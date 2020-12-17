@@ -143,7 +143,8 @@ public class AmbryQuotaManager implements QuotaManager {
     Map<String, QuotaSource> quotaSourceObjectMap = new HashMap<>();
     for (String quotaSourceClass : quotaSourceClasses) {
       if (!quotaSourceObjectMap.containsKey(quotaSourceClass)) {
-        quotaSourceObjectMap.put(quotaSourceClass, Utils.getObj(quotaSourceClass, quotaConfig));
+        quotaSourceObjectMap.put(quotaSourceClass,
+            ((QuotaSourceFactory) Utils.getObj(quotaSourceClass, quotaConfig)).getQuotaSource());
       }
     }
     return quotaSourceObjectMap;

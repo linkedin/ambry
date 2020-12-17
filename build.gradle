@@ -362,7 +362,8 @@ project(':ambry-rest') {
         compile project(':ambry-api'),
                 project(':ambry-account'),
                 project(':ambry-utils'),
-                project(':ambry-commons')
+                project(':ambry-commons'),
+                project(':ambry-quota')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
@@ -406,7 +407,8 @@ project(':ambry-frontend') {
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-rest'),
-                project(':ambry-router')
+                project(':ambry-router'),
+                project(':ambry-quota')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')

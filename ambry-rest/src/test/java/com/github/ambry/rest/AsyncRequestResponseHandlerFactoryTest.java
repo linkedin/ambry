@@ -15,10 +15,15 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -29,6 +34,19 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link AsyncRequestResponseHandlerFactory}.
  */
 public class AsyncRequestResponseHandlerFactoryTest {
+  private final QuotaConfig quotaConfig;
+  private final QuotaManager quotaManager;
+
+  public AsyncRequestResponseHandlerFactoryTest() {
+    try {
+      quotaConfig = QuotaTestUtils.createDummyQuotaConfig();
+      quotaManager =
+          new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
+    } catch (ReflectiveOperationException rEx) {
+      throw new IllegalArgumentException("Could not instantiate quota classes", rEx);
+    }
+  }
+
   /**
    * Tests the instantiation of an {@link AsyncRequestResponseHandler} instance through the
    * {@link AsyncRequestResponseHandlerFactory}.
@@ -42,7 +60,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     RestRequestService restRequestService = new MockRestRequestService(verifiableProperties, router);
     AsyncRequestResponseHandlerFactory handlerFactory =
-        new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), restRequestService);
+        new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), restRequestService, quotaManager, quotaConfig);
     // Get response handler.
     RestResponseHandler restResponseHandler = handlerFactory.getRestResponseHandler();
     assertNotNull("No RestResponseHandler returned", restResponseHandler);
@@ -75,14 +93,14 @@ public class AsyncRequestResponseHandlerFactoryTest {
     // RestResponseHandlerFactory constructor.
     // handlerCount = 0
     try {
-      new AsyncRequestResponseHandlerFactory(0, new MetricRegistry(), restRequestService);
+      new AsyncRequestResponseHandlerFactory(0, new MetricRegistry(), restRequestService, quotaManager, quotaConfig);
       fail("Instantiation should have failed because response handler count is 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
     // handlerCount < 0
     try {
-      new AsyncRequestResponseHandlerFactory(-1, new MetricRegistry(), restRequestService);
+      new AsyncRequestResponseHandlerFactory(-1, new MetricRegistry(), restRequestService, quotaManager, quotaConfig);
       fail("Instantiation should have failed because response handler count is less than 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -90,7 +108,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // MetricRegistry null.
     try {
-      new AsyncRequestResponseHandlerFactory(1, null, restRequestService);
+      new AsyncRequestResponseHandlerFactory(1, null, restRequestService, quotaManager, quotaConfig);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -99,7 +117,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
     // RestRequestHandlerFactory constructor.
     // handlerCount = 0
     try {
-      new AsyncRequestResponseHandlerFactory(0, new MetricRegistry(), restRequestService);
+      new AsyncRequestResponseHandlerFactory(0, new MetricRegistry(), restRequestService, quotaManager, quotaConfig);
       fail("Instantiation should have failed because request handler count is 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -107,7 +125,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // handlerCount < 0
     try {
-      new AsyncRequestResponseHandlerFactory(-1, new MetricRegistry(), restRequestService);
+      new AsyncRequestResponseHandlerFactory(-1, new MetricRegistry(), restRequestService, quotaManager, quotaConfig);
       fail("Instantiation should have failed because request handler count is less than 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -115,7 +133,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // MetricRegistry null.
     try {
-      new AsyncRequestResponseHandlerFactory(1, null, restRequestService);
+      new AsyncRequestResponseHandlerFactory(1, null, restRequestService, quotaManager, quotaConfig);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -123,7 +141,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // RestRequestService null.
     try {
-      new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), null);
+      new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), null, quotaManager, quotaConfig);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

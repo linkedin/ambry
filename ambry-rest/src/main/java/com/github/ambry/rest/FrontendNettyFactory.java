@@ -68,7 +68,7 @@ public class FrontendNettyFactory implements NioServerFactory {
       final RestServerState restServerState, SSLFactory defaultSslFactory, List<ChannelHandler> addedChannelHandlers,
       QuotaManager quotaManager) throws ReflectiveOperationException {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null || publicAccessLogger == null
-        || restServerState == null) {
+        || restServerState == null || quotaManager == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of FrontendNettyFactory");
     }
     nettyConfig = new NettyConfig(verifiableProperties);

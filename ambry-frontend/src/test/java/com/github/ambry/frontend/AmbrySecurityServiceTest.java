@@ -18,12 +18,17 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.HostThrottleConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -37,7 +42,6 @@ import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
@@ -73,13 +77,16 @@ import static org.mockito.Mockito.*;
 public class AmbrySecurityServiceTest {
 
   private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
-  private static final HostThrottleConfig HOST_THROTTLE_CONFIG = new HostThrottleConfig(new VerifiableProperties(new Properties()));
+  private static final HostThrottleConfig HOST_THROTTLE_CONFIG =
+      new HostThrottleConfig(new VerifiableProperties(new Properties()));
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
   private static final String CLUSTER_NAME = "ambry-test";
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final HostLevelThrottler hostLevelThrottler = new HostLevelThrottler(HOST_THROTTLE_CONFIG);
+  private static final QuotaManager quotaManager;
+  private static final QuotaConfig quotaConfig = QuotaTestUtils.createDummyQuotaConfig();
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
   private static final Map<String, Object> USER_METADATA = new HashMap<>();
@@ -97,10 +104,12 @@ public class AmbrySecurityServiceTest {
 
   private final SecurityService securityService =
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler);
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, quotaManager, quotaConfig);
 
   static {
     try {
+      quotaManager =
+          new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
       ACCOUNT_SERVICE.clear();
       REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
@@ -123,7 +132,7 @@ public class AmbrySecurityServiceTest {
       throw new IllegalStateException(e);
     }
   }
-
+  
   /**
    * Tests for {@link AmbrySecurityService#preProcessRequest(RestRequest, Callback)}
    * @throws Exception
@@ -157,7 +166,7 @@ public class AmbrySecurityServiceTest {
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(properties));
     SecurityService securityServiceWithTrackingDisabled =
         new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
-            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler);
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, quotaManager, quotaConfig);
     restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
     Assert.assertFalse("The arg with key: ambry-internal-keys-send-tracking-info should be set to false",
@@ -220,29 +229,17 @@ public class AmbrySecurityServiceTest {
    */
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
-    HostLevelThrottler quotaManager = Mockito.mock(HostLevelThrottler.class);
+    HostLevelThrottler hostLevelThrottler = Mockito.mock(HostLevelThrottler.class);
     AmbrySecurityService ambrySecurityService =
         new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
             new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
-            quotaManager);
+            hostLevelThrottler, quotaManager, quotaConfig);
     // Everything should be good.
-    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
+    Mockito.when(quotaManager.shouldThrottleOnRequestAndCharge(any(), any(), any())).thenReturn(false);
     for (int i = 0; i < 100; i++) {
       for (RestMethod restMethod : RestMethod.values()) {
         RestRequest restRequest = createRestRequest(restMethod, "/", null);
         ambrySecurityService.postProcessRequest(restRequest).get();
-      }
-    }
-    // Requests should be denied.
-    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(true);
-    for (RestMethod restMethod : RestMethod.values()) {
-      RestRequest restRequest = createRestRequest(restMethod, "/", null);
-      try {
-        ambrySecurityService.postProcessRequest(restRequest).get();
-        Assert.fail("Should have failed.");
-      } catch (Exception e) {
-        Assert.assertEquals("Exception should be TooManyRequests", RestServiceErrorCode.TooManyRequests,
-            ((RestServiceException) e.getCause()).getErrorCode());
       }
     }
   }
@@ -912,13 +909,13 @@ public class AmbrySecurityServiceTest {
     }
 
     @Override
-    public void setStatus(ResponseStatus status) throws RestServiceException {
-      throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
+    public ResponseStatus getStatus() {
+      throw new IllegalStateException("Not implemented");
     }
 
     @Override
-    public ResponseStatus getStatus() {
-      throw new IllegalStateException("Not implemented");
+    public void setStatus(ResponseStatus status) throws RestServiceException {
+      throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
     }
 
     @Override

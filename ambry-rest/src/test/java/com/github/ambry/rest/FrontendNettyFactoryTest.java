@@ -19,8 +19,8 @@ import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaTestUtils;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import java.io.File;
@@ -39,7 +39,7 @@ public class FrontendNettyFactoryTest {
   private static final RestRequestHandler REST_REQUEST_HANDLER =
       new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
           new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()), null,
-          new QuotaConfig(new VerifiableProperties(new Properties())));
+          QuotaTestUtils.createDummyQuotaConfig());
   private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
@@ -125,7 +125,7 @@ public class FrontendNettyFactoryTest {
       SSLFactory sslFactory) throws Exception {
     try {
       new FrontendNettyFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger,
-          restServerState, sslFactory, null);
+          restServerState, sslFactory, null, null);
       fail("Instantiation should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

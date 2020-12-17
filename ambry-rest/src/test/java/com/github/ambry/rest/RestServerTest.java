@@ -17,6 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.DefaultObjectNameFactory;
 import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.jmx.ObjectNameFactory;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -39,6 +41,7 @@ import static org.mockito.Mockito.*;
  */
 public class RestServerTest {
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
+  private static final AccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
 
   /**
    * Tests {@link RestServer#start()} and {@link RestServer#shutdown()}.
@@ -51,7 +54,8 @@ public class RestServerTest {
     ClusterMap clusterMap = new MockClusterMap();
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
 
-    RestServer server = new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY);
+    RestServer server =
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
     server.start();
     server.shutdown();
     server.awaitShutdown();
@@ -72,8 +76,8 @@ public class RestServerTest {
         reporter -> JmxReporter.forRegistry(reporter).createsObjectNamesWith(spyObjectNameFactory).build();
     // TODO add a test quota manager factory for rest server
     RestServer server =
-        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, Collections.emptyList(),
-            reporterFactory, null);
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE,
+            Collections.emptyList(), reporterFactory, null);
     server.start();
     // check that the custom ObjectNameFactory specified in reporterFactory was used.
     verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());
@@ -93,7 +97,8 @@ public class RestServerTest {
     ClusterMap clusterMap = new MockClusterMap();
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
 
-    RestServer server = new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY);
+    RestServer server =
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
     server.shutdown();
     server.awaitShutdown();
   }
@@ -123,7 +128,8 @@ public class RestServerTest {
     VerifiableProperties verifiableProperties = getVProps(properties);
     ClusterMap clusterMap = new MockClusterMap();
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
-    RestServer server = new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY);
+    RestServer server =
+        new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
     try {
       server.start();
       fail("start() should not be successful. MockNioServer::start() would have thrown InstantiationException");
@@ -185,7 +191,7 @@ public class RestServerTest {
 
     try {
       // no props.
-      new RestServer(null, clusterMap, notificationSystem, SSL_FACTORY);
+      new RestServer(null, clusterMap, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
       fail("Properties missing, yet no exception was thrown");
     } catch (IllegalArgumentException e) {
       // nothing to do. expected.
@@ -193,7 +199,7 @@ public class RestServerTest {
 
     try {
       // no ClusterMap.
-      new RestServer(verifiableProperties, null, notificationSystem, SSL_FACTORY);
+      new RestServer(verifiableProperties, null, notificationSystem, SSL_FACTORY, ACCOUNT_SERVICE);
       fail("ClusterMap missing, yet no exception was thrown");
     } catch (IllegalArgumentException e) {
       // nothing to do. expected.
@@ -201,7 +207,7 @@ public class RestServerTest {
 
     try {
       // no NotificationSystem.
-      new RestServer(verifiableProperties, clusterMap, null, SSL_FACTORY);
+      new RestServer(verifiableProperties, clusterMap, null, SSL_FACTORY, ACCOUNT_SERVICE);
       fail("NotificationSystem missing, yet no exception was thrown");
     } catch (IllegalArgumentException e) {
       // nothing to do. expected.
@@ -233,7 +239,8 @@ public class RestServerTest {
     properties.setProperty(configKey, "non.existent.factory");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY);
+      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY,
+          ACCOUNT_SERVICE);
       fail("Properties file contained non existent " + configKey + ", yet no exception was thrown");
     } catch (ClassNotFoundException e) {
       // nothing to do. expected.
@@ -243,7 +250,8 @@ public class RestServerTest {
     properties.setProperty(configKey, RestServerTest.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
-      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY);
+      new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY,
+          ACCOUNT_SERVICE);
       fail("Properties file contained invalid " + configKey + " class, yet no exception was thrown");
     } catch (NoSuchMethodException e) {
       // nothing to do. expected.
@@ -254,7 +262,8 @@ public class RestServerTest {
     verifiableProperties = new VerifiableProperties(properties);
     try {
       RestServer restServer =
-          new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY);
+          new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY,
+              ACCOUNT_SERVICE);
       restServer.start();
       fail("Properties file contained faulty " + configKey + " class, yet no exception was thrown");
     } catch (InstantiationException e) {

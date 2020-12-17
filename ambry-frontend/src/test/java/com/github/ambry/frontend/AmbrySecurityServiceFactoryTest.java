@@ -14,7 +14,10 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import java.util.Collections;
 import java.util.Properties;
 import junit.framework.Assert;
 import org.junit.Test;
@@ -31,9 +34,11 @@ public class AmbrySecurityServiceFactoryTest {
    */
   @Test
   public void getAmbrySecurityServiceFactoryTest() throws Exception {
+    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     SecurityService securityService =
-        new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MockClusterMap(), null, null,
-            null, null).getSecurityService();
+        new AmbrySecurityServiceFactory(verifiableProperties, new MockClusterMap(), null, null, null, null,
+            new AmbryQuotaManagerFactory(new QuotaConfig(verifiableProperties), Collections.emptyList(),
+                Collections.emptyList())).getSecurityService();
     Assert.assertNotNull(securityService);
   }
 }

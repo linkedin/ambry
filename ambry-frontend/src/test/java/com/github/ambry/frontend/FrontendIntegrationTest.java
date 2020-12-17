@@ -244,7 +244,7 @@ public class FrontendIntegrationTest {
         buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100);
 
     RestServer ambryRestServer = new RestServer(vprop, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(vprop)));
+        SSLFactory.getNewInstance(new SSLConfig(vprop)), ACCOUNT_SERVICE);
     ambryRestServer.start();
     NettyClient plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT + 100, null);
     NettyClient sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT + 100,

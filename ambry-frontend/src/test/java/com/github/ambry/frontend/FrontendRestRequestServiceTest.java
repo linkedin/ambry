@@ -29,12 +29,15 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -51,7 +54,6 @@ import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -128,6 +130,8 @@ public class FrontendRestRequestServiceTest {
   private final String datacenterName = "Data-Center";
   private final String hostname = "localhost";
   private final String clusterName = "ambry-test";
+  private final String SECURE_PATH_PREFIX = "secure-path";
+  private final int CONTENT_LENGTH = 1024;
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
@@ -137,8 +141,6 @@ public class FrontendRestRequestServiceTest {
   private Container refDefaultPrivateContainer;
   private InMemAccountService accountService = new InMemAccountServiceFactory(false, true).getAccountService();
   private AccountAndContainerInjector accountAndContainerInjector;
-  private final String SECURE_PATH_PREFIX = "secure-path";
-  private final int CONTENT_LENGTH = 1024;
 
   /**
    * Sets up the {@link FrontendRestRequestService} instance before a test.
@@ -165,7 +167,9 @@ public class FrontendRestRequestServiceTest {
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, null);
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService, idSigningService,
-            accountAndContainerInjector);
+            accountAndContainerInjector,
+            new AmbryQuotaManagerFactory(new QuotaConfig(verifiableProperties), Collections.emptyList(),
+                Collections.emptyList()));
     accountService.clear();
     accountService.updateAccounts(Collections.singleton(InMemAccountService.UNKNOWN_ACCOUNT));
     refAccount = accountService.createAndAddRandomAccount();
@@ -189,6 +193,74 @@ public class FrontendRestRequestServiceTest {
     referenceBlobIdStr = referenceBlobId.getID();
     responseHandler.start();
     frontendRestRequestService.start();
+  }
+
+  /**
+   * Method to easily create {@link RestRequest} objects containing a specific request.
+   * @param restMethod the {@link RestMethod} desired.
+   * @param uri string representation of the desired URI.
+   * @param headers any associated headers as a {@link JSONObject}.
+   * @param contents the content that accompanies the request.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers, List<ByteBuffer> contents)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    JSONObject request = new JSONObject();
+    request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
+    request.put(MockRestRequest.URI_KEY, uri);
+    if (headers != null) {
+      request.put(MockRestRequest.HEADERS_KEY, headers);
+    }
+    return new MockRestRequest(request, contents);
+  }
+
+  /**
+   * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
+   * Any other headers have to be set explicitly.
+   * @param headers the {@link JSONObject} where the headers should be set.
+   * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
+   *                  expiry.
+   * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
+   * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header. Required.
+   * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header. Required and has to be a valid MIME
+   *                    type.
+   * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
+   * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
+   * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
+   * @param uploadNamedBlobMode
+   * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
+   *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
+   * @throws JSONException
+   */
+  static void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
+      String contentType, String ownerId, String targetAccountName, String targetContainerName,
+      String uploadNamedBlobMode) throws JSONException {
+    if (headers != null && serviceId != null && contentType != null) {
+      if (ttlInSecs != Utils.Infinite_Time) {
+        headers.put(RestUtils.Headers.TTL, Long.toString(ttlInSecs));
+      }
+      headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
+      headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
+      if (targetAccountName != null) {
+        headers.put(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
+      }
+      if (targetContainerName != null) {
+        headers.put(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
+      } else {
+        headers.put(RestUtils.Headers.PRIVATE, Boolean.toString(isPrivate));
+      }
+      if (ownerId != null) {
+        headers.put(RestUtils.Headers.OWNER_ID, ownerId);
+      }
+      if (uploadNamedBlobMode != null) {
+        headers.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, uploadNamedBlobMode);
+      }
+    } else {
+      throw new IllegalArgumentException("Some required arguments are null. Cannot set ambry headers");
+    }
   }
 
   /**
@@ -935,7 +1007,7 @@ public class FrontendRestRequestServiceTest {
 
     // test an invalid request case to ensure that it goes through the exception path
     body = new LinkedList<>();
-    body.add(ByteBuffer.wrap("abcdefghijk".toString().getBytes(StandardCharsets.UTF_8)));
+    body.add(ByteBuffer.wrap("abcdefghijk".getBytes(StandardCharsets.UTF_8)));
     body.add(null);
     restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS, null, body);
     try {
@@ -1111,6 +1183,9 @@ public class FrontendRestRequestServiceTest {
     verifyOperationsAfterDelete(postResults.blobId, postResults.headers, postResults.content, refAccount, refContainer);
   }
 
+  // helpers
+  // general
+
   /**
    * Tests the injection of {@link GetOption#Include_All} and {@link GetOption#Include_Expired_Blobs} as the default
    * {@link GetOption}
@@ -1204,77 +1279,6 @@ public class FrontendRestRequestServiceTest {
     }
     // test container with no validation should succeed if URI is correct
     getBlobAndVerify(blobId, null, null, headers, content, account, noValidationContainer);
-  }
-
-  // helpers
-  // general
-
-  /**
-   * Method to easily create {@link RestRequest} objects containing a specific request.
-   * @param restMethod the {@link RestMethod} desired.
-   * @param uri string representation of the desired URI.
-   * @param headers any associated headers as a {@link JSONObject}.
-   * @param contents the content that accompanies the request.
-   * @return A {@link RestRequest} object that defines the request required by the input.
-   * @throws JSONException
-   * @throws UnsupportedEncodingException
-   * @throws URISyntaxException
-   */
-  static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers, List<ByteBuffer> contents)
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    JSONObject request = new JSONObject();
-    request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
-    request.put(MockRestRequest.URI_KEY, uri);
-    if (headers != null) {
-      request.put(MockRestRequest.HEADERS_KEY, headers);
-    }
-    return new MockRestRequest(request, contents);
-  }
-
-  /**
-   * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
-   * Any other headers have to be set explicitly.
-   * @param headers the {@link JSONObject} where the headers should be set.
-   * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
-   *                  expiry.
-   * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
-   * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header. Required.
-   * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header. Required and has to be a valid MIME
-   *                    type.
-   * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
-   * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
-   * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
-   * @param uploadNamedBlobMode
-   * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
-   *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
-   * @throws JSONException
-   */
-  static void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
-      String contentType, String ownerId, String targetAccountName, String targetContainerName,
-      String uploadNamedBlobMode) throws JSONException {
-    if (headers != null && serviceId != null && contentType != null) {
-      if (ttlInSecs != Utils.Infinite_Time) {
-        headers.put(RestUtils.Headers.TTL, Long.toString(ttlInSecs));
-      }
-      headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
-      headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
-      if (targetAccountName != null) {
-        headers.put(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
-      }
-      if (targetContainerName != null) {
-        headers.put(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
-      } else {
-        headers.put(RestUtils.Headers.PRIVATE, Boolean.toString(isPrivate));
-      }
-      if (ownerId != null) {
-        headers.put(RestUtils.Headers.OWNER_ID, ownerId);
-      }
-      if (uploadNamedBlobMode != null) {
-        headers.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, uploadNamedBlobMode);
-      }
-    } else {
-      throw new IllegalArgumentException("Some required arguments are null. Cannot set ambry headers");
-    }
   }
 
   /**
@@ -2671,6 +2675,24 @@ class FrontendTestResponseHandler implements RestResponseHandler {
  */
 class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
   /**
+   * The exception to return via future/callback.
+   */
+  Exception exceptionToReturn = null;
+  /**
+   * The exception to throw on function invocation.
+   */
+  RuntimeException exceptionToThrow = null;
+  /**
+   * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
+   */
+  Mode mode = Mode.PreProcessRequest;
+
+  @Override
+  public SecurityService getSecurityService() {
+    return new TestSecurityService();
+  }
+
+  /**
    * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
    */
   protected enum Mode {
@@ -2693,24 +2715,6 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
      * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
      */
     ProcessResponse
-  }
-
-  /**
-   * The exception to return via future/callback.
-   */
-  Exception exceptionToReturn = null;
-  /**
-   * The exception to throw on function invocation.
-   */
-  RuntimeException exceptionToThrow = null;
-  /**
-   * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
-   */
-  Mode mode = Mode.PreProcessRequest;
-
-  @Override
-  public SecurityService getSecurityService() {
-    return new TestSecurityService();
   }
 
   private class TestSecurityService implements SecurityService {
@@ -2920,21 +2924,13 @@ class BadRSC implements ReadableStreamChannel {
  * Implementation of {@link Router} that responds immediately or throws exceptions as required.
  */
 class FrontendTestRouter implements Router {
-  private boolean isOpen = true;
-
-  /**
-   * Enumerates the different operation types in the router.
-   */
-  enum OpType {
-    DeleteBlob, GetBlob, PutBlob, StitchBlob, UpdateBlobTtl, UndeleteBlob,
-  }
-
   OpType exceptionOpType = null;
   Exception exceptionToReturn = null;
   RuntimeException exceptionToThrow = null;
   String deleteServiceId = null;
   String ttlUpdateServiceId = null;
   String undeleteServiceId = null;
+  private boolean isOpen = true;
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
@@ -3019,6 +3015,13 @@ class FrontendTestRouter implements Router {
       callback.onCompletion(result, exception);
     }
     return futureResult;
+  }
+
+  /**
+   * Enumerates the different operation types in the router.
+   */
+  enum OpType {
+    DeleteBlob, GetBlob, PutBlob, StitchBlob, UpdateBlobTtl, UndeleteBlob,
   }
 }
 
