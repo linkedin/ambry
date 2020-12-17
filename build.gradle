@@ -191,7 +191,8 @@ project(':ambry-account') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
-                project(':ambry-commons')
+                project(':ambry-commons'),
+                project(':ambry-mysql')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }
@@ -229,7 +230,6 @@ project(':ambry-commons') {
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }
-        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
@@ -261,7 +261,8 @@ project(':ambry-server') {
                 project(':ambry-utils'),
                 project(':ambry-rest'),
                 project(':ambry-account'),
-                project(':ambry-replication')
+                project(':ambry-replication'),
+                project(':ambry-mysql')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         runtimeOnly "log4j:log4j:$log4jVersion"
@@ -438,6 +439,7 @@ project(':ambry-cloud') {
 project(':ambry-named-mysql') {
     dependencies {
         compile project(':ambry-api')
+        compile project(':ambry-mysql')
         compile project(':ambry-commons')
         compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
         compile "com.zaxxer:HikariCP:$hikariVersion"
@@ -445,15 +447,28 @@ project(':ambry-named-mysql') {
     }
 }
 
-// TODO move mysql implementation to a common package and drop ambry-server dependency from ambry-quota
 project(':ambry-quota') {
     dependencies {
         compile project(':ambry-api'),
-            project(':ambry-server'),
-            project(':ambry-commons')
+            project(':ambry-commons'),
+            project(':ambry-mysql'),
+            project(':ambry-clustermap')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }
+        testCompile project(':ambry-test-utils')
+        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+    }
+}
+
+project(':ambry-mysql') {
+    dependencies {
+        compile project(':ambry-api'),
+                project(':ambry-utils')
+        compile ("org.apache.helix:helix-core:$helixVersion") {
+            exclude group: "log4j", module: "log4j"
+        }
+        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }

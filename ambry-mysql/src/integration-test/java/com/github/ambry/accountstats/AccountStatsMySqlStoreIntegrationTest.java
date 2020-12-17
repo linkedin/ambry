@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.accountstats;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.AccountStatsMySqlConfig;
@@ -19,10 +19,10 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlDataAccessor;
-import com.github.ambry.server.mysql.AccountReportsDao;
-import com.github.ambry.server.mysql.AccountStatsMySqlStore;
-import com.github.ambry.server.mysql.AccountStatsMySqlStoreFactory;
-import com.github.ambry.server.mysql.AggregatedAccountReportsDao;
+import com.github.ambry.server.StatsHeader;
+import com.github.ambry.server.StatsReportType;
+import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -160,7 +160,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
   private AccountStatsMySqlStore createAccountStatsMySqlStore(String clusterName, String hostname,
       boolean withLocalbackup) throws Exception {
     Path localBackupFilePath = withLocalbackup ? createLocalBackup(10, 10, 1) : createTemporaryFile();
-    Properties configProps = Utils.loadPropsFromResource("mysql.properties");
+    Properties configProps = Utils.loadPropsFromResource("accountstats_mysql.properties");
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, clusterName);
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, hostname);
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "dc1");
