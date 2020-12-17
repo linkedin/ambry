@@ -124,6 +124,31 @@ public class MySqlDataAccessor {
   }
 
   /**
+   * Enables or disables auto commit on current active {@link Connection}.
+   * @param enable {@code true} to enable auto commit and {@code false} to disable auto commit.
+   * @throws SQLException
+   */
+  public synchronized void setAutoCommit(boolean enable) throws SQLException {
+    activeConnection.setAutoCommit(enable);
+  }
+
+  /**
+   * Commits transaction changes on current active {@link Connection}. This should only be used with auto commit disabled.
+   * @throws SQLException
+   */
+  public synchronized void commit() throws SQLException {
+    activeConnection.commit();
+  }
+
+  /**
+   * Rollback transaction changes on current active {@link Connection}. This should only be used with auto commit disabled.
+   * @throws SQLException
+   */
+  public synchronized void rollback() throws SQLException {
+    activeConnection.rollback();
+  }
+
+  /**
    * @return a JDBC {@link Connection} to the database.  An existing connection will be reused,
    * unless a connection to a better-ranked enpoint is available.
    * @param needWritable whether the database instance needs to be writeable.
@@ -134,7 +159,6 @@ public class MySqlDataAccessor {
     // Close active connection if no longer valid
     if (activeConnection != null && !activeConnection.isValid(5)) {
       closeActiveConnection();
-      activeConnection = null;
       connectedEndpoint = null;
     }
 
@@ -248,9 +272,9 @@ public class MySqlDataAccessor {
     if (e instanceof SQLTransientConnectionException) {
       if (operationType == OperationType.Write) {
         metrics.writeFailureCount.inc();
-      } else if (operationType == operationType.Read) {
+      } else if (operationType == OperationType.Read) {
         metrics.readFailureCount.inc();
-      } else if (operationType == operationType.Copy) {
+      } else if (operationType == OperationType.Copy) {
         metrics.copyFailureCount.inc();
       }
       closeActiveConnection();
@@ -285,6 +309,7 @@ public class MySqlDataAccessor {
     }
     statementCache.clear();
     closeQuietly(activeConnection);
+    activeConnection = null;
   }
 
   private boolean isBetterEndpoint(DbEndpoint first, DbEndpoint second) {

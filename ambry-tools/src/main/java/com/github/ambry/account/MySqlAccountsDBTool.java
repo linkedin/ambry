@@ -14,8 +14,8 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
-import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.commons.CommonUtils;
@@ -27,9 +27,10 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -178,7 +179,7 @@ public class MySqlAccountsDBTool {
         mySqlAccountsDBTool.compare();
       }
     } catch (Exception e) {
-      logger.error("MySQL accounts validation failed", e);
+      logger.error("MySQL accounts initialization or comparison failed", e);
     }
   }
 
@@ -196,7 +197,7 @@ public class MySqlAccountsDBTool {
 
   private void cleanup() throws SQLException {
     Statement statement = mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection(true).createStatement();
-    int numDeleted = statement.executeUpdate("delete from " + ContainerDao.CONTAINER_TABLE);
+    int numDeleted = statement.executeUpdate("delete from " + AccountDao.CONTAINER_TABLE);
     logger.info("Deleted {} containers", numDeleted);
     int numDeletedAccounts = statement.executeUpdate("delete from " + AccountDao.ACCOUNT_TABLE);
     logger.info("Deleted {} Accounts", numDeletedAccounts);
@@ -223,11 +224,13 @@ public class MySqlAccountsDBTool {
 
     AccountInfoMap accountInfoMap = new AccountInfoMap(new AccountServiceMetrics(new MetricRegistry()), accountMap);
 
-    // Populate Account and Container tables
+    // Populate Account and Container tables in batches
+    List<AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
     for (Account account : accountInfoMap.getAccounts()) {
-      mySqlAccountStore.addContainers(account.getId(), account.getAllContainers());
-      mySqlAccountStore.addAccounts(Collections.singletonList(account));
+      accountUpdateInfos.add(
+          new AccountUpdateInfo(account, true, false, new ArrayList<>(account.getAllContainers()), new ArrayList<>()));
     }
+    mySqlAccountStore.updateAccounts(accountUpdateInfos);
 
     logger.info("Initialized account metadata in DB from ZK path {}, took time={} ms", fullZKAccountMetadataPath,
         System.currentTimeMillis() - zkFetchTimeMs);

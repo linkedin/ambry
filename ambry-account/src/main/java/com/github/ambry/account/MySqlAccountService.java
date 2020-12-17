@@ -13,11 +13,11 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.account.mysql.ContainerDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -26,6 +26,7 @@ import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -322,7 +323,6 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    // TODO: make transactional
     try {
       return super.updateContainers(accountName, containers);
     } catch (AccountServiceException ase) {
@@ -345,7 +345,7 @@ public class MySqlAccountService extends AbstractAccountService {
   protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
       throws AccountServiceException {
     try {
-      updateContainersWithMySqlStore(account.getId(), resolvedContainers);
+      updateContainersWithMySqlStore(account, resolvedContainers);
     } catch (SQLException e) {
       logger.error("Failed updating containers {} in MySql DB", resolvedContainers, e);
       handleSQLException(e);
@@ -365,85 +365,100 @@ public class MySqlAccountService extends AbstractAccountService {
    * @param accounts collection of {@link Account}s
    * @throws SQLException
    */
-  private void updateAccountsWithMySqlStore(Collection<Account> accounts) throws SQLException {
+  void updateAccountsWithMySqlStore(Collection<Account> accounts) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     logger.trace("Start updating accounts={} into MySql DB", accounts);
 
-    // write Accounts and containers to MySql
-    // TODO: make transactional
+    // Get account and container changes info
+    List<AccountUpdateInfo> accountsUpdateInfo = new ArrayList<>();
     for (Account account : accounts) {
-      Account existingAccount = getAccountById(account.getId());
-      if (existingAccount == null) {
-        // new account (insert the containers and account into db tables)
-        mySqlAccountStore.addAccount(account);
-        mySqlAccountStore.addContainers(account.getId(), account.getAllContainers());
+
+      boolean isAccountAdded = false, isAccountUpdated = false;
+      List<Container> addedContainers;
+      List<Container> updatedContainers = new ArrayList<>();
+
+      Account accountInCache = getAccountById(account.getId());
+      if (accountInCache == null) {
+        isAccountAdded = true;
+        addedContainers = new ArrayList<>(account.getAllContainers());
       } else {
-        // existing account (update account table)
-        // Avoid updating account records if only container information changed.
-        if (!AccountCollectionSerde.accountToJsonNoContainers(existingAccount)
+        if (!AccountCollectionSerde.accountToJsonNoContainers(accountInCache)
             .similar(AccountCollectionSerde.accountToJsonNoContainers(account))) {
-          // increment the version of account record
-          account = new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() + 1).build();
-          mySqlAccountStore.updateAccount(account);
+          isAccountUpdated = true;
         }
-        updateContainersWithMySqlStore(account.getId(), account.getAllContainers());
+        // Get list of added and updated containers in the account.
+        Pair<List<Container>, List<Container>> addedOrUpdatedContainers =
+            getUpdatedContainers(account, account.getAllContainers());
+        addedContainers = addedOrUpdatedContainers.getFirst();
+        updatedContainers = addedOrUpdatedContainers.getSecond();
       }
+
+      accountsUpdateInfo.add(
+          new AccountUpdateInfo(account, isAccountAdded, isAccountUpdated, addedContainers, updatedContainers));
     }
 
+    // Write changes to MySql db.
+    mySqlAccountStore.updateAccounts(accountsUpdateInfo);
+
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
-    logger.trace("Completed updating accounts/containers in MySql DB, took time={} ms", timeForUpdate);
+    logger.trace("Completed updating accounts={} in MySql DB, took time={} ms", accounts, timeForUpdate);
     accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
   }
 
   /**
    * Updates MySql DB with added or modified {@link Container}s of a given account
-   * @param accountId id of the {@link Account} for the {@link Container}s
+   * @param account parent {@link Account} for the {@link Container}s
    * @param containers collection of {@link Container}s
    * @throws SQLException
    */
-  private void updateContainersWithMySqlStore(short accountId, Collection<Container> containers) throws SQLException {
+  private void updateContainersWithMySqlStore(Account account, Collection<Container> containers) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    logger.trace("Start updating containers={} for accountId={} into MySql DB", containers, accountId);
+    logger.trace("Start updating containers={} for accountId={} into MySql DB", containers, account.getId());
 
-    //check for account ID in in-memory cache
-    AccountInfoMap accountInfoMap;
-    Account accountInCache;
-    infoMapLock.readLock().lock();
-    try {
-      accountInfoMap = accountInfoMapRef.get();
-      accountInCache = accountInfoMap.getAccountById(accountId);
-    } finally {
-      infoMapLock.readLock().unlock();
-    }
+    // Get list of added and updated containers in the account.
+    Pair<List<Container>, List<Container>> addedOrUpdatedContainers = getUpdatedContainers(account, containers);
+    AccountUpdateInfo accountUpdateInfo =
+        new AccountUpdateInfo(account, false, false, addedOrUpdatedContainers.getFirst(),
+            addedOrUpdatedContainers.getSecond());
+
+    // Write changes to MySql db.
+    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
+
+    long timeForUpdate = System.currentTimeMillis() - startTimeMs;
+    logger.trace("Completed updating containers={} for accountId={} in MySqlDB in time={} ms", containers,
+        account.getId(), timeForUpdate);
+    accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
+  }
+
+  /**
+   * Gets lists of added and updated {@link Container}s in the {@link Account} by comparing with in-memory cache.
+   * @param account Id of the account
+   * @param containers {@link Container}s added or updated in the account.
+   * @return {@link Pair} of lists of added and updated {@link Container}s in the given {@link Account}
+   */
+  private Pair<List<Container>, List<Container>> getUpdatedContainers(Account account,
+      Collection<Container> containers) {
+
+    //check for account in in-memory cache
+    Account accountInCache = getAccountById(account.getId());
     if (accountInCache == null) {
-      throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");
+      throw new IllegalArgumentException("Account with ID " + account + "doesn't exist");
     }
 
     List<Container> addedContainers = new ArrayList<>();
     List<Container> updatedContainers = new ArrayList<>();
     for (Container containerToUpdate : containers) {
-      Container containerInCache =
-          accountInfoMap.getContainerByIdForAccount(containerToUpdate.getParentAccountId(), containerToUpdate.getId());
+      Container containerInCache = accountInCache.getContainerById(containerToUpdate.getId());
       if (containerInCache == null) {
-        // new container added. Insert record into container table.
         addedContainers.add(containerToUpdate);
       } else {
         if (!containerInCache.equals(containerToUpdate)) {
-          // Existing container modified. Increase the version of container and update container record
-          containerToUpdate =
-              new ContainerBuilder(containerToUpdate).setSnapshotVersion(containerToUpdate.getSnapshotVersion() + 1)
-                  .build();
           updatedContainers.add(containerToUpdate);
         }
       }
     }
 
-    mySqlAccountStore.addContainers(accountId, addedContainers);
-    mySqlAccountStore.updateContainers(accountId, updatedContainers);
-
-    long timeForUpdate = System.currentTimeMillis() - startTimeMs;
-    logger.trace("Completed updating accounts/containers in MySql DB, took time={} ms", timeForUpdate);
-    accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
+    return new Pair<>(addedContainers, updatedContainers);
   }
 
   /**
