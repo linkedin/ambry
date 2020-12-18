@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -55,15 +56,15 @@ class AmbrySecurityService implements SecurityService {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
-  private final QuotaManager quotaManager;
+  private final HostLevelThrottler hostLevelThrottler;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      UrlSigningService urlSigningService, QuotaManager quotaManager) {
+      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
-    this.quotaManager = quotaManager;
+    this.hostLevelThrottler = hostLevelThrottler;
     isOpen = true;
   }
 
@@ -115,7 +116,7 @@ class AmbrySecurityService implements SecurityService {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null || callback == null) {
       throw new IllegalArgumentException("RestRequest or Callback is null");
-    } else if (quotaManager.shouldThrottle(restRequest)) {
+    } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
       exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
     } else if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
       try {

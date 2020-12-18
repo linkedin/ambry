@@ -26,8 +26,8 @@ public class Criteria {
     UpperBound, LowerBound
   }
 
-  private final long threshold;
-  private final BoundType boundType;
+  private long threshold;
+  private BoundType boundType;
 
   /**
    * Criteria ctor
@@ -37,6 +37,12 @@ public class Criteria {
   public Criteria(long threshold, BoundType boundType) {
     this.threshold = threshold;
     this.boundType = boundType;
+  }
+
+  /**
+   * Default ctor for mapping JSONObject to object.
+   */
+  public Criteria() {
   }
 
   /**
@@ -56,4 +62,21 @@ public class Criteria {
   public long getThresholdValue() {
     return threshold;
   }
+
+  public BoundType getBoundType() {
+    return boundType;
+  }
+
+  public void setBoundType(BoundType boundType) {
+    this.boundType = boundType;
+  }
+  public long getThreshold() {
+    return threshold;
+  }
+
+  public void setThreshold(long threshold) {
+    this.threshold = threshold;
+  }
+
+
 }

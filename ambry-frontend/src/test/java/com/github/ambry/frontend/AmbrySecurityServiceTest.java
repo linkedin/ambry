@@ -18,7 +18,9 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
+import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -71,12 +73,13 @@ import static org.mockito.Mockito.*;
 public class AmbrySecurityServiceTest {
 
   private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
+  private static final HostThrottleConfig HOST_THROTTLE_CONFIG = new HostThrottleConfig(new VerifiableProperties(new Properties()));
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
   private static final String CLUSTER_NAME = "ambry-test";
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
-  private static final QuotaManager quotaManager = new QuotaManager(FRONTEND_CONFIG);
+  private static final HostLevelThrottler hostLevelThrottler = new HostLevelThrottler(HOST_THROTTLE_CONFIG);
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
   private static final Map<String, Object> USER_METADATA = new HashMap<>();
@@ -94,7 +97,7 @@ public class AmbrySecurityServiceTest {
 
   private final SecurityService securityService =
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler);
 
   static {
     try {
@@ -154,7 +157,7 @@ public class AmbrySecurityServiceTest {
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(properties));
     SecurityService securityServiceWithTrackingDisabled =
         new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
-            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager);
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler);
     restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
     Assert.assertFalse("The arg with key: ambry-internal-keys-send-tracking-info should be set to false",
@@ -217,7 +220,7 @@ public class AmbrySecurityServiceTest {
    */
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
-    QuotaManager quotaManager = Mockito.mock(QuotaManager.class);
+    HostLevelThrottler quotaManager = Mockito.mock(HostLevelThrottler.class);
     AmbrySecurityService ambrySecurityService =
         new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
             new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
