@@ -133,14 +133,14 @@ public class Http2ClientConfig {
    * Maximum time allowed for netty write and flush a request.
    */
   @Config(HTTP2_BLOCKING_CHANNEL_SEND_TIMEOUT_MS)
-  @Default("2000")
+  @Default("5000")
   public final int http2BlockingChannelSendTimeoutMs;
 
   /**
    * Maximum waiting time for receiving a response.
    */
   @Config(HTTP2_BLOCKING_CHANNEL_RECEIVE_TIMEOUT_MS)
-  @Default("5000")
+  @Default("10000")
   public final int http2BlockingChannelReceiveTimeoutMs;
 
   /**
