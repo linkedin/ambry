@@ -343,8 +343,6 @@ public class MySqlStorageUsageRefresherTest {
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "dc1");
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(SERVER_PORT));
     configProps.setProperty(AccountStatsMySqlConfig.DOMAIN_NAMES_TO_REMOVE, ".github.com");
-    configProps.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "localhost:1234");
-    configProps.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     configProps.setProperty(StorageQuotaConfig.BACKUP_FILE_DIR, localBackupFilePath.toString());
     configProps.setProperty(StorageQuotaConfig.MYSQL_STORE_RETRY_BACKOFF_MS, String.valueOf(MYSQL_RETRY_BACKOFF_MS));
     configProps.setProperty(StorageQuotaConfig.MYSQL_STORE_RETRY_MAX_COUNT, "1");

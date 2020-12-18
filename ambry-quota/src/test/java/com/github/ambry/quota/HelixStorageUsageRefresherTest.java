@@ -57,7 +57,6 @@ public class HelixStorageUsageRefresherTest {
     mockHelixStore = new MockHelixPropertyStore<>();
     Properties properties = new Properties();
     properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, ZK_CLIENT_CONNECT_ADDRESS);
-    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     storageQuotaConfig = new StorageQuotaConfig(new VerifiableProperties(properties));
   }
 
