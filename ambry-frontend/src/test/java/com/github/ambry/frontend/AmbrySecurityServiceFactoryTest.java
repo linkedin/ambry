@@ -29,7 +29,7 @@ import org.junit.Test;
 public class AmbrySecurityServiceFactoryTest {
 
   /**
-   * Tests intantiation of {@link AmbrySecurityServiceFactory}.
+   * Tests instantiation of {@link AmbrySecurityServiceFactory}.
    * @throws Exception
    */
   @Test

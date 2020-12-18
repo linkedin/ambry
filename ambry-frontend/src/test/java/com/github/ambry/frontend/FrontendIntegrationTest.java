@@ -581,43 +581,6 @@ public class FrontendIntegrationTest {
         refContainer.getName());
   }
 
-  @Test
-  public void hostThrottlingTest() throws Exception {
-    NettyClient plaintextNettyClient = null;
-    NettyClient sslNettyClient = null;
-    RestServer ambryRestServer = null;
-    int plainTextServerPort = SSL_SERVER_PORT + 1;
-    int sslServerPort = SSL_SERVER_PORT + 1;
-    try {
-      QuotaConfig quotaConfig =
-          QuotaTestUtils.createQuotaConfig(Collections.singletonList(RejectHostQuotaEnforcerFactory.class.getName()),
-              true, QuotaMode.THROTTLING, true);
-      QuotaManagerFactory quotaManagerFactory =
-          new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList());
-      VerifiableProperties verifiableProperties =
-          buildFrontendVProps(trustFile, true, plainTextServerPort, sslServerPort, QuotaMode.THROTTLING, true);
-      ambryRestServer = new RestServer(verifiableProperties, CLUSTER_MAP, new LoggingNotificationSystem(),
-          SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)), ACCOUNT_SERVICE, quotaManagerFactory);
-      ambryRestServer.start();
-      plaintextNettyClient = new NettyClient("localhost", plainTextServerPort, null);
-      sslNettyClient = new NettyClient("localhost", sslServerPort,
-          SSLFactory.getNewInstance(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
-      FullHttpRequest httpRequest =
-          buildRequest(HttpMethod.GET, UUID.randomUUID().toString(), new DefaultHttpHeaders(), null);
-      nettyClient.sendRequest(httpRequest, null, null).get();
-    } finally {
-      if (plaintextNettyClient != null) {
-        plaintextNettyClient.close();
-      }
-      if (sslNettyClient != null) {
-        sslNettyClient.close();
-      }
-      if (ambryRestServer != null) {
-        ambryRestServer.shutdown();
-      }
-    }
-  }
-
   /**
    * Method to easily create a request.
    * @param httpMethod the {@link HttpMethod} desired.
