@@ -249,7 +249,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       DataInputStream stream = channel.sendAndReceive(getRequest1).getInputStream();
       GetResponse resp1 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         assertEquals(31870, propertyOutput.getBlobSize());
@@ -270,7 +269,6 @@ final class ServerTestUtil {
           GetOption.Include_Expired_Blobs);
       stream = channel.sendAndReceive(getRequest1).getInputStream();
       resp1 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         assertEquals(31870, propertyOutput.getBlobSize());
@@ -295,7 +293,6 @@ final class ServerTestUtil {
               GetOption.None);
       DataInputStream streamExpired = channel.sendAndReceive(getRequestExpired).getInputStream();
       GetResponse respExpired = GetResponse.readFrom(streamExpired, clusterMap);
-      releaseStream(streamExpired);
       assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // 2. With Include_Expired flag
@@ -311,7 +308,6 @@ final class ServerTestUtil {
               GetOption.Include_Expired_Blobs);
       streamExpired = channel.sendAndReceive(getRequestExpired).getInputStream();
       respExpired = GetResponse.readFrom(streamExpired, clusterMap);
-      releaseStream(streamExpired);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(respExpired.getInputStream());
         assertEquals(31870, propertyOutput.getBlobSize());
@@ -328,7 +324,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest2).getInputStream();
       GetResponse resp2 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         assertArrayEquals(userMetadata, userMetadataOutput.array());
@@ -350,7 +345,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest3).getInputStream();
       GetResponse resp3 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       InputStream responseStream = resp3.getInputStream();
       // verify blob properties.
       BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(responseStream);
@@ -376,7 +370,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest4).getInputStream();
       GetResponse resp4 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       responseStream = resp4.getInputStream();
       BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
@@ -423,7 +416,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest5).getInputStream();
       GetResponse resp5 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       assertEquals(ServerErrorCode.Blob_Not_Found, resp5.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // stop the store via AdminRequest
@@ -457,7 +449,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest1).getInputStream();
       resp1 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Replica_Unavailable,
           resp1.getPartitionResponseInfoList().get(0).getErrorCode());
 
@@ -504,7 +495,6 @@ final class ServerTestUtil {
       getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest1).getInputStream();
       resp1 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
@@ -545,7 +535,6 @@ final class ServerTestUtil {
       getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest1).getInputStream();
       resp1 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
@@ -561,7 +550,6 @@ final class ServerTestUtil {
       getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel.sendAndReceive(getRequest1).getInputStream();
       resp1 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
@@ -817,7 +805,6 @@ final class ServerTestUtil {
             new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
         DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
         GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         try {
           BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
           assertEquals(100, propertyOutput.getBlobSize());
@@ -836,7 +823,6 @@ final class ServerTestUtil {
             GetOption.None);
         stream = channel.sendAndReceive(getRequest).getInputStream();
         resp = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         try {
           ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
           assertArrayEquals(usermetadata, userMetadataOutput.array());
@@ -860,7 +846,6 @@ final class ServerTestUtil {
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
         stream = channel.sendAndReceive(getRequest).getInputStream();
         resp = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
           byte[] blobout = getBlobDataAndRelease(blobData);
@@ -885,7 +870,6 @@ final class ServerTestUtil {
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
         stream = channel.sendAndReceive(getRequest).getInputStream();
         resp = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
           assertEquals("Expiration time mismatch (props)", expectedExpiryTimeMs,
@@ -987,7 +971,6 @@ final class ServerTestUtil {
             new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
         DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
         GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         assertEquals(ServerErrorCode.Blob_Deleted, resp.getPartitionResponseInfoList().get(0).getErrorCode());
       }
     }
@@ -1040,7 +1023,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       DataInputStream stream = channel1.sendAndReceive(getRequest).getInputStream();
       GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsDeleted.contains(blobIds.get(j)));
@@ -1063,7 +1045,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
       resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsDeleted.contains(blobIds.get(j)));
@@ -1091,7 +1072,6 @@ final class ServerTestUtil {
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
       resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsDeleted.contains(blobIds.get(j)));
@@ -1120,7 +1100,6 @@ final class ServerTestUtil {
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
       resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsDeleted.contains(blobIds.get(j)));
@@ -1186,7 +1165,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       DataInputStream stream = channel1.sendAndReceive(getRequest).getInputStream();
       GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsChecked.contains(blobIds.get(j)));
@@ -1207,7 +1185,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
       resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsChecked.contains(blobIds.get(j)));
@@ -1233,7 +1210,6 @@ final class ServerTestUtil {
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
       resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsChecked.contains(blobIds.get(j)));
@@ -1260,7 +1236,6 @@ final class ServerTestUtil {
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
       resp = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       if (resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Deleted
           || resp.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.Blob_Not_Found) {
         assertTrue(blobsChecked.contains(blobIds.get(j)));
@@ -1314,7 +1289,6 @@ final class ServerTestUtil {
             new GetRequest(1, "clientid20", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
         DataInputStream stream = channel1.sendAndReceive(getRequest).getInputStream();
         GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         assertEquals(ServerErrorCode.No_Error, resp.getError());
         assertEquals(1, resp.getPartitionResponseInfoList().size());
         assertEquals(ServerErrorCode.No_Error, resp.getPartitionResponseInfoList().get(0).getErrorCode());
@@ -1360,7 +1334,6 @@ final class ServerTestUtil {
             new GetRequest(1, "clientid200", MessageFormatFlags.All, partitionRequestInfoList, GetOption.Include_All);
         DataInputStream stream = channel1.sendAndReceive(getRequest).getInputStream();
         GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         assertEquals(ServerErrorCode.No_Error, resp.getError());
         assertEquals(1, resp.getPartitionResponseInfoList().size());
         assertEquals(ServerErrorCode.No_Error, resp.getPartitionResponseInfoList().get(0).getErrorCode());
@@ -1519,7 +1492,6 @@ final class ServerTestUtil {
         new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
     stream = channel.sendAndReceive(getRequest1).getInputStream();
     GetResponse resp1 = GetResponse.readFrom(stream, clusterMap);
-    releaseStream(stream);
     assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Replica_Unavailable,
         resp1.getPartitionResponseInfoList().get(0).getErrorCode());
 
@@ -1568,7 +1540,6 @@ final class ServerTestUtil {
         new GetRequest(1, "clientId2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
     stream = channel.sendAndReceive(getRequest2).getInputStream();
     GetResponse resp2 = GetResponse.readFrom(stream, clusterMap);
-    releaseStream(stream);
     InputStream responseStream = resp2.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
     byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
@@ -1734,7 +1705,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       DataInputStream stream = channel2.sendAndReceive(getRequest1).getInputStream();
       GetResponse resp1 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       assertEquals(ServerErrorCode.No_Error, resp1.getError());
       assertEquals(ServerErrorCode.No_Error, resp1.getPartitionResponseInfoList().get(0).getErrorCode());
       try {
@@ -1754,7 +1724,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest2).getInputStream();
       GetResponse resp2 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       assertEquals(ServerErrorCode.No_Error, resp2.getError());
       assertEquals(ServerErrorCode.No_Error, resp2.getPartitionResponseInfoList().get(0).getErrorCode());
       try {
@@ -1780,7 +1749,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       stream = channel3.sendAndReceive(getRequest3).getInputStream();
       GetResponse resp3 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       try {
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
         byte[] blobout = getBlobDataAndRelease(blobData);
@@ -1805,7 +1773,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest4).getInputStream();
       GetResponse resp4 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       try {
         BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp4.getInputStream(), blobIdFactory);
         byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
@@ -1853,7 +1820,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       stream = channel3.sendAndReceive(getRequest5).getInputStream();
       GetResponse resp5 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       assertEquals(ServerErrorCode.No_Error, resp5.getError());
       assertEquals(ServerErrorCode.Blob_Not_Found, resp5.getPartitionResponseInfoList().get(0).getErrorCode());
 
@@ -1875,7 +1841,6 @@ final class ServerTestUtil {
           new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       stream = channel3.sendAndReceive(getRequest6).getInputStream();
       GetResponse resp6 = GetResponse.readFrom(stream, clusterMap);
-      releaseStream(stream);
       assertEquals(ServerErrorCode.No_Error, resp6.getError());
       assertEquals(ServerErrorCode.Blob_Deleted, resp6.getPartitionResponseInfoList().get(0).getErrorCode());
 
@@ -2185,7 +2150,6 @@ final class ServerTestUtil {
                 GetOption.Include_All);
         stream = channel1.sendAndReceive(getRequest).getInputStream();
         GetResponse getResponse = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
         assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
         MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         hasUndelete =
@@ -2209,7 +2173,6 @@ final class ServerTestUtil {
                 GetOption.Include_All);
         stream = connectedChannel.sendAndReceive(getRequest).getInputStream();
         GetResponse getResponse = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
 
         assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
         MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
@@ -2304,7 +2267,6 @@ final class ServerTestUtil {
                   GetOption.Include_All);
           stream = connectedChannel.sendAndReceive(getRequest).getInputStream();
           GetResponse getResponse = GetResponse.readFrom(stream, clusterMap);
-          releaseStream(stream);
           assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
           MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
           if (getResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getLifeVersion() == 2) {
@@ -2443,7 +2405,6 @@ final class ServerTestUtil {
                   GetOption.None);
           stream = channel.sendAndReceive(getRequest).getInputStream();
           GetResponse getResponse = GetResponse.readFrom(stream, clusterMap);
-          releaseStream(stream);
           if (getResponse.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.No_Error) {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
             assertEquals(31870, propertyOutput.getBlobSize());
@@ -2648,7 +2609,6 @@ final class ServerTestUtil {
         new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
     DataInputStream stream = channel.sendAndReceive(getRequest3).getInputStream();
     GetResponse resp = GetResponse.readFrom(stream, clusterMap);
-    releaseStream(stream);
     assertEquals(ServerErrorCode.No_Error, resp.getError());
     BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
     byte[] blobout = getBlobDataAndRelease(blobData);
@@ -2766,7 +2726,6 @@ final class ServerTestUtil {
         new GetRequest(1, "checkTtlUpdateStatus", MessageFormatFlags.BlobProperties, requestInfos, GetOption.None);
     DataInputStream stream = channel.sendAndReceive(request).getInputStream();
     GetResponse response = GetResponse.readFrom(stream, clusterMap);
-    releaseStream(stream);
     BlobProperties blobProperties = MessageFormatRecord.deserializeBlobProperties(response.getInputStream());
     if (!ttlUpdated) {
       assertEquals("TTL does not match", expectedExpiryTimeMs, getExpiryTimeMs(blobProperties));
@@ -2780,7 +2739,6 @@ final class ServerTestUtil {
     request = new GetRequest(1, "checkTtlUpdateStatus", MessageFormatFlags.All, requestInfos, GetOption.None);
     stream = channel.sendAndReceive(request).getInputStream();
     response = GetResponse.readFrom(stream, clusterMap);
-    releaseStream(stream);
     InputStream responseStream = response.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, storeKeyFactory);
     byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
