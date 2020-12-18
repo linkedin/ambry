@@ -101,6 +101,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -2104,7 +2105,8 @@ final class ServerTestUtil {
         GetRequest getRequest =
             new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
                 GetOption.Include_All);
-        GetResponse getResponse = GetResponse.readFrom(channel1.sendAndReceive(getRequest).getInputStream(), clusterMap);
+        GetResponse getResponse =
+            GetResponse.readFrom(channel1.sendAndReceive(getRequest).getInputStream(), clusterMap);
         assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
         MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         hasUndelete =
@@ -2170,7 +2172,8 @@ final class ServerTestUtil {
 
       // Now send the undelete to two data nodes in the same DC and then send delete
       UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId2, System.currentTimeMillis());
-      UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(channel1.sendAndReceive(undeleteRequest).getInputStream());
+      UndeleteResponse undeleteResponse =
+          UndeleteResponse.readFrom(channel1.sendAndReceive(undeleteRequest).getInputStream());
       assertEquals(ServerErrorCode.No_Error, undeleteResponse.getError());
       assertEquals((short) 1, undeleteResponse.getLifeVersion());
       undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId2, undeleteRequest.getOperationTimeMs());
@@ -2343,7 +2346,8 @@ final class ServerTestUtil {
           GetRequest getRequest =
               new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
                   GetOption.None);
-          GetResponse getResponse = GetResponse.readFrom(channel.sendAndReceive(getRequest).getInputStream(), clusterMap);
+          GetResponse getResponse =
+              GetResponse.readFrom(channel.sendAndReceive(getRequest).getInputStream(), clusterMap);
           if (getResponse.getPartitionResponseInfoList().get(0).getErrorCode() == ServerErrorCode.No_Error) {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
             assertEquals(31870, propertyOutput.getBlobSize());
@@ -2373,7 +2377,8 @@ final class ServerTestUtil {
           new AdminRequest(AdminRequestOrResponseType.ReplicationControl, partitionId, 1, "clientid2");
       ReplicationControlAdminRequest controlRequest =
           new ReplicationControlAdminRequest(Collections.emptyList(), enable, adminRequest);
-      AdminResponse adminResponse = AdminResponse.readFrom(connectedChannel.sendAndReceive(controlRequest).getInputStream());
+      AdminResponse adminResponse =
+          AdminResponse.readFrom(connectedChannel.sendAndReceive(controlRequest).getInputStream());
       assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
     }
   }
@@ -2626,7 +2631,8 @@ final class ServerTestUtil {
   static void undeleteBlob(ConnectedChannel channel, BlobId blobId, long ts, ServerErrorCode expectedErrorCode,
       short lifeVersion) throws Exception {
     UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId, ts);
-    UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(channel.sendAndReceive(undeleteRequest).getInputStream());
+    UndeleteResponse undeleteResponse =
+        UndeleteResponse.readFrom(channel.sendAndReceive(undeleteRequest).getInputStream());
     assertEquals("Unexpected ServerErrorCode for UndeleteRequest", expectedErrorCode, undeleteResponse.getError());
     if (undeleteResponse.getError() == ServerErrorCode.No_Error
         || undeleteResponse.getError() == ServerErrorCode.Blob_Already_Undeleted) {
@@ -2793,5 +2799,12 @@ final class ServerTestUtil {
       blobIds.add(blobId);
     }
     return blobIds;
+  }
+
+  static void releaseStream(DataInputStream stream) {
+    if (stream instanceof NettyByteBufDataInputStream) {
+      // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+      ((NettyByteBufDataInputStream) stream).getBuffer().release();
+    }
   }
 }
