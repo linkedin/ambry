@@ -762,8 +762,7 @@ public class ReplicaThread implements Runnable {
           "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
           replicaMetadataRequestInfoList, replicationConfig.replicationFetchSizeInBytes,
           replicationConfig.replicaMetadataRequestVersion);
-      connectedChannel.send(request);
-      channelOutput = connectedChannel.receive();
+      channelOutput = connectedChannel.sendAndReceive(request);
       logger.trace("Remote node: {} Thread name: {} Remote replicas: {} Stream size after deserialization: {} ",
           remoteNode, threadName, replicasToReplicatePerNode, channelOutput.getInputStream().available());
       ReplicaMetadataResponse response =
@@ -784,7 +783,7 @@ public class ReplicaThread implements Runnable {
         throw new ReplicationException("Replica Metadata Response Error " + response.getError());
       }
       return response;
-    } catch (IOException e) {
+    } catch (Exception e) {
       responseHandler.onEvent(replicasToReplicatePerNode.get(0).getReplicaId(), e);
       throw e;
     } finally {
@@ -1064,8 +1063,7 @@ public class ReplicaThread implements Runnable {
           replicationConfig.replicationIncludeAll ? GetOption.Include_All : GetOption.None);
       long startTime = time.milliseconds();
       try {
-        connectedChannel.send(getRequest);
-        ChannelOutput channelOutput = connectedChannel.receive();
+        ChannelOutput channelOutput = connectedChannel.sendAndReceive(getRequest);
         getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
         long getRequestTime = time.milliseconds() - startTime;
         replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,

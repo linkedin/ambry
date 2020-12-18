@@ -109,8 +109,7 @@ class DirectSender implements Runnable {
                 Unpooled.wrappedBuffer(data), blobProperties.getBlobSize(), BlobType.DataBlob,
                 encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
 
-        channel.send(putRequest);
-        DataInputStream putResponseStream = channel.receive().getInputStream();
+        DataInputStream putResponseStream = channel.sendAndReceive(putRequest).getInputStream();
         PutResponse response = PutResponse.readFrom(putResponseStream);
         if (putResponseStream instanceof NettyByteBufDataInputStream) {
           // Release the underlying netty buf if the stream is NettyByteBuf based.
