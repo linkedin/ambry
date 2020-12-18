@@ -98,33 +98,6 @@ public class HostThrottlerTest {
     return parameters;
   }
 
-/*
-  @BeforeClass
-  public static void setup() throws Exception {
-    ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)), ACCOUNT_SERVICE, QUOTA_MANAGER_FACTORY);
-    ambryRestServer.start();
-    plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
-    sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT,
-        SSLFactory.getNewInstance(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
-  }
-
-
-  @AfterClass
-  public static void teardown() {
-    if (plaintextNettyClient != null) {
-      plaintextNettyClient.close();
-    }
-    if (sslNettyClient != null) {
-      sslNettyClient.close();
-    }
-    if (ambryRestServer != null) {
-      ambryRestServer.shutdown();
-    }
-  }
-
- */
-
   /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
