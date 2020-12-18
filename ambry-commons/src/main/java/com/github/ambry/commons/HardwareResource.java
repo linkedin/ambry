@@ -17,5 +17,5 @@ package com.github.ambry.commons;
  * Hardware Resource that Ambry needs to monitor for throttling
  */
 public enum HardwareResource {
-  CPU, MEMORY
+  CPU, HEAP_MEMORY, DIRECT_MEMORY
 }

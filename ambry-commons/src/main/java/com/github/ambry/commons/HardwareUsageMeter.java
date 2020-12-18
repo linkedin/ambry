@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.sun.management.HotSpotDiagnosticMXBean;
 import java.lang.management.BufferPoolMXBean;
 import java.lang.management.ManagementFactory;
 import com.sun.management.OperatingSystemMXBean;
@@ -30,10 +31,14 @@ public class HardwareUsageMeter {
   private AtomicLong cpuLastSampleTime = new AtomicLong(0);
   private final int cpuSamplingPeriodMs;
   private int cpuPercentage;
-  private AtomicLong memoryLastSampleTime = new AtomicLong(0);
+  private AtomicLong heapMemoryLastSampleTime = new AtomicLong(0);
   private final int memorySamplingPeriodMs;
-  private int memoryPercentage;
-  private long maxMemory = Runtime.getRuntime().maxMemory();
+  private long maxHeapMemory = Runtime.getRuntime().maxMemory();
+  private int heapMemoryPercentage;
+
+  private final long maxDirectMemory;
+  private int directMemoryPercentage;
+  private AtomicLong directMemoryLastSampleTime = new AtomicLong(0);
   private BufferPoolMXBean directMemoryMxBean;
   private OperatingSystemMXBean osBean;
 
@@ -47,6 +52,20 @@ public class HardwareUsageMeter {
       logger.error("Couldn't get directMemoryMxBean");
     }
     osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+
+    // MaxDirectMemorySize comes from jvm option -XX:MaxDirectMemorySize. If this option is not set, max direct memory equals to
+    // the value of Runtime.getRuntime().maxMemory(). https://stackoverflow.com/questions/3773775/default-for-xxmaxdirectmemorysize
+    long valueFromVmOption = Long.parseLong(ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class)
+        .getVMOption("MaxDirectMemorySize")
+        .getValue());
+    if (valueFromVmOption == 0) {
+      maxDirectMemory = maxHeapMemory;
+    } else {
+      maxDirectMemory = valueFromVmOption;
+    }
+
+    logger.info("Max heap memory {}MB, Max direct memory: {}MB", maxHeapMemory / 1024 / 1024,
+        maxDirectMemory / 1024 / 1024);
   }
 
   private int getCpuPercentage() {
@@ -60,22 +79,37 @@ public class HardwareUsageMeter {
     return cpuPercentage;
   }
 
-  private int getMemoryPercentage() {
+  private int getHeapMemoryPercentage() {
     // In experiments, Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory() takes 2-6ms
-    // directMemoryMxBean.getMemoryUsed() takes 2-15ms
-    if (System.currentTimeMillis() <= memoryLastSampleTime.get() + memorySamplingPeriodMs) {
-      return memoryPercentage;
+    if (System.currentTimeMillis() <= heapMemoryLastSampleTime.get() + memorySamplingPeriodMs) {
+      return heapMemoryPercentage;
     }
     long usedHeapMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-    memoryPercentage = (int) ((usedHeapMemory + directMemoryMxBean.getMemoryUsed()) * 100 / maxMemory);
-    memoryLastSampleTime.set(System.currentTimeMillis());
-    logger.trace("Memory total: {}  heap: {}, percentage: {}", maxMemory, usedHeapMemory, memoryPercentage);
-    return memoryPercentage;
+    heapMemoryPercentage = (int) (usedHeapMemory * 100 / maxHeapMemory);
+    heapMemoryLastSampleTime.set(System.currentTimeMillis());
+    logger.trace("Heap memory total: {}  used: {}, percentage: {}", maxHeapMemory, usedHeapMemory,
+        heapMemoryPercentage);
+    return heapMemoryPercentage;
+  }
+
+  private int getDirectMemoryPercentage() {
+    // directMemoryMxBean.getMemoryUsed() takes 2-15ms
+    if (System.currentTimeMillis() <= directMemoryLastSampleTime.get() + memorySamplingPeriodMs) {
+      return directMemoryPercentage;
+    }
+    long usedDirectMemory = directMemoryMxBean.getMemoryUsed();
+    directMemoryPercentage = (int) (usedDirectMemory * 100 / maxDirectMemory);
+    directMemoryLastSampleTime.set(System.currentTimeMillis());
+    logger.trace("Direct memory total: {}  used: {}, percentage: {}", maxDirectMemory, usedDirectMemory,
+        directMemoryPercentage);
+    return directMemoryPercentage;
   }
 
   int getHardwareResourcePercentage(HardwareResource hardwareResource) {
-    if (hardwareResource.equals(HardwareResource.MEMORY)) {
-      return getMemoryPercentage();
+    if (hardwareResource.equals(HardwareResource.HEAP_MEMORY)) {
+      return getHeapMemoryPercentage();
+    } else if (hardwareResource.equals(HardwareResource.DIRECT_MEMORY)) {
+      return getDirectMemoryPercentage();
     } else if (hardwareResource.equals(HardwareResource.CPU)) {
       return getCpuPercentage();
     }

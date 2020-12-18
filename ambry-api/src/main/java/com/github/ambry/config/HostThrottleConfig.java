@@ -38,7 +38,12 @@ public class HostThrottleConfig {
   /**
    * A better looking sample:
    *   {
-   *   "MEMORY": {
+   *   "HEAP_MEMORY": {
+   *     "threshold": 90,
+   *     "boundType": "UpperBound"
+   *   },
+   *   {
+   *   "DIRECT_MEMORY": {
    *     "threshold": 90,
    *     "boundType": "UpperBound"
    *   },
@@ -49,7 +54,8 @@ public class HostThrottleConfig {
    * }
    */
   private static final String DEFAULT_HARDWARE_THRESHOLDS_STRING =
-      new JSONObject().put("MEMORY", new JSONObject().put("threshold", 101).put("boundType", "UpperBound"))
+      new JSONObject().put("HEAP_MEMORY", new JSONObject().put("threshold", 101).put("boundType", "UpperBound"))
+          .put("DIRECT_MEMORY", new JSONObject().put("threshold", 101).put("boundType", "UpperBound"))
           .put("CPU", new JSONObject().put("threshold", 101).put("boundType", "UpperBound"))
           .toString();
 

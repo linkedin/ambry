@@ -15,7 +15,6 @@ package com.github.ambry.commons;
 
 import com.codahale.metrics.Clock;
 import com.codahale.metrics.Meter;
-import com.github.ambry.account.Container;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
@@ -83,21 +82,24 @@ public class HostLevelThrottlerTest {
   @Test
   public void hardwareUsageTest() throws Exception {
     String hardwareThresholdsString =
-        new JSONObject().put("MEMORY", new JSONObject().put("threshold", 30).put("boundType", "UpperBound"))
+        new JSONObject().put("HEAP_MEMORY", new JSONObject().put("threshold", 30).put("boundType", "UpperBound"))
+            .put("DIRECT_MEMORY", new JSONObject().put("threshold", 30).put("boundType", "UpperBound"))
             .put("CPU", new JSONObject().put("threshold", 30).put("boundType", "UpperBound"))
             .toString();
 
     List<int[]> usages = new ArrayList<>();
     List<Boolean> expectedResult = new ArrayList<>();
-    usages.add(new int[]{10, 10});
+    usages.add(new int[]{10, 10, 10});
     expectedResult.add(false);
-    usages.add(new int[]{30, 30});
+    usages.add(new int[]{30, 30, 30});
     expectedResult.add(false);
-    usages.add(new int[]{31, 31});
+    usages.add(new int[]{31, 31, 31});
     expectedResult.add(true);
-    usages.add(new int[]{10, 31});
+    usages.add(new int[]{10, 31, 10});
     expectedResult.add(true);
-    usages.add(new int[]{31, 10});
+    usages.add(new int[]{31, 10, 10});
+    expectedResult.add(true);
+    usages.add(new int[]{10, 10, 31});
     expectedResult.add(true);
 
     for (int i = 0; i < usages.size(); i++) {
@@ -108,8 +110,10 @@ public class HostLevelThrottlerTest {
           new HostLevelThrottler(new HashMap<>(), hardwareThresholdMap, mockHardwareUsageMeter);
       Mockito.when(mockHardwareUsageMeter.getHardwareResourcePercentage(HardwareResource.CPU))
           .thenReturn(usages.get(i)[0]);
-      Mockito.when(mockHardwareUsageMeter.getHardwareResourcePercentage(HardwareResource.MEMORY))
+      Mockito.when(mockHardwareUsageMeter.getHardwareResourcePercentage(HardwareResource.HEAP_MEMORY))
           .thenReturn(usages.get(i)[1]);
+      Mockito.when(mockHardwareUsageMeter.getHardwareResourcePercentage(HardwareResource.DIRECT_MEMORY))
+          .thenReturn(usages.get(i)[2]);
       Assert.assertEquals("Incorrect result", expectedResult.get(i),
           throttler.shouldThrottle(createRestRequest(RestMethod.GET, "https://linkedin.com")));
     }
