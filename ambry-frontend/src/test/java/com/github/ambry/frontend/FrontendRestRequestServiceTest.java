@@ -154,6 +154,8 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.secure.path.prefix", SECURE_PATH_PREFIX);
     configProps.setProperty("frontend.path.prefixes.to.remove", "/media");
     configProps.setProperty("frontend.enable.undelete", "true");
+    configProps.setProperty("storage.quota.helix.property.root.path", "");
+    configProps.setProperty("storage.quota.zk.client.connect.address", "");
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);

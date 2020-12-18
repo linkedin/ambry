@@ -51,6 +51,8 @@ public class FrontendRestRequestServiceFactoryTest {
     properties.setProperty("clustermap.cluster.name", "Cluster-Name");
     properties.setProperty("clustermap.datacenter.name", "Datacenter-Name");
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("storage.quota.helix.property.root.path", "");
+    properties.setProperty("storage.quota.zk.client.connect.address", "");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     FrontendRestRequestServiceFactory frontendRestRequestServiceFactory =

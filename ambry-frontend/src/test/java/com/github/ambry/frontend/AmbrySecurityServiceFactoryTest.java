@@ -34,7 +34,10 @@ public class AmbrySecurityServiceFactoryTest {
    */
   @Test
   public void getAmbrySecurityServiceFactoryTest() throws Exception {
-    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    Properties properties = new Properties();
+    properties.setProperty("storage.quota.helix.property.root.path", "");
+    properties.setProperty("storage.quota.zk.client.connect.address", "");
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     SecurityService securityService =
         new AmbrySecurityServiceFactory(verifiableProperties, new MockClusterMap(), null, null, null, null,
             new AmbryQuotaManagerFactory(new QuotaConfig(verifiableProperties), Collections.emptyList(),
