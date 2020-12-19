@@ -27,6 +27,7 @@ import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,14 +60,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String BLOB_ID = "blob_id";
   private static final String DELETED_TS = "deleted_ts";
   private static final String EXPIRES_TS = "expires_ts";
-  // variables
-  private static final String FOUND_ID = "@found_id";
   // query building blocks
   private static final String CURRENT_TIME = "CURRENT_TIMESTAMP(6)";
   private static final String CURRENT_TIME_COMPARISON = "(%1$s IS NOT NULL AND %1$s <= " + CURRENT_TIME + ")";
   private static final String IS_DELETED = String.format(CURRENT_TIME_COMPARISON, DELETED_TS);
   private static final String IS_EXPIRED = String.format(CURRENT_TIME_COMPARISON, EXPIRES_TS);
-  private static final String IS_DELETED_OR_EXPIRED = IS_DELETED + " OR " + IS_EXPIRED;
+  private static final String IS_DELETED_OR_EXPIRED = "(" + IS_DELETED + " OR " + IS_EXPIRED + ")";
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
 
   /**
@@ -84,27 +83,32 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       EXPIRES_TS, DELETED_TS, NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID);
 
   /**
-   * Create a blob name to blob ID mapping if a record for that blob name does not exist.
-   * If there is an existing record but the existing blob was soft deleted or expired, allow it to be overwritten.
-   * If there is an existing record and the existing blob is still valid (not expired or soft deleted), do not
-   * overwrite it.
-   * <p>
-   * Eventually the put operation will support updates to the mapping in the third case above, but that requires other
-   * work around concurrency control.
+   * Attempt to insert a new mapping into the database.
    */
-  private static final String PUT_QUERY = String.format(
-      "INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "
-          + "%5$s = IF(%8$s, VALUES(%5$s), %5$s), %6$s = IF(%8$s, VALUES(%6$s), %6$s), %7$s = IF(%8$s, null, %7$s)",
-      NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS, DELETED_TS, IS_DELETED_OR_EXPIRED);
+  private static final String INSERT_QUERY =
+      String.format("INSERT INTO %s (%s, %s, %4$s, %5$s, %6$s) VALUES (?, ?, ?, ?, ?)", NAMED_BLOBS, ACCOUNT_ID,
+          CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS);
 
-  private static final String SELECT_FOR_DELETE_QUERY =
+  /**
+   * If a record already exists for a named blob, attempt an update if the record in the DB represents an expired or
+   * deleted blob.
+   */
+  private static final String UPDATE_IF_DELETED_OR_EXPIRED_QUERY =
+      String.format("UPDATE %s SET %s = ?, %s = ?, %s = null WHERE %s AND %s", NAMED_BLOBS, BLOB_ID, EXPIRES_TS,
+          DELETED_TS, PK_MATCH, IS_DELETED_OR_EXPIRED);
+
+  /**
+   * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.
+   * This select call also allows the current blob ID to be retrieved prior to a delete.
+   */
+  private static final String SELECT_FOR_SOFT_DELETE_QUERY =
       String.format("SELECT %s, %s, %s FROM %s WHERE %s FOR UPDATE", BLOB_ID, DELETED_TS, CURRENT_TIME, NAMED_BLOBS,
           PK_MATCH);
 
   /**
-   * Soft delete a blob by setting the delete timestamp to the current time if the blob is not already deleted.
+   * Soft delete a blob by setting the delete timestamp to the current time.
    */
-  private static final String DELETE_QUERY =
+  private static final String SOFT_DELETE_QUERY =
       String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS, DELETED_TS, PK_MATCH);
 
   private final AccountService accountService;
@@ -171,6 +175,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         try (ResultSet resultSet = statement.executeQuery()) {
           String nextContinuationToken = null;
           List<NamedBlobRecord> elements = new ArrayList<>();
+          long currentTime = System.currentTimeMillis();
           int resultIndex = 0;
           while (resultSet.next()) {
             if (resultIndex++ == config.listMaxResults) {
@@ -181,7 +186,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
             Timestamp expirationTime = resultSet.getTimestamp(3);
             Timestamp deletionTime = resultSet.getTimestamp(4);
-            long currentTime = System.currentTimeMillis();
 
             if (compareTimestamp(expirationTime, currentTime) <= 0) {
               logger.trace("LIST: Blob expired, ignoring in list response; account='{}', container='{}', name='{}'",
@@ -204,7 +208,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<PutResult> put(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
-          try (PreparedStatement statement = connection.prepareStatement(PUT_QUERY)) {
+          boolean rowAlreadyExists = false;
+          // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
+          try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
             statement.setInt(1, accountId);
             statement.setInt(2, containerId);
             statement.setString(3, record.getBlobName());
@@ -214,13 +220,33 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             } else {
               statement.setTimestamp(5, null);
             }
-            // affectedRows will be 0 if there is currently an entry for this blob name that is
-            // not expired or deleted. Note that for this to return the number of changed rows instead of found rows,
-            // the useAffectedRows connector property has to be set to true.
-            int affectedRows = statement.executeUpdate();
-            if (affectedRows == 0) {
-              throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
-                  record.getContainerName(), record.getBlobName());
+            statement.executeUpdate();
+          } catch (SQLIntegrityConstraintViolationException e) {
+            rowAlreadyExists = true;
+          }
+          // 2. If the row already exists, attempt an update, checking that the update should be allowed (the current
+          //    row in the db represents a blob that was soft deleted or expired. Since soft deleted records are not
+          //    deleted from the table before a long retention period, there is no risk of the row not existing when
+          //    this query is run.
+          if (rowAlreadyExists) {
+            try (PreparedStatement statement = connection.prepareStatement(UPDATE_IF_DELETED_OR_EXPIRED_QUERY)) {
+              // fields to update
+              statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
+              if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
+                statement.setTimestamp(2, new Timestamp(record.getExpirationTimeMs()));
+              } else {
+                statement.setTimestamp(2, null);
+              }
+              // primary key fields
+              statement.setInt(3, accountId);
+              statement.setInt(4, containerId);
+              statement.setString(5, record.getBlobName());
+              // the number of rows found will be 0 if there is currently an entry for this blob name that is
+              // not expired or deleted.
+              if (statement.executeUpdate() == 0) {
+                throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
+                    record.getContainerName(), record.getBlobName());
+              }
             }
           }
           return new PutResult(record);
@@ -233,7 +259,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String blobId;
       Timestamp currentTime;
       boolean alreadyDeleted;
-      try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_DELETE_QUERY)) {
+      try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY)) {
         statement.setInt(1, accountId);
         statement.setInt(2, containerId);
         statement.setString(3, blobName);
@@ -250,8 +276,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       // only need to issue an update statement if the row was not already marked as deleted.
       if (!alreadyDeleted) {
-        try (PreparedStatement statement = connection.prepareStatement(DELETE_QUERY)) {
-          // use the current tim
+        try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY)) {
+          // use the current time
           statement.setTimestamp(1, currentTime);
           statement.setInt(2, accountId);
           statement.setInt(3, containerId);

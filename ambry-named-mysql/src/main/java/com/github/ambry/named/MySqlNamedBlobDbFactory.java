@@ -60,9 +60,6 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
     hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
     hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
     hikariConfig.addDataSourceProperty("useServerPrepStmts", "true");
-    // Checking if a row was actually changed in an update requires the DataSource to be configured with the
-    // useAffectedRows option, otherwise the number of rows visited will be returned, even if they are not changed.
-    hikariConfig.addDataSourceProperty("useAffectedRows", "true");
     hikariConfig.setMetricRegistry(metricRegistry);
     return new HikariDataSource(hikariConfig);
   }
