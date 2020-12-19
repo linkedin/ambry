@@ -27,7 +27,9 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collections;
@@ -361,10 +363,9 @@ public class RestUtilsTest {
 
   /**
    * Tests deserializing user metadata from byte array
-   * @throws Exception
    */
   @Test
-  public void getUserMetadataFromByteArrayComplexTest() throws Exception {
+  public void getUserMetadataFromByteArrayComplexTest() {
 
     Map<String, String> userMetadataMap = null;
     // user metadata of size 1 byte
@@ -746,17 +747,25 @@ public class RestUtilsTest {
    * Tests for {@link RestUtils#setUserMetadataHeaders(Map<String, String>, RestResponseChannel)}
    */
   @Test
-  public void setUserMetadataHeadersMapTest() {
+  public void setUserMetadataHeadersMapTest() throws UnsupportedEncodingException {
     // Call method that takes map input and verify headers are prefixed.
     String rawName = "customer";
     String customerName = "Walmart";
-    Map<String, String> rawUserMetadata = Collections.singletonMap(rawName, customerName);
+    String umFilename = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "filename";
+    String nonAsciiFilename = "å∫ \uD83D\uDE1D\uD83D\uDE31abcd";
+    Map<String, String> userMetadata = new HashMap<>();
+    userMetadata.put(rawName, customerName);
+    userMetadata.put(umFilename, nonAsciiFilename);
     MockRestResponseChannel responseChannel = new MockRestResponseChannel();
-    RestUtils.setUserMetadataHeaders(rawUserMetadata, responseChannel);
+    RestUtils.setUserMetadataHeaders(userMetadata, responseChannel);
     Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
-    assertEquals("Expected one header", 1, responseHeaders.size());
+    assertEquals("Expected one header", 2, responseHeaders.size());
     assertEquals("Header did not get prefixed", customerName,
         responseHeaders.get(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + rawName));
+    Object encodedValue = responseHeaders.get(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + "filename");
+    assertNotNull("Expected encoded header", encodedValue);
+    assertEquals("Mismatch in non-ascii filename", nonAsciiFilename,
+        URLDecoder.decode((String) encodedValue, StandardCharsets.UTF_8.name()));
   }
 
   // helpers.
