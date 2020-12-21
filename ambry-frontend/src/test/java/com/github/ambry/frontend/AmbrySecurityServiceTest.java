@@ -55,6 +55,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -110,33 +111,6 @@ public class AmbrySecurityServiceTest {
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
           URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, quotaManager, quotaConfig);
 
-  static {
-    try {
-      quotaManager =
-          new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
-      ACCOUNT_SERVICE.clear();
-      REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
-      REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(9),
-          TestUtils.getRandomString(9));
-      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(10),
-          TestUtils.getRandomString(10));
-      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(11),
-          TestUtils.getRandomString(11));
-      DEFAULT_INFO = new BlobInfo(
-          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
-              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
-          RestUtils.buildUserMetadata(USER_METADATA));
-      LIFEVERSION_INFO = new BlobInfo(
-          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
-              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
-          RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
-      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-  
   /**
    * Tests for {@link AmbrySecurityService#preProcessRequest(RestRequest, Callback)}
    * @throws Exception
@@ -234,6 +208,7 @@ public class AmbrySecurityServiceTest {
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
     HostLevelThrottler hostLevelThrottler = Mockito.mock(HostLevelThrottler.class);
+    QuotaManager quotaManager = Mockito.mock(QuotaManager.class);
     AmbrySecurityService ambrySecurityService =
         new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
             new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
@@ -410,7 +385,7 @@ public class AmbrySecurityServiceTest {
       new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
 
       securityService = new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager, quotaConfig);
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, quotaManager, quotaConfig);
 
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
@@ -435,7 +410,7 @@ public class AmbrySecurityServiceTest {
       new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
 
       securityService = new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager, quotaConfig);
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, quotaManager, quotaConfig);
 
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
@@ -983,6 +958,33 @@ public class AmbrySecurityServiceTest {
     @Override
     public Object getHeader(String headerName) {
       throw new IllegalStateException("Not implemented");
+    }
+  }
+
+  static {
+    try {
+      quotaManager =
+          new AmbryQuotaManagerFactory(quotaConfig, Collections.emptyList(), Collections.emptyList()).getQuotaManager();
+      ACCOUNT_SERVICE.clear();
+      REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
+      REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(9),
+          TestUtils.getRandomString(9));
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(10),
+          TestUtils.getRandomString(10));
+      USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(11),
+          TestUtils.getRandomString(11));
+      DEFAULT_INFO = new BlobInfo(
+          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
+          RestUtils.buildUserMetadata(USER_METADATA));
+      LIFEVERSION_INFO = new BlobInfo(
+          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
+          RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
+      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
     }
   }
 }

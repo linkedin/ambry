@@ -29,12 +29,12 @@ public class QuotaConfig {
   public static final String ENFORCER_STR = "enforcer";
   public static final String SOURCE_STR = "source";
   public static final String QUOTA_CONFIG_PREFIX = "quota.";
-  public static final String REQUEST_QUOTA_THROTTLING_ENABLED = "request.quota.throttling.enabled";
-  public static final String HOST_QUOTA_THROTTLING_ENABLED = "host.quota.throttling.enabled";
+  public static final String REQUEST_QUOTA_THROTTLING_ENABLED = QUOTA_CONFIG_PREFIX + "request.throttling.enabled";
+  public static final String HOST_QUOTA_THROTTLING_ENABLED = QUOTA_CONFIG_PREFIX + "host.throttling.enabled";
   public static final String QUOTA_THROTTLING_MODE = QUOTA_CONFIG_PREFIX + "throttling.mode";
   public static final String REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON =
-      "request.quota.enforcer.source.pair.info.json";
-  public static final String HOST_QUOTA_ENFORCER_FACTORIES = "host.quota.enforcer.factories";
+      QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
+  public static final String HOST_QUOTA_ENFORCER_FACTORIES = QUOTA_CONFIG_PREFIX + "host.enforcer.factories";
   public static final String QUOTA_MANAGER_FACTORY_CLASS = QUOTA_CONFIG_PREFIX + "manger.factory.class";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY_CLASS = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
