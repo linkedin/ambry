@@ -100,7 +100,7 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public boolean shouldThrottleOnRequestAndCharge(RestRequest restRequest, BlobInfo blobInfo,
+  public boolean charge(RestRequest restRequest, BlobInfo blobInfo,
       List<EnforcementRecommendation> enforcementRecommendations) {
     if (requestQuotaEnforcers.isEmpty()) {
       return false;

@@ -57,7 +57,7 @@ public interface QuotaManager {
    * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
    * @return true if the request should be throttled. false otherwise.
    */
-  boolean shouldThrottleOnRequestAndCharge(RestRequest restRequest, BlobInfo blobInfo,
+  boolean charge(RestRequest restRequest, BlobInfo blobInfo,
       List<EnforcementRecommendation> enforcementRecommendations);
 
   /**

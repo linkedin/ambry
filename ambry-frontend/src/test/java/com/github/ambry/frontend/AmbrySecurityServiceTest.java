@@ -214,7 +214,7 @@ public class AmbrySecurityServiceTest {
             new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
             hostLevelThrottler, quotaManager, quotaConfig);
     // Everything should be good.
-    Mockito.when(quotaManager.shouldThrottleOnRequestAndCharge(any(), any(), any())).thenReturn(false);
+    Mockito.when(quotaManager.charge(any(), any(), any())).thenReturn(false);
     for (int i = 0; i < 100; i++) {
       for (RestMethod restMethod : RestMethod.values()) {
         RestRequest restRequest = createRestRequest(restMethod, "/", null);
@@ -389,10 +389,10 @@ public class AmbrySecurityServiceTest {
 
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
-      when(quotaManager.shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList())).thenReturn(
+      when(quotaManager.charge(eq(restRequest), eq(DEFAULT_INFO), anyList())).thenReturn(
           true);
       securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO);
-      verify(quotaManager, times(1)).shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList());
+      verify(quotaManager, times(1)).charge(eq(restRequest), eq(DEFAULT_INFO), anyList());
     } finally {
       if (securityService != null) {
         securityService.close();
@@ -414,10 +414,10 @@ public class AmbrySecurityServiceTest {
 
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
-      when(quotaManager.shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList())).thenReturn(
+      when(quotaManager.charge(eq(restRequest), eq(DEFAULT_INFO), anyList())).thenReturn(
           true);
       securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO);
-      verify(quotaManager, times(0)).shouldThrottleOnRequestAndCharge(eq(restRequest), eq(DEFAULT_INFO), anyList());
+      verify(quotaManager, times(1)).charge(eq(restRequest), eq(DEFAULT_INFO), anyList());
     } finally {
       if (securityService != null) {
         securityService.close();

@@ -248,7 +248,7 @@ class AmbrySecurityService implements SecurityService {
     }
     if (quotaConfig.requestQuotaThrottlingEnabled) {
       // TODO use enforcement recommendation to create more specific error message and set specific response headers.
-      quotaManager.shouldThrottleOnRequestAndCharge(restRequest, blobInfo, new ArrayList<>());
+      quotaManager.charge(restRequest, blobInfo, new ArrayList<>());
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
