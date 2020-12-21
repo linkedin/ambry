@@ -31,9 +31,9 @@ public class ClusterMapConfig {
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   public static final String OLD_STATE_MODEL_DEF = "LeaderStandby";
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
+  public static final String ENABLE_MYSQL_AGGREGATION_TASK = "clustermap.enable.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
-  public static final String ENABLE_MYSQL_AGGREGATION_TASK = "clustermap.enable.mysql.aggregation.task";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -375,8 +375,8 @@ public class ClusterMapConfig {
     clustermapRetryDisablePartitionCompletionBackoffMs =
         verifiableProperties.getIntInRange("clustermap.retry.disable.partition.completion.backoff.ms", 10 * 1000, 1,
             Integer.MAX_VALUE);
+    clustermapEnableMySqlAggregationTask = verifiableProperties.getBoolean(ENABLE_MYSQL_AGGREGATION_TASK, false);
     clustermapEnableAggregatedMonthlyAccountReport =
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
-    clustermapEnableMySqlAggregationTask = verifiableProperties.getBoolean(ENABLE_MYSQL_AGGREGATION_TASK, false);
   }
 }

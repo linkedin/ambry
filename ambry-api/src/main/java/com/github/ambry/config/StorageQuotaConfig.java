@@ -36,12 +36,14 @@ public class StorageQuotaConfig {
    * must not end with {@code /}. The root path should be {@code /{clustername}/PROPERTYSTORE}
    */
   @Config(HELIX_PROPERTY_ROOT_PATH)
+  @Default("")
   public final String helixPropertyRootPath;
 
   /**
    * The ZooKeeper server address to connect to. This config is required.
    */
   @Config(ZK_CLIENT_CONNECT_ADDRESS)
+  @Default("")
   public final String zkClientConnectAddress;
 
   /**
@@ -114,8 +116,8 @@ public class StorageQuotaConfig {
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
   public StorageQuotaConfig(VerifiableProperties verifiableProperties) {
-    helixPropertyRootPath = verifiableProperties.getString(HELIX_PROPERTY_ROOT_PATH);
-    zkClientConnectAddress = verifiableProperties.getString(ZK_CLIENT_CONNECT_ADDRESS);
+    helixPropertyRootPath = verifiableProperties.getString(HELIX_PROPERTY_ROOT_PATH, "");
+    zkClientConnectAddress = verifiableProperties.getString(ZK_CLIENT_CONNECT_ADDRESS, "");
     refresherPollingIntervalMs =
         verifiableProperties.getIntInRange(REFRESHER_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
     containerStorageQuotaInJson = verifiableProperties.getString(CONTAINER_STORAGE_QUOTA_IN_JSON, "");

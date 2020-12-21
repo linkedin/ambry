@@ -21,10 +21,6 @@ import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +34,6 @@ import org.apache.helix.task.TaskCallbackContext;
 import org.apache.helix.task.TaskResult;
 import org.apache.helix.task.UserContentStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
-import org.apache.zookeeper.data.Stat;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,15 +44,11 @@ import org.slf4j.LoggerFactory;
  */
 class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   static final String AGGREGATED_REPORT_PREFIX = "Aggregated_";
-  static final String AGGREGATED_MONTHLY_REPORT_SUFFIX = "_Month_Base";
   static final String RAW_VALID_SIZE_FIELD_NAME = "raw_valid_data_size";
   static final String VALID_SIZE_FIELD_NAME = "valid_data_size";
-  static final String MONTH_NAME = "month";
   public static final String TASK_COMMAND_PREFIX = "aggregate";
   private static final String TIMESTAMP_FIELD_NAME = "timestamp";
   private static final String ERROR_OCCURRED_INSTANCES_FIELD_NAME = "error_occurred_instances";
-  private static final ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(LocalDateTime.now());
-  static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
   private final HelixManager manager;
   private final HelixClusterAggregator clusterAggregator;
   private final String healthReportName;
@@ -125,31 +116,6 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
           clusterAggregator.getExceptionOccurredInstances(statsReportType));
       String path = String.format("/%s", resultId);
       manager.getHelixPropertyStore().set(path, znRecord, AccessOption.PERSISTENT);
-
-      // Create a base report at the beginning of each month.
-      // Check if there is a base report for this month or not.
-      if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
-          && statsReportType == StatsReportType.ACCOUNT_REPORT) {
-        resultId =
-            String.format("%s%s%s", AGGREGATED_REPORT_PREFIX, healthReportName, AGGREGATED_MONTHLY_REPORT_SUFFIX);
-        path = String.format("/%s", resultId);
-        Stat stat = new Stat();
-        ZNRecord monthlyReportZNRecord = manager.getHelixPropertyStore().get(path, stat, AccessOption.PERSISTENT);
-        String currentMonthValue =
-            LocalDateTime.ofEpochSecond(time.seconds(), 0, zoneOffset).format(TIMESTAMP_FORMATTER);
-        if (monthlyReportZNRecord == null || !currentMonthValue.equals(
-            monthlyReportZNRecord.getSimpleField(MONTH_NAME))) {
-          monthlyReportZNRecord = new ZNRecord(resultId);
-          monthlyReportZNRecord.setSimpleField(MONTH_NAME, currentMonthValue);
-          monthlyReportZNRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME,
-              znRecord.getSimpleField(RAW_VALID_SIZE_FIELD_NAME));
-          monthlyReportZNRecord.setSimpleField(VALID_SIZE_FIELD_NAME, znRecord.getSimpleField(VALID_SIZE_FIELD_NAME));
-          monthlyReportZNRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(time.milliseconds()));
-          monthlyReportZNRecord.setListField(ERROR_OCCURRED_INSTANCES_FIELD_NAME,
-              clusterAggregator.getExceptionOccurredInstances(statsReportType));
-          manager.getHelixPropertyStore().set(path, monthlyReportZNRecord, AccessOption.PERSISTENT);
-        }
-      }
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
     } catch (Exception e) {
       logger.error("Exception thrown while aggregating stats from health reports across all nodes ", e);

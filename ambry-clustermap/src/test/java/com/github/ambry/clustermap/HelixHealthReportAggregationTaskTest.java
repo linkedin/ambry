@@ -21,16 +21,11 @@ import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
 import java.net.BindException;
 import java.nio.file.Files;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -45,16 +40,12 @@ import org.apache.zookeeper.data.Stat;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 
 /**
  * Unit test class for {@link HelixHealthReportAggregatorTask}.
  */
-@RunWith(Parameterized.class)
 public class HelixHealthReportAggregationTaskTest {
   private static final String CLUSTER_NAME = "Ambry-test";
   private static final String INSTANCE_NAME = "helix.ambry.com";
@@ -71,15 +62,7 @@ public class HelixHealthReportAggregationTaskTest {
   private TestUtils.ZkInfo zkInfo;
   private final ObjectMapper mapper = new ObjectMapper();
 
-  private final boolean enableAggregatedMonthlyAccountReport;
-
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
-  }
-
-  public HelixHealthReportAggregationTaskTest(boolean enableAggregatedMonthlyAccountReport) throws IOException {
-    this.enableAggregatedMonthlyAccountReport = enableAggregatedMonthlyAccountReport;
+  public HelixHealthReportAggregationTaskTest() throws IOException {
     File tempDir = Files.createTempDirectory("HelixHealthReportAggregationTask-" + new Random().nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     int zkPort = 13188;
@@ -121,8 +104,6 @@ public class HelixHealthReportAggregationTaskTest {
     props.setProperty("clustermap.host.name", INSTANCE_NAME);
     props.setProperty("clustermap.cluster.name", CLUSTER_NAME);
     props.setProperty("clustermap.datacenter.name", "DC1");
-    props.setProperty(ClusterMapConfig.ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT,
-        Boolean.toString(this.enableAggregatedMonthlyAccountReport));
     return new ClusterMapConfig(new VerifiableProperties(props));
   }
 
@@ -153,61 +134,7 @@ public class HelixHealthReportAggregationTaskTest {
       Assert.assertNotNull(record);
       Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.VALID_SIZE_FIELD_NAME));
       Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.RAW_VALID_SIZE_FIELD_NAME));
-
-      if (type == StatsReportType.ACCOUNT_REPORT && this.enableAggregatedMonthlyAccountReport) {
-        record = mockHelixManager.getHelixPropertyStore()
-            .get(String.format("/%s%s%s", HelixHealthReportAggregatorTask.AGGREGATED_REPORT_PREFIX, healthReportName,
-                HelixHealthReportAggregatorTask.AGGREGATED_MONTHLY_REPORT_SUFFIX), stat, AccessOption.PERSISTENT);
-        Assert.assertNotNull(record);
-        Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.VALID_SIZE_FIELD_NAME));
-        Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.RAW_VALID_SIZE_FIELD_NAME));
-        Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.MONTH_NAME));
-      }
     }
-  }
-
-  /**
-   * Test aggregation task on different month to verify if the new monthly account reports are generated.
-   * @throws Exception
-   */
-  @Test
-  public void testAggregationOnNewMonth() throws Exception {
-    Assume.assumeTrue(enableAggregatedMonthlyAccountReport);
-    initializeNodeReports(StatsReportType.ACCOUNT_REPORT, 3, 1000);
-
-    task = new HelixHealthReportAggregatorTask(mockHelixManager, RELEVANT_PERIOD_IN_MINUTES, HEALTH_REPORT_NAME_ACCOUNT,
-        STATS_FIELD_NAME_ACCOUNT, StatsReportType.ACCOUNT_REPORT, null, clusterMapConfig, mockTime);
-    task.run();
-
-    Stat stat = new Stat();
-    ZNRecord record = mockHelixManager.getHelixPropertyStore()
-        .get(String.format("/%s%s%s", HelixHealthReportAggregatorTask.AGGREGATED_REPORT_PREFIX,
-            HEALTH_REPORT_NAME_ACCOUNT, HelixHealthReportAggregatorTask.AGGREGATED_MONTHLY_REPORT_SUFFIX), stat,
-            AccessOption.PERSISTENT);
-    Assert.assertNotNull(record);
-    Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.VALID_SIZE_FIELD_NAME));
-    Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.RAW_VALID_SIZE_FIELD_NAME));
-    Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.MONTH_NAME));
-
-    String previousMonth = record.getSimpleField(HelixHealthReportAggregatorTask.MONTH_NAME);
-
-    // Moving timestamp to next month, we should get a different ZNRecord with different month value.
-    ZoneOffset zoneOffset = ZoneId.systemDefault().getRules().getOffset(LocalDateTime.now());
-    LocalDateTime dateTime = LocalDateTime.ofEpochSecond(mockTime.seconds(), 0, zoneOffset);
-    long secondsNextMonth = dateTime.plusMonths(1).atOffset(zoneOffset).toEpochSecond();
-    mockTime.sleep(secondsNextMonth * Time.MsPerSec - mockTime.milliseconds());
-    // Now it's should be a month later
-
-    task.run();
-
-    record = mockHelixManager.getHelixPropertyStore()
-        .get(String.format("/%s%s%s", HelixHealthReportAggregatorTask.AGGREGATED_REPORT_PREFIX,
-            HEALTH_REPORT_NAME_ACCOUNT, HelixHealthReportAggregatorTask.AGGREGATED_MONTHLY_REPORT_SUFFIX), stat,
-            AccessOption.PERSISTENT);
-    Assert.assertNotNull(record);
-    Assert.assertNotNull(record.getSimpleField(HelixHealthReportAggregatorTask.MONTH_NAME));
-    String currentMonth = record.getSimpleField(HelixHealthReportAggregatorTask.MONTH_NAME);
-    Assert.assertFalse(previousMonth.equals(currentMonth));
   }
 
   /**

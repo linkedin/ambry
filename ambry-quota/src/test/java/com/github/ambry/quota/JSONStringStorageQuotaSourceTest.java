@@ -34,8 +34,6 @@ public class JSONStringStorageQuotaSourceTest {
     String json = "{`10`: {`1`: 1000, `2`: 3000}, `20`: {`4`: 2000, `5`: 1000}}".replace("`", "\"");
     Properties properties = new Properties();
     properties.setProperty(StorageQuotaConfig.CONTAINER_STORAGE_QUOTA_IN_JSON, json);
-    properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
-    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     StorageQuotaConfig config = new StorageQuotaConfig(new VerifiableProperties(properties));
 
     JSONStringStorageQuotaSource source = new JSONStringStorageQuotaSource(config);
