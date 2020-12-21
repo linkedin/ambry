@@ -124,7 +124,6 @@ public class ServerHttp2Test {
 
   @Test
   public void endToEndHttp2ReplicationWithMultiNodeMultiPartition() throws Exception {
-    // TODO: ByteBuf leak reported during test.
     DataNodeId dataNode = http2Cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = http2Cluster.getOneDataNodeFromEachDatacenter(dataCenterList);

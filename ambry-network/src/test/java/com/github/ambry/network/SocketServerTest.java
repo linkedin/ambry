@@ -22,7 +22,6 @@ import com.github.ambry.config.VerifiableProperties;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;

@@ -14,7 +14,6 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.messageformat.BlobStoreRecovery;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;

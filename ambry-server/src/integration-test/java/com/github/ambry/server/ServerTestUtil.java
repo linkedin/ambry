@@ -137,7 +137,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLSocketFactory;
-import javax.xml.crypto.Data;
 
 import static org.junit.Assert.*;
 
@@ -199,7 +198,7 @@ final class ServerTestUtil {
       channel.connect();
       DataInputStream putResponseStream = channel.sendAndReceive(putRequest).getInputStream();
       PutResponse response = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response.getError());
 
       // put blob 2 with an expiry time and apply TTL update later
@@ -213,7 +212,7 @@ final class ServerTestUtil {
               testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putResponseStream = channel.sendAndReceive(putRequest2).getInputStream();
       PutResponse response2 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 3
@@ -222,7 +221,7 @@ final class ServerTestUtil {
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putResponseStream = channel.sendAndReceive(putRequest3).getInputStream();
       PutResponse response3 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response3.getError());
       // put blob 4 that is expired
       BlobProperties propertiesExpired =
@@ -233,7 +232,7 @@ final class ServerTestUtil {
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putResponseStream = channel.sendAndReceive(putRequest4).getInputStream();
       PutResponse response4 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response4.getError());
       cluster.time.sleep(10000);
 
@@ -255,7 +254,7 @@ final class ServerTestUtil {
         assertEquals("serviceid1", propertyOutput.getServiceId());
         assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
         assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
-        releaseStream(stream);
+        releaseNettyBufUnderneathStream(stream);
       } catch (MessageFormatException e) {
         fail();
       }
@@ -276,7 +275,7 @@ final class ServerTestUtil {
         assertEquals("serviceid1", propertyOutput.getServiceId());
         assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
         assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
-        releaseStream(stream);
+        releaseNettyBufUnderneathStream(stream);
       } catch (MessageFormatException e) {
         fail();
       }
@@ -295,7 +294,7 @@ final class ServerTestUtil {
       DataInputStream streamExpired = channel.sendAndReceive(getRequestExpired).getInputStream();
       GetResponse respExpired = GetResponse.readFrom(streamExpired, clusterMap);
       assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
-      releaseStream(streamExpired);
+      releaseNettyBufUnderneathStream(streamExpired);
       // 2. With Include_Expired flag
       idsExpired = new ArrayList<>();
       partitionExpired =
@@ -316,7 +315,7 @@ final class ServerTestUtil {
         assertEquals("ownerid", propertyOutput.getOwnerId());
         assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
         assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
-        releaseStream(streamExpired);
+        releaseNettyBufUnderneathStream(streamExpired);
       } catch (MessageFormatException e) {
         fail();
       }
@@ -337,7 +336,7 @@ final class ServerTestUtil {
           assertNull("MessageMetadata should have been null",
               resp2.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
         }
-        releaseStream(stream);
+        releaseNettyBufUnderneathStream(stream);
       } catch (MessageFormatException e) {
         fail();
       }
@@ -365,7 +364,7 @@ final class ServerTestUtil {
         assertNull("MessageMetadata should have been null",
             resp3.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob all
       GetRequest getRequest4 =
           new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
@@ -382,7 +381,7 @@ final class ServerTestUtil {
       } else {
         assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob data
       // if encryption is enabled, router will try to decrypt the blob content using encryptionKey which will fail, as
       // encryptionKey in this test doesn't have any relation to the content. Both are random bytes for test purposes.
@@ -418,7 +417,7 @@ final class ServerTestUtil {
       stream = channel.sendAndReceive(getRequest5).getInputStream();
       GetResponse resp5 = GetResponse.readFrom(stream, clusterMap);
       assertEquals(ServerErrorCode.Blob_Not_Found, resp5.getPartitionResponseInfoList().get(0).getErrorCode());
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // stop the store via AdminRequest
       System.out.println("Begin to stop a BlobStore");
       AdminRequest adminRequest =
@@ -427,7 +426,7 @@ final class ServerTestUtil {
           new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StopStore, adminRequest);
       stream = channel.sendAndReceive(controlRequest).getInputStream();
       AdminResponse adminResponse = AdminResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
 
       // put a blob on a stopped store, which should fail
@@ -436,7 +435,7 @@ final class ServerTestUtil {
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putResponseStream = channel.sendAndReceive(putRequest).getInputStream();
       response = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals("Put blob on stopped store should fail", ServerErrorCode.Replica_Unavailable, response.getError());
 
       // get a blob properties on a stopped store, which should fail
@@ -452,12 +451,12 @@ final class ServerTestUtil {
       resp1 = GetResponse.readFrom(stream, clusterMap);
       assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Replica_Unavailable,
           resp1.getPartitionResponseInfoList().get(0).getErrorCode());
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // delete a blob on a stopped store, which should fail
       DeleteRequest deleteRequest = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
       stream = channel.sendAndReceive(deleteRequest).getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Replica_Unavailable,
           deleteResponse.getError());
 
@@ -467,7 +466,7 @@ final class ServerTestUtil {
       controlRequest = new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
       stream = channel.sendAndReceive(controlRequest).getInputStream();
       adminResponse = AdminResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Start store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
       List<? extends ReplicaId> replicaIds = partitionIds.get(0).getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
@@ -483,7 +482,7 @@ final class ServerTestUtil {
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putResponseStream = channel.sendAndReceive(putRequest5).getInputStream();
       PutResponse response5 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals("Put blob on restarted store should succeed", ServerErrorCode.No_Error, response5.getError());
 
       // get a blob on a restarted store , which should succeed
@@ -500,19 +499,19 @@ final class ServerTestUtil {
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
       assertArrayEquals("Content mismatch.", data, actualBlobData);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // undelete a not-deleted blob should return fail
       UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId1, System.currentTimeMillis());
       stream = channel.sendAndReceive(undeleteRequest).getInputStream();
       UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Undelete blob should succeed", ServerErrorCode.Blob_Not_Deleted, undeleteResponse.getError());
 
       // delete a blob on a restarted store , which should succeed
       deleteRequest = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
       stream = channel.sendAndReceive(deleteRequest).getInputStream();
       deleteResponse = DeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Delete blob on restarted store should succeed", ServerErrorCode.No_Error,
           deleteResponse.getError());
 
@@ -520,7 +519,7 @@ final class ServerTestUtil {
       undeleteRequest = new UndeleteRequest(2, "undeleteClient", blobId1, System.currentTimeMillis());
       stream = channel.sendAndReceive(undeleteRequest).getInputStream();
       undeleteResponse = UndeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Undelete blob should succeed", ServerErrorCode.No_Error, undeleteResponse.getError());
       assertEquals("Undelete life version mismatch", undeleteResponse.getLifeVersion(), (short) 1);
 
@@ -528,7 +527,7 @@ final class ServerTestUtil {
       undeleteRequest = new UndeleteRequest(3, "undeleteClient", blobId1, System.currentTimeMillis());
       stream = channel.sendAndReceive(undeleteRequest).getInputStream();
       undeleteResponse = UndeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Undelete blob should fail", ServerErrorCode.Blob_Already_Undeleted, undeleteResponse.getError());
       assertEquals("LifeVersion Mismatch", (short) 1, undeleteResponse.getLifeVersion());
 
@@ -540,7 +539,7 @@ final class ServerTestUtil {
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
       assertArrayEquals("Content mismatch", data, actualBlobData);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // Bounce servers to make them read the persisted token file.
       cluster.stopServers();
       cluster.reinitServers();
@@ -555,7 +554,7 @@ final class ServerTestUtil {
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
       actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
       assertArrayEquals("Content mismatch", data, actualBlobData);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       channel.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
@@ -601,17 +600,17 @@ final class ServerTestUtil {
             properties.getBlobSize(), BlobType.DataBlob, encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
     DataInputStream putResponseStream = channelToDatanode1.sendAndReceive(latePutRequest1).getInputStream();
     PutResponse response = PutResponse.readFrom(putResponseStream);
-    releaseStream(putResponseStream);
+    releaseNettyBufUnderneathStream(putResponseStream);
     assertEquals(expectedErrorCode, response.getError());
 
     putResponseStream = channelToDatanode2.sendAndReceive(latePutRequest2).getInputStream();
     response = PutResponse.readFrom(putResponseStream);
-    releaseStream(putResponseStream);
+    releaseNettyBufUnderneathStream(putResponseStream);
     assertEquals(expectedErrorCode, response.getError());
 
     putResponseStream = channelToDatanode3.sendAndReceive(latePutRequest3).getInputStream();
     response = PutResponse.readFrom(putResponseStream);
-    releaseStream(putResponseStream);
+    releaseNettyBufUnderneathStream(putResponseStream);
     assertEquals(expectedErrorCode, response.getError());
   }
 
@@ -815,7 +814,7 @@ final class ServerTestUtil {
           assertEquals("Expiration time mismatch (props)", expectedExpiryTimeMs, getExpiryTimeMs(propertyOutput));
           assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
-          releaseStream(stream);
+          releaseNettyBufUnderneathStream(stream);
         } catch (MessageFormatException e) {
           fail();
         }
@@ -842,7 +841,7 @@ final class ServerTestUtil {
           e.printStackTrace();
           fail();
         }
-        releaseStream(stream);
+        releaseNettyBufUnderneathStream(stream);
         // get blob
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
         stream = channel.sendAndReceive(getRequest).getInputStream();
@@ -866,7 +865,7 @@ final class ServerTestUtil {
           e.printStackTrace();
           fail();
         }
-        releaseStream(stream);
+        releaseNettyBufUnderneathStream(stream);
         // get blob all
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
         stream = channel.sendAndReceive(getRequest).getInputStream();
@@ -885,7 +884,7 @@ final class ServerTestUtil {
           } else {
             assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
           }
-          releaseStream(stream);
+          releaseNettyBufUnderneathStream(stream);
         } catch (MessageFormatException e) {
           e.printStackTrace();
           fail();
@@ -943,7 +942,7 @@ final class ServerTestUtil {
         DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIds.get(i), System.currentTimeMillis());
         DataInputStream deleteResponseStream = channel.sendAndReceive(deleteRequest).getInputStream();
         DeleteResponse deleteResponse = DeleteResponse.readFrom(deleteResponseStream);
-        releaseStream(deleteResponseStream);
+        releaseNettyBufUnderneathStream(deleteResponseStream);
         assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
         blobsDeleted.add(blobIds.get(i));
       }
@@ -973,7 +972,7 @@ final class ServerTestUtil {
         DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
         GetResponse resp = GetResponse.readFrom(stream, clusterMap);
         assertEquals(ServerErrorCode.Blob_Deleted, resp.getPartitionResponseInfoList().get(0).getErrorCode());
-        releaseStream(stream);
+        releaseNettyBufUnderneathStream(stream);
       }
     }
     // take a server down, clean up a mount path, start and ensure replication fixes it
@@ -1040,7 +1039,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get user metadata
       getRequest =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
@@ -1068,7 +1067,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
@@ -1096,7 +1095,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob all
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
@@ -1123,7 +1122,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
     }
     assertEquals(0, blobsDeleted.size());
     // take a server down, clean all contents, start and ensure replication fixes it
@@ -1180,7 +1179,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get user metadata
       getRequest =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
@@ -1206,7 +1205,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
@@ -1232,7 +1231,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob all
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
       stream = channel1.sendAndReceive(getRequest).getInputStream();
@@ -1257,7 +1256,7 @@ final class ServerTestUtil {
           fail();
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
     }
     assertEquals(0, blobsChecked.size());
     short expectedLifeVersion = 1;
@@ -1268,7 +1267,7 @@ final class ServerTestUtil {
         UndeleteRequest undeleteRequest = new UndeleteRequest(2, "reptest", deletedId, System.currentTimeMillis());
         DataInputStream undeleteResponseStream = channel3.sendAndReceive(undeleteRequest).getInputStream();
         UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(undeleteResponseStream);
-        releaseStream(undeleteResponseStream);
+        releaseNettyBufUnderneathStream(undeleteResponseStream);
         assertEquals(ServerErrorCode.No_Error, undeleteResponse.getError());
         assertEquals(expectedLifeVersion, undeleteResponse.getLifeVersion());
       }
@@ -1309,7 +1308,7 @@ final class ServerTestUtil {
           }
           assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
-          releaseStream(stream);
+          releaseNettyBufUnderneathStream(stream);
         } catch (MessageFormatException e) {
           fail();
         }
@@ -1318,7 +1317,7 @@ final class ServerTestUtil {
         DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", id, System.currentTimeMillis());
         DataInputStream deleteResponseStream = channel.sendAndReceive(deleteRequest).getInputStream();
         DeleteResponse deleteResponse = DeleteResponse.readFrom(deleteResponseStream);
-        releaseStream(deleteResponseStream);
+        releaseNettyBufUnderneathStream(deleteResponseStream);
         assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
       }
 
@@ -1354,7 +1353,7 @@ final class ServerTestUtil {
           }
           assertEquals("Expiration time mismatch in MessageInfo", Utils.Infinite_Time,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
-          releaseStream(stream);
+          releaseNettyBufUnderneathStream(stream);
         } catch (MessageFormatException e) {
           fail();
         }
@@ -1465,7 +1464,7 @@ final class ServerTestUtil {
         new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StopStore, adminRequest);
     DataInputStream stream = channel.sendAndReceive(controlRequest).getInputStream();
     AdminResponse adminResponse = AdminResponse.readFrom(stream);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
 
     // put a blob on a stopped store, which should fail
@@ -1480,7 +1479,7 @@ final class ServerTestUtil {
             properties.getBlobSize(), BlobType.DataBlob, null);
     DataInputStream putResponseStream = channel.sendAndReceive(putRequest2).getInputStream();
     PutResponse response2 = PutResponse.readFrom(putResponseStream);
-    releaseStream(putResponseStream);
+    releaseNettyBufUnderneathStream(putResponseStream);
     assertEquals("Put blob on stopped store should fail", ServerErrorCode.Replica_Unavailable, response2.getError());
 
     // get a blob properties on a stopped store, which should fail
@@ -1495,12 +1494,12 @@ final class ServerTestUtil {
     GetResponse resp1 = GetResponse.readFrom(stream, clusterMap);
     assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Replica_Unavailable,
         resp1.getPartitionResponseInfoList().get(0).getErrorCode());
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     // delete a blob on a stopped store, which should fail
     DeleteRequest deleteRequest = new DeleteRequest(1, "clientId1", blobId1, System.currentTimeMillis());
     stream = channel.sendAndReceive(deleteRequest).getInputStream();
     DeleteResponse deleteResponse = DeleteResponse.readFrom(stream);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Replica_Unavailable,
         deleteResponse.getError());
 
@@ -1510,7 +1509,7 @@ final class ServerTestUtil {
     controlRequest = new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StartStore, adminRequest);
     stream = channel.sendAndReceive(controlRequest).getInputStream();
     adminResponse = AdminResponse.readFrom(stream);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     assertEquals("Start store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
     List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
     for (ReplicaId replicaId : replicaIds) {
@@ -1526,7 +1525,7 @@ final class ServerTestUtil {
             properties.getBlobSize(), BlobType.DataBlob, null);
     putResponseStream = channel.sendAndReceive(putRequest2).getInputStream();
     response2 = PutResponse.readFrom(putResponseStream);
-    releaseStream(putResponseStream);
+    releaseNettyBufUnderneathStream(putResponseStream);
     assertEquals("Put blob on restarted store should succeed", ServerErrorCode.No_Error, response2.getError());
     // verify the put blob has been replicated successfully.
     notificationSystem.awaitBlobCreations(blobId2.getID());
@@ -1545,12 +1544,12 @@ final class ServerTestUtil {
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
     byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
     assertArrayEquals("Content mismatch.", data, actualBlobData);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     // delete a blob on a restarted store , which should succeed
     deleteRequest = new DeleteRequest(1, "clientId2", blobId2, System.currentTimeMillis());
     stream = channel.sendAndReceive(deleteRequest).getInputStream();
     deleteResponse = DeleteResponse.readFrom(stream);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     assertEquals("Delete blob on restarted store should succeed", ServerErrorCode.No_Error, deleteResponse.getError());
 
     router.close();
@@ -1616,7 +1615,7 @@ final class ServerTestUtil {
       channel3.connect();
       DataInputStream putResponseStream = channel1.sendAndReceive(putRequest).getInputStream();
       PutResponse response = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response.getError());
       // put blob 2
       PutRequest putRequest2 =
@@ -1628,7 +1627,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(1));
       putResponseStream = channel2.sendAndReceive(putRequest2).getInputStream();
       PutResponse response2 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response2.getError());
       // put blob 3
       PutRequest putRequest3 =
@@ -1640,7 +1639,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(2));
       putResponseStream = channel3.sendAndReceive(putRequest3).getInputStream();
       PutResponse response3 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 4
@@ -1652,7 +1651,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(3));
       putResponseStream = channel1.sendAndReceive(putRequest).getInputStream();
       response = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response.getError());
 
       // put blob 5
@@ -1664,7 +1663,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(4));
       putResponseStream = channel2.sendAndReceive(putRequest2).getInputStream();
       response2 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 6
@@ -1676,7 +1675,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(5));
       putResponseStream = channel3.sendAndReceive(putRequest3).getInputStream();
       response3 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response3.getError());
       // wait till replication can complete
       notificationSystem.awaitBlobCreations(blobIdList.get(0).getID());
@@ -1742,7 +1741,7 @@ final class ServerTestUtil {
       } catch (MessageFormatException e) {
         fail();
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob
       ids.clear();
       ids.add(blobIdList.get(0));
@@ -1766,7 +1765,7 @@ final class ServerTestUtil {
       } catch (MessageFormatException e) {
         fail();
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get blob all
       ids.clear();
       ids.add(blobIdList.get(0));
@@ -1787,7 +1786,7 @@ final class ServerTestUtil {
       } catch (MessageFormatException e) {
         fail();
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       if (!testEncryption) {
         // get blob data
         // Use router to get the blob
@@ -1823,13 +1822,13 @@ final class ServerTestUtil {
       GetResponse resp5 = GetResponse.readFrom(stream, clusterMap);
       assertEquals(ServerErrorCode.No_Error, resp5.getError());
       assertEquals(ServerErrorCode.Blob_Not_Found, resp5.getPartitionResponseInfoList().get(0).getErrorCode());
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIdList.get(0), System.currentTimeMillis());
       expectedTokenSize += getUpdateRecordSize(blobIdList.get(0), SubRecord.Type.DELETE);
       DataInputStream deleteResponseStream = channel1.sendAndReceive(deleteRequest).getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(deleteResponseStream);
-      releaseStream(deleteResponseStream);
+      releaseNettyBufUnderneathStream(deleteResponseStream);
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
@@ -1844,7 +1843,7 @@ final class ServerTestUtil {
       GetResponse resp6 = GetResponse.readFrom(stream, clusterMap);
       assertEquals(ServerErrorCode.No_Error, resp6.getError());
       assertEquals(ServerErrorCode.Blob_Deleted, resp6.getPartitionResponseInfoList().get(0).getErrorCode());
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       checkReplicaTokens(clusterMap, dataNodeId,
@@ -1863,7 +1862,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(6));
       putResponseStream = channel2.sendAndReceive(putRequest2).getInputStream();
       response2 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 8
@@ -1875,7 +1874,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(7));
       putResponseStream = channel3.sendAndReceive(putRequest3).getInputStream();
       response3 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 9
@@ -1887,7 +1886,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(8));
       putResponseStream = channel2.sendAndReceive(putRequest2).getInputStream();
       response2 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 10
@@ -1899,7 +1898,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(9));
       putResponseStream = channel3.sendAndReceive(putRequest3).getInputStream();
       response3 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 11
@@ -1912,7 +1911,7 @@ final class ServerTestUtil {
           ByteBuffer.wrap(usermetadata), dataList.get(10));
       putResponseStream = channel2.sendAndReceive(putRequest2).getInputStream();
       response2 = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       checkTtlUpdateStatus(channel2, clusterMap, blobIdFactory, blobIdList.get(10), dataList.get(10), false,
@@ -2101,7 +2100,7 @@ final class ServerTestUtil {
       DataInputStream putResponseStream = channel.sendAndReceive(putRequest).getInputStream();
 
       PutResponse response = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response.getError());
 
       notificationSystem.awaitBlobCreations(blobId1.toString());
@@ -2122,13 +2121,13 @@ final class ServerTestUtil {
       DeleteRequest deleteRequest1 = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
       DataInputStream stream = channel1.sendAndReceive(deleteRequest1).getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
       DeleteRequest deleteRequest2 =
           new DeleteRequest(1, "deleteClient", blobId1, deleteRequest1.getDeletionTimeInMs());
       stream = channel2.sendAndReceive(deleteRequest2).getInputStream();
       deleteResponse = DeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       // Now send the undelete operation through router, and it should fail because of not deleted error.
@@ -2159,7 +2158,7 @@ final class ServerTestUtil {
           break;
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       // Now restart the replication
       controlReplicationForPartition(channels, partitionId, true);
       if (hasUndelete) {
@@ -2174,7 +2173,7 @@ final class ServerTestUtil {
                 GetOption.Include_All);
         stream = connectedChannel.sendAndReceive(getRequest).getInputStream();
         GetResponse getResponse = GetResponse.readFrom(stream, clusterMap);
-        releaseStream(stream);
+        releaseNettyBufUnderneathStream(stream);
         assertEquals(ServerErrorCode.No_Error, getResponse.getPartitionResponseInfoList().get(0).getErrorCode());
         MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         if (hasUndelete) {
@@ -2201,7 +2200,7 @@ final class ServerTestUtil {
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putResponseStream = channel.sendAndReceive(putRequest).getInputStream();
       response = PutResponse.readFrom(putResponseStream);
-      releaseStream(putResponseStream);
+      releaseNettyBufUnderneathStream(putResponseStream);
       assertEquals(ServerErrorCode.No_Error, response.getError());
       notificationSystem.awaitBlobCreations(blobId2.toString());
 
@@ -2209,7 +2208,7 @@ final class ServerTestUtil {
       DeleteRequest deleteRequest = new DeleteRequest(1, "deleteClient", blobId2, System.currentTimeMillis());
       stream = channel.sendAndReceive(deleteRequest).getInputStream();
       deleteResponse = DeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
       notificationSystem.awaitBlobDeletions(blobId2.toString());
 
@@ -2221,25 +2220,25 @@ final class ServerTestUtil {
       UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId2, System.currentTimeMillis());
       stream = channel1.sendAndReceive(undeleteRequest).getInputStream();
       UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, undeleteResponse.getError());
       assertEquals((short) 1, undeleteResponse.getLifeVersion());
       undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId2, undeleteRequest.getOperationTimeMs());
       stream = channel2.sendAndReceive(undeleteRequest).getInputStream();
       undeleteResponse = UndeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, undeleteResponse.getError());
       assertEquals((short) 1, undeleteResponse.getLifeVersion());
 
       deleteRequest1 = new DeleteRequest(1, "deleteClient", blobId2, System.currentTimeMillis());
       stream = channel1.sendAndReceive(deleteRequest1).getInputStream();
       deleteResponse = DeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
       deleteRequest2 = new DeleteRequest(1, "deleteClient", blobId2, deleteRequest1.getDeletionTimeInMs());
       stream = channel2.sendAndReceive(deleteRequest2).getInputStream();
       deleteResponse = DeleteResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       // Now send the undelete operation through router, and it should fail because of lifeVersion conflict error.
@@ -2283,7 +2282,7 @@ final class ServerTestUtil {
           }
         }
       }
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       for (ConnectedChannel connectedChannel : channels) {
         connectedChannel.disconnect();
       }
@@ -2332,7 +2331,7 @@ final class ServerTestUtil {
       channel.connect();
       DataInputStream stream = channel.sendAndReceive(putRequest).getInputStream();
       PutResponse response = PutResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, response.getError());
 
       for (int i = 0; i < 2; i++) {
@@ -2357,7 +2356,7 @@ final class ServerTestUtil {
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob, null);
       stream = channel.sendAndReceive(putRequest2).getInputStream();
       PutResponse response2 = PutResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       for (int i = 0; i < 2; i++) {
@@ -2412,7 +2411,7 @@ final class ServerTestUtil {
             assertEquals("serviceid1", propertyOutput.getServiceId());
             assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
             assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
-            releaseStream(stream);
+            releaseNettyBufUnderneathStream(stream);
             break;
           } else {
             Thread.sleep(1000);
@@ -2428,6 +2427,7 @@ final class ServerTestUtil {
       fail();
     }
   }
+
   private static void controlReplicationForPartition(List<ConnectedChannel> channels, PartitionId partitionId,
       boolean enable) throws Exception {
     for (ConnectedChannel connectedChannel : channels) {
@@ -2437,7 +2437,7 @@ final class ServerTestUtil {
           new ReplicationControlAdminRequest(Collections.emptyList(), enable, adminRequest);
       DataInputStream stream = connectedChannel.sendAndReceive(controlRequest).getInputStream();
       AdminResponse adminResponse = AdminResponse.readFrom(stream);
-      releaseStream(stream);
+      releaseNettyBufUnderneathStream(stream);
       assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
     }
   }
@@ -2623,8 +2623,9 @@ final class ServerTestUtil {
       assertNull("EncryptionKey should have been null",
           resp.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
     }
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
   }
+
   /**
    * Generate and return {@link Properties} to instantiate {@link Router}
    * @param routerDatacenter Router's datacentre
@@ -2668,7 +2669,7 @@ final class ServerTestUtil {
     TtlUpdateRequest ttlUpdateRequest = new TtlUpdateRequest(1, "updateBlobTtl", blobId, Utils.Infinite_Time, ts);
     DataInputStream stream = channel.sendAndReceive(ttlUpdateRequest).getInputStream();
     TtlUpdateResponse ttlUpdateResponse = TtlUpdateResponse.readFrom(stream);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     assertEquals("Unexpected ServerErrorCode for TtlUpdateRequest", ServerErrorCode.No_Error,
         ttlUpdateResponse.getError());
   }
@@ -2682,7 +2683,7 @@ final class ServerTestUtil {
     DeleteRequest deleteRequest = new DeleteRequest(1, "deleteClient", blobId, ts);
     DataInputStream stream = channel.sendAndReceive(deleteRequest).getInputStream();
     DeleteResponse deleteResponse = DeleteResponse.readFrom(stream);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     assertEquals("Unexpected ServerErrorCode for DeleteRequest", expectedErrorCode, deleteResponse.getError());
   }
 
@@ -2695,7 +2696,7 @@ final class ServerTestUtil {
     UndeleteRequest undeleteRequest = new UndeleteRequest(1, "undeleteClient", blobId, ts);
     DataInputStream stream = channel.sendAndReceive(undeleteRequest).getInputStream();
     UndeleteResponse undeleteResponse = UndeleteResponse.readFrom(stream);
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     assertEquals("Unexpected ServerErrorCode for UndeleteRequest", expectedErrorCode, undeleteResponse.getError());
     if (undeleteResponse.getError() == ServerErrorCode.No_Error
         || undeleteResponse.getError() == ServerErrorCode.Blob_Already_Undeleted) {
@@ -2735,7 +2736,7 @@ final class ServerTestUtil {
     assertEquals("Blob ID not as expected", blobId, messageInfo.getStoreKey());
     assertEquals("TTL update state not as expected", ttlUpdated, messageInfo.isTtlUpdated());
     assertEquals("Expiry time is not as expected", expectedExpiryTimeMs, messageInfo.getExpirationTimeInMs());
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
     // blob all
     request = new GetRequest(1, "checkTtlUpdateStatus", MessageFormatFlags.All, requestInfos, GetOption.None);
     stream = channel.sendAndReceive(request).getInputStream();
@@ -2748,8 +2749,9 @@ final class ServerTestUtil {
     assertEquals("Blob ID not as expected", blobId, messageInfo.getStoreKey());
     assertEquals("TTL update state not as expected", ttlUpdated, messageInfo.isTtlUpdated());
     assertEquals("Expiry time is not as expected", expectedExpiryTimeMs, messageInfo.getExpirationTimeInMs());
-    releaseStream(stream);
+    releaseNettyBufUnderneathStream(stream);
   }
+
   /**
    * Gets the expiry time (in ms) as stored by the {@link com.github.ambry.store.BlobStore}.
    * @param blobProperties the properties of the blob
@@ -2864,7 +2866,11 @@ final class ServerTestUtil {
     return blobIds;
   }
 
-  static void releaseStream(DataInputStream stream) {
+  /**
+   * Release the Netty ByteBuf if the stream is NettyByteBufDataInputStream
+   * @param stream the input stream.
+   */
+  static void releaseNettyBufUnderneathStream(DataInputStream stream) {
     if (stream instanceof NettyByteBufDataInputStream) {
       // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
       ((NettyByteBufDataInputStream) stream).getBuffer().release();

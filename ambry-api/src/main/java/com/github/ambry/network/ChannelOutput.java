@@ -14,7 +14,6 @@
 package com.github.ambry.network;
 
 import java.io.DataInputStream;
-import java.io.InputStream;
 
 
 /**
@@ -35,10 +34,6 @@ public class ChannelOutput {
   public DataInputStream getInputStream() {
     return inputStream;
   }
-
-//  public DataInputStream getDataInputStream() {
-//
-//  }
 
   public long getStreamSize() {
     return streamSize;
