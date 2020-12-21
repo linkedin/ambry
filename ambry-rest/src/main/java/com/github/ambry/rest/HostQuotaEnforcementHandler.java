@@ -44,6 +44,12 @@ public class HostQuotaEnforcementHandler extends ChannelInboundHandlerAdapter {
   private final QuotaConfig quotaConfig;
   private FullHttpResponse response;
 
+  /**
+   * Constructor for {@link HostQuotaEnforcementHandler}.
+   * @param nettyMetrics {@link NettyMetrics} object.
+   * @param quotaManager {@link QuotaManager} object.
+   * @param quotaConfig {@link QuotaConfig} object.
+   */
   public HostQuotaEnforcementHandler(NettyMetrics nettyMetrics, QuotaManager quotaManager, QuotaConfig quotaConfig) {
     this.metrics = nettyMetrics;
     this.quotaManager = quotaManager;

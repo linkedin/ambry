@@ -44,6 +44,11 @@ public class RequestCost {
     return costMap.getOrDefault(quotaMetric, 0.0);
   }
 
+  /**
+   * Set the cost of the quota along with its specified metric.
+   * @param cost the cost incurred in serving the request.
+   * @param quotaMetric {@link QuotaMetric} in which the cost is measured.
+   */
   public void setCost(double cost, QuotaMetric quotaMetric) {
     costMap.put(quotaMetric, cost);
   }

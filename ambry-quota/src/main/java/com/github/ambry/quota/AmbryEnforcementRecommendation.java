@@ -13,18 +13,31 @@
  */
 package com.github.ambry.quota;
 
+/**
+ * An implementation of {@link EnforcementRecommendation} made by Ambry.
+ */
 public class AmbryEnforcementRecommendation implements EnforcementRecommendation {
   private final boolean shouldThrottle;
   private final float usagePercentage;
   private final String quotaEnforcerName;
   private final int recommendedHttpStatus;
+  private final RequestCost requestCost;
 
+  /**
+   * Constructor for {@link AmbryEnforcementRecommendation}.
+   * @param shouldThrottle boolean flag indicating throttling recommendation.
+   * @param usagePercentage percentage of resource usage.
+   * @param quotaEnforcerName name of the enforcement that made the recommendation.
+   * @param recommendedHttpStatus recommended http status.
+   * @param requestCost {@link RequestCost} of the request.
+   */
   public AmbryEnforcementRecommendation(boolean shouldThrottle, float usagePercentage, String quotaEnforcerName,
-      int recommendedHttpStatus) {
+      int recommendedHttpStatus, RequestCost requestCost) {
     this.shouldThrottle = shouldThrottle;
     this.usagePercentage = usagePercentage;
     this.quotaEnforcerName = quotaEnforcerName;
     this.recommendedHttpStatus = recommendedHttpStatus;
+    this.requestCost = requestCost;
   }
 
   @Override
@@ -33,7 +46,7 @@ public class AmbryEnforcementRecommendation implements EnforcementRecommendation
   }
 
   @Override
-  public float quotaUsagePercentage() {
+  public float getQuotaUsagePercentage() {
     return usagePercentage;
   }
 
@@ -45,5 +58,10 @@ public class AmbryEnforcementRecommendation implements EnforcementRecommendation
   @Override
   public int getRecommendedHttpStatus() {
     return recommendedHttpStatus;
+  }
+
+  @Override
+  public RequestCost getRequestCost() {
+    return requestCost;
   }
 }

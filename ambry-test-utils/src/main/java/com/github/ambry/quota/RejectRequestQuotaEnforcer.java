@@ -17,9 +17,16 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 
 
+/**
+ * {@link RequestQuotaEnforcer} implementation for test that always rejects requests.
+ */
 public class RejectRequestQuotaEnforcer implements RequestQuotaEnforcer {
   private final QuotaSource quotaSource;
 
+  /**
+   * Constructor for {@link RejectRequestQuotaEnforcer}.
+   * @param quotaSource {@link QuotaSource} object.
+   */
   public RejectRequestQuotaEnforcer(QuotaSource quotaSource) {
     this.quotaSource = quotaSource;
   }

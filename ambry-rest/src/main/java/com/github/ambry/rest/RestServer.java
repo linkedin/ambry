@@ -93,8 +93,8 @@ public class RestServer {
    * @param clusterMap the {@link ClusterMap} instance that needs to be used.
    * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
    * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
-   * @param quotaManagerFactory the {@link QuotaManagerFactory} class to manage quota and throttling.
    * @param accountService {@link AccountService} object.
+   * @param quotaManagerFactory the {@link QuotaManagerFactory} class to manage quota and throttling.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
@@ -110,12 +110,12 @@ public class RestServer {
    * @param clusterMap the {@link ClusterMap} instance that needs to be used.
    * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
    * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
+   * @param accountService {@link AccountService} object.
    * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
    *                             the final handler.
    * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
    *                        option is null the default settings for the reporter will be used.
    * @param quotaManagerFactory the {@link QuotaManagerFactory} class to manage quota and throttling.
-   * @param accountService {@link AccountService} object.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,

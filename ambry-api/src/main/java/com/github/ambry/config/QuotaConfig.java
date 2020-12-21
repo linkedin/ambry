@@ -75,10 +75,16 @@ public class QuotaConfig {
   @Config(HOST_QUOTA_ENFORCER_FACTORIES)
   public Set<String> hostQuotaEnforcerFactories;
 
+  /**
+   * The quota manager factory class.
+   */
   @Config(QUOTA_MANAGER_FACTORY_CLASS)
   @Default(DEFAULT_QUOTA_MANAGER_FACTORY_CLASS)
   public String quotaManagerFactoryClass;
 
+  /**
+   * The mode in which quota throttling is being done (TRACKING/THROTTLING).
+   */
   @Config(QUOTA_THROTTLING_MODE)
   public QuotaMode quotaThrottlingMode;
 
@@ -102,6 +108,10 @@ public class QuotaConfig {
         QuotaMode.valueOf(verifiableProperties.getString(QUOTA_THROTTLING_MODE, DEFAULT_QUOTA_THROTTLING_MODE));
   }
 
+  /**
+   * Build the default quota enforcer and source pair json.
+   * @return Json string.
+   */
   private static String buildDefaultQuotaEnforcerSourceInfoPairJson() {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put(ENFORCER_STR, "com.github.ambry.quota.capacityunit.AmbryCapacityUnitQuotaEnforcerFactory");

@@ -13,10 +13,17 @@
  */
 package com.github.ambry.quota;
 
+/**
+ * {@link EnforcementRecommendation} implementation with reject recommendation for tests.
+ */
 public class RejectEnforcementRecommendation implements EnforcementRecommendation {
   private static final int REJECT_HTTP_STATUS_CODE = 429;
   private final String enforcerName;
 
+  /**
+   * Constructor for {@link RejectEnforcementRecommendation}.
+   * @param enforcerName name of the enforcer that made the recommendation.
+   */
   public RejectEnforcementRecommendation(String enforcerName) {
     this.enforcerName = enforcerName;
   }
@@ -27,7 +34,7 @@ public class RejectEnforcementRecommendation implements EnforcementRecommendatio
   }
 
   @Override
-  public float quotaUsagePercentage() {
+  public float getQuotaUsagePercentage() {
     return 101;
   }
 
@@ -39,5 +46,10 @@ public class RejectEnforcementRecommendation implements EnforcementRecommendatio
   @Override
   public int getRecommendedHttpStatus() {
     return REJECT_HTTP_STATUS_CODE;
+  }
+
+  @Override
+  public RequestCost getRequestCost() {
+    return null;
   }
 }

@@ -13,10 +13,17 @@
  */
 package com.github.ambry.quota;
 
+/**
+ * {@link EnforcementRecommendation} implementation with serve recommendation for tests.
+ */
 public class ServeEnforcementRecommendation implements EnforcementRecommendation {
   private static final int ACCEPT_HTTP_STATUS_CODE = 200;
   private final String enforcerName;
 
+  /**
+   * Constructor for {@link ServeEnforcementRecommendation}.
+   * @param enforcerName name of the enforcer that makes this recommendation.
+   */
   public ServeEnforcementRecommendation(String enforcerName) {
     this.enforcerName = enforcerName;
   }
@@ -27,7 +34,7 @@ public class ServeEnforcementRecommendation implements EnforcementRecommendation
   }
 
   @Override
-  public float quotaUsagePercentage() {
+  public float getQuotaUsagePercentage() {
     return 101;
   }
 
@@ -39,5 +46,10 @@ public class ServeEnforcementRecommendation implements EnforcementRecommendation
   @Override
   public int getRecommendedHttpStatus() {
     return ACCEPT_HTTP_STATUS_CODE;
+  }
+
+  @Override
+  public RequestCost getRequestCost() {
+    return null;
   }
 }

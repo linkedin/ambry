@@ -13,6 +13,9 @@
  */
 package com.github.ambry.quota;
 
+/**
+ * {@link HostQuotaEnforcer} implementation for test that always rejects requests.
+ */
 public class RejectHostQuotaEnforcer implements HostQuotaEnforcer {
 
   @Override

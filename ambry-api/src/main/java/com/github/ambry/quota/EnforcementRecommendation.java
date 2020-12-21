@@ -14,21 +14,22 @@
 package com.github.ambry.quota;
 
 /**
- * Interface representing enforcement recommendation.
+ * Interface representing enforcement recommendation made by a {@link RequestQuotaEnforcer} or {@link HostQuotaEnforcer}
+ * implementation. Quota Source implementations can use this object to provide a boolean recommendation to throttle the
+ * request or not, along with usage information like usage percentage, name of the enforcer that made this recommendation,
+ * the recommended http status (indicating whether or not throttled request should be retried) and cost to serve the request.
  */
 public interface EnforcementRecommendation {
 
   /**
-   * Boolean recommendation to throttle or not.
    * @return true if recommendation is to throttle. false otherwise.
    */
   boolean shouldThrottle();
 
   /**
-   * Estimation of percentage of quota in use when the recommendation was made.
-   * @return percentage value between 0 and 100.
+   * @return estimation of percentage of quota in use when the recommendation was made.
    */
-  float quotaUsagePercentage();
+  float getQuotaUsagePercentage();
 
   /**
    * @return name of the enforcer that created this recommendation.
@@ -39,4 +40,9 @@ public interface EnforcementRecommendation {
    * @return http status recommended by enforcer.
    */
   int getRecommendedHttpStatus();
+
+  /**
+   * @return the {@link RequestCost} for serving the request.
+   */
+  RequestCost getRequestCost();
 }

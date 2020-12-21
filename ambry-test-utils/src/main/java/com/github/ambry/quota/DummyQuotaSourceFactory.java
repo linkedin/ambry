@@ -15,8 +15,9 @@ package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
 
+
 /**
- * Factory to create {@link DummyQuotaSource}.
+ * Factory to create {@link DummyQuotaSource} for test.
  */
 public class DummyQuotaSourceFactory implements QuotaSourceFactory {
 

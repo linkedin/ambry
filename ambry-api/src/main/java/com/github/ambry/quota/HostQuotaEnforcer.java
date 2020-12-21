@@ -16,7 +16,7 @@ package com.github.ambry.quota;
 /**
  * Interface for class that would do the quota enforcement based on quota of load on host resources. This type of quota
  * enforcement doesn't need details about the request and can be done much before than deserialization of the request.
- * A {@link HostQuotaEnforcer} object would need a {@link QuotaSource} to get and save quota and usage.
+ * A {@link HostQuotaEnforcer} object would usually need a {@link QuotaSource} to get and save quota and usage.
  */
 public interface HostQuotaEnforcer {
   /**

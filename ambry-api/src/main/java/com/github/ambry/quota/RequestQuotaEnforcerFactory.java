@@ -22,5 +22,5 @@ public interface RequestQuotaEnforcerFactory {
    * Build and return {@link RequestQuotaEnforcer} class.
    * @return RequestQuotaEnforcer object.
    */
-  public RequestQuotaEnforcer getRequestQuotaEnforcer();
+  RequestQuotaEnforcer getRequestQuotaEnforcer();
 }

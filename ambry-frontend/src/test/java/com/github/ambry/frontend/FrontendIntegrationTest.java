@@ -142,6 +142,23 @@ public class FrontendIntegrationTest {
   private final boolean addClusterPrefix;
   private final boolean useSSL;
 
+  static {
+    try {
+      QUOTA_MANAGER_FACTORY =
+          new AmbryQuotaManagerFactory(QUOTA_CONFIG, Collections.emptyList(), Collections.emptyList());
+      CLUSTER_MAP = new MockClusterMap();
+      trustFile = File.createTempFile("truststore", ".jks");
+      trustFile.deleteOnExit();
+      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustFile);
+      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustFile, "client");
+      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
+      ACCOUNT_SERVICE.clear();
+      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
   /**
    * @param useSSL {@code true} if SSL should be tested.
    */
@@ -1588,22 +1605,5 @@ public class FrontendIntegrationTest {
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     return new HashSet<>(
         AccountCollectionSerde.accountsFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
-  }
-
-  static {
-    try {
-      QUOTA_MANAGER_FACTORY =
-          new AmbryQuotaManagerFactory(QUOTA_CONFIG, Collections.emptyList(), Collections.emptyList());
-      CLUSTER_MAP = new MockClusterMap();
-      trustFile = File.createTempFile("truststore", ".jks");
-      trustFile.deleteOnExit();
-      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustFile);
-      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustFile, "client");
-      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
-      ACCOUNT_SERVICE.clear();
-      ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

@@ -15,18 +15,20 @@ package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaMetric;
-import com.github.ambry.quota.storage.QuotaOperation;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.quota.storage.QuotaOperation;
 import java.util.Arrays;
 import java.util.HashSet;
 
 
+/**
+ * An implementation of {@link QuotaSource} that always returns a max value for {@link Quota} for all resources.
+ */
 public class UnlimitedQuotaSource implements QuotaSource {
 
   @Override
   public Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
-    return new Quota<>(quotaMetric, Long.MAX_VALUE, quotaResource,
-        new HashSet<>(Arrays.asList(quotaOperation)));
+    return new Quota<>(quotaMetric, Long.MAX_VALUE, quotaResource, new HashSet<>(Arrays.asList(quotaOperation)));
   }
 }

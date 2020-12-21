@@ -19,9 +19,17 @@ import com.github.ambry.quota.RequestQuotaEnforcer;
 import com.github.ambry.quota.RequestQuotaEnforcerFactory;
 
 
+/**
+ * Implementation of {@link RequestQuotaEnforcerFactory} that instantiates {@link AmbryCapacityUnitQuotaEnforcer}.
+ */
 public class AmbryCapacityUnitQuotaEnforcerFactory implements RequestQuotaEnforcerFactory {
   private final RequestQuotaEnforcer quotaEnforcer;
 
+  /**
+   * Constructor for {@link AmbryCapacityUnitQuotaEnforcerFactory}.
+   * @param quotaConfig {@link QuotaConfig} object.
+   * @param quotaSource {@link QuotaSource} object.
+   */
   public AmbryCapacityUnitQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource) {
     quotaEnforcer = new AmbryCapacityUnitQuotaEnforcer(quotaSource);
   }

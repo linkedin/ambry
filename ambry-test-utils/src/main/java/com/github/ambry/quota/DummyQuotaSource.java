@@ -17,7 +17,7 @@ import com.github.ambry.quota.storage.QuotaOperation;
 
 
 /**
- * Dummy {@link QuotaSource} implementation.
+ * Dummy {@link QuotaSource} implementation for test.
  */
 public class DummyQuotaSource implements QuotaSource {
 

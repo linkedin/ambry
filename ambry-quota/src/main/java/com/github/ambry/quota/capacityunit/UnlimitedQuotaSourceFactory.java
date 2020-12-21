@@ -18,7 +18,15 @@ import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
 
 
+/**
+ * Implementation of {@link QuotaSourceFactory} that instantiates {@link UnlimitedQuotaSourceFactory}.
+ */
 public class UnlimitedQuotaSourceFactory implements QuotaSourceFactory {
+
+  /**
+   * Constructor for {@link UnlimitedQuotaSourceFactory}.
+   * @param quotaConfig {@link QuotaConfig} object.
+   */
   public UnlimitedQuotaSourceFactory(QuotaConfig quotaConfig) {
 
   }

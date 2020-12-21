@@ -16,7 +16,6 @@ package com.github.ambry.quota;
 import com.github.ambry.quota.storage.QuotaOperation;
 import java.util.Set;
 
-
 /**
  * The quota for a particular Ambry resource.
  * @param <T> the type of the quota value.

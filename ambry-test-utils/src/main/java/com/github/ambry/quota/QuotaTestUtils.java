@@ -39,18 +39,25 @@ public class QuotaTestUtils {
     return new QuotaConfig(new VerifiableProperties(properties));
   }
 
-  public static QuotaConfig createQuotaConfig(Map<String, String> map, boolean isQuotaThrottlingEnabled,
-      QuotaMode quotaMode) {
+  /**
+   * Create {@link QuotaConfig} object with {@link RequestQuotaEnforcer} and corresponding {@link QuotaSource} map.
+   * @param enforcerSourcemap {@link Map} for {@link RequestQuotaEnforcer} and corresponding {@link QuotaSource} object.
+   * @param isRequestQuotaThrottlingEnabled boolean flag indicating if request quota throttling should be enabled.
+   * @param quotaMode {@link QuotaMode} for quota enforcement.
+   * @return QuotaConfig object.
+   */
+  public static QuotaConfig createQuotaConfig(Map<String, String> enforcerSourcemap,
+      boolean isRequestQuotaThrottlingEnabled, QuotaMode quotaMode) {
     Properties properties = new Properties();
     properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
-    properties.setProperty(QuotaConfig.REQUEST_QUOTA_THROTTLING_ENABLED, "" + isQuotaThrottlingEnabled);
+    properties.setProperty(QuotaConfig.REQUEST_QUOTA_THROTTLING_ENABLED, "" + isRequestQuotaThrottlingEnabled);
     properties.setProperty(QuotaConfig.QUOTA_THROTTLING_MODE, quotaMode.name());
     JSONArray jsonArray = new JSONArray();
-    for (String enforcerFactoryClass : map.keySet()) {
+    for (String enforcerFactoryClass : enforcerSourcemap.keySet()) {
       JSONObject jsonObject = new JSONObject();
       jsonObject.put(QuotaConfig.ENFORCER_STR, enforcerFactoryClass);
-      jsonObject.put(QuotaConfig.SOURCE_STR, map.get(enforcerFactoryClass));
+      jsonObject.put(QuotaConfig.SOURCE_STR, enforcerSourcemap.get(enforcerFactoryClass));
       jsonArray.put(jsonObject);
     }
     properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
@@ -58,6 +65,14 @@ public class QuotaTestUtils {
     return new QuotaConfig(new VerifiableProperties(properties));
   }
 
+  /**
+   * Create {@link QuotaConfig} object with the {@link HostQuotaEnforcer} class.
+   * @param hostEnforcerFactoryClass {@link HostQuotaEnforcer} object.
+   * @param isRequestThrottlingEnabled boolean flag indicating if request quota throttling should be enabled.
+   * @param quotaMode {@link QuotaMode} for quota enforcement.
+   * @param isHostThrottlingEnabled boolean flag indicating if host quota throttling should be enabled.
+   * @return QuotaConfig object.
+   */
   public static QuotaConfig createQuotaConfig(Collection<String> hostEnforcerFactoryClass,
       boolean isRequestThrottlingEnabled, QuotaMode quotaMode, boolean isHostThrottlingEnabled) {
     Properties properties = new Properties();

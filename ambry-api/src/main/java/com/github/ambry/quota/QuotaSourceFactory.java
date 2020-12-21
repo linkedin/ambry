@@ -14,7 +14,7 @@
 package com.github.ambry.quota;
 
 /**
- * Factory to instantiate {@link QuotaSource}.
+ * Factory to instantiate {@link QuotaSource} object.
  */
 public interface QuotaSourceFactory {
   /**

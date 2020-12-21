@@ -14,7 +14,6 @@
 package com.github.ambry.config;
 
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
@@ -215,7 +214,7 @@ public class FrontendConfig {
   public final boolean enableStorageQuotaService;
 
   /**
-   * The {@link StorageQuotaServiceFactory}.
+   * The StorageQuotaServiceFactory class.
    */
   @Config(STORAGE_QUOTA_SERVICE_FACTORY)
   @Default(DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY)
