@@ -13,6 +13,11 @@
  */
 package com.github.ambry.quota;
 
+/**
+ * The Operation being performed from the point of view of quota calculation.
+ * All the actual http operations (like POST/PUT/GET etc) will be mapped to one of the {@link QuotaOperation}s for quota
+ * enforcement.
+ */
 public enum QuotaOperation {
-  READ, WRITE, STORAGE
+  READ, WRITE
 }

@@ -247,15 +247,8 @@ class AmbrySecurityService implements SecurityService {
       }
     }
     if (quotaConfig.requestQuotaThrottlingEnabled) {
-      if (quotaConfig.quotaThrottlingMode == QuotaMode.THROTTLING) {
-        // TODO use enforcement recommendation to create more specific error message and set specific response headers.
-        // TODO make sure that container and account both are populated in request here
-        quotaManager.shouldThrottleOnRequestAndCharge(restRequest, blobInfo, new ArrayList<>());
-      } else {
-        // TODO send feedback to user in terms of response headers.
-        // TODO log metrics internally
-        logger.warn("HostQuotaEnforcementHandler recommends throttling due to high system load");
-      }
+      // TODO use enforcement recommendation to create more specific error message and set specific response headers.
+      quotaManager.shouldThrottleOnRequestAndCharge(restRequest, blobInfo, new ArrayList<>());
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

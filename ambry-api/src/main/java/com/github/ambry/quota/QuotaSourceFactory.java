@@ -18,8 +18,7 @@ package com.github.ambry.quota;
  */
 public interface QuotaSourceFactory {
   /**
-   * Return the {@link QuotaSource} object.
-   * @return QuotaSource object for the {@link QuotaMetric}.
+   * @return the {@link QuotaSource} object.
    */
   QuotaSource getQuotaSource();
 }

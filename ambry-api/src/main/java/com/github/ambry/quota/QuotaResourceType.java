@@ -19,5 +19,5 @@ package com.github.ambry.quota;
 public enum QuotaResourceType {
   AMBRY_ACCOUNT,
   AMBRY_CONTAINER,
-  HOST_RESOURCES
+  AMBRY_HOST
 }

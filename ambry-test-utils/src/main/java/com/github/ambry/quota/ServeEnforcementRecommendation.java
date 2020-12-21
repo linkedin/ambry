@@ -30,7 +30,7 @@ public class ServeEnforcementRecommendation implements EnforcementRecommendation
 
   @Override
   public boolean shouldThrottle() {
-    return true;
+    return false;
   }
 
   @Override

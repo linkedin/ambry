@@ -19,7 +19,7 @@ import java.util.Map;
 
 
 /**
- * Class representing cost of a request for a resource.
+ * Class representing collection of costs associated with metrics of interest of a request for a resource.
  */
 public class RequestCost {
   private final Map<QuotaMetric, Double> costMap;
