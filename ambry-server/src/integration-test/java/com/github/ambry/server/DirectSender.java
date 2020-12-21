@@ -26,7 +26,6 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
