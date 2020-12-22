@@ -2866,7 +2866,7 @@ final class ServerTestUtil {
     return blobIds;
   }
 
-  /*CloudAndStoreReplicationTest.java*
+  /*
    * Release the Netty ByteBuf if the stream is NettyByteBufDataInputStream
    * @param stream the input stream.
    */
