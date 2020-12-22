@@ -83,7 +83,7 @@ public interface AccountStatsStore {
   /**
    * Return the month value of the current container storage snapshot.
    * @param clusterName The clusterName.
-   * @return The month value for current snapshot, like "2020-01"
+   * @return The month value for current snapshot, like "2020-01". Empty string will be returned if there is no record.
    * @throws Exception
    */
   String queryRecordedMonth(String clusterName) throws Exception;

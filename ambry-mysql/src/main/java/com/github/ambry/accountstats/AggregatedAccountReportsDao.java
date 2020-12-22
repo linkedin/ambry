@@ -151,13 +151,11 @@ public class AggregatedAccountReportsDao {
       PreparedStatement queryStatement = dataAccessor.getPreparedStatement(sqlStatement, false);
       queryStatement.setString(1, clusterName);
       ResultSet resultSet = queryStatement.executeQuery();
-      if (resultSet != null) {
-        while (resultSet.next()) {
-          int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
-          int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
-          long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-          func.apply((short) accountId, (short) containerId, storageUsage);
-        }
+      while (resultSet.next()) {
+        int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
+        int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
+        long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
+        func.apply((short) accountId, (short) containerId, storageUsage);
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
@@ -202,8 +200,7 @@ public class AggregatedAccountReportsDao {
       queryStatement.setString(1, clusterName);
       ResultSet resultSet = queryStatement.executeQuery();
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
-      if (resultSet != null) {
-        resultSet.next();
+      if (resultSet.next()) {
         return resultSet.getString(MONTH_COLUMN);
       }
       return "";
