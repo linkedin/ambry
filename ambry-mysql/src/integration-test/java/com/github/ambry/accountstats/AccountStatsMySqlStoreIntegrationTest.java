@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -139,6 +140,8 @@ public class AccountStatsMySqlStoreIntegrationTest {
       mySqlStore.storeAggregatedStats(snapshot);
       currentContainerStorageUsages = mySqlStore.queryAggregatedStats(clusterName1);
     }
+    // fetch the month and it should return emtpy string
+    Assert.assertEquals("", mySqlStore.queryRecordedMonth(clusterName1));
     mySqlStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(clusterName1, monthValue);
     Map<String, Map<String, Long>> monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedStats(clusterName1);
     TestUtils.assertContainerMap(currentContainerStorageUsages, monthlyContainerStorageUsages);

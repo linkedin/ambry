@@ -108,15 +108,13 @@ public class AccountReportsDao {
       queryStatement.setString(1, clusterName);
       queryStatement.setString(2, hostname);
       ResultSet resultSet = queryStatement.executeQuery();
-      if (resultSet != null) {
-        while (resultSet.next()) {
-          int partitionId = resultSet.getInt(PARTITION_ID_COLUMN);
-          int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
-          int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
-          long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-          long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
-          func.apply((short) partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
-        }
+      while (resultSet.next()) {
+        int partitionId = resultSet.getInt(PARTITION_ID_COLUMN);
+        int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
+        int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
+        long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
+        long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
+        func.apply((short) partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
