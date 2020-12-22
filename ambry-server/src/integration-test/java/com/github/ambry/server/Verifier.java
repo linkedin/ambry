@@ -101,8 +101,8 @@ class Verifier implements Runnable {
                   new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
                       GetOption.None);
               channel1.send(getRequest);
-              InputStream stream = channel1.receive().getInputStream();
-              GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              DataInputStream stream = channel1.receive().getInputStream();
+              GetResponse resp = GetResponse.readFrom(stream, clusterMap);
               if (resp.getError() != ServerErrorCode.No_Error) {
                 System.out.println(dataNodeId.getHostname() + " " + dataNodeId.getPort() + " " + resp.getError());
                 throw new IllegalStateException();
@@ -163,7 +163,7 @@ class Verifier implements Runnable {
                   GetOption.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
-              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              resp = GetResponse.readFrom(stream, clusterMap);
               if (resp.getError() != ServerErrorCode.No_Error) {
                 System.out.println("Error after get user metadata " + resp.getError());
                 throw new IllegalStateException();
@@ -192,7 +192,7 @@ class Verifier implements Runnable {
                   new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
-              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              resp = GetResponse.readFrom(stream, clusterMap);
               //System.out.println("response from get " + resp.getError());
               if (resp.getError() != ServerErrorCode.No_Error) {
                 System.out.println("Error after get blob " + resp.getError());
@@ -224,7 +224,7 @@ class Verifier implements Runnable {
                   new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
-              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              resp = GetResponse.readFrom(stream, clusterMap);
               if (resp.getError() != ServerErrorCode.No_Error) {
                 System.out.println("Error after get blob " + resp.getError());
                 throw new IllegalStateException();

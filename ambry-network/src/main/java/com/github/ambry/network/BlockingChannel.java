@@ -14,7 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.messageformat.BlobStoreRecovery;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -193,7 +193,7 @@ public class BlockingChannel implements ConnectedChannel {
       streamSizeBuffer.put((byte) read);
     }
     streamSizeBuffer.flip();
-    return new ChannelOutput(readChannel, streamSizeBuffer.getLong() - 8);
+    return new ChannelOutput(new DataInputStream(readChannel), streamSizeBuffer.getLong() - 8);
   }
 
   @Override

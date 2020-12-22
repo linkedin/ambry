@@ -23,9 +23,9 @@ import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -108,9 +108,13 @@ class DirectSender implements Runnable {
                 Unpooled.wrappedBuffer(data), blobProperties.getBlobSize(), BlobType.DataBlob,
                 encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
 
-        channel.send(putRequest);
-        InputStream putResponseStream = channel.receive().getInputStream();
-        PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
+        DataInputStream putResponseStream = channel.sendAndReceive(putRequest).getInputStream();
+        PutResponse response = PutResponse.readFrom(putResponseStream);
+        if (putResponseStream instanceof NettyByteBufDataInputStream) {
+          // Release the underlying netty buf if the stream is NettyByteBuf based.
+          // The ByteBuf should also be released if exception happens, but we ignore it since this is test and exception is not expected.
+          ((NettyByteBufDataInputStream) putResponseStream).getBuffer().release();
+        }
         Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
       }
     } catch (Exception e) {

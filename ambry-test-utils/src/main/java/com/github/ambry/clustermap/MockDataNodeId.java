@@ -32,6 +32,7 @@ public class MockDataNodeId implements DataNodeId {
   private final String hostname;
   private final String datacenter;
   private List<String> sslEnabledDataCenters = new ArrayList<String>();
+  private boolean enableHttp2Replication = false;
   private int portNum;
   private AtomicBoolean isTimedout = new AtomicBoolean(false);
 
@@ -84,6 +85,15 @@ public class MockDataNodeId implements DataNodeId {
     this.sslEnabledDataCenters = sslEnabledDataCenters;
   }
 
+  /**
+   * This datanode will always return an HTTP/2 port in {@link #getPortToConnectTo()} if enableHttp2Replication
+   * is set to true.
+   * @param enable http2 replication if it's true.
+   */
+  public void setEnableHttp2Replication(boolean enable) {
+    this.enableHttp2Replication = enable;
+  }
+
   @Override
   public String getHostname() {
     return hostname;
@@ -122,6 +132,9 @@ public class MockDataNodeId implements DataNodeId {
 
   @Override
   public Port getPortToConnectTo() {
+    if (enableHttp2Replication) {
+      return ports.get(PortType.HTTP2);
+    }
     if (sslEnabledDataCenters.contains(datacenter)) {
       if (ports.containsKey(PortType.SSL)) {
         return ports.get(PortType.SSL);

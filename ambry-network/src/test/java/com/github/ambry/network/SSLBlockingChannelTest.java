@@ -20,7 +20,6 @@ import com.github.ambry.config.SSLConfig;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Random;
 import javax.net.ssl.SSLContext;
@@ -126,10 +125,9 @@ public class SSLBlockingChannelTest {
     channel.connect();
     channel.send(bufferToSend);
     // receive response
-    InputStream streamResponse = channel.receive().getInputStream();
-    DataInputStream input = new DataInputStream(streamResponse);
+    DataInputStream streamResponse = channel.receive().getInputStream();
     byte[] bytesReceived = new byte[(int) blobSize - 8];
-    input.readFully(bytesReceived);
+    streamResponse.readFully(bytesReceived);
     for (int i = 0; i < blobSize - 8; i++) {
       Assert.assertEquals(bytesToSend[8 + i], bytesReceived[i]);
     }

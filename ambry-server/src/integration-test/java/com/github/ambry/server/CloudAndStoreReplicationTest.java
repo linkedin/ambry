@@ -46,7 +46,6 @@ import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
@@ -301,7 +300,7 @@ public class CloudAndStoreReplicationTest {
 
     channel.send(getRequest);
     GetResponse getResponse =
-        GetResponse.readFrom(new DataInputStream(channel.receive().getInputStream()), recoveryCluster.getClusterMap());
+        GetResponse.readFrom(channel.receive().getInputStream(), recoveryCluster.getClusterMap());
 
     for (PartitionResponseInfo partitionResponseInfo : getResponse.getPartitionResponseInfoList()) {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,

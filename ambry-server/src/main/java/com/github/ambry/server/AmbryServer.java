@@ -231,7 +231,7 @@ public class AmbryServer {
 
       SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
 
-      if (replicationConfig.replicationEnableHttp2) {
+      if (clusterMapConfig.clusterMapEnableHttp2Replication) {
         connectionPool = new Http2BlockingChannelPool(sslFactory, new Http2ClientConfig(properties),
             new Http2ClientMetrics(registry));
       } else {

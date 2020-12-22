@@ -22,7 +22,6 @@ import com.github.ambry.config.VerifiableProperties;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -116,7 +115,7 @@ public class SocketServerTest {
     byteBufferToSendResponse.putLong(0, 2048);
     BoundedByteBufferSend responseToSend = new BoundedByteBufferSend(byteBufferToSendResponse);
     requestResponseChannel.sendResponse(responseToSend, request, null);
-    InputStream streamResponse = channel.receive().getInputStream();
+    DataInputStream streamResponse = channel.receive().getInputStream();
     byte[] responseBytesReceived = new byte[2040];
     streamResponse.read(responseBytesReceived);
     for (int i = 0; i < 2040; i++) {

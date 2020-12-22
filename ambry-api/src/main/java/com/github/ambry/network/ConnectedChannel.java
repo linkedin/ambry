@@ -50,6 +50,16 @@ public interface ConnectedChannel {
   ChannelOutput receive() throws IOException;
 
   /**
+   * Send a request and receive a response from the remote host
+   * @return The input stream that can be used to consume data from the remote host
+   * @throws IOException
+   */
+  default ChannelOutput sendAndReceive(Send request) throws IOException {
+    send(request);
+    return receive();
+  }
+
+  /**
    * Gets the remote host that this channel is connected to
    * @return The remote host the channel is connected to
    */

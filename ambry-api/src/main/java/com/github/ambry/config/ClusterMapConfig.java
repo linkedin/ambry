@@ -87,10 +87,18 @@ public class ClusterMapConfig {
 
   /**
    * List of Datacenters to which local node needs SSL encryption to communicate
+   * TODO: retire this config after http2 replication fully enabled
    */
   @Config("clustermap.ssl.enabled.datacenters")
   @Default("")
   public final String clusterMapSslEnabledDatacenters;
+
+  /**
+   * True to enable http2 based replication on a local node.
+   */
+  @Config("clustermap.enable.http2.replication")
+  @Default("false")
+  public final Boolean clusterMapEnableHttp2Replication;
 
   /**
    * The clustermap agent factory to use for instantiating the Cluster Map and the Cluster Participant.
@@ -329,6 +337,7 @@ public class ClusterMapConfig {
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.replica.retry.backoff.ms", 10 * 60 * 1000, 1,
             30 * 60 * 1000);
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
+    clusterMapEnableHttp2Replication = verifiableProperties.getBoolean("clustermap.enable.http2.replication", false);
     clusterMapClusterAgentsFactory = verifiableProperties.getString("clustermap.clusteragents.factory",
         "com.github.ambry.clustermap.StaticClusterAgentsFactory");
     clusterMapClusterChangeHandlerType =

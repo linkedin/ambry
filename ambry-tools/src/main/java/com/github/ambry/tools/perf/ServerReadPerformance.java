@@ -255,8 +255,8 @@ public class ServerReadPerformance {
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);
-            InputStream receiveStream = channel.receive().getInputStream();
-            GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
+            DataInputStream receiveStream = channel.receive().getInputStream();
+            GetResponse getResponse = GetResponse.readFrom(receiveStream, map);
             blobData = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
             long sizeRead = 0;
             byte[] outputBuffer = new byte[(int) blobData.getSize()];
@@ -308,8 +308,8 @@ public class ServerReadPerformance {
                     GetOption.None);
             long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestProperties);
-            InputStream receivePropertyStream = channel.receive().getInputStream();
-            GetResponse getResponseProperty = GetResponse.readFrom(new DataInputStream(receivePropertyStream), map);
+            DataInputStream receivePropertyStream = channel.receive().getInputStream();
+            GetResponse getResponseProperty = GetResponse.readFrom(receivePropertyStream, map);
             BlobProperties blobProperties =
                 MessageFormatRecord.deserializeBlobProperties(getResponseProperty.getInputStream());
             long endTimeGetBlobProperties = SystemTime.getInstance().nanoseconds() - startTimeGetBlobProperties;
@@ -323,9 +323,9 @@ public class ServerReadPerformance {
 
             long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestUserMetadata);
-            InputStream receiveUserMetadataStream = channel.receive().getInputStream();
+            DataInputStream receiveUserMetadataStream = channel.receive().getInputStream();
             GetResponse getResponseUserMetadata =
-                GetResponse.readFrom(new DataInputStream(receiveUserMetadataStream), map);
+                GetResponse.readFrom(receiveUserMetadataStream, map);
             ByteBuffer userMetadata =
                 MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
             long endTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds() - startTimeGetBlobUserMetadata;
@@ -333,7 +333,7 @@ public class ServerReadPerformance {
             DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId, System.currentTimeMillis());
             channel.send(deleteRequest);
             DeleteResponse deleteResponse =
-                DeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+                DeleteResponse.readFrom(channel.receive().getInputStream());
             if (deleteResponse.getError() != ServerErrorCode.No_Error) {
               throw new UnexpectedException("error " + deleteResponse.getError());
             }

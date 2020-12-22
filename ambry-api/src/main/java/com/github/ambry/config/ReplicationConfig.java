@@ -198,14 +198,6 @@ public class ReplicationConfig {
   public final ReplicationModelType replicationModelAcrossDatacenters;
 
   /**
-   * Use http2 connection for replication if this is true.
-   * DO NOT enable http2 replication. Not ready.
-   */
-  @Config("replication.enable.http2")
-  @Default("false")
-  public final boolean replicationEnableHttp2;
-
-  /**
    * How long (in days) a container must be replicated before it's been deleted during compaction.
    */
   @Config("replication.container.deletion.retention.days")
@@ -276,7 +268,6 @@ public class ReplicationConfig {
     replicationVcrRecoveryPartitions = Utils.splitString(vcrRecoveryPartitions, ",", HashSet::new);
     replicationModelAcrossDatacenters = ReplicationModelType.valueOf(
         verifiableProperties.getString(REPLICATION_MODEL_ACROSS_DATACENTERS, ReplicationModelType.ALL_TO_ALL.name()));
-    replicationEnableHttp2 = verifiableProperties.getBoolean("replication.enable.http2", false);
     replicationContainerDeletionRetentionDays =
         verifiableProperties.getInt("replication.container.deletion.retention.days", 14);
     replicationContainerDeletionEnabled =

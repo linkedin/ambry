@@ -44,7 +44,6 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
-  private Promise<ByteBuf> responsePromise;
   private final Http2MultiplexedChannelPool http2MultiplexedChannelPool;
   private final Http2ClientConfig http2ClientConfig;
   final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
@@ -88,6 +87,17 @@ public class Http2BlockingChannel implements ConnectedChannel {
    */
   @Override
   public void send(Send request) throws IOException {
+    logger.error("Http2 doesn't support send() receive(). Please use sendAndReceive()");
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public ChannelOutput receive() throws IOException {
+    logger.error("Http2 doesn't support send() receive(). Please use sendAndReceive()");
+    throw new UnsupportedOperationException();
+  }
+
+  public ChannelOutput sendAndReceive(Send request) throws IOException {
     Channel streamChannel;
     try {
       streamChannel = http2MultiplexedChannelPool.acquire()
@@ -96,14 +106,11 @@ public class Http2BlockingChannel implements ConnectedChannel {
       throw new IOException("Can't acquire stream channel from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
 
-    responsePromise = streamChannel.eventLoop().newPromise();
+    Promise<ByteBuf> responsePromise = streamChannel.eventLoop().newPromise();
     streamChannel.attr(RESPONSE_PROMISE).set(responsePromise);
     streamChannel.writeAndFlush(request)
         .awaitUninterruptibly(http2ClientConfig.http2BlockingChannelSendTimeoutMs, TimeUnit.MILLISECONDS);
-  }
 
-  @Override
-  public ChannelOutput receive() throws IOException {
     ByteBuf responseByteBuf;
     try {
       responseByteBuf =
@@ -111,8 +118,10 @@ public class Http2BlockingChannel implements ConnectedChannel {
     } catch (InterruptedException | ExecutionException | TimeoutException e) {
       throw new IOException("Failed to receive response from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
-    DataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
-    return new ChannelOutput(dataInputStream, dataInputStream.readLong());
+    NettyByteBufDataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
+    // Because readLong() is called to get entire stream size(long),
+    // the size of remaining data should be dataInputStream.readLong() - 8
+    return new ChannelOutput(dataInputStream, dataInputStream.readLong() - Long.BYTES);
   }
 
   @Override

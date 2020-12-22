@@ -184,7 +184,7 @@ public class VcrRecoveryTest {
 
     channel.send(getRequest);
     GetResponse getResponse =
-        GetResponse.readFrom(new DataInputStream(channel.receive().getInputStream()), recoveryCluster.getClusterMap());
+        GetResponse.readFrom(channel.receive().getInputStream(), recoveryCluster.getClusterMap());
 
     for (PartitionResponseInfo partitionResponseInfo : getResponse.getPartitionResponseInfoList()) {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
