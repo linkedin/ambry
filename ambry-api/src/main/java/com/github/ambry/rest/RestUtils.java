@@ -15,8 +15,6 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
-import com.github.ambry.frontend.NamedBlobPath;
-import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
@@ -910,21 +908,16 @@ public class RestUtils {
       if (!headerName.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
         headerName = Headers.USER_META_DATA_HEADER_PREFIX + headerName;
       }
-      try {
-        restResponseChannel.setHeader(headerName, headerValue);
-      } catch (IllegalArgumentException iae) {
+      if (StandardCharsets.US_ASCII.newEncoder().canEncode(headerValue)) {
         try {
-          // Value may require encoding to set in response header.
-          // Set in special header designated for encoded values.  The client receiving the response
-          // will need to check these headers and perform the decode.
-          headerName = headerName.replaceFirst(Headers.USER_META_DATA_HEADER_PREFIX,
-              Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
-          headerValue = URLEncoder.encode(headerValue, CHARSET.name());
           restResponseChannel.setHeader(headerName, headerValue);
-          logger.debug("Set encoded value in response header {}", headerName);
-        } catch (Exception e) {
-          logger.error("Unable to set response header {} to value {}", headerName, headerValue, e);
+        } catch (IllegalArgumentException iae) {
+          // if responseChannel fails to set header due to special characters like "\n\r", we encode it and add to a special header
+          encodeMetadataValueAndSetHeader(headerName, headerValue, restResponseChannel);
         }
+      } else {
+        // if the header value contains non-ascii character, we explicitly encode the value and set in response header
+        encodeMetadataValueAndSetHeader(headerName, headerValue, restResponseChannel);
       }
     }
   }
@@ -984,6 +977,27 @@ public class RestUtils {
           RestServiceErrorCode.InvalidArgs);
     }
     return range;
+  }
+
+  /**
+   * The header value may require encoding to set in response header (i.e it contains non-ascii character, newline, etc)
+   * The encoded value will be set in special header (USER_META_DATA_ENCODED_HEADER_PREFIX). The client receiving the
+   * response will need to check these headers and perform the decode.
+   * @param headerName the user metadata key
+   * @param headerValue the user metadata value
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   */
+  private static void encodeMetadataValueAndSetHeader(String headerName, String headerValue,
+      RestResponseChannel restResponseChannel) {
+    try {
+      headerName =
+          headerName.replaceFirst(Headers.USER_META_DATA_HEADER_PREFIX, Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
+      headerValue = URLEncoder.encode(headerValue, CHARSET.name());
+      restResponseChannel.setHeader(headerName, headerValue);
+      logger.debug("Set encoded value in response header {}", headerName);
+    } catch (Exception e) {
+      logger.error("Unable to set response header {} to value {}", headerName, headerValue, e);
+    }
   }
 
   /**

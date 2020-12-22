@@ -31,7 +31,6 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
@@ -78,10 +77,6 @@ class MockFindTokenHelper extends FindTokenHelper {
 }
 
 class MockFindTokenFactory implements FindTokenFactory {
-
-  public MockFindTokenFactory(StoreKeyFactory factory) {
-
-  }
 
   public MockFindTokenFactory() {
 
@@ -369,14 +364,12 @@ public class RequestResponseTest {
         blob, blobSize, blobKey);
 
     // Response test
-    for (boolean useByteBufContent : new boolean[]{true, false}) {
-      PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
-      DataInputStream responseStream = serAndPrepForRead(response, -1, false);
-      PutResponse deserializedPutResponse = PutResponse.readFrom(responseStream);
-      Assert.assertEquals(deserializedPutResponse.getCorrelationId(), 1234);
-      Assert.assertEquals(deserializedPutResponse.getError(), ServerErrorCode.No_Error);
-      response.release();
-    }
+    PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
+    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
+    PutResponse deserializedPutResponse = PutResponse.readFrom(responseStream);
+    Assert.assertEquals(deserializedPutResponse.getCorrelationId(), 1234);
+    Assert.assertEquals(deserializedPutResponse.getError(), ServerErrorCode.No_Error);
+    response.release();
   }
 
   @Test
