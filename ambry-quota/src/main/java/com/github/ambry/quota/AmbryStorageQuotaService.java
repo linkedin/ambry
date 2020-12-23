@@ -42,12 +42,13 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
     this.scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
     this.storageUsageRefresher = new HelixStorageUsageRefresher(helixStore, this.scheduler, storageQuotaConfig);
     this.storageQuotaSource = new JSONStringStorageQuotaSource(storageQuotaConfig);
-    this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer();
+    this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer(null);
     this.config = storageQuotaConfig;
   }
 
   @Override
   public void start() throws Exception {
+    storageQuotaEnforcer.setQuotaMode(config.enforcerMode);
     storageQuotaEnforcer.initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
     storageQuotaEnforcer.initStorageQuota(storageQuotaSource.getContainerQuota());
     storageQuotaEnforcer.registerListeners(storageQuotaSource, storageUsageRefresher);

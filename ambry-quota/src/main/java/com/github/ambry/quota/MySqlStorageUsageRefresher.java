@@ -120,6 +120,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     // First try to get the monthly base storage usage from backup
     try {
       if (backupFileManager != null) {
+        logger.trace("Fetching monthly base from backup directory for this month: " + currentMonth);
         containerStorageUsageMonthlyBase = backupFileManager.getBackupFileContent(currentMonth);
       }
       if (containerStorageUsageMonthlyBase != null) {
@@ -131,6 +132,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
 
     try {
       // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
+      logger.trace("Fetching monthly base from mysql database for this month: " + currentMonth);
       containerStorageUsageMonthlyBase =
           accountStatsMySqlStore.queryMonthlyAggregatedStats(clusterMapConfig.clusterMapClusterName);
       // If the monthly base is indeed for this month, then try to persist it in the backup file.
@@ -388,6 +390,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       if (backupFiles.contains(filename)) {
         return;
       }
+      logger.trace("Persist container usage for " + filename);
       String tempFileName = filename + TEMP_FILE_SUFFIX;
       Path tempFilePath = backupDirPath.resolve(tempFileName);
       Path filePath = backupDirPath.resolve(filename);
@@ -411,6 +414,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
      * Load all the backup files under the backup directory to a list.
      */
     private void loadBackupFiles() {
+      logger.info("Loading mysql monthly storage usage backup file from directory " + backupDirPath);
       File backupDir = backupDirPath.toFile();
       // First remove all the temp files
       FileFilter tempFileFilter = (File pathname) -> tempFilenamePattern.matcher(pathname.getName()).matches();
@@ -430,6 +434,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
           backupFiles.add(file.getName());
         }
       }
+      logger.info("Loaded " + backupFiles.size() + " backup files");
+      logger.trace("Backup files " + backupFiles);
     }
 
     /**

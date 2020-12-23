@@ -71,4 +71,12 @@ public interface StorageQuotaEnforcer {
    * @param mode The new value for {@link QuotaMode}.
    */
   void setQuotaMode(QuotaMode mode);
+
+  /**
+   * Interface of callback method when the quota of certain account and container's quota is exceeded.
+   */
+  interface QuotaExceededCallback {
+    void onQuotaExceeded(QuotaMode quotaMode, short accountId, short containerId, QuotaOperation op, long quota,
+        long existingUsage, long newSize);
+  }
 }

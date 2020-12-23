@@ -97,6 +97,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
   private GetAccountsHandler getAccountsHandler;
   private PostAccountsHandler postAccountsHandler;
+  private StorageQuotaService storageQuotaService;
   private boolean isUp = false;
 
   /**
@@ -136,6 +137,7 @@ class FrontendRestRequestService implements RestRequestService {
     this.hostname = hostname;
     this.clusterName = clusterName.toLowerCase();
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
+    this.storageQuotaService = storageQuotaService;
     logger.trace("Instantiated FrontendRestRequestService");
   }
 
@@ -155,6 +157,14 @@ class FrontendRestRequestService implements RestRequestService {
     long startupBeginTime = System.currentTimeMillis();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
+    if (storageQuotaService != null) {
+      try {
+        storageQuotaService.start();
+      } catch (Exception e) {
+        logger.error("Failed to start storage quota service", e);
+        throw new InstantiationException("StorageQuotaService fail to start");
+      }
+    }
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     getSignedUrlHandler =
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
@@ -191,6 +201,9 @@ class FrontendRestRequestService implements RestRequestService {
       if (idConverter != null) {
         idConverter.close();
         idConverter = null;
+      }
+      if (storageQuotaService != null) {
+        storageQuotaService.shutdown();
       }
       logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {
