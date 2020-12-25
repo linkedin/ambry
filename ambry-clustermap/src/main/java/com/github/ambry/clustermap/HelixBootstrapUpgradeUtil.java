@@ -63,6 +63,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.clustermap.PropertyStoreToDataNodeConfigAdapter.Converter.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -322,7 +323,7 @@ public class HelixBootstrapUpgradeUtil {
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
-   * @param dataNodeConfigSourceType
+   * @param dataNodeConfigSourceType the {@link DataNodeConfigSourceType} associated with this cluster.
    * @return a set of sealed partitions in cluster
    * @throws Exception
    */
@@ -943,94 +944,94 @@ public class HelixBootstrapUpgradeUtil {
    *                                  given datacenter.
    */
   private void addUpdateInstances(String dcName, Map<String, Set<String>> partitionsToInstancesInDc) {
-    Pair<PropertyStoreToDataNodeConfigAdapter, InstanceConfigToDataNodeConfigAdapter.Converter> adapterAndConverter =
-        createPropertyStoreAdapterAndInstanceConverter(dcName);
-    PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = adapterAndConverter.getFirst();
-    InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter = adapterAndConverter.getSecond();
-    info("[{}] Getting list of instances in {}", dcName.toUpperCase(), dcName);
-    Set<String> instancesInHelix = new HashSet<>(getInstanceNamesInHelix(dcName, propertyStoreAdapter));
-    Set<String> instancesInStatic = dcToInstanceNameToDataNodeId.get(dcName) == null ? new HashSet<>()
-        : new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
-    Set<String> instancesInBoth = new HashSet<>(instancesInHelix);
-    // set instances in both correctly.
-    instancesInBoth.retainAll(instancesInStatic);
-    // set instances in Helix only correctly.
-    instancesInHelix.removeAll(instancesInBoth);
-    // set instances in Static only correctly.
-    instancesInStatic.removeAll(instancesInBoth);
-    int totalInstances = instancesInBoth.size() + instancesInHelix.size() + instancesInStatic.size();
-    for (String instanceName : instancesInBoth) {
-      DataNodeConfig nodeConfigFromHelix =
-          getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
-      DataNodeConfig nodeConfigFromStatic =
-          createDataNodeConfigFromStatic(dcName, instanceName, nodeConfigFromHelix, partitionsToInstancesInDc,
-              instanceConfigConverter);
-      if (!areDataNodeConfigsEquivalent(nodeConfigFromStatic, nodeConfigFromHelix, !overrideReplicaStatus)) {
-        if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
-          if (!dryRun) {
-            info(
-                "[{}] Instance {} already present in Helix, but DataNodeConfig has changed, updating. Remaining instances: {}",
-                dcName.toUpperCase(), instanceName, --totalInstances);
-            // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
-            // availability and so on should be updated at all (if not, nodeConfigFromStatic should be replaced with
-            // the appropriate dataNodeConfig that is constructed with the correct values from both).
-            // For now, only bootstrapping cluster is allowed to directly change DataNodeConfig
-            setDataNodeConfigInHelix(dcName, instanceName, nodeConfigFromStatic, propertyStoreAdapter,
+    ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
+    String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+    try (PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = new PropertyStoreToDataNodeConfigAdapter(
+        zkConnectStr, config)) {
+      InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
+          new InstanceConfigToDataNodeConfigAdapter.Converter(config);
+      info("[{}] Getting list of instances in {}", dcName.toUpperCase(), dcName);
+      Set<String> instancesInHelix = new HashSet<>(getInstanceNamesInHelix(dcName, propertyStoreAdapter));
+      Set<String> instancesInStatic = dcToInstanceNameToDataNodeId.get(dcName) == null ? new HashSet<>() : new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
+      Set<String> instancesInBoth = new HashSet<>(instancesInHelix);
+      // set instances in both correctly.
+      instancesInBoth.retainAll(instancesInStatic);
+      // set instances in Helix only correctly.
+      instancesInHelix.removeAll(instancesInBoth);
+      // set instances in Static only correctly.
+      instancesInStatic.removeAll(instancesInBoth);
+      int totalInstances = instancesInBoth.size() + instancesInHelix.size() + instancesInStatic.size();
+      for (String instanceName : instancesInBoth) {
+        DataNodeConfig nodeConfigFromHelix = getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
+        DataNodeConfig nodeConfigFromStatic =
+            createDataNodeConfigFromStatic(dcName, instanceName, nodeConfigFromHelix, partitionsToInstancesInDc,
                 instanceConfigConverter);
-          } else {
-            info(
-                "[{}] Instance {} already present in Helix, but DataNodeConfig has changed, no action as dry run. Remaining instances: {}",
-                dcName.toUpperCase(), instanceName, --totalInstances);
-            logger.debug("[{}] Previous dataNodeConfig: {} \n New dataNodeConfig: {}", dcName.toUpperCase(),
-                nodeConfigFromHelix, nodeConfigFromStatic);
+        if (!areDataNodeConfigsEquivalent(nodeConfigFromStatic, nodeConfigFromHelix, !overrideReplicaStatus)) {
+          if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
+            if (!dryRun) {
+              info(
+                  "[{}] Instance {} already present in Helix, but DataNodeConfig has changed, updating. Remaining instances: {}",
+                  dcName.toUpperCase(), instanceName, --totalInstances);
+              // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
+              // availability and so on should be updated at all (if not, nodeConfigFromStatic should be replaced with
+              // the appropriate dataNodeConfig that is constructed with the correct values from both).
+              // For now, only bootstrapping cluster is allowed to directly change DataNodeConfig
+              setDataNodeConfigInHelix(dcName, instanceName, nodeConfigFromStatic, propertyStoreAdapter,
+                  instanceConfigConverter);
+            } else {
+              info(
+                  "[{}] Instance {} already present in Helix, but DataNodeConfig has changed, no action as dry run. Remaining instances: {}",
+                  dcName.toUpperCase(), instanceName, --totalInstances);
+              logger.debug("[{}] Previous dataNodeConfig: {} \n New dataNodeConfig: {}", dcName.toUpperCase(),
+                  nodeConfigFromHelix, nodeConfigFromStatic);
+            }
+            // for dryRun, we update counter but don't really change the DataNodeConfig in Helix
+            instancesUpdated.getAndIncrement();
           }
-          // for dryRun, we update counter but don't really change the DataNodeConfig in Helix
-          instancesUpdated.getAndIncrement();
-        }
-      } else {
-        if (!dryRun) {
-          info("[{}] Instance {} already present in Helix, with same Data, skipping. Remaining instances: {}",
-              dcName.toUpperCase(), instanceName, --totalInstances);
+        } else {
+          if (!dryRun) {
+            info("[{}] Instance {} already present in Helix, with same Data, skipping. Remaining instances: {}", dcName.toUpperCase(), instanceName, --totalInstances);
+          }
         }
       }
-    }
 
-    for (String instanceName : instancesInStatic) {
-      DataNodeConfig nodeConfigFromStatic = createDataNodeConfigFromStatic(dcName, instanceName, null, partitionsToInstancesInDc,
-          instanceConfigConverter);
-      info("[{}] Instance {} is new, {}. Remaining instances: {}", dcName.toUpperCase(), instanceName,
-          dryRun ? "no action as dry run" : "adding to Helix", --totalInstances);
-      // Note: if we want to move replica to new instance (not present in cluster yet), we can prepare a transient
-      // clustermap in which we keep existing replicas and add new replicas/instances. We should be able to upgrade cluster
-      // normally (update both datanode configs and IdealState). Helix controller will notify new instance to perform
-      // replica addition.
-      if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
-        if (!dryRun) {
-          addDataNodeConfigToHelix(dcName, nodeConfigFromStatic, propertyStoreAdapter, instanceConfigConverter);
-        }
-        instancesAdded.getAndIncrement();
-      }
-    }
-
-    for (String instanceName : instancesInHelix) {
-      if (forceRemove) {
-        info("[{}] Instance {} is in Helix, but not in static. {}. Remaining instances: {}", dcName.toUpperCase(),
-            instanceName, dryRun ? "No action as dry run" : "Forcefully removing", --totalInstances);
+      for (String instanceName : instancesInStatic) {
+        DataNodeConfig nodeConfigFromStatic =
+            createDataNodeConfigFromStatic(dcName, instanceName, null, partitionsToInstancesInDc,
+                instanceConfigConverter);
+        info("[{}] Instance {} is new, {}. Remaining instances: {}", dcName.toUpperCase(), instanceName,
+            dryRun ? "no action as dry run" : "adding to Helix", --totalInstances);
+        // Note: if we want to move replica to new instance (not present in cluster yet), we can prepare a transient
+        // clustermap in which we keep existing replicas and add new replicas/instances. We should be able to upgrade cluster
+        // normally (update both datanode configs and IdealState). Helix controller will notify new instance to perform
+        // replica addition.
         if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
           if (!dryRun) {
-            removeDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter);
+            addDataNodeConfigToHelix(dcName, nodeConfigFromStatic, propertyStoreAdapter, instanceConfigConverter);
           }
-          instancesDropped.getAndIncrement();
+          instancesAdded.getAndIncrement();
         }
-      } else {
-        info(
-            "[{}] Instance {} is in Helix, but not in static. Ignoring for now (use --forceRemove to forcefully remove). "
-                + "Remaining instances: {}", dcName.toUpperCase(), instanceName, --totalInstances);
-        expectMoreInHelixDuringValidate = true;
-        instancesNotForceRemovedByDc.computeIfAbsent(dcName, k -> ConcurrentHashMap.newKeySet()).add(instanceName);
+      }
+
+      for (String instanceName : instancesInHelix) {
+        if (forceRemove) {
+          info("[{}] Instance {} is in Helix, but not in static. {}. Remaining instances: {}", dcName.toUpperCase(),
+              instanceName, dryRun ? "No action as dry run" : "Forcefully removing", --totalInstances);
+          if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
+            if (!dryRun) {
+              removeDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter);
+            }
+            instancesDropped.getAndIncrement();
+          }
+        } else {
+          info(
+              "[{}] Instance {} is in Helix, but not in static. Ignoring for now (use --forceRemove to forcefully remove). "
+                  + "Remaining instances: {}", dcName.toUpperCase(), instanceName, --totalInstances);
+          expectMoreInHelixDuringValidate = true;
+          instancesNotForceRemovedByDc.computeIfAbsent(dcName, k -> ConcurrentHashMap.newKeySet()).add(instanceName);
+        }
       }
     }
-    propertyStoreAdapter.close();
   }
 
   private Pair<PropertyStoreToDataNodeConfigAdapter, InstanceConfigToDataNodeConfigAdapter.Converter> createPropertyStoreAdapterAndInstanceConverter(
@@ -1610,25 +1611,32 @@ public class HelixBootstrapUpgradeUtil {
       Map<String, Set<String>> nodeToNonExistentReplicas) {
     String dcName = dc.getName();
     dcToSealedPartitions.put(dcName, new HashSet<>());
-    HelixAdmin admin = adminForDc.get(dcName);
-    Set<String> allInstancesInHelix = new HashSet<>(admin.getInstancesInCluster(clusterName));
-    for (DataNodeId dataNodeId : dc.getDataNodes()) {
-      DataNode dataNode = (DataNode) dataNodeId;
-      Set<String> replicasOnNode = staticClusterMap.getReplicas(dataNode)
-          .stream()
-          .map(replicaId -> replicaId.getPartitionId().toPathString())
-          .collect(Collectors.toSet());
-      String instanceName = getInstanceName(dataNode);
-      ensureOrThrow(allInstancesInHelix.contains(instanceName), "Instance not present in Helix " + instanceName);
-      InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
-      List<String> sealedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
-      if (sealedReplicas != null) {
-        for (String sealedReplica : sealedReplicas) {
-          info("Replica {} is sealed on {}", sealedReplica, instanceName);
-          dcToSealedPartitions.get(dcName).add(sealedReplica);
-          if (!replicasOnNode.contains(sealedReplica)) {
-            logger.warn("Replica {} is in sealed list but not on node {}", sealedReplica, instanceName);
-            nodeToNonExistentReplicas.computeIfAbsent(instanceName, key -> new HashSet<>()).add(sealedReplica);
+    ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
+    String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+    try (PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = new PropertyStoreToDataNodeConfigAdapter(
+        zkConnectStr, config)) {
+      InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
+          new InstanceConfigToDataNodeConfigAdapter.Converter(config);
+      Set<String> allInstancesInHelix = new HashSet<>(getInstanceNamesInHelix(dcName, propertyStoreAdapter));
+      for (DataNodeId dataNodeId : dc.getDataNodes()) {
+        DataNode dataNode = (DataNode) dataNodeId;
+        Set<String> replicasOnNode = staticClusterMap.getReplicas(dataNode)
+            .stream()
+            .map(replicaId -> replicaId.getPartitionId().toPathString())
+            .collect(Collectors.toSet());
+        String instanceName = getInstanceName(dataNode);
+        ensureOrThrow(allInstancesInHelix.contains(instanceName), "Instance not present in Helix " + instanceName);
+        DataNodeConfig dataNodeConfig =
+            getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
+        Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+        if (sealedReplicas != null) {
+          for (String sealedReplica : sealedReplicas) {
+            info("Replica {} is sealed on {}", sealedReplica, instanceName);
+            dcToSealedPartitions.get(dcName).add(sealedReplica);
+            if (!replicasOnNode.contains(sealedReplica)) {
+              logger.warn("Replica {} is in sealed list but not on node {}", sealedReplica, instanceName);
+              nodeToNonExistentReplicas.computeIfAbsent(instanceName, key -> new HashSet<>()).add(sealedReplica);
+            }
           }
         }
       }
@@ -1688,98 +1696,92 @@ public class HelixBootstrapUpgradeUtil {
         (new StaticClusterAgentsFactory(clusterMapConfig, partitionLayout)).getClusterMap();
     String dcName = dc.getName();
     HelixAdmin admin = adminForDc.get(dcName);
-    Set<String> allInstancesInHelix = new HashSet<>(admin.getInstancesInCluster(clusterName));
-    for (DataNodeId dataNodeId : dc.getDataNodes()) {
-      Map<String, Map<String, ReplicaId>> mountPathToReplicas = getMountPathToReplicas(staticClusterMap, dataNodeId);
-      DataNode dataNode = (DataNode) dataNodeId;
-      String instanceName = getInstanceName(dataNode);
-      ensureOrThrow(allInstancesInHelix.remove(instanceName), "Instance not present in Helix " + instanceName);
-      InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
+    ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
+    String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+    try (PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = new PropertyStoreToDataNodeConfigAdapter(
+        zkConnectStr, config)) {
+      InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
+          new InstanceConfigToDataNodeConfigAdapter.Converter(config);
+      Set<String> allInstancesInHelix = new HashSet<>(getInstanceNamesInHelix(dcName, propertyStoreAdapter));
+      for (DataNodeId dataNodeId : dc.getDataNodes()) {
+        Map<String, Map<String, ReplicaId>> mountPathToReplicas = getMountPathToReplicas(staticClusterMap, dataNodeId);
+        DataNode dataNode = (DataNode) dataNodeId;
+        String instanceName = getInstanceName(dataNode);
+        ensureOrThrow(allInstancesInHelix.remove(instanceName), "Instance not present in Helix " + instanceName);
+        DataNodeConfig dataNodeConfig = getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
 
-      Map<String, Map<String, String>> diskInfos = new HashMap<>(instanceConfig.getRecord().getMapFields());
-      for (Disk disk : dataNode.getDisks()) {
-        Map<String, String> diskInfoInHelix = diskInfos.remove(disk.getMountPath());
-        ensureOrThrow(diskInfoInHelix != null,
-            "[" + dcName.toUpperCase() + "] Disk not present for instance " + instanceName + " disk "
-                + disk.getMountPath());
-        ensureOrThrow(disk.getRawCapacityInBytes() == Long.parseLong(diskInfoInHelix.get(DISK_CAPACITY_STR)),
-            "[" + dcName.toUpperCase() + "] Capacity mismatch for instance " + instanceName + " disk "
-                + disk.getMountPath());
+        Map<String, DataNodeConfig.DiskConfig> diskInfos = new HashMap<>(dataNodeConfig.getDiskConfigs());
+        for (Disk disk : dataNode.getDisks()) {
+          DataNodeConfig.DiskConfig diskInfoInHelix = diskInfos.remove(dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE ? MOUNT_PREFIX + disk.getMountPath() : disk.getMountPath());
+          ensureOrThrow(diskInfoInHelix != null,
+              "[" + dcName.toUpperCase() + "] Disk not present for instance " + instanceName + " disk "
+                  + disk.getMountPath());
+          ensureOrThrow(disk.getRawCapacityInBytes() == diskInfoInHelix.getDiskCapacityInBytes(),
+              "[" + dcName.toUpperCase() + "] Capacity mismatch for instance " + instanceName + " disk "
+                  + disk.getMountPath());
 
-        // We check replicaInfo only when this is a Bootstrap or Validate operation. For other operations, replica infos
-        // are expected to be different on certain nodes.
-        if (EnumSet.of(HelixAdminOperation.BootstrapCluster, HelixAdminOperation.ValidateCluster)
-            .contains(helixAdminOperation)) {
-          Set<String> replicasInClusterMap = new HashSet<>();
-          Map<String, ReplicaId> replicaList = mountPathToReplicas.get(disk.getMountPath());
-          if (replicaList != null) {
-            replicasInClusterMap.addAll(replicaList.keySet());
-          }
-          Set<String> replicasInHelix = new HashSet<>();
-          String replicasStr = diskInfoInHelix.get(REPLICAS_STR);
-          if (!replicasStr.isEmpty()) {
-            String[] replicaInfoList = replicasStr.split(REPLICAS_DELIM_STR);
-            for (String replicaInfo : replicaInfoList) {
-              String[] info = replicaInfo.split(REPLICAS_STR_SEPARATOR);
-              // This is schema specific, but the assumption is that partition id and capacity fields should always be
-              // there. At this time these are the only things checked.
-              ensureOrThrow(info.length >= 2, "[" + dcName.toUpperCase()
-                  + "] Replica info field should have at least two fields - partition id and capacity");
-              replicasInHelix.add(info[0]);
-              ReplicaId replica = replicaList.get(info[0]);
-              ensureOrThrow(info[1].equals(Long.toString(replica.getCapacityInBytes())),
-                  "[" + dcName.toUpperCase() + "] Replica capacity should be the same.");
-              if (info.length > 2) {
-                ensureOrThrow(info[2].equals(replica.getPartitionId().getPartitionClass()),
-                    "[" + dcName.toUpperCase() + "] Partition class should be the same.");
-              }
+          // We check replicaInfo only when this is a Bootstrap or Validate operation. For other operations, replica infos
+          // are expected to be different on certain nodes.
+          if (EnumSet.of(HelixAdminOperation.BootstrapCluster, HelixAdminOperation.ValidateCluster)
+              .contains(helixAdminOperation)) {
+            Set<String> replicasInClusterMap = new HashSet<>();
+            Map<String, ReplicaId> replicaList = mountPathToReplicas.get(disk.getMountPath());
+            if (replicaList != null) {
+              replicasInClusterMap.addAll(replicaList.keySet());
             }
+            Set<String> replicasInHelix = new HashSet<>();
+            Map<String, DataNodeConfig.ReplicaConfig> replicaConfigMap = diskInfoInHelix.getReplicaConfigs();
+            for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaConfigEntry : replicaConfigMap.entrySet()) {
+              String replicaName = replicaConfigEntry.getKey();
+              DataNodeConfig.ReplicaConfig replicaConfig = replicaConfigEntry.getValue();
+              replicasInHelix.add(replicaName);
+              ReplicaId replica = replicaList.get(replicaName);
+              ensureOrThrow(replicaConfig.getReplicaCapacityInBytes() == replica.getCapacityInBytes(),
+                  "[" + dcName.toUpperCase() + "] Replica capacity should be the same.");
+              ensureOrThrow(replicaConfig.getPartitionClass().equals(replica.getPartitionId().getPartitionClass()),
+                  "[" + dcName.toUpperCase() + "] Partition class should be the same.");
+            }
+            ensureOrThrow(replicasInClusterMap.equals(replicasInHelix),
+                "[" + dcName.toUpperCase() + "] Replica information not consistent for instance " + instanceName
+                    + " disk " + disk.getMountPath() + "\n in Helix: " + replicaList + "\n in static clustermap: "
+                    + replicasInClusterMap);
           }
-          ensureOrThrow(replicasInClusterMap.equals(replicasInHelix),
-              "[" + dcName.toUpperCase() + "] Replica information not consistent for instance " + instanceName
-                  + " disk " + disk.getMountPath() + "\n in Helix: " + replicaList + "\n in static clustermap: "
-                  + replicasInClusterMap);
         }
-      }
-      for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
-        String mountPath = entry.getKey();
-        if (!mountPath.startsWith("/mnt")) {
-          logger.warn("[{}] Instance {} has unidentifiable mount path in Helix: {}", dcName.toUpperCase(), instanceName,
-              mountPath);
-        } else {
-          throw new AssertionError(
-              "[" + dcName.toUpperCase() + "] Instance " + instanceName + " has extra disk in Helix: " + entry);
+        for (Map.Entry<String, DataNodeConfig.DiskConfig> entry : diskInfos.entrySet()) {
+          String mountPath = entry.getKey();
+          if (!mountPath.startsWith("/mnt") && !mountPath.startsWith(MOUNT_PREFIX)) {
+            logger.warn("[{}] Instance {} has unidentifiable mount path in Helix: {}", dcName.toUpperCase(),
+                instanceName, mountPath);
+          } else {
+            throw new AssertionError(
+                "[" + dcName.toUpperCase() + "] Instance " + instanceName + " has extra disk in Helix: " + entry);
+          }
         }
-      }
-      ensureOrThrow(!dataNode.hasSSLPort() || (dataNode.getSSLPort() == Integer.parseInt(
-          instanceConfig.getRecord().getSimpleField(SSL_PORT_STR))),
-          "[" + dcName.toUpperCase() + "] SSL Port mismatch for instance " + instanceName);
-      ensureOrThrow(!dataNode.hasHttp2Port() || (dataNode.getHttp2Port() == Integer.parseInt(
-          instanceConfig.getRecord().getSimpleField(HTTP2_PORT_STR))),
-          "[" + dcName.toUpperCase() + "] HTTP2 Port mismatch for instance " + instanceName);
-      ensureOrThrow(dataNode.getDatacenterName().equals(instanceConfig.getRecord().getSimpleField(DATACENTER_STR)),
-          "[" + dcName.toUpperCase() + "] Datacenter mismatch for instance " + instanceName);
-      ensureOrThrow(Objects.equals(dataNode.getRackId(), instanceConfig.getRecord().getSimpleField(RACKID_STR)),
-          "[" + dcName.toUpperCase() + "] Rack Id mismatch for instance " + instanceName);
+        ensureOrThrow(!dataNode.hasSSLPort() || (dataNode.getSSLPort() == dataNodeConfig.getSslPort()),
+            "[" + dcName.toUpperCase() + "] SSL Port mismatch for instance " + instanceName);
+        ensureOrThrow(!dataNode.hasHttp2Port() || (dataNode.getHttp2Port() == dataNodeConfig.getHttp2Port()),
+            "[" + dcName.toUpperCase() + "] HTTP2 Port mismatch for instance " + instanceName);
+        ensureOrThrow(dataNode.getDatacenterName().equals(dataNodeConfig.getDatacenterName()),
+            "[" + dcName.toUpperCase() + "] Datacenter mismatch for instance " + instanceName);
+        ensureOrThrow(Objects.equals(dataNode.getRackId(), dataNodeConfig.getRackId()),
+            "[" + dcName.toUpperCase() + "] Rack Id mismatch for instance " + instanceName);
 
-      String xidInHelix = instanceConfig.getRecord().getSimpleField(XID_STR);
-      if (xidInHelix == null) {
-        xidInHelix = Long.toString(DEFAULT_XID);
+        long xidInHelix = dataNodeConfig.getXid();
+        ensureOrThrow(dataNode.getXid() == xidInHelix,
+            "[" + dcName.toUpperCase() + "] Xid mismatch for instance " + instanceName);
       }
-      ensureOrThrow(Objects.equals(Long.toString(dataNode.getXid()), xidInHelix),
-          "[" + dcName.toUpperCase() + "] Xid mismatch for instance " + instanceName);
-    }
-    if (expectMoreInHelixDuringValidate) {
-      ensureOrThrow(
-          allInstancesInHelix.equals(instancesNotForceRemovedByDc.getOrDefault(dc.getName(), new HashSet<>())),
-          "[" + dcName.toUpperCase() + "] Additional instances in Helix: " + allInstancesInHelix
-              + " not what is expected " + instancesNotForceRemovedByDc.get(dc.getName()));
-      info("[{}] *** Helix may have more instances than in the given clustermap as removals were not forced.",
-          dcName.toUpperCase());
-    } else {
-      ensureOrThrow(allInstancesInHelix.isEmpty(),
-          "[" + dcName.toUpperCase() + "] Following instances in Helix not found in the clustermap "
-              + allInstancesInHelix);
+      if (expectMoreInHelixDuringValidate) {
+        ensureOrThrow(
+            allInstancesInHelix.equals(instancesNotForceRemovedByDc.getOrDefault(dc.getName(), new HashSet<>())),
+            "[" + dcName.toUpperCase() + "] Additional instances in Helix: " + allInstancesInHelix
+                + " not what is expected " + instancesNotForceRemovedByDc.get(dc.getName()));
+        info("[{}] *** Helix may have more instances than in the given clustermap as removals were not forced.",
+            dcName.toUpperCase());
+      } else {
+        ensureOrThrow(allInstancesInHelix.isEmpty(),
+            "[" + dcName.toUpperCase() + "] Following instances in Helix not found in the clustermap "
+                + allInstancesInHelix);
+      }
     }
     info("[{}] Successfully verified datanode and disk equivalency in dc {}", dcName.toUpperCase(), dc.getName());
   }

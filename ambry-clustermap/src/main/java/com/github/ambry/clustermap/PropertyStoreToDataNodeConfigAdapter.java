@@ -203,8 +203,8 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
    * Convert between {@link DataNodeConfig}s and {@link ZNRecord}s.
    */
   static class Converter {
+    public static final String MOUNT_PREFIX = "mount-";
     private static final int VERSION_0 = 0;
-    private static final String MOUNT_PREFIX = "mount-";
     private static final String HOSTNAME_FIELD = "hostname";
     private static final String PORT_FIELD = "port";
     private final String defaultPartitionClass;
