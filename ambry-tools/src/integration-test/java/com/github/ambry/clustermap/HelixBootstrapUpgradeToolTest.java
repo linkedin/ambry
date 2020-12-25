@@ -84,6 +84,7 @@ public class HelixBootstrapUpgradeToolTest {
   private static final String CLUSTER_NAME_PREFIX = "Ambry-";
   private static final String ROOT_PATH =
       "/" + CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP + "/" + ClusterMapUtils.PROPERTYSTORE_STR;
+  private static final DataNodeConfigSourceType DEFAULT_DATA_NODE_CONFIG_SOURCE = DataNodeConfigSourceType.INSTANCE_CONFIG;
   private static HelixPropertyStoreConfig propertyStoreConfig;
 
   /**
@@ -197,7 +198,7 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
@@ -236,7 +237,7 @@ public class HelixBootstrapUpgradeToolTest {
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -578,7 +579,7 @@ public class HelixBootstrapUpgradeToolTest {
     // upgrade Helix by updating IdealState: AdminOperation = UpdateIdealState
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState);
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
 
     // verify IdealState has been updated
@@ -652,7 +653,7 @@ public class HelixBootstrapUpgradeToolTest {
         // Upgrade Helix by updating IdealState: AdminOperation = DisablePartition
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
         bootstrapCompletionLatch.countDown();
       } catch (Exception e) {
         // do nothing, if there is any exception subsequent test should fail.
@@ -816,7 +817,7 @@ public class HelixBootstrapUpgradeToolTest {
     writeBootstrapOrUpgrade(expectedResourceCount, false);
     Set<String> sealedPartitions =
         HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-            CLUSTER_NAME_PREFIX, dcStr);
+            CLUSTER_NAME_PREFIX, dcStr, DEFAULT_DATA_NODE_CONFIG_SOURCE);
     assertEquals("Sealed partition set should be empty initially", Collections.emptySet(), sealedPartitions);
     // randomly choose 20 partitions to mark as sealed
     int[] intArray = new Random().ints(0, 100).distinct().limit(20).toArray();
@@ -845,7 +846,7 @@ public class HelixBootstrapUpgradeToolTest {
     // query sealed partition in Helix again
     sealedPartitions =
         HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-            CLUSTER_NAME_PREFIX, dcStr);
+            CLUSTER_NAME_PREFIX, dcStr, DEFAULT_DATA_NODE_CONFIG_SOURCE);
     assertEquals("Mismatch in sealed partition set", selectedSealedPartitionSet, sealedPartitions);
   }
 
@@ -1022,7 +1023,7 @@ public class HelixBootstrapUpgradeToolTest {
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory(),
-        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster);
+        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 

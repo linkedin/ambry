@@ -88,6 +88,22 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
     propertyStore.stop();
   }
 
+  /**
+   * Remove data config from property store
+   * @param instanceName the name of instance
+   */
+  public void remove(String instanceName) {
+    propertyStore.remove(CONFIG_PATH + "/" + instanceName, AccessOption.PERSISTENT);
+  }
+
+  /**
+   * @return all data node names in the property store.
+   */
+  public List<String> getAllDataNodeNames() {
+    List<String> names = propertyStore.getChildNames(CONFIG_PATH, AccessOption.PERSISTENT);
+    return names == null ? Collections.emptyList() : names;
+  }
+
   private class Subscription implements HelixPropertyListener {
     private final DataNodeConfigChangeListener listener;
     private final CompletableFuture<Void> initFuture = new CompletableFuture<>();

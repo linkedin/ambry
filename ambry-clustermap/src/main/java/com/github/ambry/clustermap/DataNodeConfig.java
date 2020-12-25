@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
 
 /**
@@ -37,7 +38,7 @@ class DataNodeConfig {
   private final Set<String> sealedReplicas = new HashSet<>();
   private final Set<String> stoppedReplicas = new HashSet<>();
   private final Set<String> disabledReplicas = new HashSet<>();
-  private final Map<String, DiskConfig> diskConfigs = new HashMap<>();
+  private final Map<String, DiskConfig> diskConfigs = new TreeMap<>();
   private final Map<String, Map<String, String>> extraMapFields = new HashMap<>();
 
   /**
@@ -195,7 +196,7 @@ class DataNodeConfig {
   static class DiskConfig {
     private final HardwareState state;
     private final long diskCapacityInBytes;
-    private final Map<String, ReplicaConfig> replicaConfigs = new HashMap<>();
+    private final Map<String, ReplicaConfig> replicaConfigs = new TreeMap<>();
 
     /**
      * @param state the configured {@link HardwareState} of the disk.

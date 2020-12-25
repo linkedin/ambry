@@ -17,6 +17,7 @@ import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -34,6 +35,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -132,6 +134,8 @@ public class HelixBootstrapUpgradeUtil {
   private final Integer portNum;
   private final String partitionName;
   private final HelixAdminOperation helixAdminOperation;
+  private final DataNodeConfigSourceType dataNodeConfigSourceType;
+  private final boolean overrideReplicaStatus;
   private boolean expectMoreInHelixDuringValidate = false;
   private ConcurrentHashMap<String, Set<String>> instancesNotForceRemovedByDc = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, Set<String>> partitionsNotForceRemovedByDc = new ConcurrentHashMap<>();
@@ -209,13 +213,16 @@ public class HelixBootstrapUpgradeUtil {
    * @param helixAdminOperation the {@link HelixAdminOperation} to perform on resources (partitions). This is used in
    *                           the context of move replica. So it only updates IdealState without touching anything else.
    *                           InstanceConfig will be updated by nodes themselves.
+   * @param dataNodeConfigSourceType the {@link DataNodeConfigSourceType} to use when bootstrapping cluster.
+   * @param overrideReplicaStatus whether to override sealed/stopped/disabled replica status lists.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager, String stateModelDef,
-      HelixAdminOperation helixAdminOperation) throws Exception {
+      HelixAdminOperation helixAdminOperation, DataNodeConfigSourceType dataNodeConfigSourceType,
+      boolean overrideReplicaStatus) throws Exception {
     if (dryRun) {
       info("==== This is a dry run ====");
       info("No changes will be made to the information in Helix (except adding the cluster if it does not exist.");
@@ -223,7 +230,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory, stateModelDef, null, null, null,
-            helixAdminOperation);
+            helixAdminOperation, dataNodeConfigSourceType, overrideReplicaStatus);
     if (dryRun) {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
           clusterMapToHelixMapper.clusterName);
@@ -259,7 +266,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, null, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF,
-            null, null, null, null);
+            null, null, null, null, null, false);
     if (forceRemove) {
       for (String adminType : adminTypes) {
         removeAdminInfosFromCluster(clusterMapToHelixMapper, adminType);
@@ -278,7 +285,7 @@ public class HelixBootstrapUpgradeUtil {
       String clusterNamePrefix, String dcs, String stateModelDef) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, stateModelDef, null, null, null, null);
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, stateModelDef, null, null, null, null, null, false);
     clusterMapToHelixMapper.addStateModelDef();
     info("State model def is successfully added");
   }
@@ -293,15 +300,16 @@ public class HelixBootstrapUpgradeUtil {
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
    * @param stateModelDef the state model definition to use in Ambry cluster.
+   * @param dataNodeConfigSourceType the {@link DataNodeConfigSourceType} of this cluster.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void validate(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs, String stateModelDef) throws Exception {
+      String clusterNamePrefix, String dcs, String stateModelDef, DataNodeConfigSourceType dataNodeConfigSourceType) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, stateModelDef, null, null, null,
-            HelixAdminOperation.ValidateCluster);
+            HelixAdminOperation.ValidateCluster, dataNodeConfigSourceType, false);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
   }
@@ -314,15 +322,16 @@ public class HelixBootstrapUpgradeUtil {
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param dcs the comma-separated list of data centers that needs to be upgraded/bootstrapped.
+   * @param dataNodeConfigSourceType
    * @return a set of sealed partitions in cluster
    * @throws Exception
    */
   static Set<String> listSealedPartition(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs) throws Exception {
+      String clusterNamePrefix, String dcs, DataNodeConfigSourceType dataNodeConfigSourceType) throws Exception {
     HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, null,
-            null, null, HelixAdminOperation.ListSealedPartition);
+            null, null, HelixAdminOperation.ListSealedPartition, dataNodeConfigSourceType, false);
     return helixBootstrapUpgradeUtil.getSealedPartitionsInHelixCluster();
   }
 
@@ -347,7 +356,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, null, Objects.requireNonNull(hostname), portNum,
-            Objects.requireNonNull(partitionName), operation);
+            Objects.requireNonNull(partitionName), operation, null, false);
     if (operation == HelixAdminOperation.ResetPartition) {
       helixBootstrapUpgradeUtil.resetPartition();
     } else {
@@ -372,7 +381,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, null, null, null, null,
-            HelixAdminOperation.MigrateToPropertyStore);
+            HelixAdminOperation.MigrateToPropertyStore, DataNodeConfigSourceType.PROPERTY_STORE, false);
     helixBootstrapUpgradeUtil.migrateToPropertyStore();
   }
 
@@ -468,13 +477,16 @@ public class HelixBootstrapUpgradeUtil {
    * @param portNum the port number (if not null) associated with host.
    * @param partitionName the partition (if not null) on which the admin operation should be performed.
    * @param helixAdminOperation the {@link HelixAdminOperation} to perform.
+   * @param dataNodeConfigSourceType the {@link DataNodeConfigSourceType} associated with this cluster.
+   * @param overrideReplicaStatus whether to override sealed/stopped/disabled replica status lists.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeUtil(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory, String stateModelDef, String hostname, Integer portNum, String partitionName,
-      HelixAdminOperation helixAdminOperation) throws Exception {
+      HelixAdminOperation helixAdminOperation, DataNodeConfigSourceType dataNodeConfigSourceType,
+      boolean overrideReplicaStatus) throws Exception {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
@@ -484,8 +496,10 @@ public class HelixBootstrapUpgradeUtil {
     this.portNum = portNum;
     this.partitionName = partitionName;
     this.helixAdminOperation = helixAdminOperation;
+    this.dataNodeConfigSourceType =
+        dataNodeConfigSourceType == null ? DataNodeConfigSourceType.INSTANCE_CONFIG : dataNodeConfigSourceType;
+    this.overrideReplicaStatus = overrideReplicaStatus;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
-    Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
     ClusterMapConfig clusterMapConfig = getClusterMapConfig("", "", null);
     if (new File(partitionLayoutPath).exists()) {
@@ -929,9 +943,12 @@ public class HelixBootstrapUpgradeUtil {
    *                                  given datacenter.
    */
   private void addUpdateInstances(String dcName, Map<String, Set<String>> partitionsToInstancesInDc) {
-    HelixAdmin dcAdmin = adminForDc.get(dcName);
+    Pair<PropertyStoreToDataNodeConfigAdapter, InstanceConfigToDataNodeConfigAdapter.Converter> adapterAndConverter =
+        createPropertyStoreAdapterAndInstanceConverter(dcName);
+    PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = adapterAndConverter.getFirst();
+    InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter = adapterAndConverter.getSecond();
     info("[{}] Getting list of instances in {}", dcName.toUpperCase(), dcName);
-    Set<String> instancesInHelix = new HashSet<>(dcAdmin.getInstancesInCluster(clusterName));
+    Set<String> instancesInHelix = new HashSet<>(getInstanceNamesInHelix(dcName, propertyStoreAdapter));
     Set<String> instancesInStatic = dcToInstanceNameToDataNodeId.get(dcName) == null ? new HashSet<>()
         : new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
     Set<String> instancesInBoth = new HashSet<>(instancesInHelix);
@@ -943,51 +960,53 @@ public class HelixBootstrapUpgradeUtil {
     instancesInStatic.removeAll(instancesInBoth);
     int totalInstances = instancesInBoth.size() + instancesInHelix.size() + instancesInStatic.size();
     for (String instanceName : instancesInBoth) {
-      InstanceConfig instanceConfigInHelix = dcAdmin.getInstanceConfig(clusterName, instanceName);
-      InstanceConfig instanceConfigFromStatic =
-          createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
-              partitionsToInstancesInDc, instanceToDiskReplicasMap, instanceConfigInHelix);
-      if (!instanceConfigFromStatic.getRecord().equals(instanceConfigInHelix.getRecord())) {
+      DataNodeConfig nodeConfigFromHelix =
+          getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
+      DataNodeConfig nodeConfigFromStatic =
+          createDataNodeConfigFromStatic(dcName, instanceName, nodeConfigFromHelix, partitionsToInstancesInDc,
+              instanceConfigConverter);
+      if (!areDataNodeConfigsEquivalent(nodeConfigFromStatic, nodeConfigFromHelix, !overrideReplicaStatus)) {
         if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
           if (!dryRun) {
             info(
-                "[{}] Instance {} already present in Helix, but InstanceConfig has changed, updating. Remaining instances: {}",
+                "[{}] Instance {} already present in Helix, but DataNodeConfig has changed, updating. Remaining instances: {}",
                 dcName.toUpperCase(), instanceName, --totalInstances);
             // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
-            // availability and so on should be updated at all (if not, instanceConfigFromStatic should be replaced with
-            // the appropriate instanceConfig that is constructed with the correct values from both).
-            // For now, only bootstrapping cluster is allowed to directly change InstanceConfig
-            dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfigFromStatic);
+            // availability and so on should be updated at all (if not, nodeConfigFromStatic should be replaced with
+            // the appropriate dataNodeConfig that is constructed with the correct values from both).
+            // For now, only bootstrapping cluster is allowed to directly change DataNodeConfig
+            setDataNodeConfigInHelix(dcName, instanceName, nodeConfigFromStatic, propertyStoreAdapter,
+                instanceConfigConverter);
           } else {
             info(
-                "[{}] Instance {} already present in Helix, but InstanceConfig has changed, no action as dry run. Remaining instances: {}",
+                "[{}] Instance {} already present in Helix, but DataNodeConfig has changed, no action as dry run. Remaining instances: {}",
                 dcName.toUpperCase(), instanceName, --totalInstances);
-            logger.debug("[{}] Previous instanceConfig: {} \n New InstanceConfig: {}", dcName.toUpperCase(),
-                instanceConfigInHelix.getRecord(), instanceConfigFromStatic.getRecord());
+            logger.debug("[{}] Previous dataNodeConfig: {} \n New dataNodeConfig: {}", dcName.toUpperCase(),
+                nodeConfigFromHelix, nodeConfigFromStatic);
           }
-          // for dryRun, we update counter but don't really change the InstanceConfig in Helix
+          // for dryRun, we update counter but don't really change the DataNodeConfig in Helix
           instancesUpdated.getAndIncrement();
         }
       } else {
         if (!dryRun) {
-          info("[{}] Instance {} already present in Helix, with same InstanceConfig, skipping. Remaining instances: {}",
+          info("[{}] Instance {} already present in Helix, with same Data, skipping. Remaining instances: {}",
               dcName.toUpperCase(), instanceName, --totalInstances);
         }
       }
     }
 
     for (String instanceName : instancesInStatic) {
-      InstanceConfig instanceConfigFromStatic =
-          createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
-              partitionsToInstancesInDc, instanceToDiskReplicasMap, null);
+      DataNodeConfig nodeConfigFromStatic = createDataNodeConfigFromStatic(dcName, instanceName, null, partitionsToInstancesInDc,
+          instanceConfigConverter);
       info("[{}] Instance {} is new, {}. Remaining instances: {}", dcName.toUpperCase(), instanceName,
           dryRun ? "no action as dry run" : "adding to Helix", --totalInstances);
-      // Note: for now, if we want to move replica to new instance (not present in cluster yet), we should take two steps:
-      // step1: add new instance (empty) to cluster, which is a regular bootstrap; step2: add replica to IdealState
-      // Helix controller will notify new instance to perform replica addition.
+      // Note: if we want to move replica to new instance (not present in cluster yet), we can prepare a transient
+      // clustermap in which we keep existing replicas and add new replicas/instances. We should be able to upgrade cluster
+      // normally (update both datanode configs and IdealState). Helix controller will notify new instance to perform
+      // replica addition.
       if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
         if (!dryRun) {
-          dcAdmin.addInstance(clusterName, instanceConfigFromStatic);
+          addDataNodeConfigToHelix(dcName, nodeConfigFromStatic, propertyStoreAdapter, instanceConfigConverter);
         }
         instancesAdded.getAndIncrement();
       }
@@ -999,7 +1018,7 @@ public class HelixBootstrapUpgradeUtil {
             instanceName, dryRun ? "No action as dry run" : "Forcefully removing", --totalInstances);
         if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
           if (!dryRun) {
-            dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
+            removeDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter);
           }
           instancesDropped.getAndIncrement();
         }
@@ -1010,6 +1029,101 @@ public class HelixBootstrapUpgradeUtil {
         expectMoreInHelixDuringValidate = true;
         instancesNotForceRemovedByDc.computeIfAbsent(dcName, k -> ConcurrentHashMap.newKeySet()).add(instanceName);
       }
+    }
+    propertyStoreAdapter.close();
+  }
+
+  private Pair<PropertyStoreToDataNodeConfigAdapter, InstanceConfigToDataNodeConfigAdapter.Converter> createPropertyStoreAdapterAndInstanceConverter(
+      String dcName) {
+    ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
+    String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+    PropertyStoreToDataNodeConfigAdapter adapter = new PropertyStoreToDataNodeConfigAdapter(zkConnectStr, config);
+    InstanceConfigToDataNodeConfigAdapter.Converter converter =
+        new InstanceConfigToDataNodeConfigAdapter.Converter(config);
+    return new Pair<>(adapter, converter);
+  }
+
+  private List<String> getInstanceNamesInHelix(String dcName, PropertyStoreToDataNodeConfigAdapter adapter) {
+    List<String> instanceNames;
+    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+      instanceNames = adapter.getAllDataNodeNames();
+    } else {
+      instanceNames = adminForDc.get(dcName).getInstancesInCluster(clusterName);
+    }
+    return instanceNames;
+  }
+
+  private DataNodeConfig createDataNodeConfigFromStatic(String dcName, String instanceName,
+      DataNodeConfig referenceConfig, Map<String, Set<String>> partitionsToInstancesInDc,
+      InstanceConfigToDataNodeConfigAdapter.Converter converter) {
+    InstanceConfig referenceInstanceConfig =
+        overrideReplicaStatus || referenceConfig == null ? null : converter.convert(referenceConfig);
+    return converter.convert(
+        createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
+            partitionsToInstancesInDc, instanceToDiskReplicasMap, referenceInstanceConfig));
+  }
+
+  private DataNodeConfig getDataNodeConfigFromHelix(String dcName, String instanceName,
+      PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
+    DataNodeConfig dataNodeConfig;
+    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+      dataNodeConfig = adapter.get(instanceName);
+    } else {
+      dataNodeConfig = converter.convert(adminForDc.get(dcName).getInstanceConfig(clusterName, instanceName));
+    }
+    return dataNodeConfig;
+  }
+
+  private boolean areDataNodeConfigsEquivalent(DataNodeConfig configInStatic, DataNodeConfig configInHelix,
+      boolean ignoreListFields) {
+    if (ignoreListFields) {
+      // @formatter:off
+      return Objects.equals(configInStatic.getInstanceName(), configInHelix.getDatacenterName())
+          && Objects.equals(configInStatic.getHostName(), configInHelix.getHostName())
+          && Objects.equals(configInStatic.getDatacenterName(), configInHelix.getDatacenterName())
+          && configInStatic.getPort() == configInHelix.getPort()
+          && Objects.equals(configInStatic.getSslPort(), configInHelix.getSslPort())
+          && Objects.equals(configInStatic.getHttp2Port(), configInHelix.getHttp2Port())
+          && Objects.equals(configInStatic.getRackId(), configInHelix.getRackId())
+          && configInStatic.getDiskConfigs().equals(configInHelix.getDiskConfigs());
+      // @formatter:on
+    } else {
+      return configInStatic.equals(configInHelix);
+    }
+  }
+
+  private void setDataNodeConfigInHelix(String dcName, String instanceName, DataNodeConfig config,
+      PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
+    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+      if (!adapter.set(config)) {
+        logger.error("[{}] Failed to persist config for node {} in the property store.", dcName.toUpperCase(),
+            config.getInstanceName());
+      }
+    } else {
+      adminForDc.get(dcName).setInstanceConfig(clusterName, instanceName, converter.convert(config));
+    }
+  }
+
+  private void addDataNodeConfigToHelix(String dcName, DataNodeConfig config,
+      PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
+    // if this is a new instance, we should add it to both InstanceConfig and PropertyStore
+    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+      // when source type is PROPERTY_STORE, we only need to add an empty InstanceConfig
+      adminForDc.get(dcName).addInstance(clusterName, new InstanceConfig(config.getInstanceName()));
+    } else {
+      adminForDc.get(dcName).addInstance(clusterName, converter.convert(config));
+    }
+    if (!adapter.set(config)) {
+      logger.error("[{}] Failed to add config for new node {} in the property store.", dcName.toUpperCase(),
+          config.getInstanceName());
+    }
+  }
+
+  private void removeDataNodeConfigFromHelix(String dcName, String instanceName,
+      PropertyStoreToDataNodeConfigAdapter adapter) {
+    adminForDc.get(dcName).dropInstance(clusterName, new InstanceConfig(instanceName));
+    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+      adapter.remove(instanceName);
     }
   }
 
@@ -1093,7 +1207,9 @@ public class HelixBootstrapUpgradeUtil {
               if (!dryRun) {
                 InstanceConfig instanceConfig = dcAdmin.getInstanceConfig(clusterName, instanceInHelixOnly);
                 String instanceName = instanceConfig.getInstanceName();
-                // create a Znode (if not present) for this instance before disabling partition
+                // create a Znode (if not present) in PropertyStore for this instance before disabling partition, which
+                // will be deleted in the end. The reason to create a ZNode is to ensure replica decommission is blocked
+                // on updating InstanceConfig until this tool has completed. TODO, remove this logic once migration to PropertyStore is done.
                 if (!instancesWithDisabledPartition.contains(instanceName)) {
                   ZNRecord znRecord = new ZNRecord(instanceName);
                   String path = PARTITION_DISABLED_ZNODE_PATH + instanceName;
@@ -1107,8 +1223,6 @@ public class HelixBootstrapUpgradeUtil {
                 dcAdmin.setInstanceConfig(clusterName, instanceInHelixOnly, instanceConfig);
                 instancesWithDisabledPartition.add(instanceName);
               }
-              // note that disabling partition also updates InstanceConfig of certain node which hosts the partition.
-              instancesUpdated.getAndIncrement();
               partitionsDisabled.getAndIncrement();
             }
             // Disabling partition won't remove certain replica from IdealState. So replicas of this partition in Helix
@@ -1141,7 +1255,10 @@ public class HelixBootstrapUpgradeUtil {
         }
       }
     }
-    // if there are some partitions are disabled, mark whole disabling process complete in Helix PropertyStore
+    // note that disabling partition also updates InstanceConfig of certain nodes which host the partitions.
+    instancesUpdated.getAndAdd(instancesWithDisabledPartition.size());
+    // if there are some partitions are disabled, mark whole disabling process complete in Helix PropertyStore to unblock
+    // replica decommission thread on each datanode.
     if (helixPropertyStore != null) {
       maybeAwaitForLatch();
       for (String instanceName : instancesWithDisabledPartition) {
@@ -1283,8 +1400,9 @@ public class HelixBootstrapUpgradeUtil {
 
     List<String> sealedPartitionsList = new ArrayList<>();
     List<String> stoppedReplicasList = new ArrayList<>();
+    List<String> disabledReplicasList = new ArrayList<>();
     if (instanceToDiskReplicasMap.containsKey(instanceName)) {
-      Map<String, Map<String, String>> diskInfos = new HashMap<>();
+      Map<String, Map<String, String>> diskInfos = new TreeMap<>();
       for (HashMap.Entry<DiskId, SortedSet<Replica>> diskToReplicas : instanceToDiskReplicasMap.get(instanceName)
           .entrySet()) {
         DiskId disk = diskToReplicas.getKey();
@@ -1320,9 +1438,11 @@ public class HelixBootstrapUpgradeUtil {
     if (referenceInstanceConfig != null) {
       sealedPartitionsList = ClusterMapUtils.getSealedReplicas(referenceInstanceConfig);
       stoppedReplicasList = ClusterMapUtils.getStoppedReplicas(referenceInstanceConfig);
+      disabledReplicasList = ClusterMapUtils.getDisabledReplicas(referenceInstanceConfig);
     }
     instanceConfig.getRecord().setListField(SEALED_STR, sealedPartitionsList);
     instanceConfig.getRecord().setListField(STOPPED_REPLICAS_STR, stoppedReplicasList);
+    instanceConfig.getRecord().setListField(DISABLED_REPLICAS_STR, disabledReplicasList);
     return instanceConfig;
   }
 
@@ -1337,6 +1457,7 @@ public class HelixBootstrapUpgradeUtil {
       if (!isClusterPresent(dcName)) {
         info("Adding cluster {} in {}", clusterName, dcName);
         admin.addCluster(clusterName);
+        info("Adding state model {} to cluster {}", stateModelDef, clusterName);
         admin.addStateModelDef(clusterName, stateModelDef, getStateModelDefinition(stateModelDef));
       }
     }
