@@ -77,6 +77,7 @@ public class HelixBootstrapUpgradeToolTest {
   private final String adminConfigFilePath;
   private final JSONObject zkJson;
   private final String dcStr;
+  private final DataNodeConfigSourceType dataNodeConfigSourceType;
   private Set<String> activeDcSet;
   private TestHardwareLayout testHardwareLayout;
   private TestPartitionLayout testPartitionLayout;
@@ -84,7 +85,6 @@ public class HelixBootstrapUpgradeToolTest {
   private static final String CLUSTER_NAME_PREFIX = "Ambry-";
   private static final String ROOT_PATH =
       "/" + CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP + "/" + ClusterMapUtils.PROPERTYSTORE_STR;
-  private static final DataNodeConfigSourceType DEFAULT_DATA_NODE_CONFIG_SOURCE = DataNodeConfigSourceType.INSTANCE_CONFIG;
   private static HelixPropertyStoreConfig propertyStoreConfig;
 
   /**
@@ -119,13 +119,20 @@ public class HelixBootstrapUpgradeToolTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{"DC1"}, {"DC1, DC0"}, {"all"}});
+    return Arrays.asList(new Object[][]{
+        {"DC1", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"DC1", DataNodeConfigSourceType.PROPERTY_STORE},
+        {"DC1, DC0", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"DC1, DC0", DataNodeConfigSourceType.PROPERTY_STORE},
+        {"all", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"all", DataNodeConfigSourceType.PROPERTY_STORE},
+    });
   }
 
   /**
    * Initialize ZKInfos for all dcs and start the ZK server.
    */
-  public HelixBootstrapUpgradeToolTest(String dcStr) {
+  public HelixBootstrapUpgradeToolTest(String dcStr, DataNodeConfigSourceType configSourceType) {
     hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
@@ -134,6 +141,7 @@ public class HelixBootstrapUpgradeToolTest {
     testPartitionLayout =
         constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, null);
     this.dcStr = dcStr;
+    dataNodeConfigSourceType = configSourceType;
     if (!dcStr.equalsIgnoreCase("all")) {
       activeDcSet = Arrays.stream(dcStr.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
     } else {
@@ -198,7 +206,7 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
@@ -237,7 +245,7 @@ public class HelixBootstrapUpgradeToolTest {
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -579,7 +587,7 @@ public class HelixBootstrapUpgradeToolTest {
     // upgrade Helix by updating IdealState: AdminOperation = UpdateIdealState
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState, dataNodeConfigSourceType, false);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
 
     // verify IdealState has been updated
@@ -603,8 +611,8 @@ public class HelixBootstrapUpgradeToolTest {
   @Test
   public void testDisablePartitionAdminOp() throws Exception {
     String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
-    // Test regular bootstrap. This is to ensure InstanceConfig and IdealState are there before testing disabling certain
-    // replica on specific node.
+    // Test regular bootstrap. This is to ensure DataNodeConfig and IdealState are there before testing disabling
+    // certain replica on specific node.
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
     writeBootstrapOrUpgrade(expectedResourceCount, false);
@@ -631,15 +639,17 @@ public class HelixBootstrapUpgradeToolTest {
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.retry.disable.partition.completion.backoff.ms", Integer.toString(100));
+    props.setProperty("clustermap.data.node.config.source.type", dataNodeConfigSourceType.name());
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
         "localhost:" + zkInfo.getPort(), true);
+    PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
+        dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? null
+            : new PropertyStoreToDataNodeConfigAdapter("localhost:" + zkInfo.getPort(), clusterMapConfig);
+    InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
+        new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig);
     // create HelixAdmin
     ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
-    InstanceConfig instanceConfig =
-        admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
-    // Deep copy the InstanceConfig for validation
-    InstanceConfig previousInstanceConfig = new InstanceConfig(instanceConfig.getRecord());
     // Write changes to static files
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
@@ -653,7 +663,7 @@ public class HelixBootstrapUpgradeToolTest {
         // Upgrade Helix by updating IdealState: AdminOperation = DisablePartition
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition, dataNodeConfigSourceType, false);
         bootstrapCompletionLatch.countDown();
       } catch (Exception e) {
         // do nothing, if there is any exception subsequent test should fail.
@@ -661,7 +671,7 @@ public class HelixBootstrapUpgradeToolTest {
     }, false).start();
     assertTrue("Disable partition latch didn't come down within 5 seconds",
         disablePartitionLatch.await(5, TimeUnit.SECONDS));
-    // Let's attempt to update InstanceConfig via HelixParticipant, which should be blocked
+    // Let's attempt to update InstanceConfig/DataNodeConfig via HelixParticipant, which should be blocked
     CountDownLatch updateCompletionLatch = new CountDownLatch(1);
     Utils.newThread(() -> {
       helixParticipant.updateDataNodeInfoInCluster(removedReplica, false);
@@ -669,10 +679,12 @@ public class HelixBootstrapUpgradeToolTest {
     }, false).start();
     // sleep 100 ms to ensure updateDataNodeInfoInCluster is blocked due to disabling partition hasn't completed yet
     Thread.sleep(100);
-    // Ensure the InstanceConfig still has the replica
-    InstanceConfig currentInstanceConfig =
-        admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
-    verifyReplicaInfoInInstanceConfig(currentInstanceConfig, removedReplica, true);
+    // Ensure the DataNodeConfig still has the replica
+    String instanceName = getInstanceName(removedReplica.getDataNodeId());
+    DataNodeConfig currentDataNodeConfig =
+        dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? instanceConfigConverter.convert(
+            admin.getInstanceConfig(clusterName, instanceName)) : propertyStoreAdapter.get(instanceName);
+    verifyReplicaInfoInDataNodeConfig(currentDataNodeConfig, removedReplica, true);
 
     // verify the znode is created for the node on which partition has been disabled.
     Properties properties = new Properties();
@@ -692,7 +704,7 @@ public class HelixBootstrapUpgradeToolTest {
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
     assertTrue("Helix participant didn't complete update within 5 seconds",
         updateCompletionLatch.await(5, TimeUnit.SECONDS));
-    currentInstanceConfig = admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
+    InstanceConfig currentInstanceConfig = admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
     // Verify that replica has been disabled
     String resourceName = null;
     for (String rs : admin.getResourcesInCluster(clusterName)) {
@@ -722,7 +734,13 @@ public class HelixBootstrapUpgradeToolTest {
     assertEquals("Mismatch in disabled partition string in InstanceConfig", expectedDisabledPartitionMap,
         currentInstanceConfig.getRecord().getMapField(disabledPartitionStr));
     // verify the removed replica is no longer in InstanceConfig
-    verifyReplicaInfoInInstanceConfig(currentInstanceConfig, removedReplica, false);
+    currentDataNodeConfig =
+        dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? instanceConfigConverter.convert(
+            admin.getInstanceConfig(clusterName, instanceName)) : propertyStoreAdapter.get(instanceName);
+    verifyReplicaInfoInDataNodeConfig(currentDataNodeConfig, removedReplica, false);
+    if (propertyStoreAdapter != null) {
+      propertyStoreAdapter.close();
+    }
   }
 
   /**
@@ -811,13 +829,16 @@ public class HelixBootstrapUpgradeToolTest {
   public void testListSealedPartitions() throws Exception {
     assumeTrue(!dcStr.equals("DC1"));
     String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig(clusterName, "DC1", null);
+    InstanceConfigToDataNodeConfigAdapter.Converter instanceConfigConverter =
+        new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig);
     // Test regular bootstrap
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
     writeBootstrapOrUpgrade(expectedResourceCount, false);
     Set<String> sealedPartitions =
         HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-            CLUSTER_NAME_PREFIX, dcStr, DEFAULT_DATA_NODE_CONFIG_SOURCE);
+            CLUSTER_NAME_PREFIX, dcStr, dataNodeConfigSourceType);
     assertEquals("Sealed partition set should be empty initially", Collections.emptySet(), sealedPartitions);
     // randomly choose 20 partitions to mark as sealed
     int[] intArray = new Random().ints(0, 100).distinct().limit(20).toArray();
@@ -828,25 +849,33 @@ public class HelixBootstrapUpgradeToolTest {
     // update the sealed lists in Helix
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
       ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+      PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
+          dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? null
+              : new PropertyStoreToDataNodeConfigAdapter("localhost:" + zkInfo.getPort(), clusterMapConfig);
       for (String instanceName : admin.getInstancesInCluster(clusterName)) {
-        InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
+        DataNodeConfig dataNodeConfig =
+            dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? instanceConfigConverter.convert(
+                admin.getInstanceConfig(clusterName, instanceName)) : propertyStoreAdapter.get(instanceName);
         Set<String> localReplicas = new HashSet<>();
-        for (Map<String, String> diskInfo : instanceConfig.getRecord().getMapFields().values()) {
-          String replicaStrs = diskInfo.get(REPLICAS_STR);
-          for (String replicaStr : replicaStrs.split(REPLICAS_DELIM_STR)) {
-            localReplicas.add(replicaStr.split(REPLICAS_STR_SEPARATOR)[0]);
-          }
+        for (DataNodeConfig.DiskConfig diskConfig : dataNodeConfig.getDiskConfigs().values()) {
+          localReplicas.addAll(diskConfig.getReplicaConfigs().keySet());
         }
         // derive the intersection of localReplicas set and selectedSealedPartitionSet
         localReplicas.retainAll(selectedSealedPartitionSet);
-        instanceConfig.getRecord().setListField(SEALED_STR, new ArrayList<>(localReplicas));
-        admin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        if (dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG) {
+          InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
+          instanceConfig.getRecord().setListField(SEALED_STR, new ArrayList<>(localReplicas));
+          admin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        } else {
+          dataNodeConfig.getSealedReplicas().addAll(localReplicas);
+          propertyStoreAdapter.set(dataNodeConfig);
+        }
       }
     }
     // query sealed partition in Helix again
     sealedPartitions =
         HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-            CLUSTER_NAME_PREFIX, dcStr, DEFAULT_DATA_NODE_CONFIG_SOURCE);
+            CLUSTER_NAME_PREFIX, dcStr, dataNodeConfigSourceType);
     assertEquals("Mismatch in sealed partition set", selectedSealedPartitionSet, sealedPartitions);
   }
 
@@ -855,7 +884,10 @@ public class HelixBootstrapUpgradeToolTest {
    */
   @Test
   public void testMigrateToPropertyStore() throws Exception {
-    assumeTrue(dcStr.equals("all"));
+    // This test is tested only when DataNodeConfigSourceType.INSTANCE_CONFIG. The reason is: PROPERTY_STORE source type
+    // already writes dataNodeConfigs to Helix PropertyStore when bootstrapping cluster and creates empty InstanceConfig
+    // for each node. Once copied from InstanceConfig, the dataNodeConfig will be overridden to empty.
+    assumeTrue(dcStr.equals("all") && dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG);
     // build a cluster first with metadata in the instance configs
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
@@ -1023,7 +1055,7 @@ public class HelixBootstrapUpgradeToolTest {
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory(),
-        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DEFAULT_DATA_NODE_CONFIG_SOURCE, false);
+        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
