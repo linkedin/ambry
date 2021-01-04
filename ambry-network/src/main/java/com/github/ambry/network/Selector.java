@@ -779,8 +779,8 @@ public class Selector implements Selectable {
     long startTimeToWriteInMs = time.milliseconds();
     NetworkSend networkSend = null;
     try {
-      boolean sendComplete = transmission.write();
       networkSend = transmission.getNetworkSend();
+      boolean sendComplete = transmission.write();
       if (sendComplete) {
         logger.trace("Finished writing, registering for read on connection {}", transmission.getRemoteSocketAddress());
         // Release the NetworkSend resource here, not in the SocketNetworkClient, because SocketServer uses Selector
