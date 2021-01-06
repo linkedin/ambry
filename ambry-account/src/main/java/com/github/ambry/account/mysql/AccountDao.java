@@ -27,6 +27,8 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 
@@ -36,6 +38,7 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  */
 public class AccountDao {
 
+  private static final Logger logger = LoggerFactory.getLogger(AccountDao.class);
   private final MySqlDataAccessor dataAccessor;
 
   // Account table fields
@@ -105,16 +108,19 @@ public class AccountDao {
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
+    ResultSet rs = null;
     try {
       PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getAccountsSinceSql, false);
       getSinceStatement.setTimestamp(1, sinceTime);
-      ResultSet rs = getSinceStatement.executeQuery();
+      rs = getSinceStatement.executeQuery();
       List<Account> accounts = convertAccountsResultSet(rs);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return accounts;
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    } finally {
+      closeQuietly(rs);
     }
   }
 
@@ -147,16 +153,19 @@ public class AccountDao {
    */
   public List<Container> getContainers(int accountId) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
+    ResultSet rs = null;
     try {
       PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getContainersByAccountSql, false);
       getByAccountStatement.setInt(1, accountId);
-      ResultSet rs = getByAccountStatement.executeQuery();
+      rs = getByAccountStatement.executeQuery();
       List<Container> containers = convertContainersResultSet(rs);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return containers;
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    } finally {
+      closeQuietly(rs);
     }
   }
 
@@ -169,16 +178,19 @@ public class AccountDao {
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
+    ResultSet rs = null;
     try {
       PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getContainersSinceSql, false);
       getSinceStatement.setTimestamp(1, sinceTime);
-      ResultSet rs = getSinceStatement.executeQuery();
+      rs = getSinceStatement.executeQuery();
       List<Container> containers = convertContainersResultSet(rs);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return containers;
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    } finally {
+      closeQuietly(rs);
     }
   }
 
@@ -322,6 +334,20 @@ public class AccountDao {
         statement.setInt(2, (container.getSnapshotVersion() + 1));
         statement.setInt(3, accountId);
         statement.setInt(4, container.getId());
+    }
+  }
+
+  /**
+   * Close a resource without throwing exception.
+   * @param resource the resource to close.
+   */
+  private static void closeQuietly(AutoCloseable resource) {
+    try {
+      if (resource != null) {
+        resource.close();
+      }
+    } catch (Exception e) {
+      logger.warn("Closing resource", e);
     }
   }
 

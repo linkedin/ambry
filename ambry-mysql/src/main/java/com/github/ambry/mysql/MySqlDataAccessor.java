@@ -269,16 +269,19 @@ public class MySqlDataAccessor {
    * @param operationType type of mysql operation
    */
   public void onException(SQLException e, OperationType operationType) {
+
+    // Record errors.
+    if (operationType == OperationType.Write) {
+      metrics.writeFailureCount.inc();
+    } else if (operationType == OperationType.Read) {
+      metrics.readFailureCount.inc();
+    } else if (operationType == OperationType.Copy) {
+      metrics.copyFailureCount.inc();
+    }
+
     // Close connection for all non transient sql exceptions.
     if (!(e instanceof SQLNonTransientException || (e instanceof BatchUpdateException
         && e.getCause() instanceof SQLNonTransientException))) {
-      if (operationType == OperationType.Write) {
-        metrics.writeFailureCount.inc();
-      } else if (operationType == OperationType.Read) {
-        metrics.readFailureCount.inc();
-      } else if (operationType == OperationType.Copy) {
-        metrics.copyFailureCount.inc();
-      }
       closeActiveConnection();
     }
   }
