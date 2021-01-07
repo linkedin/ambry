@@ -77,20 +77,20 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
 
   @Override
   public void setQuotaMode(QuotaMode mode) {
-    logger.info("Setting Quota mode to " + mode.name());
+    logger.info("Setting Quota mode to {}", mode.name());
     this.mode = mode;
   }
 
   @Override
   public void initStorageUsage(Map<String, Map<String, Long>> usage) {
-    logger.info("Initializing storage usage for " + usage.size() + " accounts");
+    logger.info("Initializing storage usage for {} accounts", usage.size());
     storageUsage = new ConcurrentHashMap<>();
     initMap(usage, storageUsage, true);
   }
 
   @Override
   public void initStorageQuota(Map<String, Map<String, Long>> quota) {
-    logger.info("Initializing storage quota for " + quota.size() + " accounts");
+    logger.info("Initializing storage quota for {} accounts");
     storageQuota = new HashMap<>();
     initMap(quota, storageQuota, false);
   }
@@ -109,7 +109,7 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   StorageQuotaSource.Listener getQuotaSourceListener() {
     return containerStorageQuota -> {
       logger.trace("QuotaSourceListener invoked with new container storage quota");
-      logger.debug("New quota: " + containerStorageQuota);
+      logger.debug("New quota: {}", containerStorageQuota);
       Map<String, Map<String, Long>> newQuota = new HashMap<>();
       initMap(containerStorageQuota, newQuota, false);
       storageQuota = newQuota;
@@ -123,7 +123,7 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   StorageUsageRefresher.Listener getUsageRefresherListener() {
     return containerStorageUsage -> {
       logger.trace("UsageRefresherListener invoked with new container storage usage");
-      logger.debug("New usage: " + containerStorageUsage);
+      logger.debug("New usage: {}", containerStorageUsage);
       initMap(containerStorageUsage, storageUsage, true);
     };
   }

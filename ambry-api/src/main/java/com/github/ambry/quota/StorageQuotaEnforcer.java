@@ -76,7 +76,18 @@ public interface StorageQuotaEnforcer {
    * Interface of callback method when the quota of certain account and container's quota is exceeded.
    */
   interface QuotaExceededCallback {
+
+    /**
+     * Method to call when the storage quota is exceeded.
+     * @param quotaMode The current {@link QuotaMode} of Enforcer.
+     * @param accountId The account id that exceeds the quota.
+     * @param containerId The container id that exceeds the quota.
+     * @param op The particular {@link QuotaOperation} that exceeds the quota.
+     * @param quota The storage quota.
+     * @param existingUsage The existing usage before the operation.
+     * @param opSize The storage size of the operation.
+     */
     void onQuotaExceeded(QuotaMode quotaMode, short accountId, short containerId, QuotaOperation op, long quota,
-        long existingUsage, long newSize);
+        long existingUsage, long opSize);
   }
 }

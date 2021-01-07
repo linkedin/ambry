@@ -146,6 +146,7 @@ public class StorageQuotaConfig {
     if (str == null || str.isEmpty() || str.trim().isEmpty()) {
       return str;
     }
+    str = str.trim();
     return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
   }
 }
