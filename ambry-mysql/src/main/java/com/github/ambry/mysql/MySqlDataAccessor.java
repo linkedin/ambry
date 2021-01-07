@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.mysql.MySqlUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -326,20 +327,6 @@ public class MySqlDataAccessor {
       return true;
     }
     return endpointComparator.compare(first, second) < 0;
-  }
-
-  /**
-   * Close a resource without throwing exception.
-   * @param resource the resource to close.
-   */
-  private static void closeQuietly(AutoCloseable resource) {
-    try {
-      if (resource != null) {
-        resource.close();
-      }
-    } catch (Exception e) {
-      logger.warn("Closing resource", e);
-    }
   }
 
   /**

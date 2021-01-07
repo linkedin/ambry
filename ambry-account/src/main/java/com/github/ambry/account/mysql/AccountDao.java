@@ -27,10 +27,9 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -38,7 +37,6 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  */
 public class AccountDao {
 
-  private static final Logger logger = LoggerFactory.getLogger(AccountDao.class);
   private final MySqlDataAccessor dataAccessor;
 
   // Account table fields
@@ -334,20 +332,6 @@ public class AccountDao {
         statement.setInt(2, (container.getSnapshotVersion() + 1));
         statement.setInt(3, accountId);
         statement.setInt(4, container.getId());
-    }
-  }
-
-  /**
-   * Close a resource without throwing exception.
-   * @param resource the resource to close.
-   */
-  private static void closeQuietly(AutoCloseable resource) {
-    try {
-      if (resource != null) {
-        resource.close();
-      }
-    } catch (Exception e) {
-      logger.warn("Closing resource", e);
     }
   }
 
