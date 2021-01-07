@@ -29,6 +29,7 @@ import java.util.List;
 import org.json.JSONObject;
 
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -105,15 +106,19 @@ public class AccountDao {
   public List<Account> getNewAccounts(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
-    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getAccountsSinceSql, false);
-    getSinceStatement.setTimestamp(1, sinceTime);
-    try (ResultSet rs = getSinceStatement.executeQuery()) {
+    ResultSet rs = null;
+    try {
+      PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getAccountsSinceSql, false);
+      getSinceStatement.setTimestamp(1, sinceTime);
+      rs = getSinceStatement.executeQuery();
       List<Account> accounts = convertAccountsResultSet(rs);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return accounts;
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    } finally {
+      closeQuietly(rs);
     }
   }
 
@@ -146,15 +151,19 @@ public class AccountDao {
    */
   public List<Container> getContainers(int accountId) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getContainersByAccountSql, false);
-    getByAccountStatement.setInt(1, accountId);
-    try (ResultSet rs = getByAccountStatement.executeQuery()) {
+    ResultSet rs = null;
+    try {
+      PreparedStatement getByAccountStatement = dataAccessor.getPreparedStatement(getContainersByAccountSql, false);
+      getByAccountStatement.setInt(1, accountId);
+      rs = getByAccountStatement.executeQuery();
       List<Container> containers = convertContainersResultSet(rs);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return containers;
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    } finally {
+      closeQuietly(rs);
     }
   }
 
@@ -167,15 +176,19 @@ public class AccountDao {
   public List<Container> getNewContainers(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
-    PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getContainersSinceSql, false);
-    getSinceStatement.setTimestamp(1, sinceTime);
-    try (ResultSet rs = getSinceStatement.executeQuery()) {
+    ResultSet rs = null;
+    try {
+      PreparedStatement getSinceStatement = dataAccessor.getPreparedStatement(getContainersSinceSql, false);
+      getSinceStatement.setTimestamp(1, sinceTime);
+      rs = getSinceStatement.executeQuery();
       List<Container> containers = convertContainersResultSet(rs);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return containers;
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    } finally {
+      closeQuietly(rs);
     }
   }
 

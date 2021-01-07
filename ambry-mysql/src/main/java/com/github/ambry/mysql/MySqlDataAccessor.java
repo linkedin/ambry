@@ -15,12 +15,13 @@ package com.github.ambry.mysql;
 
 import com.github.ambry.utils.Pair;
 import com.mysql.cj.exceptions.MysqlErrorNumbers;
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.SQLTransientConnectionException;
+import java.sql.SQLNonTransientException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -33,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.mysql.MySqlUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -159,7 +161,6 @@ public class MySqlDataAccessor {
     // Close active connection if no longer valid
     if (activeConnection != null && !activeConnection.isValid(5)) {
       closeActiveConnection();
-      connectedEndpoint = null;
     }
 
     // If the active connection is good and it's the best endpoint, keep it.
@@ -173,11 +174,11 @@ public class MySqlDataAccessor {
       logger.debug("Still connected to {}", connectedEndpoint.getUrl());
     } else {
       // New connection established
+      closeActiveConnection();
       connectedEndpoint = endpointConnectionPair.getFirst();
+      activeConnection = endpointConnectionPair.getSecond();
       String qualifier = connectedEndpoint.isWriteable() ? "writable" : "read-only";
       logger.info("Connected to {} enpoint: {}", qualifier, connectedEndpoint.getUrl());
-      closeActiveConnection();
-      activeConnection = endpointConnectionPair.getSecond();
     }
     return activeConnection;
   }
@@ -269,14 +270,19 @@ public class MySqlDataAccessor {
    * @param operationType type of mysql operation
    */
   public void onException(SQLException e, OperationType operationType) {
-    if (e instanceof SQLTransientConnectionException) {
-      if (operationType == OperationType.Write) {
-        metrics.writeFailureCount.inc();
-      } else if (operationType == OperationType.Read) {
-        metrics.readFailureCount.inc();
-      } else if (operationType == OperationType.Copy) {
-        metrics.copyFailureCount.inc();
-      }
+
+    // Record errors.
+    if (operationType == OperationType.Write) {
+      metrics.writeFailureCount.inc();
+    } else if (operationType == OperationType.Read) {
+      metrics.readFailureCount.inc();
+    } else if (operationType == OperationType.Copy) {
+      metrics.copyFailureCount.inc();
+    }
+
+    // Close connection for all non transient sql exceptions.
+    if (!(e instanceof SQLNonTransientException || (e instanceof BatchUpdateException
+        && e.getCause() instanceof SQLNonTransientException))) {
       closeActiveConnection();
     }
   }
@@ -310,6 +316,7 @@ public class MySqlDataAccessor {
     statementCache.clear();
     closeQuietly(activeConnection);
     activeConnection = null;
+    connectedEndpoint = null;
   }
 
   private boolean isBetterEndpoint(DbEndpoint first, DbEndpoint second) {
@@ -320,20 +327,6 @@ public class MySqlDataAccessor {
       return true;
     }
     return endpointComparator.compare(first, second) < 0;
-  }
-
-  /**
-   * Close a resource without throwing exception.
-   * @param resource the resource to close.
-   */
-  private static void closeQuietly(AutoCloseable resource) {
-    try {
-      if (resource != null) {
-        resource.close();
-      }
-    } catch (Exception e) {
-      logger.warn("Closing resource", e);
-    }
   }
 
   /**

@@ -25,12 +25,14 @@ import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLNonTransientException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -580,6 +582,31 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountService.fetchAndUpdateCache();
     assertEquals("Mismatch in number of containers of a1", 6,
         mySqlAccountService.getAccountById(a1.getId()).getAllContainers().size());
+  }
+
+  /**
+   * Tests connection refresh for all non transient sql exceptions
+   */
+  @Test
+  public void testConnectionRefreshOnException() throws Exception {
+
+    //1. Add account to db
+    Account a1 = new AccountBuilder((short) 101, "a1", Account.AccountStatus.ACTIVE).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(a1));
+
+    //2. query db - should be successful
+    assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
+
+    //3. close db connection manually
+    mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection(true).close();
+
+    //4. query db - should fail with exception and clear prepared statement cache
+    ThrowingConsumer<SQLException> errorAction = e -> assertFalse("Exception should not be a non-transient exception",
+        e.getCause() instanceof SQLNonTransientException);
+    TestUtils.assertException(SQLException.class, () -> mySqlAccountStore.getNewAccounts(0), errorAction);
+
+    //5. query db - should establish new connection and get results.
+    assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
   }
 
   private Account makeTestAccountWithContainer() {

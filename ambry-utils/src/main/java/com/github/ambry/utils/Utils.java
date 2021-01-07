@@ -1201,6 +1201,20 @@ public class Utils {
   }
 
   /**
+   * Close a resource without throwing exception.
+   * @param resource the resource to close.
+   */
+  public static void closeQuietly(AutoCloseable resource) {
+    try {
+      if (resource != null) {
+        resource.close();
+      }
+    } catch (Exception e) {
+      logger.warn("Closing resource", e);
+    }
+  }
+
+  /**
    * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
    * {@link #newScheduler(int, String, boolean)}.
    */
