@@ -17,6 +17,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -29,9 +32,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * uploads would also increase the storage usage in the in-memory map.
  */
 public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
+  private static final Logger logger = LoggerFactory.getLogger(AmbryStorageQuotaEnforcer.class);
   private volatile QuotaMode mode = QuotaMode.Tracking;
   private volatile Map<String, Map<String, Long>> storageQuota;
   private volatile Map<String, Map<String, Long>> storageUsage;
+  private final QuotaExceededCallback quotaExceededCallback;
+
+  /**
+   * Constructor to instantiate {@link AmbryStorageQuotaEnforcer}.
+   * @param quotaExceededCallback The {@link com.github.ambry.quota.StorageQuotaEnforcer.QuotaExceededCallback}
+   */
+  public AmbryStorageQuotaEnforcer(QuotaExceededCallback quotaExceededCallback) {
+    this.quotaExceededCallback = quotaExceededCallback;
+  }
 
   @Override
   public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
@@ -42,8 +55,10 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
         .getOrDefault(String.valueOf(containerId), Long.MAX_VALUE);
 
     AtomicBoolean exceedQuota = new AtomicBoolean(false);
+    AtomicLong existingUsage = new AtomicLong();
     storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
         .compute(String.valueOf(containerId), (k, v) -> {
+          existingUsage.set(v == null ? 0 : v);
           if (v == null) {
             return size;
           }
@@ -54,28 +69,35 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
             return v;
           }
         });
+    if (exceedQuota.get() && quota != Long.MAX_VALUE && quotaExceededCallback != null) {
+      quotaExceededCallback.onQuotaExceeded(mode, accountId, containerId, op, quota, existingUsage.get(), size);
+    }
     return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
   }
 
   @Override
   public void setQuotaMode(QuotaMode mode) {
+    logger.info("Setting Quota mode to {}", mode.name());
     this.mode = mode;
   }
 
   @Override
   public void initStorageUsage(Map<String, Map<String, Long>> usage) {
+    logger.info("Initializing storage usage for {} accounts", usage.size());
     storageUsage = new ConcurrentHashMap<>();
     initMap(usage, storageUsage, true);
   }
 
   @Override
   public void initStorageQuota(Map<String, Map<String, Long>> quota) {
+    logger.info("Initializing storage quota for {} accounts");
     storageQuota = new HashMap<>();
     initMap(quota, storageQuota, false);
   }
 
   @Override
   public void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher) {
+    logger.info("Register quota source and usage refresher listeners");
     storageQuotaSource.registerListener(getQuotaSourceListener());
     storageUsageRefresher.registerListener(getUsageRefresherListener());
   }
@@ -86,6 +108,8 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
    */
   StorageQuotaSource.Listener getQuotaSourceListener() {
     return containerStorageQuota -> {
+      logger.trace("QuotaSourceListener invoked with new container storage quota");
+      logger.debug("New quota: {}", containerStorageQuota);
       Map<String, Map<String, Long>> newQuota = new HashMap<>();
       initMap(containerStorageQuota, newQuota, false);
       storageQuota = newQuota;
@@ -98,6 +122,8 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
    */
   StorageUsageRefresher.Listener getUsageRefresherListener() {
     return containerStorageUsage -> {
+      logger.trace("UsageRefresherListener invoked with new container storage usage");
+      logger.debug("New usage: {}", containerStorageUsage);
       initMap(containerStorageUsage, storageUsage, true);
     };
   }
