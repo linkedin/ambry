@@ -27,9 +27,6 @@ public class MySqlMetrics {
   public static final String WRITE_TIME_MSEC = "WriteTimeInMs";
   public static final String READ_TIME_MSEC = "ReadTimeInMs";
   public static final String COPY_TIME_MSEC = "CopyTimeInMs";
-  public static final String WRITE_RATE = "WriteRate";
-  public static final String READ_RATE = "ReadRate";
-  public static final String COPY_RATE = "CopyRate";
   public static final String WRITE_SUCCESS_COUNT = "WriteSuccessCount";
   public static final String WRITE_FAILURE_COUNT = "WriteFailureCount";
   public static final String READ_SUCCESS_COUNT = "ReadSuccessCount";
@@ -42,9 +39,6 @@ public class MySqlMetrics {
   public final Histogram writeTimeMs;
   public final Histogram readTimeMs;
   public final Histogram copyTimeMs;
-  public final Meter writeRate;
-  public final Meter readRate;
-  public final Meter copyRate;
   public final Counter writeSuccessCount;
   public final Counter writeFailureCount;
   public final Counter readSuccessCount;
@@ -58,9 +52,6 @@ public class MySqlMetrics {
     writeTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, WRITE_TIME_MSEC));
     readTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, READ_TIME_MSEC));
     copyTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, COPY_TIME_MSEC));
-    writeRate = metricRegistry.meter(MetricRegistry.name(clazz, WRITE_RATE));
-    readRate = metricRegistry.meter(MetricRegistry.name(clazz, READ_RATE));
-    copyRate = metricRegistry.meter(MetricRegistry.name(clazz, COPY_RATE));
     writeSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, WRITE_SUCCESS_COUNT));
     writeFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, WRITE_FAILURE_COUNT));
     readSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, READ_SUCCESS_COUNT));

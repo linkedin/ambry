@@ -271,13 +271,10 @@ public class MySqlDataAccessor {
   public void onException(SQLException e, OperationType operationType) {
     if (e instanceof SQLTransientConnectionException) {
       if (operationType == OperationType.Write) {
-        metrics.writeRate.mark();
         metrics.writeFailureCount.inc();
       } else if (operationType == OperationType.Read) {
-        metrics.readRate.mark();
         metrics.readFailureCount.inc();
       } else if (operationType == OperationType.Copy) {
-        metrics.copyRate.mark();
         metrics.copyFailureCount.inc();
       }
       closeActiveConnection();
@@ -292,15 +289,12 @@ public class MySqlDataAccessor {
   public void onSuccess(OperationType operationType, long operationTimeInMs) {
     if (operationType == OperationType.Write) {
       metrics.writeSuccessCount.inc();
-      metrics.writeRate.mark();
       metrics.writeTimeMs.update(operationTimeInMs);
     } else if (operationType == OperationType.Read) {
       metrics.readSuccessCount.inc();
-      metrics.readRate.mark();
       metrics.readTimeMs.update(operationTimeInMs);
     } else if (operationType == OperationType.Copy) {
       metrics.copySuccessCount.inc();
-      metrics.copyRate.mark();
       metrics.copyTimeMs.update(operationTimeInMs);
     }
   }
