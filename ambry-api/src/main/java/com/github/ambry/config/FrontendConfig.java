@@ -66,6 +66,14 @@ public class FrontendConfig {
   public final long optionsValiditySeconds;
 
   /**
+   * For permanent named blob, the put procedure is put, database insert and then ttlUpdate. This config is the ttl used
+   * in the initial put. This value should be greater than {@link StoreConfig#storeTtlUpdateBufferTimeSeconds}
+   */
+  @Config("permanent.named.blob.initial.put.ttl")
+  @Default("25 * 60 * 60")
+  public final long permanentNamedBlobInitialPutTtl;
+
+  /**
    * Value of "Access-Control-Allow-Methods" in response headers for OPTIONS requests.
    */
   @Config("frontend.options.allow.methods")
@@ -232,6 +240,7 @@ public class FrontendConfig {
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
+    permanentNamedBlobInitialPutTtl = verifiableProperties.getLong("permanent.named.blob.initial.put.ttl", 25 * 60 * 60);
     optionsAllowMethods =
         verifiableProperties.getString("frontend.options.allow.methods", "POST, GET, OPTIONS, HEAD, DELETE");
     idConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",

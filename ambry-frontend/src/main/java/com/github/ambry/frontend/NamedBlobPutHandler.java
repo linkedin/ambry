@@ -172,6 +172,10 @@ public class NamedBlobPutHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
+          if (RestUtils.getTtlFromRequestHeader(restRequest.getArgs()) == Utils.Infinite_Time) {
+            // For blob with infinite time, the procedure is putBlob, record insert to database, and ttlUpdate.
+            blobInfo.getBlobProperties().setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
+          }
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo));
         }
@@ -225,7 +229,13 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> idConverterCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, blobId -> {
-        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
+        if (RestUtils.getTtlFromRequestHeader(restRequest.getArgs()) == Utils.Infinite_Time) {
+          String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
+          router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, routerTtlUpdateCallback(blobInfo));
+        } else {
+          securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+              securityProcessResponseCallback());
+        }
       }, uri, LOGGER, finalCallback);
     }
 
@@ -237,7 +247,6 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putBlobSecurityProcessResponseMetrics,
           securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
     }
-
 
     /**
      * Parse {@link BlobInfo} from the request arguments. This method will also ensure that the correct account and
@@ -363,6 +372,18 @@ public class NamedBlobPutHandler {
             + stitchedBlobProperties.getAccountId() + ", " + stitchedBlobProperties.getContainerId() + ")",
             RestServiceErrorCode.BadRequest);
       }
+    }
+
+    /**
+     * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
+     */
+    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, blobId -> {
+        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
+      }, uri, LOGGER, finalCallback);
     }
   }
 }
