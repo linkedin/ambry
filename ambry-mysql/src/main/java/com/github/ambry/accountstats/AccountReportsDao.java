@@ -13,6 +13,7 @@
  */
 package com.github.ambry.accountstats;
 
+import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -123,6 +124,42 @@ public class AccountReportsDao {
           String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clusterName,
               hostname), e);
       throw e;
+    }
+  }
+
+  /**
+   * A batch updater to update storage usage.
+   */
+  class StorageBatchUpdater extends BatchUpdater {
+
+    /**
+     * Constructor to instantiate a {@link StorageBatchUpdater}.
+     * @param maxBatchSize The max batch size.
+     * @throws SQLException
+     */
+    public StorageBatchUpdater(int maxBatchSize) throws SQLException {
+      super(dataAccessor, insertSql, ACCOUNT_REPORTS_TABLE, maxBatchSize);
+    }
+
+    /**
+     * Supply values to the prepared statement and add it to the batch updater.
+     * @param partitionId The partition id of this account/container usage.
+     * @param accountId The account id.
+     * @param containerId The container id.
+     * @param storageUsage The storage usage in bytes.
+     * @throws SQLException
+     */
+    public void addUpdateToBatch(short partitionId, short accountId, short containerId, long storageUsage)
+        throws SQLException {
+      addUpdateToBatch(statement -> {
+        statement.setString(1, clusterName);
+        statement.setString(2, hostname);
+        statement.setInt(3, partitionId);
+        statement.setInt(4, accountId);
+        statement.setInt(5, containerId);
+        statement.setLong(6, storageUsage);
+        statement.setLong(7, storageUsage);
+      });
     }
   }
 }

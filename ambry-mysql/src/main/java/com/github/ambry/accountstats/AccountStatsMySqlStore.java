@@ -15,6 +15,7 @@ package com.github.ambry.accountstats;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
@@ -46,6 +47,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   private final HostnameHelper hostnameHelper;
   private StatsWrapper previousStats;
   private final Metrics storeMetrics;
+  private final AccountStatsMySqlConfig config;
 
   /**
    * Metrics for {@link AccountStatsMySqlStore}.
@@ -84,6 +86,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
 
   /**
    * Constructor to create {@link AccountStatsMySqlStore}.
+   * @param config The {@link AccountStatsMySqlConfig}.
    * @param dbEndpoints MySql DB end points.
    * @param localDatacenter The local datacenter name. Endpoints from local datacenter are preferred when creating connection to MySql DB.
    * @param clusterName  The name of the cluster, like Ambry-test.
@@ -93,10 +96,11 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param registry The {@link MetricRegistry}.
    * @throws SQLException
    */
-  public AccountStatsMySqlStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, String clusterName,
-      String hostname, String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry)
-      throws SQLException {
-    this(new MySqlDataAccessor(dbEndpoints, localDatacenter, new MySqlMetrics(AccountStatsMySqlStore.class, registry)),
+  public AccountStatsMySqlStore(AccountStatsMySqlConfig config, List<MySqlUtils.DbEndpoint> dbEndpoints,
+      String localDatacenter, String clusterName, String hostname, String localBackupFilePath,
+      HostnameHelper hostnameHelper, MetricRegistry registry) throws SQLException {
+    this(config,
+        new MySqlDataAccessor(dbEndpoints, localDatacenter, new MySqlMetrics(AccountStatsMySqlStore.class, registry)),
         clusterName, hostname, localBackupFilePath, hostnameHelper, registry);
   }
 
@@ -109,8 +113,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
    * @param registry The {@link MetricRegistry}.
    */
-  AccountStatsMySqlStore(MySqlDataAccessor dataAccessor, String clusterName, String hostname,
-      String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry) {
+  AccountStatsMySqlStore(AccountStatsMySqlConfig config, MySqlDataAccessor dataAccessor, String clusterName,
+      String hostname, String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry) {
+    this.config = config;
     mySqlDataAccessor = dataAccessor;
     accountReportsDao = new AccountReportsDao(dataAccessor, clusterName, hostname);
     aggregatedaccountReportsDao = new AggregatedAccountReportsDao(dataAccessor, clusterName);
@@ -136,8 +141,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public void storeStats(StatsWrapper statsWrapper) {
     StatsSnapshot prevSnapshot =
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
-    applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot,
-        this::tryUpdateStorageUsage);
+    ContainerUsageFunction function = this::tryUpdateStorageUsage;
+    if (config.updateBatchSize >= 0) {
+      function = new ContainerStorageFucntionBatchUpdater();
+    }
+    applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot, function);
+    if (function instanceof ContainerStorageFucntionBatchUpdater) {
+      ((ContainerStorageFucntionBatchUpdater) function).flush();
+    }
     previousStats = statsWrapper;
   }
 
@@ -181,6 +192,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public void storeAggregatedStats(StatsSnapshot snapshot) throws SQLException {
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
+    AggregatedAccountReportsDao.AggregatedStorageBatchUpdater batch = null;
+    if (config.updateBatchSize >= 0) {
+      batch = aggregatedaccountReportsDao.new AggregatedStorageBatchUpdater(config.updateBatchSize);
+    }
     for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
       String accountIdKey = accountMapEntry.getKey();
       short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
@@ -189,9 +204,16 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         String containerIdKey = currContainerMapEntry.getKey();
         short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
         long currStorageUsage = currContainerMapEntry.getValue().getValue();
-        aggregatedaccountReportsDao.updateStorageUsage(accountId, containerId, currStorageUsage);
+        if (config.updateBatchSize >= 0) {
+          batch.addUpdateToBatch(accountId, containerId, currStorageUsage);
+        } else {
+          aggregatedaccountReportsDao.updateStorageUsage(accountId, containerId, currStorageUsage);
+        }
         batchSize++;
       }
+    }
+    if (config.updateBatchSize >= 0) {
+      batch.commit();
     }
     storeMetrics.aggregatedPublishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.aggregatedBatchSize.update(batchSize);
@@ -332,6 +354,45 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     try {
       accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, storageUsage);
     } catch (Exception e) {
+    }
+  }
+
+  class ContainerStorageFucntionBatchUpdater implements ContainerUsageFunction {
+    private AccountReportsDao.StorageBatchUpdater batch = null;
+    private boolean exceptionCaught = false;
+
+    public ContainerStorageFucntionBatchUpdater() {
+      try {
+        batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
+      } catch (SQLException e) {
+        // the exception is already logged
+        exceptionCaught = true;
+      }
+    }
+
+    @Override
+    public void apply(short partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs) {
+      if (exceptionCaught) {
+        return;
+      }
+      try {
+        batch.addUpdateToBatch(partitionId, accountId, containerId, storageUsage);
+      } catch (Exception e) {
+        // the exception is already logged
+        exceptionCaught = true;
+      }
+    }
+
+    public void flush() {
+      if (exceptionCaught) {
+        return;
+      }
+      try {
+        batch.commit();
+      } catch (Exception e) {
+        // the exception is already logged
+        exceptionCaught = true;
+      }
     }
   }
 }

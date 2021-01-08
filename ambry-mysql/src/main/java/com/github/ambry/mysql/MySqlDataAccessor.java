@@ -135,6 +135,20 @@ public class MySqlDataAccessor {
   }
 
   /**
+   * Retrieves the current auto-commit mode for this <code>Connection</code>
+   * object.
+   *
+   * @return the current state of this <code>Connection</code> object's
+   *         auto-commit mode
+   * @exception SQLException if a database access error occurs
+   * or this method is called on a closed connection
+   * @see #setAutoCommit
+   */
+  public synchronized boolean getAutoCommmit() throws SQLException {
+    return activeConnection.getAutoCommit();
+  }
+
+  /**
    * Commits transaction changes on current active {@link Connection}. This should only be used with auto commit disabled.
    * @throws SQLException
    */

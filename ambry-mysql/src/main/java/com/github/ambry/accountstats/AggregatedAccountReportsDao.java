@@ -13,6 +13,7 @@
  */
 package com.github.ambry.accountstats;
 
+import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -234,6 +235,37 @@ public class AggregatedAccountReportsDao {
           String.format("Failed to execute updated on %s, with parameter %s %s", AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
               clusterName, monthValue), e);
       throw e;
+    }
+  }
+
+  /**
+   * A batch updater to update aggregate storage usage.
+   */
+  class AggregatedStorageBatchUpdater extends BatchUpdater {
+    /**
+     * Constructor to instantiate a {@link AggregatedStorageBatchUpdater}.
+     * @param maxBatchSize The max batch size.
+     * @throws SQLException
+     */
+    public AggregatedStorageBatchUpdater(int maxBatchSize) throws SQLException {
+      super(dataAccessor, insertSql, AGGREGATED_ACCOUNT_REPORTS_TABLE, maxBatchSize);
+    }
+
+    /**
+     * Supply values to the prepared statement and add it to the batch updater.
+     * @param accountId The account id.
+     * @param containerId The container id.
+     * @param storageUsage The storage usage in bytes.
+     * @throws SQLException
+     */
+    public void addUpdateToBatch(short accountId, short containerId, long storageUsage) throws SQLException {
+      addUpdateToBatch(statement -> {
+        statement.setString(1, clusterName);
+        statement.setInt(2, accountId);
+        statement.setInt(3, containerId);
+        statement.setLong(4, storageUsage);
+        statement.setLong(5, storageUsage);
+      });
     }
   }
 }
