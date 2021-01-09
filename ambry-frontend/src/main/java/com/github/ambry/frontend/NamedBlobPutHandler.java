@@ -17,6 +17,9 @@ import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import com.github.ambry.commons.RetryExecutor;
+import com.github.ambry.commons.RetryPolicies;
+import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -36,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -73,6 +77,8 @@ public class NamedBlobPutHandler {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final String clusterName;
+  private final RetryPolicy retryPolicy = RetryPolicies.defaultPolicy();
+  private final RetryExecutor retryExecutor = new RetryExecutor(Executors.newScheduledThreadPool(2));
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
