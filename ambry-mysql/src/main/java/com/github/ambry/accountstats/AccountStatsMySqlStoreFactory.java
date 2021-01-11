@@ -90,7 +90,7 @@ public class AccountStatsMySqlStoreFactory {
    * @param endpoints The list of {@link DbEndpoint}s.
    * @return The modified lit of {@link DbEndpoint}s.
    */
-  private List<DbEndpoint> setRewriteBatchedStatements(List<DbEndpoint> endpoints) {
+  static List<DbEndpoint> setRewriteBatchedStatements(List<DbEndpoint> endpoints) {
     List<DbEndpoint> result = new ArrayList<>();
     for (DbEndpoint ep : endpoints) {
       if (ep.getUrl().contains(REWRITE_BATCHED_STATEMENTS_LITERAL)) {

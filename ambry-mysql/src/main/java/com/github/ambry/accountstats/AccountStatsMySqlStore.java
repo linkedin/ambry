@@ -142,12 +142,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     StatsSnapshot prevSnapshot =
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
     ContainerUsageFunction function = this::tryUpdateStorageUsage;
+    ContainerStorageFunctionBatchUpdater batchUpdater = null;
     if (config.updateBatchSize >= 0) {
-      function = new ContainerStorageFucntionBatchUpdater();
+      batchUpdater = new ContainerStorageFunctionBatchUpdater();
+      function = batchUpdater;
     }
     applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot, function);
-    if (function instanceof ContainerStorageFucntionBatchUpdater) {
-      ((ContainerStorageFucntionBatchUpdater) function).flush();
+    if (config.updateBatchSize >= 0) {
+      batchUpdater.commit();
     }
     previousStats = statsWrapper;
   }
@@ -357,11 +359,17 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     }
   }
 
-  class ContainerStorageFucntionBatchUpdater implements ContainerUsageFunction {
+  /**
+   * A wrapper to the {@link AccountReportsDao.StorageBatchUpdater} and an implementation of {@link ContainerUsageFunction}.
+   */
+  class ContainerStorageFunctionBatchUpdater implements ContainerUsageFunction {
     private AccountReportsDao.StorageBatchUpdater batch = null;
     private boolean exceptionCaught = false;
 
-    public ContainerStorageFucntionBatchUpdater() {
+    /**
+     * Constructor to instantiate {@link ContainerStorageFunctionBatchUpdater}.
+     */
+    public ContainerStorageFunctionBatchUpdater() {
       try {
         batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
       } catch (SQLException e) {
@@ -383,7 +391,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       }
     }
 
-    public void flush() {
+    /**
+     * Wrapper function to {@link AccountReportsDao.StorageBatchUpdater#commit}.
+     */
+    public void commit() {
       if (exceptionCaught) {
         return;
       }
