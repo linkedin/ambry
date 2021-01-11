@@ -131,6 +131,9 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void setAutoCommit(boolean enable) throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
     activeConnection.setAutoCommit(enable);
   }
 
@@ -145,6 +148,9 @@ public class MySqlDataAccessor {
    * @see #setAutoCommit
    */
   public synchronized boolean getAutoCommmit() throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
     return activeConnection.getAutoCommit();
   }
 
@@ -153,6 +159,9 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void commit() throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
     activeConnection.commit();
   }
 
@@ -161,6 +170,9 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void rollback() throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
     activeConnection.rollback();
   }
 

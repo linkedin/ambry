@@ -27,7 +27,7 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  * This class buffers a list of sql update commands (insert, update, delete) and sends them to database
  * in batch. The BatchUpdater would greatly increase the performance due to less overhead in network.
  *
- * The implementation of batch with auto commit is vendor-dependent and may not fully taking advantage of
+ * The implementation of batch with auto commit is vendor-dependent and may not fully take advantage of
  * batch operation since each sql command might still be committed separately. Thus this class always disable
  * auto commit in sql connection.
  *
@@ -36,7 +36,7 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  * sent to database in one batch. If it's positive, then when the number of buffered sql commands reaches the
  * maxBatchSize, this batch would be sent to database.
  *
- * To use class please do
+ * Sample usage:
  * <pre>
  *   BatchUpdater batch = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 100);
  *   for (String name: names) {
@@ -54,7 +54,10 @@ public class BatchUpdater {
   private final int maxBatchSize;
   private final MySqlDataAccessor dataAccessor;
   private final String tableName;
+  private int totalBatchSize = 0;
   private int currentBatchSize = 0;
+  // The time when the first statement is added
+  private long startTime = 0;
 
   /**
    * Constructor to instantiate a {@link BatchUpdater}.
@@ -91,15 +94,19 @@ public class BatchUpdater {
    *                      consumer. It can also throws an {@link SQLException}.
    * @throws SQLException
    */
-  protected void addUpdateToBatch(GenericThrowableConsumer<PreparedStatement, SQLException> valueSupplier)
+  protected synchronized void addUpdateToBatch(GenericThrowableConsumer<PreparedStatement, SQLException> valueSupplier)
       throws SQLException {
     try {
+      if (startTime == 0) {
+        startTime = System.currentTimeMillis();
+      }
       if (maxBatchSize != 0 && currentBatchSize >= maxBatchSize) {
         executeBatch();
       }
       valueSupplier.accept(statement);
       statement.addBatch();
       currentBatchSize++;
+      totalBatchSize++;
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
       logger.error("Failed to add batch on {}", tableName, e);
@@ -108,18 +115,26 @@ public class BatchUpdater {
   }
 
   /**
-   * Commit all the sql commands added to this batch.
+   * Commit all the sql commands added to this batch. If commit fails, the batch would be rolled back.
    * @throws SQLException
    */
   public void commit() throws SQLException {
     try {
       executeBatch();
       dataAccessor.commit();
-      dataAccessor.setAutoCommit(autoCommit);
+      if (startTime != 0) {
+        dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTime);
+      }
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
-      logger.error("Failed to commit on {}", tableName, e);
+      logger.error("Failed to commit batch on {}, rolling back, batch size {}", tableName, totalBatchSize, e);
       throw e;
+    } finally {
+      try {
+        dataAccessor.rollback();
+      } finally {
+        dataAccessor.setAutoCommit(autoCommit);
+      }
     }
   }
 

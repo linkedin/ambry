@@ -48,6 +48,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   private StatsWrapper previousStats;
   private final Metrics storeMetrics;
   private final AccountStatsMySqlConfig config;
+  private final boolean batchEnabled;
 
   /**
    * Metrics for {@link AccountStatsMySqlStore}.
@@ -121,6 +122,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     aggregatedaccountReportsDao = new AggregatedAccountReportsDao(dataAccessor, clusterName);
     this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
+    this.batchEnabled = this.config.updateBatchSize >= 0;
     if (!Strings.isNullOrEmpty(localBackupFilePath)) {
       // load backup file and this backup is the previous stats
       ObjectMapper objectMapper = new ObjectMapper();
@@ -143,12 +145,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
     ContainerUsageFunction function = this::tryUpdateStorageUsage;
     ContainerStorageFunctionBatchUpdater batchUpdater = null;
-    if (config.updateBatchSize >= 0) {
+    if (batchEnabled) {
       batchUpdater = new ContainerStorageFunctionBatchUpdater();
       function = batchUpdater;
     }
     applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot, function);
-    if (config.updateBatchSize >= 0) {
+    if (batchEnabled) {
       batchUpdater.commit();
     }
     previousStats = statsWrapper;
@@ -195,7 +197,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
     AggregatedAccountReportsDao.AggregatedStorageBatchUpdater batch = null;
-    if (config.updateBatchSize >= 0) {
+    if (batchEnabled) {
       batch = aggregatedaccountReportsDao.new AggregatedStorageBatchUpdater(config.updateBatchSize);
     }
     for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
@@ -214,7 +216,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         batchSize++;
       }
     }
-    if (config.updateBatchSize >= 0) {
+    if (batchEnabled) {
       batch.commit();
     }
     storeMetrics.aggregatedPublishTimeMs.update(System.currentTimeMillis() - startTimeMs);
