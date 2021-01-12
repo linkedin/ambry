@@ -54,8 +54,8 @@ public class BatchUpdater {
   private final int maxBatchSize;
   private final MySqlDataAccessor dataAccessor;
   private final String tableName;
-  private int totalBatchSize = 0;
   private int currentBatchSize = 0;
+  private int committedBatchSize = 0;
   // The time when the first statement is added
   private long startTime = 0;
 
@@ -107,11 +107,10 @@ public class BatchUpdater {
       valueSupplier.accept(statement);
       statement.addBatch();
       currentBatchSize++;
-      totalBatchSize++;
     } catch (SQLException e) {
       failed = true;
       dataAccessor.onException(e, BatchUpdate);
-      logger.error("Failed to add batch on {}", tableName, e);
+      logger.error("Failed to add batch on {}, already committed {}, rolling back", tableName, committedBatchSize, e);
       dataAccessor.rollback();
       throw e;
     } finally {
@@ -133,7 +132,8 @@ public class BatchUpdater {
       }
     } catch (SQLException e) {
       dataAccessor.onException(e, BatchUpdate);
-      logger.error("Failed to commit batch on {}, rolling back, batch size {}", tableName, totalBatchSize, e);
+      logger.error("Failed to flush batch on {}, current batch size {}, already committed {}, rolling back", tableName,
+          currentBatchSize, committedBatchSize, e);
       dataAccessor.rollback();
       throw e;
     } finally {
@@ -152,6 +152,7 @@ public class BatchUpdater {
     statement.executeBatch();
     dataAccessor.commit();
     statement.clearBatch();
+    committedBatchSize += currentBatchSize;
     currentBatchSize = 0;
   }
 }
