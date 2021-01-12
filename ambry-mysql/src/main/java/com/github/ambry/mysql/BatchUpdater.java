@@ -96,45 +96,48 @@ public class BatchUpdater {
    */
   protected synchronized void addUpdateToBatch(GenericThrowableConsumer<PreparedStatement, SQLException> valueSupplier)
       throws SQLException {
+    boolean failed = false;
     try {
       if (startTime == 0) {
         startTime = System.currentTimeMillis();
       }
       if (maxBatchSize != 0 && currentBatchSize >= maxBatchSize) {
-        executeBatch();
+        executeBatchAndCommit();
       }
       valueSupplier.accept(statement);
       statement.addBatch();
       currentBatchSize++;
       totalBatchSize++;
     } catch (SQLException e) {
+      failed = true;
       dataAccessor.onException(e, Write);
       logger.error("Failed to add batch on {}", tableName, e);
+      dataAccessor.rollback();
       throw e;
+    } finally {
+      if (failed) {
+        dataAccessor.setAutoCommit(autoCommit);
+      }
     }
   }
 
   /**
-   * Commit all the sql commands added to this batch. If commit fails, the batch would be rolled back.
+   * Flush all the sql commands added to this batch. If it fails, the batch would be rolled back.
    * @throws SQLException
    */
-  public void commit() throws SQLException {
+  public void flush() throws SQLException {
     try {
-      executeBatch();
-      dataAccessor.commit();
+      executeBatchAndCommit();
       if (startTime != 0) {
         dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTime);
       }
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
       logger.error("Failed to commit batch on {}, rolling back, batch size {}", tableName, totalBatchSize, e);
+      dataAccessor.rollback();
       throw e;
     } finally {
-      try {
-        dataAccessor.rollback();
-      } finally {
-        dataAccessor.setAutoCommit(autoCommit);
-      }
+      dataAccessor.setAutoCommit(autoCommit);
     }
   }
 
@@ -142,11 +145,12 @@ public class BatchUpdater {
    * Execute all the buffered sql commands in the batch.
    * @throws SQLException
    */
-  private void executeBatch() throws SQLException {
+  private void executeBatchAndCommit() throws SQLException {
     if (currentBatchSize == 0) {
       return;
     }
     statement.executeBatch();
+    dataAccessor.commit();
     statement.clearBatch();
     currentBatchSize = 0;
   }

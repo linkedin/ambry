@@ -16,6 +16,7 @@ package com.github.ambry.accountstats;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.AccountStatsMySqlConfig;
+import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
@@ -140,19 +141,61 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param statsWrapper The {@link StatsWrapper} to publish.
    */
   @Override
-  public void storeStats(StatsWrapper statsWrapper) {
+  public void storeStats(StatsWrapper statsWrapper) throws SQLException {
     StatsSnapshot prevSnapshot =
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
-    ContainerUsageFunction function = this::tryUpdateStorageUsage;
-    ContainerStorageFunctionBatchUpdater batchUpdater = null;
+    AccountReportsDao.StorageBatchUpdater batch = null;
     if (batchEnabled) {
-      batchUpdater = new ContainerStorageFunctionBatchUpdater();
-      function = batchUpdater;
+      batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
     }
-    applyFunctionToContainerUsageInDifferentStatsSnapshots(statsWrapper.getSnapshot(), prevSnapshot, function);
+    int batchSize = 0;
+    long startTimeMs = System.currentTimeMillis();
+
+    // Find the differences between two {@link StatsSnapshot} and apply them to the given {@link ContainerUsageFunction}.
+    // The difference is defined as
+    // 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
+    // 2. If a container storage usage only exists in first StatsSnapshot.
+    // If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
+    Map<String, StatsSnapshot> currPartitionMap = statsWrapper.getSnapshot().getSubMap();
+    Map<String, StatsSnapshot> prevPartitionMap = prevSnapshot.getSubMap();
+    for (Map.Entry<String, StatsSnapshot> currPartitionMapEntry : currPartitionMap.entrySet()) {
+      String partitionIdKey = currPartitionMapEntry.getKey();
+      StatsSnapshot currAccountStatsSnapshot = currPartitionMapEntry.getValue();
+      StatsSnapshot prevAccountStatsSnapshot =
+          prevPartitionMap.getOrDefault(partitionIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
+      short partitionId = Short.valueOf(partitionIdKey.substring("Partition[".length(), partitionIdKey.length() - 1));
+      Map<String, StatsSnapshot> currAccountMap = currAccountStatsSnapshot.getSubMap();
+      Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
+      for (Map.Entry<String, StatsSnapshot> currAccountMapEntry : currAccountMap.entrySet()) {
+        String accountIdKey = currAccountMapEntry.getKey();
+        StatsSnapshot currContainerStatsSnapshot = currAccountMapEntry.getValue();
+        StatsSnapshot prevContainerStatsSnapshot =
+            prevAccountMap.getOrDefault(accountIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
+        short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
+        Map<String, StatsSnapshot> currContainerMap = currContainerStatsSnapshot.getSubMap();
+        Map<String, StatsSnapshot> prevContainerMap = prevContainerStatsSnapshot.getSubMap();
+        for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : currContainerMap.entrySet()) {
+          String containerIdKey = currContainerMapEntry.getKey();
+          short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
+          long currStorageUsage = currContainerMapEntry.getValue().getValue();
+          long prevStorageUsage =
+              prevContainerMap.getOrDefault(containerIdKey, new StatsSnapshot((long) -1, null)).getValue();
+          if (currStorageUsage != prevStorageUsage) {
+            if (batchEnabled) {
+              batch.addUpdateToBatch(partitionId, accountId, containerId, currStorageUsage);
+            } else {
+              accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, currStorageUsage);
+            }
+            batchSize++;
+          }
+        }
+      }
+    }
     if (batchEnabled) {
-      batchUpdater.commit();
+      batch.flush();
     }
+    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    storeMetrics.batchSize.update(batchSize);
     previousStats = statsWrapper;
   }
 
@@ -208,7 +251,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         String containerIdKey = currContainerMapEntry.getKey();
         short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
         long currStorageUsage = currContainerMapEntry.getValue().getValue();
-        if (config.updateBatchSize >= 0) {
+        if (batchEnabled) {
           batch.addUpdateToBatch(accountId, containerId, currStorageUsage);
         } else {
           aggregatedaccountReportsDao.updateStorageUsage(accountId, containerId, currStorageUsage);
@@ -217,7 +260,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       }
     }
     if (batchEnabled) {
-      batch.commit();
+      batch.flush();
     }
     storeMetrics.aggregatedPublishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.aggregatedBatchSize.update(batchSize);
@@ -294,118 +337,5 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   public MySqlDataAccessor getMySqlDataAccessor() {
     return mySqlDataAccessor;
-  }
-
-  /**
-   * Find the differences between two {@link StatsSnapshot} and apply them to the given {@link ContainerUsageFunction}.
-   * The difference is defined as
-   * 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
-   * 2. If a container storage usage only exists in first StatsSnapshot.
-   * If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
-   * @param currentStats The current StatsSnapshot.
-   * @param previousStats The previous StatsSnapshot.
-   * @param func The function to apply the differences to.
-   */
-  private void applyFunctionToContainerUsageInDifferentStatsSnapshots(StatsSnapshot currentStats,
-      StatsSnapshot previousStats, ContainerUsageFunction func) {
-    int batchSize = 0;
-    long startTimeMs = System.currentTimeMillis();
-    Map<String, StatsSnapshot> currPartitionMap = currentStats.getSubMap();
-    Map<String, StatsSnapshot> prevPartitionMap = previousStats.getSubMap();
-    for (Map.Entry<String, StatsSnapshot> currPartitionMapEntry : currPartitionMap.entrySet()) {
-      String partitionIdKey = currPartitionMapEntry.getKey();
-      StatsSnapshot currAccountStatsSnapshot = currPartitionMapEntry.getValue();
-      StatsSnapshot prevAccountStatsSnapshot =
-          prevPartitionMap.getOrDefault(partitionIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
-      short partitionId = Short.valueOf(partitionIdKey.substring("Partition[".length(), partitionIdKey.length() - 1));
-      Map<String, StatsSnapshot> currAccountMap = currAccountStatsSnapshot.getSubMap();
-      Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
-      for (Map.Entry<String, StatsSnapshot> currAccountMapEntry : currAccountMap.entrySet()) {
-        String accountIdKey = currAccountMapEntry.getKey();
-        StatsSnapshot currContainerStatsSnapshot = currAccountMapEntry.getValue();
-        StatsSnapshot prevContainerStatsSnapshot =
-            prevAccountMap.getOrDefault(accountIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
-        short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
-        Map<String, StatsSnapshot> currContainerMap = currContainerStatsSnapshot.getSubMap();
-        Map<String, StatsSnapshot> prevContainerMap = prevContainerStatsSnapshot.getSubMap();
-        for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : currContainerMap.entrySet()) {
-          String containerIdKey = currContainerMapEntry.getKey();
-          short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
-          long currStorageUsage = currContainerMapEntry.getValue().getValue();
-          long prevStorageUsage =
-              prevContainerMap.getOrDefault(containerIdKey, new StatsSnapshot((long) -1, null)).getValue();
-          if (currStorageUsage != prevStorageUsage) {
-            func.apply(partitionId, accountId, containerId, currStorageUsage, System.currentTimeMillis());
-            batchSize++;
-          }
-        }
-      }
-    }
-    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
-    storeMetrics.batchSize.update(batchSize);
-  }
-
-  /**
-   * Update storage usage with {@link AccountReportsDao} but ignore the exception.
-   * @param partitionId The partition id of this account/container usage.
-   * @param accountId The account id.
-   * @param containerId The container id.
-   * @param storageUsage The storage usage in bytes.
-   * @param updatedAtMs The time in ms, will be ignored by {@link AccountReportsDao}.
-   */
-  private void tryUpdateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage,
-      long updatedAtMs) {
-    try {
-      accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, storageUsage);
-    } catch (Exception e) {
-    }
-  }
-
-  /**
-   * A wrapper to the {@link AccountReportsDao.StorageBatchUpdater} and an implementation of {@link ContainerUsageFunction}.
-   */
-  class ContainerStorageFunctionBatchUpdater implements ContainerUsageFunction {
-    private AccountReportsDao.StorageBatchUpdater batch = null;
-    private boolean exceptionCaught = false;
-
-    /**
-     * Constructor to instantiate {@link ContainerStorageFunctionBatchUpdater}.
-     */
-    public ContainerStorageFunctionBatchUpdater() {
-      try {
-        batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
-      } catch (SQLException e) {
-        // the exception is already logged
-        exceptionCaught = true;
-      }
-    }
-
-    @Override
-    public void apply(short partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs) {
-      if (exceptionCaught) {
-        return;
-      }
-      try {
-        batch.addUpdateToBatch(partitionId, accountId, containerId, storageUsage);
-      } catch (Exception e) {
-        // the exception is already logged
-        exceptionCaught = true;
-      }
-    }
-
-    /**
-     * Wrapper function to {@link AccountReportsDao.StorageBatchUpdater#commit}.
-     */
-    public void commit() {
-      if (exceptionCaught) {
-        return;
-      }
-      try {
-        batch.commit();
-      } catch (Exception e) {
-        // the exception is already logged
-        exceptionCaught = true;
-      }
-    }
   }
 }
