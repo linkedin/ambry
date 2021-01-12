@@ -44,7 +44,7 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  *           statement.setString(1, name);
  *       });
  *   }
- *   batch.commit();
+ *   batch.flush();
  * </pre>
  */
 public class BatchUpdater {
@@ -81,7 +81,7 @@ public class BatchUpdater {
       statement = dataAccessor.getPreparedStatement(sql, true);
       statement.clearBatch();
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      dataAccessor.onException(e, BatchUpdate);
       logger.error("Failed to prepare for batch insert on {}", tableName, e);
       throw e;
     }
@@ -110,7 +110,7 @@ public class BatchUpdater {
       totalBatchSize++;
     } catch (SQLException e) {
       failed = true;
-      dataAccessor.onException(e, Write);
+      dataAccessor.onException(e, BatchUpdate);
       logger.error("Failed to add batch on {}", tableName, e);
       dataAccessor.rollback();
       throw e;
@@ -129,10 +129,10 @@ public class BatchUpdater {
     try {
       executeBatchAndCommit();
       if (startTime != 0) {
-        dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTime);
+        dataAccessor.onSuccess(BatchUpdate, System.currentTimeMillis() - startTime);
       }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      dataAccessor.onException(e, BatchUpdate);
       logger.error("Failed to commit batch on {}, rolling back, batch size {}", tableName, totalBatchSize, e);
       dataAccessor.rollback();
       throw e;

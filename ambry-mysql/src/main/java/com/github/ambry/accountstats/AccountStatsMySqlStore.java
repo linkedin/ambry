@@ -16,7 +16,6 @@ package com.github.ambry.accountstats;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.AccountStatsMySqlConfig;
-import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;

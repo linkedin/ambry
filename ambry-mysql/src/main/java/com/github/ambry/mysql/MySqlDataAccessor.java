@@ -62,7 +62,7 @@ public class MySqlDataAccessor {
    * List of operation types on the mysql store.
    */
   public enum OperationType {
-    Write, Read, Copy
+    Write, Read, Copy, BatchUpdate
   }
 
   /** Production constructor */
@@ -304,6 +304,8 @@ public class MySqlDataAccessor {
       metrics.readFailureCount.inc();
     } else if (operationType == OperationType.Copy) {
       metrics.copyFailureCount.inc();
+    } else if (operationType == OperationType.BatchUpdate) {
+      metrics.batchUpdateFailureCount.inc();
     }
 
     // Close connection for all non transient sql exceptions.
@@ -328,6 +330,9 @@ public class MySqlDataAccessor {
     } else if (operationType == OperationType.Copy) {
       metrics.copySuccessCount.inc();
       metrics.copyTimeMs.update(operationTimeInMs);
+    } else if (operationType == OperationType.BatchUpdate) {
+      metrics.batchUpdateSuccessCount.inc();
+      metrics.batchUpdateTimeMs.update(operationTimeInMs);
     }
   }
 
