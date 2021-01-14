@@ -99,7 +99,6 @@ public class BatchUpdater {
    */
   protected synchronized void addUpdateToBatch(GenericThrowableConsumer<PreparedStatement, SQLException> valueSupplier)
       throws SQLException {
-    boolean failed = false;
     try {
       if (startTime == 0) {
         startTime = System.currentTimeMillis();
@@ -111,13 +110,8 @@ public class BatchUpdater {
       statement.addBatch();
       currentBatchSize++;
     } catch (SQLException e) {
-      failed = true;
       rollback(e);
       throw e;
-    } finally {
-      if (failed && dataAccessor.hasActiveConnection()) {
-        dataAccessor.setAutoCommit(autoCommit);
-      }
     }
   }
 
@@ -131,13 +125,10 @@ public class BatchUpdater {
       if (startTime != 0) {
         dataAccessor.onSuccess(BatchUpdate, System.currentTimeMillis() - startTime);
       }
+      dataAccessor.setAutoCommit(autoCommit);
     } catch (SQLException e) {
       rollback(e);
       throw e;
-    } finally {
-      if (dataAccessor.hasActiveConnection()) {
-        dataAccessor.setAutoCommit(autoCommit);
-      }
     }
   }
 
@@ -171,6 +162,9 @@ public class BatchUpdater {
     } finally {
       // Then deal with exception, this might close the connection.
       dataAccessor.onException(e, BatchUpdate);
+      if (dataAccessor.hasActiveConnection()) {
+        dataAccessor.setAutoCommit(autoCommit);
+      }
     }
   }
 
