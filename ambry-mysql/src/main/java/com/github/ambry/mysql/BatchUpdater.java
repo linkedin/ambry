@@ -46,6 +46,8 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  *   }
  *   batch.flush();
  * </pre>
+ * After batch is flushed, you shouldn't use the same object again. To perform another batch operation, please
+ * create another {@link BatchUpdater} object.
  */
 public class BatchUpdater {
   private static final Logger logger = LoggerFactory.getLogger(BatchUpdater.class);
@@ -56,6 +58,7 @@ public class BatchUpdater {
   private final String tableName;
   private int currentBatchSize = 0;
   private int committedBatchSize = 0;
+  private int numBatches = 0;
   // The time when the first statement is added
   private long startTime = 0;
 
@@ -109,12 +112,10 @@ public class BatchUpdater {
       currentBatchSize++;
     } catch (SQLException e) {
       failed = true;
-      dataAccessor.onException(e, BatchUpdate);
-      logger.error("Failed to add batch on {}, already committed {}, rolling back", tableName, committedBatchSize, e);
-      dataAccessor.rollback();
+      rollback(e);
       throw e;
     } finally {
-      if (failed) {
+      if (failed && dataAccessor.hasActiveConnection()) {
         dataAccessor.setAutoCommit(autoCommit);
       }
     }
@@ -131,13 +132,12 @@ public class BatchUpdater {
         dataAccessor.onSuccess(BatchUpdate, System.currentTimeMillis() - startTime);
       }
     } catch (SQLException e) {
-      dataAccessor.onException(e, BatchUpdate);
-      logger.error("Failed to flush batch on {}, current batch size {}, already committed {}, rolling back", tableName,
-          currentBatchSize, committedBatchSize, e);
-      dataAccessor.rollback();
+      rollback(e);
       throw e;
     } finally {
-      dataAccessor.setAutoCommit(autoCommit);
+      if (dataAccessor.hasActiveConnection()) {
+        dataAccessor.setAutoCommit(autoCommit);
+      }
     }
   }
 
@@ -150,9 +150,35 @@ public class BatchUpdater {
       return;
     }
     statement.executeBatch();
+    numBatches++;
     dataAccessor.commit();
     statement.clearBatch();
     committedBatchSize += currentBatchSize;
     currentBatchSize = 0;
+  }
+
+  /**
+   * Rollback the transaction due to exception {@code e}.
+   * @param e The {@link SQLException}.
+   * @throws SQLException
+   */
+  private void rollback(SQLException e) throws SQLException {
+    logger.error("Failed batch operation on {}, current batch size {}, already committed {}, rolling back", tableName,
+        currentBatchSize, committedBatchSize, e);
+    try {
+      // First try to rollback the transaction, this might fail due to connection error.
+      dataAccessor.rollback();
+    } finally {
+      // Then deal with exception, this might close the connection.
+      dataAccessor.onException(e, BatchUpdate);
+    }
+  }
+
+  /**
+   * Only For testing.
+   * @return The number of batches;
+   */
+  int getNumBatches() {
+    return numBatches;
   }
 }

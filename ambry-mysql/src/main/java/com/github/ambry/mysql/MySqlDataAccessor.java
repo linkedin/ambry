@@ -126,6 +126,14 @@ public class MySqlDataAccessor {
   }
 
   /**
+   * Return true when active connection is available.
+   * @return True when active connection is available.
+   */
+  public synchronized boolean hasActiveConnection() {
+    return activeConnection != null;
+  }
+
+  /**
    * Enables or disables auto commit on current active {@link Connection}.
    * @param enable {@code true} to enable auto commit and {@code false} to disable auto commit.
    * @throws SQLException
