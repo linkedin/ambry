@@ -62,7 +62,7 @@ public class MySqlDataAccessor {
    * List of operation types on the mysql store.
    */
   public enum OperationType {
-    Write, Read, Copy
+    Write, Read, Copy, BatchUpdate
   }
 
   /** Production constructor */
@@ -126,12 +126,40 @@ public class MySqlDataAccessor {
   }
 
   /**
+   * Return true when active connection is available.
+   * @return True when active connection is available.
+   */
+  public synchronized boolean hasActiveConnection() {
+    return activeConnection != null;
+  }
+
+  /**
    * Enables or disables auto commit on current active {@link Connection}.
    * @param enable {@code true} to enable auto commit and {@code false} to disable auto commit.
    * @throws SQLException
    */
   public synchronized void setAutoCommit(boolean enable) throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
     activeConnection.setAutoCommit(enable);
+  }
+
+  /**
+   * Retrieves the current auto-commit mode for this <code>Connection</code>
+   * object.
+   *
+   * @return the current state of this <code>Connection</code> object's
+   *         auto-commit mode
+   * @exception SQLException if a database access error occurs
+   * or this method is called on a closed connection
+   * @see #setAutoCommit
+   */
+  public synchronized boolean getAutoCommmit() throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
+    return activeConnection.getAutoCommit();
   }
 
   /**
@@ -139,6 +167,9 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void commit() throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
     activeConnection.commit();
   }
 
@@ -147,6 +178,9 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void rollback() throws SQLException {
+    if (activeConnection == null) {
+      throw new IllegalStateException("No active connection available");
+    }
     activeConnection.rollback();
   }
 
@@ -278,6 +312,8 @@ public class MySqlDataAccessor {
       metrics.readFailureCount.inc();
     } else if (operationType == OperationType.Copy) {
       metrics.copyFailureCount.inc();
+    } else if (operationType == OperationType.BatchUpdate) {
+      metrics.batchUpdateFailureCount.inc();
     }
 
     // Close connection for all non transient sql exceptions.
@@ -302,6 +338,9 @@ public class MySqlDataAccessor {
     } else if (operationType == OperationType.Copy) {
       metrics.copySuccessCount.inc();
       metrics.copyTimeMs.update(operationTimeInMs);
+    } else if (operationType == OperationType.BatchUpdate) {
+      metrics.batchUpdateSuccessCount.inc();
+      metrics.batchUpdateTimeMs.update(operationTimeInMs);
     }
   }
 

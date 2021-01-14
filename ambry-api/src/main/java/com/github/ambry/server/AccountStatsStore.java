@@ -26,7 +26,7 @@ public interface AccountStatsStore {
    * and container. This method will be used for individual ambry server to store local stats.
    * @param statsWrapper The {@link StatsWrapper} that contains stats and other metadata.
    */
-  void storeStats(StatsWrapper statsWrapper);
+  void storeStats(StatsWrapper statsWrapper) throws Exception;
 
   /**
    * Store aggregated stats in the {@link StatsSnapshot}. The StatsSnapshot should include account and container. This

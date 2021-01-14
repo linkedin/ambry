@@ -14,6 +14,8 @@
 package com.github.ambry.accountstats;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.AccountStatsMySqlConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
@@ -54,6 +56,8 @@ public class AccountStatsMySqlStoreTest {
   private static final int BASE_PARTITION_ID = 100;
   private static final int BASE_ACCOUNT_ID = 1000;
   private static final int BASE_CONTAINER_ID = 1;
+  private static AccountStatsMySqlConfig config =
+      new AccountStatsMySqlConfig(new VerifiableProperties(new Properties()));
 
   public AccountStatsMySqlStoreTest() throws SQLException {
     mockConnection = mock(Connection.class);
@@ -86,7 +90,7 @@ public class AccountStatsMySqlStoreTest {
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     assertNull(store.getPreviousStats());
     // Second, save a backup file.
@@ -96,7 +100,7 @@ public class AccountStatsMySqlStoreTest {
     StatsWrapper statsWrapper = new StatsWrapper(header, snapshot);
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
-    store = new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+    store = new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
         new MetricRegistry());
 
     StatsWrapper backupWrapper = store.getPreviousStats();
@@ -110,7 +114,7 @@ public class AccountStatsMySqlStoreTest {
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     StatsSnapshot snapshot = createStatsSnapshot(10, 10, 1, false);
     StatsHeader header =
@@ -122,7 +126,7 @@ public class AccountStatsMySqlStoreTest {
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
 
-    store = new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+    store = new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
         new MetricRegistry());
 
     // We have a local backup to start with.
@@ -145,7 +149,7 @@ public class AccountStatsMySqlStoreTest {
 
     // create a store with a local backup file and try to publish it again.
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     store.storeStats(statsWrapper);
     assertEquals("Write success count should be 0", 0, metrics.writeSuccessCount.getCount());

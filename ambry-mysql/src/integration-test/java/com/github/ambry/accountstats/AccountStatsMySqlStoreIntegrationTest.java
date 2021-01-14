@@ -33,6 +33,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -41,6 +42,8 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -48,6 +51,7 @@ import static org.junit.Assert.*;
 /**
  * Integration tests for {@link AccountStatsMySqlStore}.
  */
+@RunWith(Parameterized.class)
 public class AccountStatsMySqlStoreIntegrationTest {
   private static final String clusterName1 = "Ambry-test";
   private static final String clusterName2 = "Ambry-random";
@@ -55,9 +59,16 @@ public class AccountStatsMySqlStoreIntegrationTest {
   private static final String hostname2 = "ambry2.test.github.com";
   private static final String hostname3 = "ambry3.test.github.com";
   private static final int port = 12345;
+  private final int batchSize;
   private final AccountStatsMySqlStore mySqlStore;
 
-  public AccountStatsMySqlStoreIntegrationTest() throws Exception {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{-1}, {0}, {17}});
+  }
+
+  public AccountStatsMySqlStoreIntegrationTest(int batchSize) throws Exception {
+    this.batchSize = batchSize;
     mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, false);
   }
 
@@ -169,6 +180,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "dc1");
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(port));
     configProps.setProperty(AccountStatsMySqlConfig.DOMAIN_NAMES_TO_REMOVE, ".github.com");
+    configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(batchSize));
     configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, localBackupFilePath.toString());
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),

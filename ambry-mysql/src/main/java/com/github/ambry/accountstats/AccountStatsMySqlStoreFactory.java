@@ -19,6 +19,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -32,6 +33,7 @@ import static com.github.ambry.mysql.MySqlUtils.*;
  */
 public class AccountStatsMySqlStoreFactory {
   private static final Logger logger = LoggerFactory.getLogger(AccountStatsMySqlStoreFactory.class);
+  private static final String REWRITE_BATCHED_STATEMENTS_LITERAL = "rewriteBatchedStatements";
 
   private final AccountStatsMySqlConfig accountStatsMySqlConfig;
   private final HostnameHelper hostnameHelper;
@@ -70,12 +72,38 @@ public class AccountStatsMySqlStoreFactory {
     if (dbEndpoints == null || dbEndpoints.size() == 0) {
       throw new IllegalArgumentException("Empty db endpoints for datacenter: " + localDC);
     }
+    if (accountStatsMySqlConfig.enableRewriteBatchedStatement) {
+      dbEndpoints = setRewriteBatchedStatements(dbEndpoints);
+    }
     try {
-      return new AccountStatsMySqlStore(dbEndpoints, localDC, clusterName, hostname, localBackupFilePath,
-          hostnameHelper, registry);
+      dbEndpoints.forEach(ep -> logger.info("DBUrl: {}", ep.getUrl()));
+      return new AccountStatsMySqlStore(accountStatsMySqlConfig, dbEndpoints, localDC, clusterName, hostname,
+          localBackupFilePath, hostnameHelper, registry);
     } catch (SQLException e) {
       logger.error("Account Stats MySQL store creation failed", e);
       throw e;
     }
+  }
+
+  /**
+   * Set rewriteBatchedStatements for the db url if not set yet.
+   * @param endpoints The list of {@link DbEndpoint}s.
+   * @return The modified lit of {@link DbEndpoint}s.
+   */
+  static List<DbEndpoint> setRewriteBatchedStatements(List<DbEndpoint> endpoints) {
+    List<DbEndpoint> result = new ArrayList<>();
+    for (DbEndpoint ep : endpoints) {
+      if (ep.getUrl().contains(REWRITE_BATCHED_STATEMENTS_LITERAL)) {
+        result.add(ep);
+      } else {
+        String sep = ep.getUrl().contains("?") ? "&" : "?";
+        String newUrl = new StringBuilder(ep.getUrl()).append(sep)
+            .append(REWRITE_BATCHED_STATEMENTS_LITERAL)
+            .append("=true")
+            .toString();
+        result.add(new DbEndpoint(newUrl, ep.getDatacenter(), ep.isWriteable(), ep.getUsername(), ep.getPassword()));
+      }
+    }
+    return result;
   }
 }

@@ -123,5 +123,18 @@ public class MySqlUtils {
     public String getPassword() {
       return password;
     }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof DbEndpoint)) {
+        return false;
+      }
+      DbEndpoint other = (DbEndpoint) o;
+      return this.url.equals(other.url) && this.datacenter.equals(other.datacenter) && isWriteable == other.isWriteable
+          && this.username.equals(other.username) && this.password.equals(other.password);
+    }
   }
 }
