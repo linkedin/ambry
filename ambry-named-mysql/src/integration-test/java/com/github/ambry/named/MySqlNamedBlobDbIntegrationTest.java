@@ -167,9 +167,31 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
   }
 
+  /**
+   * Test behavior with expired blobs
+   */
   @Test
-  public void testExpiredBlobs() {
+  public void testExpiredBlobs() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
 
+    String blobId = getBlobId(account, container);
+    String blobName = "name";
+    long expirationTime = System.currentTimeMillis();
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
+    namedBlobDb.put(record).get();
+
+    Thread.sleep(100);
+    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
+        RestServiceErrorCode.Deleted);
+
+    // replacement should succeed
+    blobId = getBlobId(account, container);
+    record = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+    namedBlobDb.put(record).get();
+    assertEquals("Record should have been replaced", record,
+        namedBlobDb.get(account.getName(), container.getName(), blobName).get());
   }
 
   /**
