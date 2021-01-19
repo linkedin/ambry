@@ -13,7 +13,7 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.storage.QuotaMode;
 
 
 /**

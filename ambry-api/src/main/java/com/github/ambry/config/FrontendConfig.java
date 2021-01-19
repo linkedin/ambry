@@ -14,7 +14,7 @@
 package com.github.ambry.config;
 
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.StorageQuotaServiceFactory;
+import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;

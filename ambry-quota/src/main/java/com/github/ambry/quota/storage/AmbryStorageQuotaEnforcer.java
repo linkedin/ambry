@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.storage;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,7 +40,7 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
 
   /**
    * Constructor to instantiate {@link AmbryStorageQuotaEnforcer}.
-   * @param quotaExceededCallback The {@link com.github.ambry.quota.StorageQuotaEnforcer.QuotaExceededCallback}
+   * @param quotaExceededCallback The {@link QuotaExceededCallback}
    */
   public AmbryStorageQuotaEnforcer(QuotaExceededCallback quotaExceededCallback) {
     this.quotaExceededCallback = quotaExceededCallback;

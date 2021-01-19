@@ -11,11 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.storage;
 
 /**
- * Operations for quota service.
+ * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
  */
-public enum QuotaOperation {
-  Post, Delete, TtlUpdate
+public enum QuotaMode {
+  Tracking, Throttling
 }
