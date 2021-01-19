@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
@@ -104,8 +105,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
         Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), "name", null).get();
-        assertNull("No continuation token expected", page.getContinuationToken());
-        assertEquals("Unexpected number of blobs in container", blobsPerContainer, page.getElements().size());
+        assertNull("No continuation token expected", page.getNextPageToken());
+        assertEquals("Unexpected number of blobs in container", blobsPerContainer, page.getEntries().size());
       }
     }
 

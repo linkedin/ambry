@@ -98,8 +98,8 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
                 clusterMap.getMetricRegistry()).getStorageQuotaService();
       }
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
-          securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-          clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
+          securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
+          accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
           clusterMapConfig.clusterMapClusterName, storageQuotaService);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);

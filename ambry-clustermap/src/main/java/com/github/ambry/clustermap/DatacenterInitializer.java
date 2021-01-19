@@ -136,7 +136,7 @@ class DatacenterInitializer {
     try {
       return initializationFuture.get();
     } catch (ExecutionException e) {
-      throw Utils.extractExecutionExceptionCause(e);
+      throw Utils.extractFutureExceptionCause(e);
     }
   }
 

@@ -50,6 +50,8 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.RandomAccess;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -329,19 +331,25 @@ public class Utils {
   }
 
   /**
-   * Extracts the cause of an {@link ExecutionException}. This is used to get the relevant domain-specific exception
-   * after unboxing a future.
-   * @param e the {@link Exception}
-   * @return if the cause is {@code null}, return {@code e} itself. If the cause is not an instance
-   *         of exception, return the {@link Throwable} wrapped in an exception. If not {@link ExecutionException},
-   *         return the exception itself. Otherwise, return the cause {@link Exception}.
+   * Extracts the cause of an {@link ExecutionException} or {@link CompletionException}. This is used to get the
+   * relevant domain-specific exception after unboxing various types of futures.
+   * @param throwable the {@link Throwable}
+   * @return If the supplied throwable is null, return null.
+   *         If not {@link ExecutionException} or {@link CompletionException}, return throwable itself.
+   *         If the cause is {@code null}, return {@code throwable} itself.
+   *         If the cause or original throwable is not an instance of exception, return the {@link Throwable} wrapped
+   *         in an exception. Otherwise, return the cause {@link Exception}.
    */
-  public static Exception extractExecutionExceptionCause(Exception e) {
-    Throwable cause = e.getCause();
-    if (!(e instanceof ExecutionException) || cause == null) {
-      return e;
+  public static Exception extractFutureExceptionCause(Throwable throwable) {
+    if (throwable == null) {
+      return null;
     }
-    return cause instanceof Exception ? (Exception) cause : new Exception(cause);
+    if (throwable instanceof CompletionException || throwable instanceof ExecutionException) {
+      if (throwable.getCause() != null) {
+        throwable = throwable.getCause();
+      }
+    }
+    return throwable instanceof Exception ? (Exception) throwable : new Exception(throwable);
   }
 
   /**

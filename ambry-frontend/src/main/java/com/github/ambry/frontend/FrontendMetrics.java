@@ -82,6 +82,9 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics putBlobRouterMetrics;
   public final AsyncOperationTracker.Metrics putBlobSecurityProcessResponseMetrics;
 
+  public final AsyncOperationTracker.Metrics listSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics listSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics listDbLookupMetrics;
 
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPostProcessRequestMetrics;
@@ -299,10 +302,15 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putRouterPutBlob", metricRegistry);
     putIdConversionMetrics =
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putIdConversion", metricRegistry);
-    putBlobRouterMetrics =
-        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "router", metricRegistry);
+    putBlobRouterMetrics = new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "router", metricRegistry);
     putBlobSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "securityProcessResponse", metricRegistry);
+
+    listSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobListHandler.class, "SecurityProcessRequest", metricRegistry);
+    listSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobListHandler.class, "SecurityPostProcessRequest", metricRegistry);
+    listDbLookupMetrics = new AsyncOperationTracker.Metrics(NamedBlobListHandler.class, "DbLookup", metricRegistry);
 
     getClusterMapSnapshotSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityProcessRequest", metricRegistry);
