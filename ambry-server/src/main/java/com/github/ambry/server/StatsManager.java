@@ -72,10 +72,10 @@ class StatsManager {
   private final AccountStatsMySqlStore accountStatsMySqlStore;
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
-  private long deleteTombstoneWithTtlCount = 0;
-  private long deleteTombstoneWithTtlTotalSize = 0;
-  private long deleteTombstoneWithoutTtlCount = 0;
-  private long deleteTombstoneWithoutTtlTotalSize = 0;
+  private long expiredDeleteTombstoneCount = 0;
+  private long expiredDeleteTombstoneTotalSize = 0;
+  private long permanentDeleteTombstoneCount = 0;
+  private long permanentDeleteTombstoneTotalSize = 0;
   private AtomicReference<AggregatedDeleteTombstoneStats> aggregatedDeleteTombstoneStats =
       new AtomicReference<>(new AggregatedDeleteTombstoneStats());
   final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
@@ -332,12 +332,12 @@ class StatsManager {
    * @param blobStoreStats the {@link BlobStoreStats} that contains delete tombstone stats of single store.
    */
   private void updateDeleteTombstoneStats(BlobStoreStats blobStoreStats) {
-    Pair<Long, Long> deleteTombstoneWithTtlStats = blobStoreStats.getDeleteTombstoneWithTtlStats();
-    Pair<Long, Long> deleteTombstoneWithoutTtlStats = blobStoreStats.getDeleteTombstoneWithoutTtlStats();
-    deleteTombstoneWithTtlCount += deleteTombstoneWithTtlStats.getFirst();
-    deleteTombstoneWithTtlTotalSize += deleteTombstoneWithTtlStats.getSecond();
-    deleteTombstoneWithoutTtlCount += deleteTombstoneWithoutTtlStats.getFirst();
-    deleteTombstoneWithoutTtlTotalSize += deleteTombstoneWithoutTtlStats.getSecond();
+    Pair<Long, Long> expiredDeleteTombstoneStats = blobStoreStats.getExpiredDeleteTombstoneStats();
+    Pair<Long, Long> permanentDeleteTombstoneStats = blobStoreStats.getPermanentDeleteTombstoneStats();
+    expiredDeleteTombstoneCount += expiredDeleteTombstoneStats.getFirst();
+    expiredDeleteTombstoneTotalSize += expiredDeleteTombstoneStats.getSecond();
+    permanentDeleteTombstoneCount += permanentDeleteTombstoneStats.getFirst();
+    permanentDeleteTombstoneTotalSize += permanentDeleteTombstoneStats.getSecond();
   }
 
   /**
@@ -345,51 +345,51 @@ class StatsManager {
    */
   private void updateAggregatedDeleteTombstoneStats() {
     aggregatedDeleteTombstoneStats.set(
-        new AggregatedDeleteTombstoneStats(deleteTombstoneWithTtlCount, deleteTombstoneWithTtlTotalSize,
-            deleteTombstoneWithoutTtlCount, deleteTombstoneWithoutTtlTotalSize));
+        new AggregatedDeleteTombstoneStats(expiredDeleteTombstoneCount, expiredDeleteTombstoneTotalSize,
+            permanentDeleteTombstoneCount, permanentDeleteTombstoneTotalSize));
   }
 
   /**
    * Reset delete tombstone related stats.
    */
   private void resetDeleteTombstoneStats() {
-    deleteTombstoneWithTtlCount = 0;
-    deleteTombstoneWithTtlTotalSize = 0;
-    deleteTombstoneWithoutTtlCount = 0;
-    deleteTombstoneWithoutTtlTotalSize = 0;
+    expiredDeleteTombstoneCount = 0;
+    expiredDeleteTombstoneTotalSize = 0;
+    permanentDeleteTombstoneCount = 0;
+    permanentDeleteTombstoneTotalSize = 0;
   }
 
   /**
    * A class to hold aggregated delete tombstone stats result. This is used by {@link StatsManagerMetrics}.
    */
   static class AggregatedDeleteTombstoneStats {
-    Pair<Long, Long> aggregatedDeleteTombstoneStatsWithTtl;
-    Pair<Long, Long> aggregatedDeleteTombstoneStatsWithoutTtl;
+    Pair<Long, Long> aggregatedExpiredDeleteTombstoneStats;
+    Pair<Long, Long> aggregatedPermanentDeleteTombstoneStats;
 
     AggregatedDeleteTombstoneStats(){
       this(0, 0, 0, 0);
     }
 
-    AggregatedDeleteTombstoneStats(long deleteWithTtlCount, long deleteWithTtlSize, long deleteWithoutTtlCount,
-        long deleteWithoutTtlSize) {
-      aggregatedDeleteTombstoneStatsWithTtl = new Pair<>(deleteWithTtlCount, deleteWithTtlSize);
-      aggregatedDeleteTombstoneStatsWithTtl = new Pair<>(deleteWithoutTtlCount, deleteWithoutTtlSize);
+    AggregatedDeleteTombstoneStats(long expiredDeleteCount, long expiredDeleteSize, long permanentDeleteCount,
+        long permanentDeleteSize) {
+      aggregatedExpiredDeleteTombstoneStats = new Pair<>(expiredDeleteCount, expiredDeleteSize);
+      aggregatedPermanentDeleteTombstoneStats = new Pair<>(permanentDeleteCount, permanentDeleteSize);
     }
 
-    long getDeleteTombstoneWithTtlCount(){
-      return aggregatedDeleteTombstoneStatsWithTtl.getFirst();
+    long getExpiredDeleteTombstoneCount(){
+      return aggregatedExpiredDeleteTombstoneStats.getFirst();
     }
 
-    long getDeleteTombstoneWithTtlSize(){
-      return aggregatedDeleteTombstoneStatsWithTtl.getSecond();
+    long getExpiredDeleteTombstoneSize(){
+      return aggregatedExpiredDeleteTombstoneStats.getSecond();
     }
 
-    long getDeleteTombstoneWithoutTtlCount(){
-      return aggregatedDeleteTombstoneStatsWithoutTtl.getFirst();
+    long getPermanentDeleteTombstoneCount(){
+      return aggregatedPermanentDeleteTombstoneStats.getFirst();
     }
 
-    long getDeleteTombstoneWithoutTtlSize(){
-      return aggregatedDeleteTombstoneStatsWithoutTtl.getSecond();
+    long getPermanentDeleteTombstoneSize(){
+      return aggregatedPermanentDeleteTombstoneStats.getSecond();
     }
   }
 

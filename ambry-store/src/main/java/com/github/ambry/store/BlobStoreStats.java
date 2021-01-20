@@ -78,9 +78,9 @@ public class BlobStoreStats implements StoreStats, Closeable {
   private final Condition waitCondition = scanLock.newCondition();
   private final Queue<EntryContext> recentEntryQueue = new LinkedBlockingQueue<>();
   private final AtomicInteger queueEntryCount = new AtomicInteger(0);
-  private final AtomicReference<Pair<Long, Long>> deleteTombstoneWithTtlStats =
+  private final AtomicReference<Pair<Long, Long>> expiredDeleteTombstoneStats =
       new AtomicReference<>(new Pair<>(0L, 0L));
-  private final AtomicReference<Pair<Long, Long>> deleteTombstoneWithoutTtlStats =
+  private final AtomicReference<Pair<Long, Long>> permanentDeleteTombstoneStats =
       new AtomicReference<>(new Pair<>(0L, 0L));
   private final AtomicBoolean enabled = new AtomicBoolean(true);
 
@@ -220,12 +220,12 @@ public class BlobStoreStats implements StoreStats, Closeable {
     return statsSnapshotsByType;
   }
 
-  public Pair<Long, Long> getDeleteTombstoneWithTtlStats() {
-    return deleteTombstoneWithTtlStats.get();
+  public Pair<Long, Long> getExpiredDeleteTombstoneStats() {
+    return expiredDeleteTombstoneStats.get();
   }
 
-  public Pair<Long, Long> getDeleteTombstoneWithoutTtlStats() {
-    return deleteTombstoneWithoutTtlStats.get();
+  public Pair<Long, Long> getPermanentDeleteTombstoneStats() {
+    return permanentDeleteTombstoneStats.get();
   }
 
   /**
@@ -1031,27 +1031,27 @@ public class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
-   * A helper method to update stats about DELETE tombstones with/without TtlUpdate flag separately.
+   * A helper method to update stats for both expired and permanent delete tombstones.
    * @param indexFinalStates a collection of {@link IndexFinalState} containing DELETE tombstone index value only
    */
   private void updateDeleteTombstoneStats(Collection<IndexFinalState> indexFinalStates) {
-    long deleteWithTtlCount = 0;
-    long deleteWithoutTtlCount = 0;
-    long deleteWithTtlTotalSize = 0;
-    long deleteWithoutTtlTotalSize = 0;
+    long expiredDeleteCount = 0;
+    long permanentDeleteCount = 0;
+    long expiredDeleteTotalSize = 0;
+    long permanentDeleteTotalSize = 0;
     for (IndexFinalState finalState : indexFinalStates) {
       if (finalState.isDelete()) {
         if (finalState.getExpirationTime() != -1) {
-          deleteWithTtlCount++;
-          deleteWithTtlTotalSize += finalState.getRecordSize();
+          expiredDeleteCount++;
+          expiredDeleteTotalSize += finalState.getRecordSize();
         } else {
-          deleteWithoutTtlCount++;
-          deleteWithoutTtlTotalSize += finalState.getRecordSize();
+          permanentDeleteCount++;
+          permanentDeleteTotalSize += finalState.getRecordSize();
         }
       }
     }
-    deleteTombstoneWithTtlStats.set(new Pair<>(deleteWithTtlCount, deleteWithTtlTotalSize));
-    deleteTombstoneWithoutTtlStats.set(new Pair<>(deleteWithoutTtlCount, deleteWithoutTtlTotalSize));
+    expiredDeleteTombstoneStats.set(new Pair<>(expiredDeleteCount, expiredDeleteTotalSize));
+    permanentDeleteTombstoneStats.set(new Pair<>(permanentDeleteCount, permanentDeleteTotalSize));
   }
 
   /**

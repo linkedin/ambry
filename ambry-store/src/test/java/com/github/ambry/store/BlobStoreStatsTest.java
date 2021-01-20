@@ -1275,8 +1275,8 @@ public class BlobStoreStatsTest {
   }
 
   private void verifyDeleteTombstoneStats(BlobStoreStats blobStoreStats, Map<String, AtomicLong> deleteTombstoneStats) {
-    Pair<Long, Long> permanentDeletes = blobStoreStats.getDeleteTombstoneWithoutTtlStats();
-    Pair<Long, Long> expiredDeletes = blobStoreStats.getDeleteTombstoneWithTtlStats();
+    Pair<Long, Long> permanentDeletes = blobStoreStats.getPermanentDeleteTombstoneStats();
+    Pair<Long, Long> expiredDeletes = blobStoreStats.getExpiredDeleteTombstoneStats();
     assertEquals("Mismatch in permanent delete count", deleteTombstoneStats.get(PERMANENT_DELETE_COUNT_STR).get(),
         (long) permanentDeletes.getFirst());
     assertEquals("Mismatch in permanent delete total size", deleteTombstoneStats.get(PERMANENT_DELETE_SIZE_STR).get(),
