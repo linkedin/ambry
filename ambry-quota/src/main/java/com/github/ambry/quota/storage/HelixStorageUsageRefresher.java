@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.storage;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.server.StatsSnapshot;
 import java.io.ByteArrayInputStream;
@@ -30,7 +31,6 @@ import org.apache.helix.store.HelixPropertyListener;
 import org.apache.zookeeper.data.Stat;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -179,8 +179,8 @@ project(':ambry-api') {
     dependencies {
         compile project(':ambry-utils')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
-        compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
+        compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
+        compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')
@@ -463,12 +463,12 @@ project(':ambry-quota') {
 
 project(':ambry-mysql') {
     dependencies {
-        compile project(':ambry-api'),
-                project(':ambry-utils')
+        compile project(':ambry-api')
+        compile project(':ambry-utils')
+        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }
-        compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }

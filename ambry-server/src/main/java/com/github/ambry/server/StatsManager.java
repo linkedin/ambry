@@ -15,6 +15,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
@@ -44,7 +45,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,7 +131,7 @@ class StatsManager {
   void publish(StatsWrapper statsWrapper) throws IOException {
     File tempFile = new File(statsOutputFile.getAbsolutePath() + ".tmp");
     if (tempFile.createNewFile()) {
-      mapper.defaultPrettyPrintingWriter().writeValue(tempFile, statsWrapper);
+      mapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, statsWrapper);
       if (!tempFile.renameTo(statsOutputFile)) {
         throw new IOException(
             "Failed to rename " + tempFile.getAbsolutePath() + " to " + statsOutputFile.getAbsolutePath());
