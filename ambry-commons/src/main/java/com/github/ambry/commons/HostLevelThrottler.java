@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -20,7 +21,6 @@ import com.github.ambry.utils.RejectThrottler;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

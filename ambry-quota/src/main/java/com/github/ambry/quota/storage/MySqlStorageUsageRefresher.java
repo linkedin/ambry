@@ -13,6 +13,8 @@
  */
 package com.github.ambry.quota.storage;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.clustermap.MySqlReportAggregatorTask;
 import com.github.ambry.config.ClusterMapConfig;
@@ -44,8 +46,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

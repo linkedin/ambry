@@ -179,8 +179,8 @@ project(':ambry-api') {
     dependencies {
         compile project(':ambry-utils')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
-        compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
-        compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
+        compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
+        compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')

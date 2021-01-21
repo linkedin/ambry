@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.Arrays;
@@ -40,7 +41,6 @@ import org.apache.helix.model.builder.HelixConfigScopeBuilder;
 import org.apache.helix.tools.ClusterSetup;
 import org.apache.helix.zookeeper.api.client.HelixZkClient;
 import org.apache.helix.zookeeper.datamodel.serializer.ZNRecordSerializer;
-import org.codehaus.jackson.map.ObjectMapper;
 
 
 /**

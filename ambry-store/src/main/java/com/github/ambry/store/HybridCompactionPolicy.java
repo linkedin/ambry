@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import java.io.File;
@@ -24,7 +25,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.codehaus.jackson.map.ObjectMapper;
 
 
 /**
@@ -184,7 +184,7 @@ public class HybridCompactionPolicy implements CompactionPolicy {
       File tempFile = new File(Paths.get(dataDir, COMPACT_POLICY_INFO_PATH + ".temp").toString());
       try {
         tempFile.createNewFile();
-        objectMapper.defaultPrettyPrintingWriter().writeValue(tempFile, compactionPolicySwitchInfo);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, compactionPolicySwitchInfo);
         tempFile.renameTo(new File(Paths.get(dataDir, COMPACT_POLICY_INFO_PATH).toString()));
       } catch (IOException e) {
         logger.error("Exception while store compaction policy info for local report. Output file path - {}",

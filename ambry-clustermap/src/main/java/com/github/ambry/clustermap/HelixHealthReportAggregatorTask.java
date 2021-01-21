@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.StatsReportType;
@@ -34,7 +35,6 @@ import org.apache.helix.task.TaskCallbackContext;
 import org.apache.helix.task.TaskResult;
 import org.apache.helix.task.UserContentStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
