@@ -195,6 +195,7 @@ project(':ambry-account') {
                 project(':ambry-mysql')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
+            exclude group: "org.codehaus.jackson"
         }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
@@ -211,6 +212,7 @@ project(':ambry-clustermap') {
                 project(':ambry-utils')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
+            exclude group: "org.codehaus.jackson"
         }
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
@@ -229,6 +231,7 @@ project(':ambry-commons') {
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
+            exclude group: "org.codehaus.jackson"
         }
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
@@ -455,6 +458,7 @@ project(':ambry-quota') {
             project(':ambry-clustermap')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
+            exclude group: "org.codehaus.jackson"
         }
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
@@ -467,6 +471,7 @@ project(':ambry-mysql') {
                 project(':ambry-utils')
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
+            exclude group: "org.codehaus.jackson"
         }
         compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
         testCompile project(':ambry-test-utils')
