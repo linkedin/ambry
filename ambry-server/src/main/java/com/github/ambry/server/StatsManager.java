@@ -376,7 +376,7 @@ class StatsManager {
     Pair<Long, Long> aggregatedExpiredDeleteTombstoneStats;
     Pair<Long, Long> aggregatedPermanentDeleteTombstoneStats;
 
-    AggregatedDeleteTombstoneStats(){
+    AggregatedDeleteTombstoneStats() {
       this(0, 0, 0, 0);
     }
 
@@ -386,19 +386,19 @@ class StatsManager {
       aggregatedPermanentDeleteTombstoneStats = new Pair<>(permanentDeleteCount, permanentDeleteSize);
     }
 
-    long getExpiredDeleteTombstoneCount(){
+    long getExpiredDeleteTombstoneCount() {
       return aggregatedExpiredDeleteTombstoneStats.getFirst();
     }
 
-    long getExpiredDeleteTombstoneSize(){
+    long getExpiredDeleteTombstoneSize() {
       return aggregatedExpiredDeleteTombstoneStats.getSecond();
     }
 
-    long getPermanentDeleteTombstoneCount(){
+    long getPermanentDeleteTombstoneCount() {
       return aggregatedPermanentDeleteTombstoneStats.getFirst();
     }
 
-    long getPermanentDeleteTombstoneSize(){
+    long getPermanentDeleteTombstoneSize() {
       return aggregatedPermanentDeleteTombstoneStats.getSecond();
     }
   }
