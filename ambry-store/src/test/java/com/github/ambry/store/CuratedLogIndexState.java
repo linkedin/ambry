@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.github.ambry.store.StoreStats.*;
 import static com.github.ambry.store.StoreTestUtils.*;
 import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
@@ -68,10 +69,6 @@ class CuratedLogIndexState {
   private static final long SEGMENT_CAPACITY = 4000;
   private static final long HARD_DELETE_START_OFFSET = 11;
   private static final long HARD_DELETE_LAST_PART_SIZE = 13;
-  static final String EXPIRED_DELETE_COUNT_STR = "ExpiredDeleteCount";
-  static final String EXPIRED_DELETE_SIZE_STR = "ExpiredDeleteSize";
-  static final String PERMANENT_DELETE_COUNT_STR = "PermanentDeleteCount";
-  static final String PERMANENT_DELETE_SIZE_STR = "PermanentDeleteSize";
 
   static final int DEFAULT_MAX_IN_MEM_ELEMENTS = 5;
   static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
@@ -854,7 +851,8 @@ class CuratedLogIndexState {
    * @return the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
    */
   long getValidDataSizeForLogSegment(LogSegment segment, long deleteReferenceTimeMs, long expiryReferenceTimeMs,
-      FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts, Map<String, AtomicLong> deleteTombstoneStats) {
+      FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     List<IndexEntry> validEntries =
         getValidIndexEntriesForLogSegment(segment, deleteReferenceTimeMs, expiryReferenceTimeMs,
             fileSpanUnderCompaction, seenPuts, deleteTombstoneStats);
@@ -878,7 +876,7 @@ class CuratedLogIndexState {
    */
   List<IndexEntry> getValidIndexEntriesForLogSegment(LogSegment segment, long deleteReferenceTimeMs,
       long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
-      Map<String, AtomicLong> deleteTombstoneStats) {
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     List<IndexEntry> validEntries = new ArrayList<>();
     Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
     while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
@@ -1573,7 +1571,7 @@ class CuratedLogIndexState {
    */
   List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
       long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
-      Map<String, AtomicLong> deleteTombstoneStats) {
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     List<IndexEntry> validEntries = new ArrayList<>();
     if (referenceIndex.containsKey(indexSegmentStartOffset)) {
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset)
@@ -1596,11 +1594,11 @@ class CuratedLogIndexState {
             // if this is a delete tombstone left by compaction, do some counting.
             if (!seenPuts.contains(key)) {
               if (currentValue.getExpiresAtMs() == -1 || currentValue.isTtlUpdate()) {
-                deleteTombstoneStats.get(PERMANENT_DELETE_COUNT_STR).getAndAdd(1);
-                deleteTombstoneStats.get(PERMANENT_DELETE_SIZE_STR).getAndAdd(currentValue.getSize());
+                deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
+                deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
               } else {
-                deleteTombstoneStats.get(EXPIRED_DELETE_COUNT_STR).getAndAdd(1);
-                deleteTombstoneStats.get(EXPIRED_DELETE_SIZE_STR).getAndAdd(currentValue.getSize());
+                deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
+                deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
               }
             }
           } else if (currentValue.isTtlUpdate()) {
@@ -1677,12 +1675,13 @@ class CuratedLogIndexState {
     return size.get();
   }
 
-  static Map<String, AtomicLong> generateDeleteTombstoneStats() {
-    Map<String, AtomicLong> deleteTombstoneStats = new HashMap<>();
-    deleteTombstoneStats.put(EXPIRED_DELETE_COUNT_STR, new AtomicLong(0));
-    deleteTombstoneStats.put(EXPIRED_DELETE_SIZE_STR, new AtomicLong(0));
-    deleteTombstoneStats.put(PERMANENT_DELETE_COUNT_STR, new AtomicLong(0));
-    deleteTombstoneStats.put(PERMANENT_DELETE_SIZE_STR, new AtomicLong(0));
+  /**
+   * @return generated empty delete tombstone stats (will be populated afterwards).
+   */
+  static Map<String, Pair<AtomicLong, AtomicLong>> generateDeleteTombstoneStats() {
+    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = new HashMap<>();
+    deleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE, new Pair<>(new AtomicLong(0), new AtomicLong(0)));
+    deleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE, new Pair<>(new AtomicLong(0), new AtomicLong(0)));
     return deleteTombstoneStats;
   }
 

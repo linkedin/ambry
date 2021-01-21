@@ -53,7 +53,7 @@ import org.slf4j.LoggerFactory;
  * a forecast boundary. Stats related requests are either served via these buckets or a separate scan that will walk
  * through the entire index if the request is outside of the forecast boundary.
  */
-public class BlobStoreStats implements StoreStats, Closeable {
+class BlobStoreStats implements StoreStats, Closeable {
   static final String IO_SCHEDULER_JOB_TYPE = "BlobStoreStats";
   static final String IO_SCHEDULER_JOB_ID = "indexSegment_read";
   // Max blob size that's encountered while generating stats
@@ -220,12 +220,12 @@ public class BlobStoreStats implements StoreStats, Closeable {
     return statsSnapshotsByType;
   }
 
-  public Pair<Long, Long> getExpiredDeleteTombstoneStats() {
-    return expiredDeleteTombstoneStats.get();
-  }
-
-  public Pair<Long, Long> getPermanentDeleteTombstoneStats() {
-    return permanentDeleteTombstoneStats.get();
+  @Override
+  public Map<String, Pair<Long, Long>> getDeleteTombstoneStats() {
+    Map<String, Pair<Long, Long>> deleteTombstoneStats = new HashMap<>();
+    deleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE, expiredDeleteTombstoneStats.get());
+    deleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE, permanentDeleteTombstoneStats.get());
+    return deleteTombstoneStats;
   }
 
   /**

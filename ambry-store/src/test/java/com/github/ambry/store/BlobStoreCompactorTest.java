@@ -2503,7 +2503,7 @@ public class BlobStoreCompactorTest {
    */
   private long getValidDataSize(List<String> logSegments, long deleteReferenceTimeMs) {
     long size = 0;
-    Map<String, AtomicLong> deleteTombstoneStats = generateDeleteTombstoneStats();
+    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     for (String segment : logSegments) {
       size += state.getValidDataSizeForLogSegment(state.log.getSegment(segment), deleteReferenceTimeMs,
           state.time.milliseconds(), getFileSpanForLogSegments(logSegments), new HashSet<>(), deleteTombstoneStats);
@@ -2933,7 +2933,7 @@ public class BlobStoreCompactorTest {
   private List<LogEntry> getValidLogEntriesInOrder(List<String> logSegmentsUnderConsideration,
       long deleteReferenceTimeMs) {
     List<LogEntry> validLogEntriesInOrder = new ArrayList<>();
-    Map<String, AtomicLong> deleteTombstoneStats = generateDeleteTombstoneStats();
+    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     for (String logSegment : logSegmentsUnderConsideration) {
       List<IndexEntry> validIndexEntries =
           state.getValidIndexEntriesForLogSegment(state.log.getSegment(logSegment), deleteReferenceTimeMs,

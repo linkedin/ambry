@@ -23,10 +23,10 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.StatsManagerConfig;
-import com.github.ambry.store.BlobStoreStats;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -52,6 +52,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+import static com.github.ambry.store.StoreStats.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -164,13 +165,13 @@ class StatsManager {
     } else {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
-        BlobStoreStats blobStoreStats = (BlobStoreStats) store.getStoreStats();
+        StoreStats storeStats = store.getStoreStats();
         Map<StatsReportType, StatsSnapshot> snapshotsByType =
-            blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
+            storeStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
         aggregatedSnapshot.getSubMap().put(partitionId.toString(), snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
         // update delete tombstone stats
-        updateDeleteTombstoneStats(blobStoreStats);
+        updateDeleteTombstoneStats(storeStats);
       } catch (StoreException e) {
         unreachablePartitions.add(partitionId);
       }
@@ -328,12 +329,21 @@ class StatsManager {
   }
 
   /**
-   * Update delete tombstone related stats from given {@link BlobStoreStats}
-   * @param blobStoreStats the {@link BlobStoreStats} that contains delete tombstone stats of single store.
+   * Exposed for testing.
+   * @return aggregated delete tombstone stats.
    */
-  private void updateDeleteTombstoneStats(BlobStoreStats blobStoreStats) {
-    Pair<Long, Long> expiredDeleteTombstoneStats = blobStoreStats.getExpiredDeleteTombstoneStats();
-    Pair<Long, Long> permanentDeleteTombstoneStats = blobStoreStats.getPermanentDeleteTombstoneStats();
+  AggregatedDeleteTombstoneStats getAggregatedDeleteTombstoneStats(){
+    return aggregatedDeleteTombstoneStats.get();
+  }
+
+  /**
+   * Update delete tombstone related stats from given {@link StoreStats}
+   * @param storeStats the {@link StoreStats} that contains delete tombstone stats of single store.
+   */
+  private void updateDeleteTombstoneStats(StoreStats storeStats) {
+    Map<String, Pair<Long, Long>> storeDeleteStats = storeStats.getDeleteTombstoneStats();
+    Pair<Long, Long> expiredDeleteTombstoneStats = storeDeleteStats.get(EXPIRED_DELETE_TOMBSTONE);
+    Pair<Long, Long> permanentDeleteTombstoneStats = storeDeleteStats.get(PERMANENT_DELETE_TOMBSTONE);
     expiredDeleteTombstoneCount += expiredDeleteTombstoneStats.getFirst();
     expiredDeleteTombstoneTotalSize += expiredDeleteTombstoneStats.getSecond();
     permanentDeleteTombstoneCount += permanentDeleteTombstoneStats.getFirst();
@@ -343,7 +353,7 @@ class StatsManager {
   /**
    * Update the aggregated delete tombstone stats by atomic switch.
    */
-  private void updateAggregatedDeleteTombstoneStats() {
+  void updateAggregatedDeleteTombstoneStats() {
     aggregatedDeleteTombstoneStats.set(
         new AggregatedDeleteTombstoneStats(expiredDeleteTombstoneCount, expiredDeleteTombstoneTotalSize,
             permanentDeleteTombstoneCount, permanentDeleteTombstoneTotalSize));

@@ -50,6 +50,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
+import static com.github.ambry.store.StoreStats.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
@@ -383,10 +384,9 @@ public class BlobStoreStatsTest {
    * to report stats correctly.
    * @throws StoreException
    * @throws InterruptedException
-   * @throws IOException
    */
   @Test
-  public void testBucketingBasic() throws StoreException, InterruptedException, IOException {
+  public void testBucketingBasic() throws StoreException, InterruptedException {
     assumeTrue(bucketingEnabled);
     final CountDownLatch scanStartedLatch = new CountDownLatch(1);
     MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
@@ -445,10 +445,9 @@ public class BlobStoreStatsTest {
    * before the next scan. In addition, verify that requests within the coverage are served without triggering any scan.
    * @throws StoreException
    * @throws InterruptedException
-   * @throws IOException
    */
   @Test
-  public void testBucketingWithNewEntriesAfterScan() throws StoreException, InterruptedException, IOException {
+  public void testBucketingWithNewEntriesAfterScan() throws StoreException, InterruptedException {
     assumeTrue(bucketingEnabled);
     CountDownLatch scanStartedLatch = new CountDownLatch(1);
     CountDownLatch queueProcessedLatch = new CountDownLatch(1);
@@ -602,10 +601,9 @@ public class BlobStoreStatsTest {
    * 4. Perform various checks to verify the reported stats.
    * @throws StoreException
    * @throws InterruptedException
-   * @throws IOException
    */
   @Test
-  public void testBucketingWithNewEntriesDuringScan() throws StoreException, InterruptedException, IOException {
+  public void testBucketingWithNewEntriesDuringScan() throws StoreException, InterruptedException {
     assumeTrue(bucketingEnabled);
     CountDownLatch scanStartedLatch = new CountDownLatch(1);
     CountDownLatch scanHoldLatch = new CountDownLatch(1);
@@ -725,7 +723,7 @@ public class BlobStoreStatsTest {
   }
 
   @Test
-  public void testWithLowIndexEntries() throws InterruptedException, StoreException, IOException {
+  public void testWithLowIndexEntries() throws StoreException, IOException {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
@@ -925,13 +923,13 @@ public class BlobStoreStatsTest {
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(total, accountSubMap);
     StatsSnapshot convertedAccountStatsSnapshot =
         BlobStoreStats.convertStoreUsageToAccountStatsSnapshot(utilizationMap);
-    assertTrue("Mismatch between the converted Account StatsSnapshot and expected StatsSnapshot",
-        expectAccountSnapshot.equals(convertedAccountStatsSnapshot));
+    assertEquals("Mismatch between the converted Account StatsSnapshot and expected StatsSnapshot",
+        expectAccountSnapshot, convertedAccountStatsSnapshot);
     StatsSnapshot convertedContainerStatsSnapshot =
         BlobStoreStats.convertStoreUsageToContainerStatsSnapshot(utilizationMap);
     StatsSnapshot expectContainerSnapshot = new StatsSnapshot(total, accountContainerPairSubMap);
-    assertTrue("Mismatch between the converted Container StatsSnapshot and expected StatsSnapshot",
-        expectContainerSnapshot.equals(convertedContainerStatsSnapshot));
+    assertEquals("Mismatch between the converted Container StatsSnapshot and expected StatsSnapshot",
+        expectContainerSnapshot, convertedContainerStatsSnapshot);
   }
 
   /**
@@ -1045,7 +1043,6 @@ public class BlobStoreStatsTest {
    * @param idToDelete the {@link MockId} to be deleted
    * @param lifeVersion the lifeVersion of the new delete
    * @throws StoreException
-   * @throws IOException
    */
   private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete, short lifeVersion) throws StoreException {
     state.addDeleteEntry(idToDelete, null, lifeVersion);
@@ -1062,9 +1059,8 @@ public class BlobStoreStatsTest {
    * @param blobStoreStats the {@link BlobStoreStats} instance to handle the new delete
    * @param idToDelete the {@link MockId} to be deleted
    * @throws StoreException
-   * @throws IOException
    */
-  private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete) throws StoreException, IOException {
+  private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete) throws StoreException {
     state.addDeleteEntry(idToDelete);
     IndexValue currentDelete = state.getExpectedValue(idToDelete, false);
     IndexValue originalPut = state.getExpectedValue(idToDelete, true);
@@ -1143,7 +1139,7 @@ public class BlobStoreStatsTest {
    */
   private long verifyAndGetContainerValidSize(BlobStoreStats blobStoreStats, long referenceTimeInMs)
       throws StoreException {
-    Map<String, AtomicLong> deleteTombstoneStats = generateDeleteTombstoneStats();
+    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     Map<String, Map<String, Long>> actualContainerValidSizeMap =
         blobStoreStats.getValidDataSizeByContainer(referenceTimeInMs);
     Map<String, Map<String, Long>> expectedContainerValidSizeMap =
@@ -1210,7 +1206,7 @@ public class BlobStoreStatsTest {
     long expectedTotalLogSegmentValidSize = 0L;
     LogSegment logSegment = state.log.getFirstSegment();
     Set<MockId> seenPuts = new HashSet<>();
-    Map<String, AtomicLong> deleteTombstoneStats = generateDeleteTombstoneStats();
+    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     while (logSegment != null) {
       String logSegmentName = logSegment.getName();
       assertTrue("Log segment: " + logSegmentName + " not found in TimeRange " + timeRange,
@@ -1237,9 +1233,6 @@ public class BlobStoreStatsTest {
             && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
     assertEquals("Total valid data size of all log segments mismatch", expectedTotalLogSegmentValidSize,
         actualTotalValidSize.getSecond().longValue());
-//    for(Map.Entry<String, AtomicLong> entry : deleteTombstoneStats.entrySet()){
-//      System.out.println(entry.getKey() + " is " + entry.getValue());
-//    }
     verifyDeleteTombstoneStats(blobStoreStats, deleteTombstoneStats);
     return actualTotalValidSize.getSecond();
   }
@@ -1253,7 +1246,7 @@ public class BlobStoreStatsTest {
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
   private Map<String, Map<String, Long>> getValidSizeByContainer(long deleteReferenceTimeInMs,
-      long expiryReferenceTimeInMs, Map<String, AtomicLong> deleteTombstoneStats) {
+      long expiryReferenceTimeInMs, Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
     Set<MockId> seenPuts = new HashSet<>();
     for (Offset indSegStartOffset : state.referenceIndex.keySet()) {
@@ -1268,25 +1261,22 @@ public class BlobStoreStatsTest {
         }
       }
     }
-//    for(Map.Entry<String, AtomicLong> entry : deleteTombstoneStats.entrySet()){
-//      System.out.println(entry.getKey() + " is " + entry.getValue());
-//    }
     return containerValidSizeMap;
   }
 
-  private void verifyDeleteTombstoneStats(BlobStoreStats blobStoreStats, Map<String, AtomicLong> deleteTombstoneStats) {
-    Pair<Long, Long> permanentDeletes = blobStoreStats.getPermanentDeleteTombstoneStats();
-    Pair<Long, Long> expiredDeletes = blobStoreStats.getExpiredDeleteTombstoneStats();
-    assertEquals("Mismatch in permanent delete count", deleteTombstoneStats.get(PERMANENT_DELETE_COUNT_STR).get(),
-        (long) permanentDeletes.getFirst());
-    assertEquals("Mismatch in permanent delete total size", deleteTombstoneStats.get(PERMANENT_DELETE_SIZE_STR).get(),
-        (long) permanentDeletes.getSecond());
-    assertEquals("Mismatch in expired delete count", deleteTombstoneStats.get(EXPIRED_DELETE_COUNT_STR).get(),
-        (long) expiredDeletes.getFirst());
-    assertEquals("Mismatch in expired delete total size", deleteTombstoneStats.get(EXPIRED_DELETE_SIZE_STR).get(),
-        (long) expiredDeletes.getSecond());
-//    System.out.println(permanentDeletes.getFirst() + ", " + permanentDeletes.getSecond());
-//    System.out.println(expiredDeletes.getFirst() + ", " + expiredDeletes.getSecond());
+  private void verifyDeleteTombstoneStats(BlobStoreStats blobStoreStats,
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
+    Map<String, Pair<Long, Long>> storeDeleteStats = blobStoreStats.getDeleteTombstoneStats();
+    Pair<Long, Long> expiredDeletes = storeDeleteStats.get(EXPIRED_DELETE_TOMBSTONE);
+    Pair<Long, Long> permanentDeletes = storeDeleteStats.get(PERMANENT_DELETE_TOMBSTONE);
+    assertEquals("Mismatch in permanent delete count",
+        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().get(), (long) permanentDeletes.getFirst());
+    assertEquals("Mismatch in permanent delete total size",
+        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().get(), (long) permanentDeletes.getSecond());
+    assertEquals("Mismatch in expired delete count",
+        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().get(), (long) expiredDeletes.getFirst());
+    assertEquals("Mismatch in expired delete total size",
+        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().get(), (long) expiredDeletes.getSecond());
   }
 
   /**
