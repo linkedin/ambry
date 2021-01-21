@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.storage;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.utils.Utils;
@@ -34,15 +35,18 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   private final StorageQuotaEnforcer storageQuotaEnforcer;
   private final ScheduledExecutorService scheduler;
   private final StorageQuotaConfig config;
+  private final StorageQuotaServiceMetrics metrics;
 
-  public AmbryStorageQuotaService(StorageQuotaConfig storageQuotaConfig) throws IOException {
+  public AmbryStorageQuotaService(StorageQuotaConfig storageQuotaConfig, MetricRegistry metricRegistry)
+      throws IOException {
     HelixPropertyStore<ZNRecord> helixStore =
         CommonUtils.createHelixPropertyStore(storageQuotaConfig.zkClientConnectAddress,
             storageQuotaConfig.helixPropertyRootPath, null);
+    this.metrics = new StorageQuotaServiceMetrics(metricRegistry);
     this.scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
     this.storageUsageRefresher = new HelixStorageUsageRefresher(helixStore, this.scheduler, storageQuotaConfig);
     this.storageQuotaSource = new JSONStringStorageQuotaSource(storageQuotaConfig);
-    this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer(null);
+    this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer(null, this.metrics);
     this.config = storageQuotaConfig;
   }
 

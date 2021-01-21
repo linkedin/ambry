@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.storage;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.HashMap;
@@ -28,13 +29,14 @@ import static org.junit.Assert.*;
  * Unit test for {@link AmbryStorageQuotaEnforcer}.
  */
 public class AmbryStorageQuotaEnforcerTest {
+  private final StorageQuotaServiceMetrics metrics = new StorageQuotaServiceMetrics(new MetricRegistry());
 
   /**
    * Test to initialize the storage usage with empty map.
    */
   @Test
   public void testInitEmptyStorageUsage() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
     TestUtils.assertContainerMap(Collections.EMPTY_MAP, enforcer.getStorageUsage());
   }
@@ -44,7 +46,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testInitStorageUsage() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     Map<String, Map<String, Long>> containerUsage = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageUsage(containerUsage);
     TestUtils.assertContainerMap(containerUsage, enforcer.getStorageUsage());
@@ -55,7 +57,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testInitEmptyStorageQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     enforcer.initStorageQuota(Collections.EMPTY_MAP);
     TestUtils.assertContainerMap(Collections.EMPTY_MAP, enforcer.getStorageQuota());
   }
@@ -65,7 +67,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testInitStorageQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     Map<String, Map<String, Long>> containerQuota = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageQuota(containerQuota);
     TestUtils.assertContainerMap(containerQuota, enforcer.getStorageQuota());
@@ -76,7 +78,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testStorageQuotaSourceListener() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
@@ -97,7 +99,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testStorageUsageRefresherListener() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedUsage = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageUsage(expectedUsage);
@@ -135,7 +137,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testThrottleNoQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
@@ -168,7 +170,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testThrottleTracking() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
@@ -218,7 +220,7 @@ public class AmbryStorageQuotaEnforcerTest {
    */
   @Test
   public void testThrottleExceedsQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null);
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);

@@ -21,6 +21,8 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.storage.QuotaOperation;
+import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -57,14 +59,17 @@ class AmbrySecurityService implements SecurityService {
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
   private final HostLevelThrottler hostLevelThrottler;
+  private final StorageQuotaService storageQuotaService;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler) {
+      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler,
+      StorageQuotaService storageQuotaService) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
+    this.storageQuotaService = storageQuotaService;
     isOpen = true;
   }
 
@@ -134,6 +139,17 @@ class AmbrySecurityService implements SecurityService {
         } catch (Exception e) {
           exception = e;
         }
+      }
+    } else if (restRequest.getRestMethod() == RestMethod.POST && storageQuotaService != null) {
+      try {
+        Account account = getAccountFromArgs(restRequest.getArgs());
+        Container container = getContainerFromArgs(restRequest.getArgs());
+        if (storageQuotaService.shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post,
+            restRequest.getBytesReceived())) {
+          exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
+        }
+      } catch (Exception e) {
+        exception = e;
       }
     }
     frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);

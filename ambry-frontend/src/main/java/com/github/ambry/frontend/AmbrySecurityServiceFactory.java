@@ -19,6 +19,7 @@ import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.storage.StorageQuotaService;
 
 
 /**
@@ -32,19 +33,21 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   private final HostThrottleConfig hostThrottleConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
+  private final StorageQuotaService storageQuotaService;
 
   public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       AccountService accountService, UrlSigningService urlSigningService, IdSigningService idSigningService,
-      AccountAndContainerInjector accountAndContainerInjector) {
+      AccountAndContainerInjector accountAndContainerInjector, StorageQuotaService storageQuotaService) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     hostThrottleConfig = new HostThrottleConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
     this.urlSigningService = urlSigningService;
+    this.storageQuotaService = storageQuotaService;
   }
 
   @Override
-  public SecurityService getSecurityService() throws InstantiationException {
+  public SecurityService getSecurityService() {
     return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService,
-        new HostLevelThrottler(hostThrottleConfig));
+        new HostLevelThrottler(hostThrottleConfig), storageQuotaService);
   }
 }
