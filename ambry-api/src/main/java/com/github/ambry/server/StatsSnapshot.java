@@ -138,6 +138,9 @@ public class StatsSnapshot {
     value = subMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
   }
 
+  /**
+   * Remove all 0-value snapshots in the sub map.
+   */
   public void removeZeroValueSnapshots() {
     if (value == 0) {
       // we know that all values are positive, if the <pre>value</prev> is 0, then all the StatsSnapshots in the subMap
