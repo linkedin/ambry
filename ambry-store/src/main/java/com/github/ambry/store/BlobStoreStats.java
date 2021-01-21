@@ -217,6 +217,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           logger.error("Unrecognized stats report type: {}", reportType);
       }
     }
+    statsSnapshotsByType.forEach((k, v) -> v.removeZeroValueSnapshots());
     return statsSnapshotsByType;
   }
 
