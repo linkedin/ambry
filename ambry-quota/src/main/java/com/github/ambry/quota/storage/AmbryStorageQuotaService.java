@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.utils.Utils;

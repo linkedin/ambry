@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright 2020 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,11 +11,18 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota.storage;
+package com.github.ambry.quota;
+
+import com.github.ambry.quota.storage.QuotaOperation;
+
 
 /**
- * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
+ * Dummy {@link QuotaSource} implementation for test.
  */
-public enum QuotaMode {
-  Tracking, Throttling
+public class DummyQuotaSource implements QuotaSource {
+
+  @Override
+  public Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
+    return null;
+  }
 }

@@ -14,6 +14,7 @@
 package com.github.ambry.quota.storage;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.HashMap;
@@ -142,7 +143,7 @@ public class AmbryStorageQuotaEnforcerTest {
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.Throttling);
+    enforcer.setQuotaMode(QuotaMode.THROTTLING);
 
     // Make sure there is no quota for this account and container
     Random random = new Random();
@@ -166,7 +167,7 @@ public class AmbryStorageQuotaEnforcerTest {
   }
 
   /**
-   *  Test on {@link StorageQuotaEnforcer#shouldThrottle} when the mode is {@link QuotaMode#Tracking}.
+   *  Test on {@link StorageQuotaEnforcer#shouldThrottle} when the mode is {@link QuotaMode#TRACKING}.
    */
   @Test
   public void testThrottleTracking() {
@@ -175,7 +176,7 @@ public class AmbryStorageQuotaEnforcerTest {
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.Tracking);
+    enforcer.setQuotaMode(QuotaMode.TRACKING);
 
     // Make sure there is no quota for this account and container
     Random random = new Random();
@@ -225,7 +226,7 @@ public class AmbryStorageQuotaEnforcerTest {
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.Throttling);
+    enforcer.setQuotaMode(QuotaMode.THROTTLING);
 
     for (Map.Entry<String, Map<String, Long>> accountQuota : expectedQuota.entrySet()) {
       short accountId = Short.parseShort(accountQuota.getKey());
