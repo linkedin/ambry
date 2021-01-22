@@ -19,10 +19,9 @@ import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 
 /**
@@ -151,15 +150,11 @@ public class StatsSnapshot {
     // if we are here, then value is not 0, we can examine all the StatsSnapshots in the subMap and remove the 0-value
     // StatsSnapshot.
     if (subMap != null) {
-      List<String> keysToRemove = new ArrayList<>();
-      for (Map.Entry<String, StatsSnapshot> ent : subMap.entrySet()) {
-        if (ent.getValue().getValue() == 0) {
-          keysToRemove.add(ent.getKey());
-        } else {
-          ent.getValue().removeZeroValueSnapshots();
-        }
-      }
-      keysToRemove.forEach(k -> subMap.remove(k));
+      subMap = subMap.entrySet()
+          .stream()
+          .filter(ent -> ent.getValue().getValue() != 0)
+          .peek(ent -> ent.getValue().removeZeroValueSnapshots())
+          .collect(Collectors.toMap(ent -> ent.getKey(), ent -> ent.getValue()));
     }
   }
 }

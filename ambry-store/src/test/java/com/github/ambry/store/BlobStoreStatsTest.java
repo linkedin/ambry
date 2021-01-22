@@ -30,12 +30,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -44,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -938,21 +942,39 @@ public class BlobStoreStatsTest {
   @Test
   public void testGetStatsSnapshots() throws StoreException {
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
-    long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
-    Map<String, Map<String, Long>> utilizationMap =
-        blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
-    // Verify account stats snapshot
-    Map<StatsReportType, StatsSnapshot> snapshotsByType =
-        blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), deleteAndExpirationRefTimeInMs);
-    verifyStatsSnapshots(utilizationMap, snapshotsByType, EnumSet.of(StatsReportType.ACCOUNT_REPORT));
-    // Verify partition class stats snapshot
-    snapshotsByType = blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT),
-        deleteAndExpirationRefTimeInMs);
-    verifyStatsSnapshots(utilizationMap, snapshotsByType, EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT));
-    // Verify all types of stats snapshots
-    Map<StatsReportType, StatsSnapshot> allStatsSnapshots =
-        blobStoreStats.getStatsSnapshots(EnumSet.allOf(StatsReportType.class), deleteAndExpirationRefTimeInMs);
-    verifyStatsSnapshots(utilizationMap, allStatsSnapshots, EnumSet.allOf(StatsReportType.class));
+    List<Short> allAccountIds =
+        state.allKeys.keySet().stream().map(mockId -> mockId.getAccountId()).distinct().collect(Collectors.toList());
+    assertFalse(allAccountIds.isEmpty());
+    short maxAccountId = allAccountIds.stream().max(Comparator.naturalOrder()).get();
+    List<Short> accountIdToExclude = null;
+
+    while (true) {
+      long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
+      Map<String, Map<String, Long>> utilizationMap =
+          blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
+      Optional.ofNullable(accountIdToExclude).orElse(Collections.EMPTY_LIST).
+          forEach(id -> utilizationMap.remove("A[" + id + "]"));
+
+      // Verify account stats snapshot
+      Map<StatsReportType, StatsSnapshot> snapshotsByType =
+          blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), deleteAndExpirationRefTimeInMs,
+              accountIdToExclude);
+      verifyStatsSnapshots(utilizationMap, snapshotsByType, EnumSet.of(StatsReportType.ACCOUNT_REPORT));
+      // Verify partition class stats snapshot
+      snapshotsByType = blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT),
+          deleteAndExpirationRefTimeInMs, accountIdToExclude);
+      verifyStatsSnapshots(utilizationMap, snapshotsByType, EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT));
+      // Verify all types of stats snapshots
+      Map<StatsReportType, StatsSnapshot> allStatsSnapshots =
+          blobStoreStats.getStatsSnapshots(EnumSet.allOf(StatsReportType.class), deleteAndExpirationRefTimeInMs,
+              accountIdToExclude);
+      verifyStatsSnapshots(utilizationMap, allStatsSnapshots, EnumSet.allOf(StatsReportType.class));
+      if (accountIdToExclude == null) {
+        accountIdToExclude = Arrays.asList(allAccountIds.get(0), (short) (maxAccountId + 1));
+      } else {
+        break;
+      }
+    }
   }
 
   /**

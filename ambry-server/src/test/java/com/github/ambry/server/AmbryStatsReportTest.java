@@ -15,6 +15,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -42,7 +43,7 @@ public class AmbryStatsReportTest {
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(Collections.emptyMap(),
         new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
             Collections.singletonList("/tmp"), "DC1")), Collections.emptyList(), new MetricRegistry(), config,
-        new MockTime(), null, null);
+        new MockTime(), null, null, new InMemAccountService(false, false));
     // test account stats report
     AmbryStatsReport ambryStatsReport =
         new AmbryStatsReport(testStatsManager, AGGREGATE_INTERVAL_MINS, StatsReportType.ACCOUNT_REPORT);

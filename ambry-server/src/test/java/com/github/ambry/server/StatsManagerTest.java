@@ -16,6 +16,9 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -69,9 +72,12 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -82,6 +88,7 @@ import static org.junit.Assert.*;
 /**
  * Tests for {@link StatsManager}.
  */
+@RunWith(Parameterized.class)
 public class StatsManagerTest {
   private static final int MAX_ACCOUNT_COUNT = 10;
   private static final int MIN_ACCOUNT_COUNT = 5;
@@ -100,6 +107,8 @@ public class StatsManagerTest {
   private final ObjectMapper mapper = new ObjectMapper();
   private final Map<String, Pair<Long, Long>> storeDeleteTombstoneStats = new HashMap<>();
   private final StatsManagerConfig statsManagerConfig;
+  private final AccountService inMemoryAccountService = new InMemAccountService(false, false);
+  private final boolean enableAccountExclusion;
   private VerifiableProperties verifiableProperties;
   private DataNodeId dataNodeId;
 
@@ -118,7 +127,13 @@ public class StatsManagerTest {
     }
   }
 
-  public StatsManagerTest() throws Exception {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  public StatsManagerTest(boolean enableAccountExclusion) throws Exception {
+    this.enableAccountExclusion = enableAccountExclusion;
     tempDir = Files.createTempDirectory("nodeStatsDir-" + TestUtils.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
@@ -126,7 +141,10 @@ public class StatsManagerTest {
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties properties = new Properties();
-    properties.put("stats.output.file.path", outputFileString);
+    String accountNamesToExclude = enableAccountExclusion ? "account0,account" + MAX_ACCOUNT_COUNT : "";
+    properties.put(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, outputFileString);
+    properties.put(StatsManagerConfig.STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES, accountNamesToExclude);
+    properties.put(StatsManagerConfig.STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, accountNamesToExclude);
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
@@ -136,7 +154,11 @@ public class StatsManagerTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     storeMap = new HashMap<>();
     partitionToSnapshot = new HashMap<>();
-    preAggregatedSnapshot = generateRandomSnapshot().get(StatsReportType.ACCOUNT_REPORT);
+    List<Short> accountIdsToExlude = new ArrayList<>();
+    if (enableAccountExclusion) {
+      accountIdsToExlude.add((short) 0);
+    }
+    preAggregatedSnapshot = generateRandomSnapshot(accountIdsToExlude).get(StatsReportType.ACCOUNT_REPORT);
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
     storeDeleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE,
         new Pair<>((long) random.nextInt(100), (long) random.nextInt(1000)));
@@ -165,9 +187,13 @@ public class StatsManagerTest {
     storageManager = new MockStorageManager(storeMap, dataNodeId);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     clusterParticipant = new MockHelixParticipant(clusterMapConfig);
+    // prepare account service, we are only going to fetch account0, and account10
+    inMemoryAccountService.updateAccounts(
+        Arrays.asList(new AccountBuilder((short) 0, "account0", Account.AccountStatus.ACTIVE).build(),
+            new AccountBuilder((short) 10, "account10", Account.AccountStatus.ACTIVE).build()));
     statsManager =
-        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
-            null);
+        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null, null,
+            inMemoryAccountService);
   }
 
   /**
@@ -228,7 +254,7 @@ public class StatsManagerTest {
     problematicStoreMap.put(partitionId2, exceptionStore);
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap, dataNodeId),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
-        statsManagerConfig, new MockTime(), null, null);
+        statsManagerConfig, new MockTime(), null, null, inMemoryAccountService);
     List<PartitionId> unreachablePartitions = new ArrayList<>();
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
@@ -252,7 +278,7 @@ public class StatsManagerTest {
     mixedStoreMap.put(partitionId4, exceptionStore);
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap, dataNodeId),
         Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
-        statsManagerConfig, new MockTime(), null, null);
+        statsManagerConfig, new MockTime(), null, null, inMemoryAccountService);
     actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
@@ -265,8 +291,8 @@ public class StatsManagerTest {
       StatsSnapshot snapshot =
           testStatsManager.fetchSnapshot(partitionId, unreachablePartitions, StatsReportType.ACCOUNT_REPORT);
       if (Integer.parseInt(partitionId.toPathString()) < 3) {
-        assertEquals("Actual StatsSnapshot does not match with expected snapshot", snapshot,
-            partitionToSnapshot.get(partitionId));
+        assertEquals("Actual StatsSnapshot does not match with expected snapshot with partition id "
+            + partitionId.toPathString(), snapshot, partitionToSnapshot.get(partitionId));
       }
     }
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
@@ -294,7 +320,7 @@ public class StatsManagerTest {
     StorageManager mockStorageManager = new MockStorageManager(testStoreMap, dataNodeId);
     StatsManager testStatsManager =
         new StatsManager(mockStorageManager, testReplicas, new MetricRegistry(), statsManagerConfig, new MockTime(),
-            null, null);
+            null, null, inMemoryAccountService);
 
     // verify that adding an existing store to StatsManager should fail
     assertFalse("Adding a store which already exists should fail", testStatsManager.addReplica(testReplicas.get(0)));
@@ -486,7 +512,7 @@ public class StatsManagerTest {
       partitionId = new MockPartitionId(i,
           (i % 2 == 0) ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS,
           Collections.singletonList((MockDataNodeId) dataNodeId), 0);
-      Map<StatsReportType, StatsSnapshot> allSnapshots = generateRandomSnapshot();
+      Map<StatsReportType, StatsSnapshot> allSnapshots = generateRandomSnapshot(Arrays.asList((short) 0));
       partitionClassSnapshots.add(allSnapshots.get(StatsReportType.PARTITION_CLASS_REPORT));
       accountSnapshots.add(allSnapshots.get(StatsReportType.ACCOUNT_REPORT));
       storeMap.put(partitionId, new MockStore(new MockStoreStats(allSnapshots, false)));
@@ -495,7 +521,7 @@ public class StatsManagerTest {
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     StatsManager statsManager =
         new StatsManager(storageManager, replicaIds, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
-            null);
+            null, inMemoryAccountService);
 
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(0L, new HashMap<>());
     StatsSnapshot expectPartitionClassSnapshot = new StatsSnapshot(0L, new HashMap<>());
@@ -620,10 +646,22 @@ public class StatsManagerTest {
    * @return a map of all types of {@link StatsSnapshot} whose key is the type name and value is corresponding snapshot
    */
   private Map<StatsReportType, StatsSnapshot> generateRandomSnapshot() {
+    return generateRandomSnapshot(Collections.EMPTY_LIST);
+  }
+
+  /**
+   * Generate a random, two levels of nesting (accountId, containerId) {@link StatsSnapshot} for testing aggregation.
+   * @param accountIdToExclude The account id to exclude from the final map.
+   * @return a map of all types of {@link StatsSnapshot} whose key is the type name and value is corresponding snapshot
+   */
+  private Map<StatsReportType, StatsSnapshot> generateRandomSnapshot(List<Short> accountIdToExclude) {
     Map<String, StatsSnapshot> accountMap = new HashMap<>();
     Map<String, StatsSnapshot> accountContainerPairMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < random.nextInt(MAX_ACCOUNT_COUNT - MIN_ACCOUNT_COUNT + 1) + MIN_ACCOUNT_COUNT; i++) {
+      if (accountIdToExclude.contains((short) i)) {
+        continue;
+      }
       String accountIdStr = "A[".concat(String.valueOf(i)).concat("]");
       Map<String, StatsSnapshot> containerMap = new HashMap<>();
       long subTotalSize = 0;
@@ -851,15 +889,36 @@ public class StatsManagerTest {
 
     @Override
     public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
-        long referenceTimeInMs) throws StoreException {
+        long referenceTimeInMs, List<Short> accountIdsToExclude) throws StoreException {
       if (throwStoreException) {
         throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
       }
-      return snapshotsByType;
+      if (accountIdsToExclude != null && !accountIdsToExclude.isEmpty()) {
+        Map<StatsReportType, StatsSnapshot> result = new HashMap<>();
+        List<String> accountIdInKeys =
+            accountIdsToExclude.stream().map(id -> "A[" + id + "]").collect(Collectors.toList());
+        for (Map.Entry<StatsReportType, StatsSnapshot> ent : snapshotsByType.entrySet()) {
+          StatsSnapshot newSnapshot = new StatsSnapshot(ent.getValue());
+          if (ent.getKey() == StatsReportType.ACCOUNT_REPORT) {
+            accountIdsToExclude.forEach(id -> newSnapshot.getSubMap().remove("A[" + id + "]"));
+          } else {
+            List<String> keysToRemove = newSnapshot.getSubMap()
+                .keySet()
+                .stream()
+                .filter(key -> accountIdInKeys.stream().anyMatch(ak -> key.contains(ak)))
+                .collect(Collectors.toList());
+            keysToRemove.forEach(key -> newSnapshot.getSubMap().remove(key));
+          }
+          result.put(ent.getKey(), newSnapshot);
+        }
+        return result;
+      } else {
+        return snapshotsByType;
+      }
     }
 
     @Override
-    public Map<String, Pair<Long, Long>> getDeleteTombstoneStats(){
+    public Map<String, Pair<Long, Long>> getDeleteTombstoneStats() {
       return deleteTombstoneStats;
     }
   }

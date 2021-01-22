@@ -16,6 +16,7 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.PartitionId;
@@ -71,6 +72,8 @@ class StatsManager {
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
   private final AccountStatsMySqlStore accountStatsMySqlStore;
+  private final List<Short> healthReportExcludeAccountIds;
+  private final List<Short> publishExcludeAccountIds;
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
   private long expiredDeleteTombstoneCount = 0;
@@ -90,10 +93,11 @@ class StatsManager {
    * @param time the {@link Time} instance to be used for reporting
    * @param clusterParticipant the {@link ClusterParticipant} to register state change listener.
    * @param accountStatsMySqlStore the {@link AccountStatsMySqlStore} to publish stats to mysql database.
+   * @param accountService the {@link AccountService} to get account ids from account names.
    */
   StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
       StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant,
-      AccountStatsMySqlStore accountStatsMySqlStore) {
+      AccountStatsMySqlStore accountStatsMySqlStore, AccountService accountService) {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
@@ -108,6 +112,13 @@ class StatsManager {
       logger.info("Stats Manager's state change listener registered!");
     }
     this.accountStatsMySqlStore = accountStatsMySqlStore;
+    Function<List<String>, List<Short>> convertAccountNamesToIds = names -> names.stream()
+        .map(name -> accountService.getAccountByName(name))
+        .filter(account -> account != null)
+        .map(account -> account.getId())
+        .collect(Collectors.toList());
+    this.healthReportExcludeAccountIds = convertAccountNamesToIds.apply(config.healthReportExcludeAccountNames);
+    this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
   }
 
   /**
@@ -167,7 +178,8 @@ class StatsManager {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StoreStats storeStats = store.getStoreStats();
         Map<StatsReportType, StatsSnapshot> snapshotsByType =
-            storeStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
+            storeStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds(),
+                publishExcludeAccountIds);
         aggregatedSnapshot.getSubMap().put(partitionId.toString(), snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
         // update delete tombstone stats
@@ -192,8 +204,8 @@ class StatsManager {
       unreachablePartitions.add(partitionId);
     } else {
       try {
-        Map<StatsReportType, StatsSnapshot> snapshotsByType =
-            store.getStoreStats().getStatsSnapshots(EnumSet.of(reportType), time.milliseconds());
+        Map<StatsReportType, StatsSnapshot> snapshotsByType = store.getStoreStats()
+            .getStatsSnapshots(EnumSet.of(reportType), time.milliseconds(), healthReportExcludeAccountIds);
         statsSnapshot = snapshotsByType.get(reportType);
       } catch (StoreException e) {
         String reportTypeStr = reportType.toString();
@@ -332,7 +344,7 @@ class StatsManager {
    * Exposed for testing.
    * @return aggregated delete tombstone stats.
    */
-  AggregatedDeleteTombstoneStats getAggregatedDeleteTombstoneStats(){
+  AggregatedDeleteTombstoneStats getAggregatedDeleteTombstoneStats() {
     return aggregatedDeleteTombstoneStats.get();
   }
 
