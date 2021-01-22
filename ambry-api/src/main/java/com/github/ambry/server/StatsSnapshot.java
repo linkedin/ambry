@@ -14,11 +14,15 @@
 
 package com.github.ambry.server;
 
-import java.util.HashMap;
-import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -29,8 +33,10 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
  * {@link StatsSnapshot}'s subMap will contain all the containers in the account that is mapped with. At the leaf level
  * {@link StatsSnapshot}'s subMap will be null.
  */
-@JsonPropertyOrder({"value", "subMap"})
+@JsonPropertyOrder({"v", "subMap"})
 public class StatsSnapshot {
+  @JsonAlias({"value", "v"})
+  @JsonProperty("v")
   private long value;
   private Map<String, StatsSnapshot> subMap;
 
@@ -130,5 +136,30 @@ public class StatsSnapshot {
     }
     subMap.values().forEach(StatsSnapshot::updateValue);
     value = subMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+  }
+
+  /**
+   * Remove all 0-value snapshots in the sub map.
+   */
+  public void removeZeroValueSnapshots() {
+    if (value == 0) {
+      // we know that all values are positive, if the <pre>value</prev> is 0, then all the StatsSnapshots in the subMap
+      // will have value 0 too.
+      subMap = null;
+      return;
+    }
+    // if we are here, then value is not 0, we can examine all the StatsSnapshots in the subMap and remove the 0-value
+    // StatsSnapshot.
+    if (subMap != null) {
+      List<String> keysToRemove = new ArrayList<>();
+      for (Map.Entry<String, StatsSnapshot> ent : subMap.entrySet()) {
+        if (ent.getValue().getValue() == 0) {
+          keysToRemove.add(ent.getKey());
+        } else {
+          ent.getValue().removeZeroValueSnapshots();
+        }
+      }
+      keysToRemove.forEach(k -> subMap.remove(k));
+    }
   }
 }
