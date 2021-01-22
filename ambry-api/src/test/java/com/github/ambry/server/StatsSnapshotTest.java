@@ -80,7 +80,7 @@ public class StatsSnapshotTest {
 
   @Test
   public void testCopyConstructor() {
-    // Anonymous class with static block initialization, not a good way to create map, it's only for map.
+    // Anonymous class with static block initialization, not a good way to create map, it's only for testing.
     StatsSnapshot original = new StatsSnapshot(60L, new HashMap<String, StatsSnapshot>() {
       {
         put("L1_K1", new StatsSnapshot(30L, new HashMap<String, StatsSnapshot>() {
@@ -93,10 +93,10 @@ public class StatsSnapshotTest {
       }
     });
     StatsSnapshot copy = new StatsSnapshot(original);
-    assertTrue(copy != original);
+    assertNotSame(copy, original);
     assertEquals(original, copy);
 
-    assertTrue(copy.getSubMap() != original.getSubMap());
+    assertNotSame(copy.getSubMap(), original.getSubMap());
     assertEquals(original.getSubMap(), copy.getSubMap());
   }
 
@@ -105,7 +105,7 @@ public class StatsSnapshotTest {
    */
   @Test
   public void testUpdateValue() {
-    // Anonymous class with static block initialization, not a good way to create map, it's only for map.
+    // Anonymous class with static block initialization, not a good way to create map, it's only for testing.
     StatsSnapshot snapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
       {
         put("L1_K1", new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
@@ -146,8 +146,8 @@ public class StatsSnapshotTest {
    */
   @Test
   public void testRemoveZeroValueSnapshots() {
-    // Anonymous class with static block initialization, not a good way to create map, it's only for map.
-    StatsSnapshot snapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
+    // Anonymous class with static block initialization, not a good way to create map, it's only for testing.
+    StatsSnapshot snapshot = new StatsSnapshot(370L, new HashMap<String, StatsSnapshot>() {
       {
         put("L1_K1", new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
           {
@@ -155,15 +155,15 @@ public class StatsSnapshotTest {
             put("L2_K2", new StatsSnapshot(0L, null));
           }
         }));
-        put("L1_K2", new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
+        put("L1_K2", new StatsSnapshot(70L, new HashMap<String, StatsSnapshot>() {
           {
             put("L2_K3", new StatsSnapshot(70L, null));
             put("L2_K4", new StatsSnapshot(0L, null));
           }
         }));
-        put("L1_K3", new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
+        put("L1_K3", new StatsSnapshot(300L, new HashMap<String, StatsSnapshot>() {
           {
-            put("L2_K5", new StatsSnapshot(20L, new HashMap<String, StatsSnapshot>() {
+            put("L2_K5", new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
               {
                 put("L3_K1", new StatsSnapshot(0L, null));
                 put("L3_K2", new StatsSnapshot(0L, null));
@@ -174,9 +174,8 @@ public class StatsSnapshotTest {
         }));
       }
     });
-    snapshot.updateValue();
     snapshot.removeZeroValueSnapshots();
-    /* it will be trimed to :
+    /* it will be trimmed to :
        {
          "value": 370,
          "L1_K2": {
@@ -189,7 +188,6 @@ public class StatsSnapshotTest {
          }
        }
      */
-    assertEquals(370, snapshot.getValue());
     assertEquals(2, snapshot.getSubMap().size());
     assertTrue(snapshot.getSubMap().containsKey("L1_K2"));
     assertTrue(snapshot.getSubMap().containsKey("L1_K3"));
