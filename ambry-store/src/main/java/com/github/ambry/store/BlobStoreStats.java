@@ -17,10 +17,10 @@ package com.github.ambry.store;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -78,6 +78,10 @@ class BlobStoreStats implements StoreStats, Closeable {
   private final Condition waitCondition = scanLock.newCondition();
   private final Queue<EntryContext> recentEntryQueue = new LinkedBlockingQueue<>();
   private final AtomicInteger queueEntryCount = new AtomicInteger(0);
+  private final AtomicReference<Pair<Long, Long>> expiredDeleteTombstoneStats =
+      new AtomicReference<>(new Pair<>(0L, 0L));
+  private final AtomicReference<Pair<Long, Long>> permanentDeleteTombstoneStats =
+      new AtomicReference<>(new Pair<>(0L, 0L));
   private final AtomicBoolean enabled = new AtomicBoolean(true);
 
   private volatile boolean isScanning = false;
@@ -214,6 +218,14 @@ class BlobStoreStats implements StoreStats, Closeable {
       }
     }
     return statsSnapshotsByType;
+  }
+
+  @Override
+  public Map<String, Pair<Long, Long>> getDeleteTombstoneStats() {
+    Map<String, Pair<Long, Long>> deleteTombstoneStats = new HashMap<>();
+    deleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE, expiredDeleteTombstoneStats.get());
+    deleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE, permanentDeleteTombstoneStats.get());
+    return deleteTombstoneStats;
   }
 
   /**
@@ -484,6 +496,8 @@ class BlobStoreStats implements StoreStats, Closeable {
             indexSegment.getFile().getName(), storeId);
       }
     }
+    // The remaining index entries in keyFinalStates are DELETE tombstones left by compaction (whose associated PUT is not found)
+    updateDeleteTombstoneStats(keyFinalStates.values());
     metrics.statsOnDemandScanTotalTimeMs.update(time.milliseconds() - startTimeMs, TimeUnit.MILLISECONDS);
     return validDataSizePerContainer;
   }
@@ -521,6 +535,8 @@ class BlobStoreStats implements StoreStats, Closeable {
             indexSegment.getFile().getName(), storeId);
       }
     }
+    // The remaining index entries in keyFinalStates are DELETE tombstones left by compaction (whose associated PUT is not found)
+    updateDeleteTombstoneStats(keyFinalStates.values());
     metrics.statsOnDemandScanTotalTimeMs.update(time.milliseconds() - startTimeMs, TimeUnit.MILLISECONDS);
     if (validSizePerLogSegment.isEmpty()) {
       validSizePerLogSegment.put(index.getStartOffset().getName(), 0L);
@@ -565,7 +581,8 @@ class BlobStoreStats implements StoreStats, Closeable {
               indexValue.getOperationTimeInMs() == Utils.Infinite_Time ? indexSegment.getLastModifiedTimeMs()
                   : indexValue.getOperationTimeInMs();
           keyFinalStates.put(indexEntry.getKey(),
-              new IndexFinalState(indexValue.getFlags(), operationTimeInMs, indexValue.getLifeVersion()));
+              new IndexFinalState(indexValue.getFlags(), operationTimeInMs, indexValue.getLifeVersion(),
+                  indexValue.getSize(), indexValue.getExpiresAtMs()));
         }
         validIndexEntryAction.accept(indexEntry);
       } else if (indexValue.isUndelete()) {
@@ -585,7 +602,8 @@ class BlobStoreStats implements StoreStats, Closeable {
               indexValue.getOperationTimeInMs() == Utils.Infinite_Time ? indexSegment.getLastModifiedTimeMs()
                   : indexValue.getOperationTimeInMs();
           keyFinalStates.put(indexEntry.getKey(),
-              new IndexFinalState(indexValue.getFlags(), operationTimeInMs, indexValue.getLifeVersion()));
+              new IndexFinalState(indexValue.getFlags(), operationTimeInMs, indexValue.getLifeVersion(),
+                  indexValue.getSize(), indexValue.getExpiresAtMs()));
         }
         if (!isExpired(indexValue.getExpiresAtMs(), expiryReferenceTimeInMs)) {
           validIndexEntryAction.accept(indexEntry);
@@ -646,7 +664,8 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
     if (valid && !keyFinalStates.containsKey(key)) {
       keyFinalStates.put(key, new IndexFinalState(ttlUpdateValue.getFlags(), ttlUpdateValue.
-          getOperationTimeInMs(), ttlUpdateValue.getLifeVersion()));
+          getOperationTimeInMs(), ttlUpdateValue.getLifeVersion(), ttlUpdateValue.getSize(),
+          ttlUpdateValue.getExpiresAtMs()));
     }
     // else, valid = true because a ttl update entry with a put in another log segment is considered valid as long as
     // the put still exists (regardless of its validity)
@@ -1012,6 +1031,30 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
+   * A helper method to update stats for both expired and permanent delete tombstones.
+   * @param indexFinalStates a collection of {@link IndexFinalState} containing DELETE tombstone index value only
+   */
+  private void updateDeleteTombstoneStats(Collection<IndexFinalState> indexFinalStates) {
+    long expiredDeleteCount = 0;
+    long permanentDeleteCount = 0;
+    long expiredDeleteTotalSize = 0;
+    long permanentDeleteTotalSize = 0;
+    for (IndexFinalState finalState : indexFinalStates) {
+      if (finalState.isDelete()) {
+        if (finalState.getExpirationTime() != -1) {
+          expiredDeleteCount++;
+          expiredDeleteTotalSize += finalState.getRecordSize();
+        } else {
+          permanentDeleteCount++;
+          permanentDeleteTotalSize += finalState.getRecordSize();
+        }
+      }
+    }
+    expiredDeleteTombstoneStats.set(new Pair<>(expiredDeleteCount, expiredDeleteTotalSize));
+    permanentDeleteTombstoneStats.set(new Pair<>(permanentDeleteCount, permanentDeleteTotalSize));
+  }
+
+  /**
    * Runner that processes new entries buffered in the recentEntryQueue and make appropriate updates to keep the current
    * {@link ScanResults} relevant.
    */
@@ -1138,6 +1181,8 @@ class BlobStoreStats implements StoreStats, Closeable {
               }
             }
           }
+          // The remaining index entries in keyFinalStates are DELETE tombstones left by compaction (whose associated PUT is not found)
+          updateDeleteTombstoneStats(keyFinalStates.values());
         } else {
           newScanResults.updateLogSegmentBaseBucket(index.getStartOffset().getName(), 0L);
         }
@@ -1303,17 +1348,23 @@ class BlobStoreStats implements StoreStats, Closeable {
     private final byte flags;
     private final long operationTime;
     private final short lifeVersion;
+    private final long recordSize;
+    private final long expirationTime;
 
     /**
      * Constructor to construct an {@link IndexFinalState}.
-     * @param flags
-     * @param operationTime
-     * @param lifeVersion
+     * @param flags the {@link IndexValue.Flags} of final {@link IndexValue}
+     * @param operationTime the operation time in ms of final {@link IndexValue}
+     * @param lifeVersion the life version associated with final {@link IndexValue}
+     * @param recordSize the size of message record in the log that associated with final {@link IndexValue}
+     * @param expirationTime the expiration time in ms of final {@link IndexValue}
      */
-    IndexFinalState(byte flags, long operationTime, short lifeVersion) {
+    IndexFinalState(byte flags, long operationTime, short lifeVersion, long recordSize, long expirationTime) {
       this.flags = flags;
       this.operationTime = operationTime;
       this.lifeVersion = lifeVersion;
+      this.recordSize = recordSize;
+      this.expirationTime = expirationTime;
     }
 
     /**
@@ -1328,6 +1379,20 @@ class BlobStoreStats implements StoreStats, Closeable {
      */
     public short getLifeVersion() {
       return lifeVersion;
+    }
+
+    /**
+     * @return size of record in log that associated with final {@link IndexValue}.
+     */
+    public long getRecordSize() {
+      return recordSize;
+    }
+
+    /**
+     * @return the expiration time of the final {@link IndexValue}.
+     */
+    public long getExpirationTime() {
+      return expirationTime;
     }
 
     /**

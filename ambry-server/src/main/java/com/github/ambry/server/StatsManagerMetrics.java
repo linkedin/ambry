@@ -15,8 +15,11 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -26,13 +29,40 @@ class StatsManagerMetrics {
   final Counter statsAggregationFailureCount;
   final Histogram totalFetchAndAggregateTimeMs;
   final Histogram fetchAndAggregateTimePerStoreMs;
+  private final AtomicBoolean deleteStatsGaugeInitialized = new AtomicBoolean(false);
+  private final AtomicReference<StatsManager.AggregatedDeleteTombstoneStats> aggregatedDeleteTombstoneStats;
+  private final MetricRegistry registry;
 
-  StatsManagerMetrics(MetricRegistry registry) {
+  StatsManagerMetrics(MetricRegistry registry,
+      AtomicReference<StatsManager.AggregatedDeleteTombstoneStats> aggregatedDeleteTombstoneStats) {
+    this.registry = registry;
+    this.aggregatedDeleteTombstoneStats = aggregatedDeleteTombstoneStats;
     statsAggregationFailureCount =
         registry.counter(MetricRegistry.name(StatsManager.class, "StatsAggregationFailureCount"));
     totalFetchAndAggregateTimeMs =
         registry.histogram(MetricRegistry.name(StatsManager.class, "TotalFetchAndAggregateTimeMs"));
     fetchAndAggregateTimePerStoreMs =
         registry.histogram(MetricRegistry.name(StatsManager.class, "FetchAndAggregateTimePerStoreMs"));
+  }
+
+  void initDeleteStatsGaugesIfNeeded() {
+    if (deleteStatsGaugeInitialized.compareAndSet(false, true)) {
+      Gauge<Long> expiredDeleteTombstoneCount =
+          () -> aggregatedDeleteTombstoneStats.get().getExpiredDeleteTombstoneCount();
+      registry.register(MetricRegistry.name(StatsManager.class, "ExpiredDeleteTombstoneCount"),
+          expiredDeleteTombstoneCount);
+      Gauge<Long> expiredDeleteTombstoneSize =
+          () -> aggregatedDeleteTombstoneStats.get().getExpiredDeleteTombstoneSize();
+      registry.register(MetricRegistry.name(StatsManager.class, "ExpiredDeleteTombstoneSize"),
+          expiredDeleteTombstoneSize);
+      Gauge<Long> permanentDeleteTombstoneCount =
+          () -> aggregatedDeleteTombstoneStats.get().getPermanentDeleteTombstoneCount();
+      registry.register(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneCount"),
+          permanentDeleteTombstoneCount);
+      Gauge<Long> permanentDeleteTombstoneSize =
+          () -> aggregatedDeleteTombstoneStats.get().getPermanentDeleteTombstoneSize();
+      registry.register(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSize"),
+          permanentDeleteTombstoneSize);
+    }
   }
 }

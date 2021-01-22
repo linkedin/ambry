@@ -1968,6 +1968,7 @@ class PersistentIndex {
         Offset floorOffset = indexSegments.floorKey(offset);
         if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
           revalidatedToken = new StoreFindToken();
+          metrics.journalBasedTokenResetCount.inc();
           logger.info("Revalidated token {} because it is invalid for the index segment map", token);
         }
         break;
@@ -1975,6 +1976,7 @@ class PersistentIndex {
         // An index based token, but the offset is not in the segments, might be caused by the compaction
         if (!indexSegments.containsKey(offset)) {
           revalidatedToken = new StoreFindToken();
+          metrics.indexBasedTokenResetCount.inc();
           logger.info("Revalidated token {} because it is invalid for the index segment map", token);
         }
         break;

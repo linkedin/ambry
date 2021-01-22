@@ -75,6 +75,7 @@ import org.junit.Test;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static com.github.ambry.store.StoreStats.*;
 import static org.junit.Assert.*;
 
 
@@ -97,6 +98,7 @@ public class StatsManagerTest {
   private final List<ReplicaId> replicas;
   private final Random random = new Random();
   private final ObjectMapper mapper = new ObjectMapper();
+  private final Map<String, Pair<Long, Long>> storeDeleteTombstoneStats = new HashMap<>();
   private final StatsManagerConfig statsManagerConfig;
   private VerifiableProperties verifiableProperties;
   private DataNodeId dataNodeId;
@@ -136,6 +138,10 @@ public class StatsManagerTest {
     partitionToSnapshot = new HashMap<>();
     preAggregatedSnapshot = generateRandomSnapshot().get(StatsReportType.ACCOUNT_REPORT);
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
+    storeDeleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE,
+        new Pair<>((long) random.nextInt(100), (long) random.nextInt(1000)));
+    storeDeleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE,
+        new Pair<>((long) random.nextInt(100), (long) random.nextInt(1000)));
     replicas = new ArrayList<>();
     PartitionId partitionId;
     dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
@@ -146,7 +152,7 @@ public class StatsManagerTest {
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
       Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
       snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, baseSliceAndNewSlice.getSecond());
-      StoreStats storeStats = new MockStoreStats(snapshotsByType, false);
+      StoreStats storeStats = new MockStoreStats(snapshotsByType, false, storeDeleteTombstoneStats);
       storeMap.put(partitionId, new MockStore(storeStats));
       partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
       replicas.add(partitionId.getReplicaIds().get(0));
@@ -154,7 +160,7 @@ public class StatsManagerTest {
     Map<StatsReportType, StatsSnapshot> snapshotsByType = new HashMap<>();
     snapshotsByType.put(StatsReportType.ACCOUNT_REPORT, baseSliceAndNewSlice.getFirst());
     partitionId = new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    storeMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false)));
+    storeMap.put(partitionId, new MockStore(new MockStoreStats(snapshotsByType, false, storeDeleteTombstoneStats)));
     partitionToSnapshot.put(partitionId, snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
     storageManager = new MockStorageManager(storeMap, dataNodeId);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
@@ -176,10 +182,11 @@ public class StatsManagerTest {
     for (PartitionId partitionId : storeMap.keySet()) {
       statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
     }
+    statsManager.updateAggregatedDeleteTombstoneStats();
     List<String> unreachableStores = statsManager.examineUnreachablePartitions(unreachablePartitions);
     StatsHeader statsHeader =
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, SystemTime.getInstance().milliseconds(),
-            storeMap.keySet().size(), storeMap.keySet().size(), unreachableStores);
+            storeMap.size(), storeMap.size(), unreachableStores);
     File outputFile = new File(outputFileString);
     if (outputFile.exists()) {
       outputFile.createNewFile();
@@ -187,6 +194,18 @@ public class StatsManagerTest {
     long fileLengthBefore = outputFile.length();
     statsManager.publish(new StatsWrapper(statsHeader, actualSnapshot));
     assertTrue("Failed to publish stats to file", outputFile.length() > fileLengthBefore);
+    // verify aggregated delete tombstone stats
+    StatsManager.AggregatedDeleteTombstoneStats deleteTombstoneStats = statsManager.getAggregatedDeleteTombstoneStats();
+    Pair<Long, Long> expectedExpiredDeleteStats = storeDeleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE);
+    Pair<Long, Long> expectedPermanentDeleteStats = storeDeleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE);
+    assertEquals("Mismatch in expired delete count", storeMap.size() * expectedExpiredDeleteStats.getFirst(),
+        deleteTombstoneStats.getExpiredDeleteTombstoneCount());
+    assertEquals("Mismatch in expired delete size", storeMap.size() * expectedExpiredDeleteStats.getSecond(),
+        deleteTombstoneStats.getExpiredDeleteTombstoneSize());
+    assertEquals("Mismatch in permanent delete count", storeMap.size() * expectedPermanentDeleteStats.getFirst(),
+        deleteTombstoneStats.getPermanentDeleteTombstoneCount());
+    assertEquals("Mismatch in permanent delete size", storeMap.size() * expectedPermanentDeleteStats.getSecond(),
+        deleteTombstoneStats.getPermanentDeleteTombstoneSize());
   }
 
   /**
@@ -803,13 +822,26 @@ public class StatsManagerTest {
   /**
    * Mocked {@link StoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
    */
-  private class MockStoreStats implements StoreStats {
+  private static class MockStoreStats implements StoreStats {
     private final Map<StatsReportType, StatsSnapshot> snapshotsByType;
     private final boolean throwStoreException;
+    private final Map<String, Pair<Long, Long>> deleteTombstoneStats;
 
     MockStoreStats(Map<StatsReportType, StatsSnapshot> snapshotsByType, boolean throwStoreException) {
+      this(snapshotsByType, throwStoreException, null);
+    }
+
+    MockStoreStats(Map<StatsReportType, StatsSnapshot> snapshotsByType, boolean throwStoreException,
+        Map<String, Pair<Long, Long>> deleteTombstoneStats) {
       this.snapshotsByType = snapshotsByType;
       this.throwStoreException = throwStoreException;
+      if (deleteTombstoneStats == null) {
+        this.deleteTombstoneStats = new HashMap<>();
+        this.deleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE, new Pair<>(0L, 0L));
+        this.deleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE, new Pair<>(0L, 0L));
+      } else {
+        this.deleteTombstoneStats = deleteTombstoneStats;
+      }
     }
 
     @Override
@@ -824,6 +856,11 @@ public class StatsManagerTest {
         throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
       }
       return snapshotsByType;
+    }
+
+    @Override
+    public Map<String, Pair<Long, Long>> getDeleteTombstoneStats(){
+      return deleteTombstoneStats;
     }
   }
 }

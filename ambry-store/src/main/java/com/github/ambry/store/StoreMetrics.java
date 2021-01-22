@@ -49,6 +49,8 @@ public class StoreMetrics {
   public final Counter unsealSetError;
   public final Counter sealDoneCount;
   public final Counter unsealDoneCount;
+  public final Counter indexBasedTokenResetCount;
+  public final Counter journalBasedTokenResetCount;
   public final Timer recoveryTime;
   public final Timer findTime;
   public final Timer indexFlushTime;
@@ -131,6 +133,10 @@ public class StoreMetrics {
     unsealSetError = registry.counter(MetricRegistry.name(BlobStore.class, name + "UnsealSetError"));
     sealDoneCount = registry.counter(MetricRegistry.name(BlobStore.class, name + "SealDoneCount"));
     unsealDoneCount = registry.counter(MetricRegistry.name(BlobStore.class, name + "UnsealDoneCount"));
+    indexBasedTokenResetCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IndexBasedTokenResetCount"));
+    journalBasedTokenResetCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "JournalBasedTokenResetCount"));
     recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexRecoveryTime"));
     findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFindTime"));
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));

@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.github.ambry.store.StoreStats.*;
 import static com.github.ambry.store.StoreTestUtils.*;
 import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
@@ -845,13 +846,16 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
    *                                cleaned up. All other use cases should use {@code null}.
+   * @param seenPuts the PUTs in previous log segments seen so far.
+   * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
    * @return the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
    */
   long getValidDataSizeForLogSegment(LogSegment segment, long deleteReferenceTimeMs, long expiryReferenceTimeMs,
-      FileSpan fileSpanUnderCompaction) {
+      FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     List<IndexEntry> validEntries =
         getValidIndexEntriesForLogSegment(segment, deleteReferenceTimeMs, expiryReferenceTimeMs,
-            fileSpanUnderCompaction);
+            fileSpanUnderCompaction, seenPuts, deleteTombstoneStats);
     long size = 0;
     for (IndexEntry indexEntry : validEntries) {
       size += indexEntry.getValue().getSize();
@@ -866,16 +870,19 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
    *                                cleaned up. All other use cases should use {@code null}.
+   * @param seenPuts the PUTs in previous segments seen so far.
+   * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
    * @return all the valid index entries in the {@code segment}.
    */
   List<IndexEntry> getValidIndexEntriesForLogSegment(LogSegment segment, long deleteReferenceTimeMs,
-      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction) {
+      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     List<IndexEntry> validEntries = new ArrayList<>();
     Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
     while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
       validEntries.addAll(
           getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, deleteReferenceTimeMs, expiryReferenceTimeMs,
-              fileSpanUnderCompaction));
+              fileSpanUnderCompaction, seenPuts, deleteTombstoneStats));
       indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
     }
     return validEntries;
@@ -1344,9 +1351,10 @@ class CuratedLogIndexState {
     addDeleteEntry(idToDelete);
     idToDelete = getIdToDeleteFromIndexSegment(fourthIndexSegmentStartOffset, false);
     addDeleteEntry(idToDelete);
-    // 1 DELETE for a PUT entry that does not exist
+    // 1 DELETE for a PUT entry that does not exist (Make this DELETE carry expiration time to help test expired
+    // deletes. Permanent DELETE will be mocked by subsequent DELETE record with TTL update flag.)
     MockId uniqueId = getUniqueId();
-    addDeleteEntry(uniqueId, new MessageInfo(uniqueId, Integer.MAX_VALUE, Utils.Infinite_Time, uniqueId.getAccountId(),
+    addDeleteEntry(uniqueId, new MessageInfo(uniqueId, Integer.MAX_VALUE, time.milliseconds(), uniqueId.getAccountId(),
         uniqueId.getContainerId(), time.milliseconds()));
     // Temporary code while other classes are upgraded to understand TTL updates. Once other classes do, the
     // variable "addTtlUpdates" will be dropped
@@ -1557,10 +1565,13 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will
    *                                cleaned up. All other use cases should use {@code null}.
+   * @param seenPuts the PUTs in previous segments seen so far.
+   * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
    * @return all the valid index entries valid in the index segment with start offset {@code indexSegmentStartOffset}.
    */
   List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
-      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction) {
+      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     List<IndexEntry> validEntries = new ArrayList<>();
     if (referenceIndex.containsKey(indexSegmentStartOffset)) {
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset)
@@ -1580,6 +1591,16 @@ class CuratedLogIndexState {
             if (latestValue.isDelete() && latestValue.getLifeVersion() == currentValue.getLifeVersion()) {
               validEntries.add(currentEntry);
             }
+            // if this is a delete tombstone left by compaction, do some counting.
+            if (!seenPuts.contains(key)) {
+              if (currentValue.getExpiresAtMs() == -1 || currentValue.isTtlUpdate()) {
+                deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
+                deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
+              } else {
+                deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
+                deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
+              }
+            }
           } else if (currentValue.isTtlUpdate()) {
             IndexValue putValue = getExpectedValue(key, EnumSet.of(PersistentIndex.IndexEntryType.PUT), null);
             if (putValue == null) {
@@ -1595,6 +1616,8 @@ class CuratedLogIndexState {
               validEntries.add(currentEntry);
             }
           } else {
+            // current index value PUT
+            seenPuts.add(key);
             if (!isExpiredAt(key, expiryReferenceTimeMs)) {
               if (latestValue.isPut()) {
                 validEntries.add(new IndexEntry(key, currentValue));
@@ -1650,6 +1673,16 @@ class CuratedLogIndexState {
     final AtomicLong size = new AtomicLong(0);
     values.forEach(value -> size.addAndGet(value.getSize()));
     return size.get();
+  }
+
+  /**
+   * @return generated empty delete tombstone stats (will be populated afterwards).
+   */
+  static Map<String, Pair<AtomicLong, AtomicLong>> generateDeleteTombstoneStats() {
+    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = new HashMap<>();
+    deleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE, new Pair<>(new AtomicLong(0), new AtomicLong(0)));
+    deleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE, new Pair<>(new AtomicLong(0), new AtomicLong(0)));
+    return deleteTombstoneStats;
   }
 
   /**

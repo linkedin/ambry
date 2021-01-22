@@ -27,6 +27,8 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreStats;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -43,12 +45,14 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
+import static com.github.ambry.store.StoreStats.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -69,6 +73,12 @@ class StatsManager {
   private final AccountStatsMySqlStore accountStatsMySqlStore;
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
+  private long expiredDeleteTombstoneCount = 0;
+  private long expiredDeleteTombstoneTotalSize = 0;
+  private long permanentDeleteTombstoneCount = 0;
+  private long permanentDeleteTombstoneTotalSize = 0;
+  private AtomicReference<AggregatedDeleteTombstoneStats> aggregatedDeleteTombstoneStats =
+      new AtomicReference<>(new AggregatedDeleteTombstoneStats());
   final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
 
   /**
@@ -88,7 +98,7 @@ class StatsManager {
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
-    metrics = new StatsManagerMetrics(registry);
+    metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
@@ -155,10 +165,13 @@ class StatsManager {
     } else {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
+        StoreStats storeStats = store.getStoreStats();
         Map<StatsReportType, StatsSnapshot> snapshotsByType =
-            store.getStoreStats().getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
+            storeStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds());
         aggregatedSnapshot.getSubMap().put(partitionId.toString(), snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
+        // update delete tombstone stats
+        updateDeleteTombstoneStats(storeStats);
       } catch (StoreException e) {
         unreachablePartitions.add(partitionId);
       }
@@ -316,6 +329,81 @@ class StatsManager {
   }
 
   /**
+   * Exposed for testing.
+   * @return aggregated delete tombstone stats.
+   */
+  AggregatedDeleteTombstoneStats getAggregatedDeleteTombstoneStats(){
+    return aggregatedDeleteTombstoneStats.get();
+  }
+
+  /**
+   * Update delete tombstone related stats from given {@link StoreStats}
+   * @param storeStats the {@link StoreStats} that contains delete tombstone stats of single store.
+   */
+  private void updateDeleteTombstoneStats(StoreStats storeStats) {
+    Map<String, Pair<Long, Long>> storeDeleteStats = storeStats.getDeleteTombstoneStats();
+    Pair<Long, Long> expiredDeleteTombstoneStats = storeDeleteStats.get(EXPIRED_DELETE_TOMBSTONE);
+    Pair<Long, Long> permanentDeleteTombstoneStats = storeDeleteStats.get(PERMANENT_DELETE_TOMBSTONE);
+    expiredDeleteTombstoneCount += expiredDeleteTombstoneStats.getFirst();
+    expiredDeleteTombstoneTotalSize += expiredDeleteTombstoneStats.getSecond();
+    permanentDeleteTombstoneCount += permanentDeleteTombstoneStats.getFirst();
+    permanentDeleteTombstoneTotalSize += permanentDeleteTombstoneStats.getSecond();
+  }
+
+  /**
+   * Update the aggregated delete tombstone stats by atomic switch.
+   */
+  void updateAggregatedDeleteTombstoneStats() {
+    aggregatedDeleteTombstoneStats.set(
+        new AggregatedDeleteTombstoneStats(expiredDeleteTombstoneCount, expiredDeleteTombstoneTotalSize,
+            permanentDeleteTombstoneCount, permanentDeleteTombstoneTotalSize));
+  }
+
+  /**
+   * Reset delete tombstone related stats.
+   */
+  private void resetDeleteTombstoneStats() {
+    expiredDeleteTombstoneCount = 0;
+    expiredDeleteTombstoneTotalSize = 0;
+    permanentDeleteTombstoneCount = 0;
+    permanentDeleteTombstoneTotalSize = 0;
+  }
+
+  /**
+   * A class to hold aggregated delete tombstone stats result. This is used by {@link StatsManagerMetrics}.
+   */
+  static class AggregatedDeleteTombstoneStats {
+    Pair<Long, Long> aggregatedExpiredDeleteTombstoneStats;
+    Pair<Long, Long> aggregatedPermanentDeleteTombstoneStats;
+
+    AggregatedDeleteTombstoneStats() {
+      this(0, 0, 0, 0);
+    }
+
+    AggregatedDeleteTombstoneStats(long expiredDeleteCount, long expiredDeleteSize, long permanentDeleteCount,
+        long permanentDeleteSize) {
+      aggregatedExpiredDeleteTombstoneStats = new Pair<>(expiredDeleteCount, expiredDeleteSize);
+      aggregatedPermanentDeleteTombstoneStats = new Pair<>(permanentDeleteCount, permanentDeleteSize);
+    }
+
+    long getExpiredDeleteTombstoneCount() {
+      return aggregatedExpiredDeleteTombstoneStats.getFirst();
+    }
+
+    long getExpiredDeleteTombstoneSize() {
+      return aggregatedExpiredDeleteTombstoneStats.getSecond();
+    }
+
+    long getPermanentDeleteTombstoneCount() {
+      return aggregatedPermanentDeleteTombstoneStats.getFirst();
+    }
+
+    long getPermanentDeleteTombstoneSize() {
+      return aggregatedPermanentDeleteTombstoneStats.getSecond();
+    }
+  }
+
+  /**
    * Runnable class that collects, aggregate and publish stats via methods in StatsManager.
    */
   private class StatsAggregator implements Runnable {
@@ -330,6 +418,7 @@ class StatsManager {
     public void run() {
       logger.info("Aggregating stats for local report");
       try {
+        resetDeleteTombstoneStats();
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
         StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, new HashMap<>());
         List<PartitionId> unreachablePartitions = new ArrayList<>();
@@ -341,6 +430,8 @@ class StatsManager {
         }
         aggregatedSnapshot.updateValue();
         List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
+        updateAggregatedDeleteTombstoneStats();
+        metrics.initDeleteStatsGaugesIfNeeded();
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
           StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
