@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.util.Comparator;
+import java.util.Objects;
 
 
 /**
@@ -30,7 +31,6 @@ import java.util.Comparator;
  * handle the new and old versions.
  */
 class LogSegmentNameHelper {
-  static final String SUFFIX = BlobStore.SEPARATOR + "log";
   /**
    * {@link Comparator} for two log segment names.
    */
@@ -58,12 +58,9 @@ class LogSegmentNameHelper {
   static final FilenameFilter LOG_FILE_FILTER = new FilenameFilter() {
     @Override
     public boolean accept(File dir, String name) {
-      return name.endsWith(LogSegmentNameHelper.SUFFIX) || name.equals(SINGLE_SEGMENT_LOG_FILE_NAME);
+      return name.endsWith(LogSegmentName.SUFFIX) || name.equals(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     }
   };
-
-  // for backwards compatibility, if the log contains only a single segment, the segment will have a special name.
-  private static final String SINGLE_SEGMENT_LOG_FILE_NAME = "log_current";
 
   /**
    * @param name the name of the log segment.
@@ -101,7 +98,7 @@ class LogSegmentNameHelper {
    * @return the name of a log segment with position {@code pos} and generation number {@code gen}.
    */
   static String getName(long pos, long gen) {
-    return pos + BlobStore.SEPARATOR + gen;
+    return LogSegmentName.fromPositionAndGeneration(pos, gen).toString();
   }
 
   /**
@@ -110,8 +107,7 @@ class LogSegmentNameHelper {
    * generation of the returned name will start from the lowest generation number.
    */
   static String getNextPositionName(String name) {
-    long pos = getPosition(name);
-    return getName(pos + 1, 0);
+    return LogSegmentName.fromString(name).getNextPositionName().toString();
   }
 
   /**
@@ -119,9 +115,7 @@ class LogSegmentNameHelper {
    * @return what should be the name of the log segment that is exactly one generation higher than {@code name}.
    */
   static String getNextGenerationName(String name) {
-    long pos = getPosition(name);
-    long gen = getGeneration(name);
-    return getName(pos, gen + 1);
+    return LogSegmentName.fromString(name).getNextGenerationName().toString();
   }
 
   /**
@@ -129,7 +123,7 @@ class LogSegmentNameHelper {
    * @return what should be the name of the first segment.
    */
   static String generateFirstSegmentName(boolean isLogSegmented) {
-    return isLogSegmented ? getName(0, 0) : "";
+    return LogSegmentName.generateFirstSegmentName(isLogSegmented).toString();
   }
 
   /**
@@ -137,10 +131,7 @@ class LogSegmentNameHelper {
    * @return the name of the file that backs the log segment.
    */
   static String nameToFilename(String name) {
-    if (name.isEmpty()) {
-      return SINGLE_SEGMENT_LOG_FILE_NAME;
-    }
-    return name + SUFFIX;
+    return LogSegmentName.fromString(name).toFilename();
   }
 
   /**
@@ -148,24 +139,7 @@ class LogSegmentNameHelper {
    * @return the name of the log segment.
    */
   static String nameFromFilename(String filename) {
-    if (filename.equals(SINGLE_SEGMENT_LOG_FILE_NAME)) {
-      return "";
-    }
-    if (!filename.endsWith(SUFFIX)) {
-      throw new IllegalArgumentException("The filename of the log segment does not end with [" + SUFFIX + "]");
-    }
-    String name = filename.substring(0, filename.length() - SUFFIX.length());
-    validate(name);
-    return name;
-  }
-
-  /**
-   * Validates that the name provided is a valid log segment name.
-   * @param name the log segment name.
-   */
-  private static void validate(String name) {
-    if (!name.equals(getName(getPosition(name), getGeneration(name)))) {
-      throw new IllegalArgumentException("Invalid name: " + name);
-    }
+    return LogSegmentName.fromFilename(filename).toString();
   }
 }
+

@@ -1781,7 +1781,7 @@ public class BlobStoreTest {
 
     // try adding fake swap segment log segment.
     File tempFile = File.createTempFile("sample-swap",
-        LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, tempDir);
+        LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, tempDir);
     doDiskSpaceRequirementsTest(segmentsAllocated, 1);
     assertTrue("Could not delete temp file", tempFile.delete());
 
@@ -1789,9 +1789,9 @@ public class BlobStoreTest {
     segmentsAllocated += 1;
     doDiskSpaceRequirementsTest(segmentsAllocated, 0);
 
-    File.createTempFile("sample-swap", LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+    File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
         tempDir).deleteOnExit();
-    File.createTempFile("sample-swap", LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+    File.createTempFile("sample-swap", LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
         tempDir).deleteOnExit();
     addCuratedData(SEGMENT_CAPACITY, true);
     segmentsAllocated += 1;
@@ -2128,7 +2128,7 @@ public class BlobStoreTest {
 
     // put a swap segment into store dir
     File tempFile = File.createTempFile("sample-swap",
-        LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, storeDir);
+        LogSegmentName.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, storeDir);
     // test success case (swap segment is returned and store dir is correctly deleted)
     assertEquals("Swap reserve dir should be empty initially", 0,
         diskAllocator.getSwapReserveFileMap().getFileSizeSet().size());

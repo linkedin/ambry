@@ -59,7 +59,7 @@ class BlobStoreCompactor {
   static final String TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME = "compactor_clean_shutdown";
   static final String TEMP_LOG_SEGMENT_NAME_SUFFIX = BlobStore.SEPARATOR + "temp";
   static final FilenameFilter TEMP_LOG_SEGMENTS_FILTER = new FilenameFilter() {
-    private final String SUFFIX = LogSegmentNameHelper.SUFFIX + TEMP_LOG_SEGMENT_NAME_SUFFIX;
+    private final String SUFFIX = LogSegmentName.SUFFIX + TEMP_LOG_SEGMENT_NAME_SUFFIX;
 
     @Override
     public boolean accept(File dir, String name) {
