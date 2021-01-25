@@ -85,9 +85,16 @@ class LogSegmentName implements Comparable<LogSegmentName> {
    * @param name the name string to parse.
    */
   private LogSegmentName(String name) {
-    int separatorIndex = name.indexOf(BlobStore.SEPARATOR);
-    this.position = Long.parseLong(name.substring(0, separatorIndex));
-    this.generation = Long.parseLong(name.substring(name.indexOf(BlobStore.SEPARATOR) + 1));
+    try {
+      int separatorIndex = name.indexOf(BlobStore.SEPARATOR);
+      if (separatorIndex == -1) {
+        throw new IllegalArgumentException("Separator char not found");
+      }
+      this.position = Long.parseLong(name.substring(0, separatorIndex));
+      this.generation = Long.parseLong(name.substring(name.indexOf(BlobStore.SEPARATOR) + 1));
+    } catch (RuntimeException e) {
+      throw new IllegalArgumentException("Could not parse " + name + " as a log segment name", e);
+    }
     this.name = name;
   }
 

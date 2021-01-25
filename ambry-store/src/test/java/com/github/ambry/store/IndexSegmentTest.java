@@ -1307,7 +1307,7 @@ public class IndexSegmentTest {
       IndexValue value;
       if (values == null) {
         // create an index value with a random log segment name
-        value = IndexValueTest.getIndexValue(1, new Offset(TestUtils.getRandomString(1), 0), Utils.Infinite_Time,
+        value = IndexValueTest.getIndexValue(1, new Offset(generateRandomLogSegmentName(), 0), Utils.Infinite_Time,
             time.milliseconds(), id.getAccountId(), id.getContainerId(), (short) 1, formatVersion);
       } else if (values.last().isDelete()) {
         throw new IllegalArgumentException(id + " is deleted");
@@ -1343,7 +1343,7 @@ public class IndexSegmentTest {
       IndexValue value;
       if (values == null) {
         // create an index value with a random log segment name
-        value = IndexValueTest.getIndexValue(1, new Offset(TestUtils.getRandomString(1), 0), Utils.Infinite_Time,
+        value = IndexValueTest.getIndexValue(1, new Offset(generateRandomLogSegmentName(), 0), Utils.Infinite_Time,
             time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
             (short) 0, formatVersion);
       } else if (values.last().isDelete()) {
