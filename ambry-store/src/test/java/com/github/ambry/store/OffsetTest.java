@@ -63,9 +63,9 @@ public class OffsetTest {
   @Test
   public void offsetBadInputTest() throws IOException {
     doBadOffsetInputTest(null, 10);
-    doBadOffsetInputTest("1_11_log", -1);
+    doBadOffsetInputTest("1_11", -1);
 
-    Offset offset = new Offset("1_11_log", 10);
+    Offset offset = new Offset("1_11", 10);
     byte[] serialized = offset.toBytes();
     // mess with a version byte
     serialized[0] = serialized[0] == (byte) 1 ? (byte) 2 : (byte) 1;
