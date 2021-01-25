@@ -16,6 +16,7 @@ package com.github.ambry.commons;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,29 +43,31 @@ public class RetryExecutor {
    * Starts retriable function call with specific {@link RetryPolicy} and callback function.
    * @param policy The {@link RetryPolicy} to schedule retry.
    * @param call The function call that will be executed and retried with failure.
+   * @param isRetriable user defined {@link Predicate} for retry or not when exception happen.
    * @param userCallback The user defined {@link Callback} to be executed after success or if all retry attempts failed.
    */
-  public <T> void runWithRetries(RetryPolicy policy, Consumer<Callback<T>> call, Callback<T> userCallback) {
-    recursiveAsyncRetry(call, policy, userCallback, 0);
+  public <T> void runWithRetries(RetryPolicy policy, Consumer<Callback<T>> call, Predicate<Throwable> isRetriable, Callback<T> userCallback) {
+    recursiveAsyncRetry(call, isRetriable, policy, userCallback, 0);
   }
 
   /**
    * Recursively retrying on the task call with specific policy and user defined callback.
    * @param call The function call will be executed and retried with failure.
+   * @param isRetriable user defined {@link Predicate} for retry or not when exception happen.
    * @param policy The {@link RetryPolicy} to schedule retrying.
    * @param userCallback The user defined {@link Callback} to be executed after all retry attempts failed.
    * @param attempts The number of retries has been attempted.
    */
-  private <T> void recursiveAsyncRetry(Consumer<Callback<T>> call, RetryPolicy policy, Callback<T> userCallback,
+  private <T> void recursiveAsyncRetry(Consumer<Callback<T>> call, Predicate<Throwable> isRetriable, RetryPolicy policy, Callback<T> userCallback,
       int attempts) {
     call.accept((result, exception) -> {
       if (exception != null) {
         int currAttempts = attempts + 1;
-        if (currAttempts < policy.maxAttempts() && isRetriable(exception)) {
+        if (currAttempts < policy.maxAttempts() && isRetriable.test(exception)) {
           int waitTimeMs = policy.waitTimeMs(currAttempts);
           logger.info("{} of {} attempts failed, will keep retrying after a {} ms backoff. exception='{}'",
               currAttempts, policy.maxAttempts(), waitTimeMs, exception);
-          scheduler.schedule(() -> recursiveAsyncRetry(call, policy, userCallback, currAttempts), waitTimeMs,
+          scheduler.schedule(() -> recursiveAsyncRetry(call, isRetriable, policy, userCallback, currAttempts), waitTimeMs,
               TimeUnit.MILLISECONDS);
         } else {
           logger.info("{} of {} attempts failed, completing operation. exception='{}'", currAttempts,
@@ -75,13 +78,5 @@ public class RetryExecutor {
         userCallback.onCompletion(result, null);
       }
     });
-  }
-
-  /**
-   * Decide on a specific {@link Throwable} can be retried or not.
-   * @param throwable The {@link Throwable} thrown in execution of retrying.
-   */
-  private static boolean isRetriable(Throwable throwable) {
-    return true;
   }
 }

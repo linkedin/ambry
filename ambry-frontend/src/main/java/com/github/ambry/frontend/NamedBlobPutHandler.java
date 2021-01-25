@@ -33,12 +33,17 @@ import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
@@ -46,6 +51,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.router.RouterErrorCode.*;
 
 
 /**
@@ -79,6 +85,8 @@ public class NamedBlobPutHandler {
   private final String clusterName;
   private final RetryPolicy retryPolicy = RetryPolicies.defaultPolicy();
   private final RetryExecutor retryExecutor = new RetryExecutor(Executors.newScheduledThreadPool(2));
+  private final Set<RouterErrorCode> retriableRouterError = new HashSet<RouterErrorCode>(
+      Arrays.asList(AmbryUnavailable, ChannelClosed, UnexpectedInternalError, OperationTimedOut));
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
@@ -178,7 +186,7 @@ public class NamedBlobPutHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          if (RestUtils.getTtlFromRequestHeader(restRequest.getArgs()) == Utils.Infinite_Time) {
+          if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
             // For blob with infinite time, the procedure is putBlob, record insert to database, and ttlUpdate.
             blobInfo.getBlobProperties().setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
           }
@@ -236,12 +244,34 @@ public class NamedBlobPutHandler {
     private Callback<String> idConverterCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, blobId -> {
         if (RestUtils.getTtlFromRequestHeader(restRequest.getArgs()) == Utils.Infinite_Time) {
+          // Do ttl update with retryExecutor
           String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-          router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, routerTtlUpdateCallback(blobInfo));
+          retryExecutor.runWithRetries(retryPolicy, callback -> updateBlobTtl(blobId, serviceId, callback),
+              throwable -> throwable instanceof RouterException && retriableRouterError.contains(
+                  ((RouterException) throwable).getErrorCode()), routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
         }
+      }, uri, LOGGER, finalCallback);
+    }
+
+    /*
+     * Wrapper method to call {@link Router#updateBlobTtl}.
+     */
+    private void updateBlobTtl(String blobId, String serviceId, Callback<Void> callback) {
+      router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback);
+    }
+
+    /**
+     * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
+     */
+    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, blobId -> {
+        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }
 
@@ -378,18 +408,6 @@ public class NamedBlobPutHandler {
             + stitchedBlobProperties.getAccountId() + ", " + stitchedBlobProperties.getContainerId() + ")",
             RestServiceErrorCode.BadRequest);
       }
-    }
-
-    /**
-     * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
-     * request time security checks that rely on the request being fully parsed and any additional arguments set.
-     * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
-     */
-    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, blobId -> {
-        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
-      }, uri, LOGGER, finalCallback);
     }
   }
 }
