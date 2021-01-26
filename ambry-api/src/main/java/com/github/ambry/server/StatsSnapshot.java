@@ -154,7 +154,7 @@ public class StatsSnapshot {
           .stream()
           .filter(ent -> ent.getValue().getValue() != 0)
           .peek(ent -> ent.getValue().removeZeroValueSnapshots())
-          .collect(Collectors.toMap(ent -> ent.getKey(), ent -> ent.getValue()));
+          .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
   }
 }

@@ -16,6 +16,7 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -35,12 +36,14 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -114,8 +117,8 @@ class StatsManager {
     this.accountStatsMySqlStore = accountStatsMySqlStore;
     Function<List<String>, List<Short>> convertAccountNamesToIds = names -> names.stream()
         .map(name -> accountService.getAccountByName(name))
-        .filter(account -> account != null)
-        .map(account -> account.getId())
+        .filter(Objects::nonNull)
+        .map(Account::getId)
         .collect(Collectors.toList());
     this.healthReportExcludeAccountIds = convertAccountNamesToIds.apply(config.healthReportExcludeAccountNames);
     this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
@@ -142,6 +145,22 @@ class StatsManager {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, 30, TimeUnit.SECONDS);
     }
+  }
+
+  /**
+   * Return the {@link #healthReportExcludeAccountIds}. Only for test.
+   * @return
+   */
+  List<Short> getHealthReportExcludeAccountIds() {
+    return Collections.unmodifiableList(healthReportExcludeAccountIds);
+  }
+
+  /**
+   * Return the {@link #publishExcludeAccountIds}. Only for test.
+   * @return
+   */
+  List<Short> getPublishExcludeAccountIds() {
+    return Collections.unmodifiableList(publishExcludeAccountIds);
   }
 
   /**
