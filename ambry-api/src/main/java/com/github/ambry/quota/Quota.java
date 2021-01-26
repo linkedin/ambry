@@ -14,7 +14,9 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.quota.storage.QuotaOperation;
+import java.util.Collections;
 import java.util.Set;
+
 
 /**
  * The quota for a particular Ambry resource.
@@ -66,6 +68,6 @@ public class Quota<T> {
    * @return Set of {@link QuotaOperation}s
    */
   public Set<QuotaOperation> getQuotaOperations() {
-    return quotaOperations;
+    return Collections.unmodifiableSet(quotaOperations);
   }
 }

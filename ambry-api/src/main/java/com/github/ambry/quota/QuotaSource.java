@@ -27,5 +27,13 @@ public interface QuotaSource {
    * @param quotaOperation {@link QuotaOperation} object.
    * @param quotaMetric {@link QuotaMetric} object.
    */
-  Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric);
+  Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric);
+
+  /**
+   * Get the {@link Quota} for host resource.
+   * @param quotaResource {@link QuotaResource} object.
+   * @param quotaMetric {@link QuotaMetric} object.
+   * @return
+   */
+  Quota getHostQuota(QuotaResource quotaResource, QuotaMetric quotaMetric);
 }

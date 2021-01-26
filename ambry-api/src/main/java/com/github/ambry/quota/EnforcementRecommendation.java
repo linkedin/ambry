@@ -15,7 +15,7 @@ package com.github.ambry.quota;
 
 /**
  * Interface representing enforcement recommendation made by a {@link RequestQuotaEnforcer} or {@link HostQuotaEnforcer}
- * implementation. Quota Source implementations can use this object to provide a boolean recommendation to throttle the
+ * implementation. QuotaEnforcer implementations can use this object to provide a boolean recommendation to throttle the
  * request or not, along with usage information like usage percentage, name of the enforcer that made this recommendation,
  * the recommended http status (indicating whether or not throttled request should be retried) and cost to serve the request.
  */

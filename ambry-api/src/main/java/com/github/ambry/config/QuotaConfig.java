@@ -40,10 +40,16 @@ public class QuotaConfig {
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public StorageQuotaConfig storageQuotaConfig;
 
+  /**
+   * Config to enable throttling on customer's account or container.
+   */
   @Config(REQUEST_QUOTA_THROTTLING_ENABLED)
   @Default("false")
   public boolean requestQuotaThrottlingEnabled;
 
+  /**
+   * Config to enable throttling for host's hardware resources quota.
+   */
   @Config(HOST_QUOTA_THROTTLING_ENABLED)
   @Default("false")
   public boolean hostQuotaThrottlingEnabled;
@@ -59,8 +65,8 @@ public class QuotaConfig {
    *       "source": "com.github.ambry.quota.QuotaSource"
    *     },
    *     {
-   *       "enforcer":"com.github.ambry.quota.QuotaEnforcer",
-   *       "source": "com.github.ambry.quota.QuotaSource"
+   *       "enforcer":"com.github.ambry.quota.AnotherQuotaEnforcer",
+   *       "source": "com.github.ambry.quota.AnotherQuotaSource"
    *     }
    *   ]
    * }

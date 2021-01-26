@@ -17,7 +17,7 @@ package com.github.ambry.quota;
  * Resource for which quota is specified for enforced.
  */
 public class QuotaResource {
-  private final String resourceId;
+  private final String resourceId; // unique identifier for Ambry account, container or host.
   private final QuotaResourceType quotaResourceType;
 
   /**
@@ -42,5 +42,14 @@ public class QuotaResource {
    */
   public QuotaResourceType getQuotaResourceType() {
     return quotaResourceType;
+  }
+
+  /**
+   * Type of Ambry resource for which quota can be applied.
+   */
+  enum QuotaResourceType {
+    AMBRY_ACCOUNT,
+    AMBRY_CONTAINER,
+    AMBRY_HOST
   }
 }

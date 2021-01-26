@@ -14,7 +14,8 @@
 package com.github.ambry.quota;
 
 /**
- * Enum representing various types of quota metrics supported.
+ * Enum representing various types of quota metrics supported. It would be used by {@link QuotaSource} to get the
+ * appropriate quota values.
  */
 public enum QuotaMetric {
   CAPACITY_UNIT,

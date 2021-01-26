@@ -17,6 +17,9 @@ package com.github.ambry.quota;
  * {@link RequestQuotaEnforcer} implementation for test that always servers requests.
  */
 public class ServeHostQuotaEnforcer implements HostQuotaEnforcer {
+  private static final float DUMMY_SERVABLE_USAGE_PERCENTAGE = 10;
+  private static final int SERVER_HTTP_STATUS = 200;
+  private static final boolean SHOULD_THROTTLE = false;
 
   @Override
   public void init() {
@@ -24,7 +27,8 @@ public class ServeHostQuotaEnforcer implements HostQuotaEnforcer {
 
   @Override
   public EnforcementRecommendation recommend() {
-    return new ServeEnforcementRecommendation(ServeHostQuotaEnforcer.class.getSimpleName());
+    return new AmbryEnforcementRecommendation(SHOULD_THROTTLE, DUMMY_SERVABLE_USAGE_PERCENTAGE,
+        ServeHostQuotaEnforcer.class.getSimpleName(), SERVER_HTTP_STATUS, null);
   }
 
   @Override

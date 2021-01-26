@@ -21,6 +21,9 @@ import com.github.ambry.rest.RestRequest;
  * {@link RequestQuotaEnforcer} implementation for test that always rejects requests.
  */
 public class RejectRequestQuotaEnforcer implements RequestQuotaEnforcer {
+  private static final float DUMMY_REJECTABLE_USAGE_PERCENTAGE = 101;
+  private static final int REJECT_HTTP_STATUS = 429;
+  private static final boolean SHOULD_THROTTLE = true;
   private final QuotaSource quotaSource;
 
   /**
@@ -37,12 +40,14 @@ public class RejectRequestQuotaEnforcer implements RequestQuotaEnforcer {
 
   @Override
   public EnforcementRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo) {
-    return new RejectEnforcementRecommendation(RejectRequestQuotaEnforcer.class.getSimpleName());
+    return new AmbryEnforcementRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE,
+        RejectRequestQuotaEnforcer.class.getSimpleName(), REJECT_HTTP_STATUS, null);
   }
 
   @Override
   public EnforcementRecommendation recommend(RestRequest restRequest) {
-    return new RejectEnforcementRecommendation(RejectRequestQuotaEnforcer.class.getSimpleName());
+    return new AmbryEnforcementRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE,
+        RejectRequestQuotaEnforcer.class.getSimpleName(), REJECT_HTTP_STATUS, null);
   }
 
   @Override
