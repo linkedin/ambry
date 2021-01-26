@@ -26,7 +26,7 @@ public class ServeHostQuotaEnforcer implements HostQuotaEnforcer {
   }
 
   @Override
-  public EnforcementRecommendation recommend() {
+  public EnforcementRecommendation recommend(String hostName) {
     return new AmbryEnforcementRecommendation(SHOULD_THROTTLE, DUMMY_SERVABLE_USAGE_PERCENTAGE,
         ServeHostQuotaEnforcer.class.getSimpleName(), SERVER_HTTP_STATUS, null);
   }

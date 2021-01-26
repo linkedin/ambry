@@ -76,7 +76,7 @@ public class AmbryQuotaManager implements QuotaManager {
     boolean shouldThrottle = true;
     Iterator<HostQuotaEnforcer> quotaEnforcerIterator = hostQuotaEnforcers.iterator();
     while (quotaEnforcerIterator.hasNext()) {
-      EnforcementRecommendation enforcementRecommendation = quotaEnforcerIterator.next().recommend();
+      EnforcementRecommendation enforcementRecommendation = quotaEnforcerIterator.next().recommend(null);
       shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
       enforcementRecommendations.add(enforcementRecommendation);
     }

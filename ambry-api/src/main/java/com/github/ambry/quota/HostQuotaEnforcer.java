@@ -25,10 +25,11 @@ public interface HostQuotaEnforcer {
   void init();
 
   /**
-   * Makes an {@link EnforcementRecommendation} based on quota on host load.
+   * Makes an {@link EnforcementRecommendation} based on load on host resources.
    * @return EnforcementRecommendation object with the recommendation.
+   * @param hostName host name of the host where this is being enforced.
    */
-  EnforcementRecommendation recommend();
+  EnforcementRecommendation recommend(String hostName);
 
   /**
    * Shutdown the {@link HostQuotaEnforcer} and perform any cleanup.

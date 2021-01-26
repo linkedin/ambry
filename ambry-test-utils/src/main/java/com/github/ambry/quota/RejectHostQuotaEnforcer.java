@@ -26,7 +26,7 @@ public class RejectHostQuotaEnforcer implements HostQuotaEnforcer {
   }
 
   @Override
-  public EnforcementRecommendation recommend() {
+  public EnforcementRecommendation recommend(String hostName) {
     return new AmbryEnforcementRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE,
         RejectRequestQuotaEnforcer.class.getSimpleName(), REJECT_HTTP_STATUS, null);
   }
