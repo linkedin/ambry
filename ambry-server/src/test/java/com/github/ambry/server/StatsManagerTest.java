@@ -174,6 +174,10 @@ public class StatsManagerTest {
             inMemoryAccountService);
   }
 
+  /**
+   * Test AccountExclusion configuration.
+   * @throws Exception
+   */
   @Test
   public void testAccountExclusion() throws Exception {
     String excludedAccountNames = "account0,account10";
