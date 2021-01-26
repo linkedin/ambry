@@ -16,6 +16,9 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -100,6 +103,7 @@ public class StatsManagerTest {
   private final ObjectMapper mapper = new ObjectMapper();
   private final Map<String, Pair<Long, Long>> storeDeleteTombstoneStats = new HashMap<>();
   private final StatsManagerConfig statsManagerConfig;
+  private final AccountService inMemoryAccountService = new InMemAccountService(false, false);
   private VerifiableProperties verifiableProperties;
   private DataNodeId dataNodeId;
 
@@ -126,7 +130,7 @@ public class StatsManagerTest {
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Properties properties = new Properties();
-    properties.put("stats.output.file.path", outputFileString);
+    properties.put(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, outputFileString);
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
@@ -166,8 +170,34 @@ public class StatsManagerTest {
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     clusterParticipant = new MockHelixParticipant(clusterMapConfig);
     statsManager =
-        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
-            null);
+        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null, null,
+            inMemoryAccountService);
+  }
+
+  /**
+   * Test AccountExclusion configuration.
+   * @throws Exception
+   */
+  @Test
+  public void testAccountExclusion() throws Exception {
+    String excludedAccountNames = "account0,account10";
+    Properties properties = new Properties();
+    properties.put(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, outputFileString);
+    properties.put(StatsManagerConfig.STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, excludedAccountNames);
+    properties.put(StatsManagerConfig.STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES, excludedAccountNames);
+    StatsManagerConfig newStatsManagerConfig = new StatsManagerConfig(new VerifiableProperties(properties));
+    // prepare account service, we are only going to fetch account0, and account10
+    inMemoryAccountService.updateAccounts(
+        Arrays.asList(new AccountBuilder((short) 0, "account0", Account.AccountStatus.ACTIVE).build()));
+    StatsManager testManager =
+        new StatsManager(storageManager, replicas, new MetricRegistry(), newStatsManagerConfig, new MockTime(), null,
+            null, inMemoryAccountService);
+    List<Short> ids = testManager.getHealthReportExcludeAccountIds();
+    assertEquals(1, ids.size());
+    assertEquals((short) 0, ids.get(0).shortValue());
+    ids = testManager.getPublishExcludeAccountIds();
+    assertEquals(1, ids.size());
+    assertEquals((short) 0, ids.get(0).shortValue());
   }
 
   /**
@@ -228,7 +258,7 @@ public class StatsManagerTest {
     problematicStoreMap.put(partitionId2, exceptionStore);
     StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap, dataNodeId),
         Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
-        statsManagerConfig, new MockTime(), null, null);
+        statsManagerConfig, new MockTime(), null, null, inMemoryAccountService);
     List<PartitionId> unreachablePartitions = new ArrayList<>();
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
@@ -252,7 +282,7 @@ public class StatsManagerTest {
     mixedStoreMap.put(partitionId4, exceptionStore);
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap, dataNodeId),
         Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
-        statsManagerConfig, new MockTime(), null, null);
+        statsManagerConfig, new MockTime(), null, null, inMemoryAccountService);
     actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
@@ -265,8 +295,8 @@ public class StatsManagerTest {
       StatsSnapshot snapshot =
           testStatsManager.fetchSnapshot(partitionId, unreachablePartitions, StatsReportType.ACCOUNT_REPORT);
       if (Integer.parseInt(partitionId.toPathString()) < 3) {
-        assertEquals("Actual StatsSnapshot does not match with expected snapshot", snapshot,
-            partitionToSnapshot.get(partitionId));
+        assertEquals("Actual StatsSnapshot does not match with expected snapshot with partition id "
+            + partitionId.toPathString(), snapshot, partitionToSnapshot.get(partitionId));
       }
     }
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
@@ -294,7 +324,7 @@ public class StatsManagerTest {
     StorageManager mockStorageManager = new MockStorageManager(testStoreMap, dataNodeId);
     StatsManager testStatsManager =
         new StatsManager(mockStorageManager, testReplicas, new MetricRegistry(), statsManagerConfig, new MockTime(),
-            null, null);
+            null, null, inMemoryAccountService);
 
     // verify that adding an existing store to StatsManager should fail
     assertFalse("Adding a store which already exists should fail", testStatsManager.addReplica(testReplicas.get(0)));
@@ -495,7 +525,7 @@ public class StatsManagerTest {
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     StatsManager statsManager =
         new StatsManager(storageManager, replicaIds, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
-            null);
+            null, inMemoryAccountService);
 
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(0L, new HashMap<>());
     StatsSnapshot expectPartitionClassSnapshot = new StatsSnapshot(0L, new HashMap<>());
@@ -851,7 +881,7 @@ public class StatsManagerTest {
 
     @Override
     public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
-        long referenceTimeInMs) throws StoreException {
+        long referenceTimeInMs, List<Short> accountIdsToExclude) throws StoreException {
       if (throwStoreException) {
         throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
       }
@@ -859,7 +889,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public Map<String, Pair<Long, Long>> getDeleteTombstoneStats(){
+    public Map<String, Pair<Long, Long>> getDeleteTombstoneStats() {
       return deleteTombstoneStats;
     }
   }

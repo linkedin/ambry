@@ -200,9 +200,12 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   @Override
   public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
-      long referenceTimeInMs) throws StoreException {
+      long referenceTimeInMs, List<Short> accountIdsToExclude) throws StoreException {
     Map<StatsReportType, StatsSnapshot> statsSnapshotsByType = new HashMap<>();
     Map<String, Map<String, Long>> utilizationMap = getValidDataSizeByContainer(referenceTimeInMs);
+    if (accountIdsToExclude != null && !accountIdsToExclude.isEmpty()) {
+      accountIdsToExclude.forEach(id -> utilizationMap.remove("A[" + id + "]"));
+    }
     for (StatsReportType reportType : statsReportTypes) {
       switch (reportType) {
         case ACCOUNT_REPORT:

@@ -14,6 +14,11 @@
 
 package com.github.ambry.config;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+
 /**
  * The configs for stats.
  */
@@ -22,6 +27,8 @@ public class StatsManagerConfig {
   public static final String STATS_PUBLISH_PERIOD_IN_SECS = "stats.publish.period.in.secs";
   public static final String STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS = "stats.initial.delay.upper.bound.in.secs";
   public static final String STATS_ENABLE_MYSQL_REPORT = "stats.enable.mysql.report";
+  public static final String STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES = "stats.health.report.exclude.account.names";
+  public static final String STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES = "stats.publish.exclude.account.names";
 
   /**
    * The file path (including filename) to be used for publishing the stats.
@@ -45,9 +52,27 @@ public class StatsManagerConfig {
   @Default("600")
   public final int initialDelayUpperBoundInSecs;
 
+  /**
+   * True to enable publishing stats to mysql database
+   */
   @Config(STATS_ENABLE_MYSQL_REPORT)
   @Default("false")
   public final boolean enableMysqlReport;
+
+  /**
+   * The account names to exclude from the health report. Multiple account names should be separated with ",".
+   */
+  @Config(STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES)
+  @Default("")
+  public final List<String> healthReportExcludeAccountNames;
+
+  /**
+   * The account names to exclude from publishing to local disk and mysql database. Multiple account names should be
+   * separated with ",".
+   */
+  @Config(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES)
+  @Default("")
+  public final List<String> publishExcludeAccountNames;
 
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
     outputFilePath = verifiableProperties.getString(STATS_OUTPUT_FILE_PATH, "/tmp/stats_output.json");
@@ -55,5 +80,11 @@ public class StatsManagerConfig {
     initialDelayUpperBoundInSecs =
         verifiableProperties.getIntInRange(STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS, 600, 0, Integer.MAX_VALUE);
     enableMysqlReport = verifiableProperties.getBoolean(STATS_ENABLE_MYSQL_REPORT, false);
+    String excludeNames = verifiableProperties.getString(STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES, "").trim();
+    healthReportExcludeAccountNames =
+        excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
+    excludeNames = verifiableProperties.getString(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, "").trim();
+    publishExcludeAccountNames =
+        excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
   }
 }

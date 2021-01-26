@@ -17,6 +17,7 @@ package com.github.ambry.store;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -50,11 +51,12 @@ public interface StoreStats {
    * value is {@link StatsSnapshot}.
    * @param statsReportTypes the specified {@link StatsReportType} to fetch
    * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param accountIdToExclude the list of account id to exclude from the {@link StatsSnapshot}.
    * @return a map of {@link StatsReportType} to {@link StatsSnapshot}
    * @throws StoreException
    */
-  Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes, long referenceTimeInMs)
-      throws StoreException;
+  Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes, long referenceTimeInMs,
+      List<Short> accountIdToExclude) throws StoreException;
 
   /**
    * Fetches delete tombstone stats grouped by different types, i.e. {@link StoreStats#EXPIRED_DELETE_TOMBSTONE},

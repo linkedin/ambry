@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
@@ -30,7 +31,8 @@ class MockStatsManager extends StatsManager {
 
   MockStatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry metricRegistry,
       StatsManagerConfig statsManagerConfig, ClusterParticipant clusterParticipant) {
-    super(storageManager, replicaIds, metricRegistry, statsManagerConfig, new MockTime(), clusterParticipant, null);
+    super(storageManager, replicaIds, metricRegistry, statsManagerConfig, new MockTime(), clusterParticipant, null,
+        new InMemAccountService(false, false));
   }
 
   @Override
