@@ -22,7 +22,12 @@ import com.github.ambry.quota.storage.QuotaOperation;
 public class DummyQuotaSource implements QuotaSource {
 
   @Override
-  public Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
+  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
+    return null;
+  }
+
+  @Override
+  public Quota getHostQuota(QuotaResource quotaResource, QuotaMetric quotaMetric) {
     return null;
   }
 }

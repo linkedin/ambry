@@ -28,7 +28,12 @@ import java.util.HashSet;
 public class UnlimitedQuotaSource implements QuotaSource {
 
   @Override
-  public Quota getQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
+  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
     return new Quota<>(quotaMetric, Long.MAX_VALUE, quotaResource, new HashSet<>(Arrays.asList(quotaOperation)));
+  }
+
+  @Override
+  public Quota getHostQuota(QuotaResource quotaResource, QuotaMetric quotaMetric) {
+    return new Quota<>(quotaMetric, Long.MAX_VALUE, quotaResource, null);
   }
 }
