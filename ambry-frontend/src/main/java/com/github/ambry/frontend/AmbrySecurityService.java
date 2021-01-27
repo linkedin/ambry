@@ -145,7 +145,7 @@ class AmbrySecurityService implements SecurityService {
         Account account = getAccountFromArgs(restRequest.getArgs());
         Container container = getContainerFromArgs(restRequest.getArgs());
         if (storageQuotaService.shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post,
-            restRequest.getBytesReceived())) {
+            restRequest.getSize())) {
           exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
         }
       } catch (Exception e) {
