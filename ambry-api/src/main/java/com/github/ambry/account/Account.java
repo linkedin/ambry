@@ -285,6 +285,13 @@ public class Account {
   }
 
   /**
+   * @return the number of containers in this account.
+   */
+  public int getContainerCount() {
+    return containerIdToContainerMap.size();
+  }
+
+  /**
    * Generates a String representation that uniquely identifies this account. The string is in the format of
    * {@code Account[id]}.
    * @return The String representation of this account.

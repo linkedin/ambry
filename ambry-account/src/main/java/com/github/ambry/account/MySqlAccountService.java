@@ -15,8 +15,8 @@ package com.github.ambry.account;
 
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -27,6 +27,7 @@ import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -62,6 +63,7 @@ public class MySqlAccountService extends AbstractAccountService {
   private volatile MySqlAccountStore mySqlAccountStore;
   private final MySqlAccountStoreFactory mySqlAccountStoreFactory;
   private boolean needRefresh = false;
+  private long lastSyncTime = -1;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
       MySqlAccountStoreFactory mySqlAccountStoreFactory) throws SQLException, IOException {
@@ -81,6 +83,8 @@ public class MySqlAccountService extends AbstractAccountService {
         throw e;
       }
     }
+    accountServiceMetrics.trackTimeSinceLastSync(this::getTimeInSecondsSinceLastSync);
+    accountServiceMetrics.trackContainerCount(this::getContainerCount);
     this.scheduler =
         config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
     // create backup file manager for persisting and retrieving Account metadata on local disk
@@ -133,7 +137,7 @@ public class MySqlAccountService extends AbstractAccountService {
   void fetchAndUpdateCacheNoThrow() {
     try {
       fetchAndUpdateCache();
-    } catch (Exception e) {
+    } catch (Throwable e) {
       logger.error("fetchAndUpdateCache failed", e);
     }
   }
@@ -156,14 +160,23 @@ public class MySqlAccountService extends AbstractAccountService {
     try {
       // Find last modified time of Accounts and containers in cache.
       long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
+      logger.info("Syncing from database using lastModifiedTime = {}", new Date(lastModifiedTime));
 
       long startTimeMs = System.currentTimeMillis();
       // Fetch added/modified accounts and containers from MySql database since LMT
       Collection<Account> updatedAccountsInDB = mySqlAccountStore.getNewAccounts(lastModifiedTime);
       Collection<Container> updatedContainersInDB = mySqlAccountStore.getNewContainers(lastModifiedTime);
-      accountServiceMetrics.fetchRemoteAccountTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+      long endTimeMs = System.currentTimeMillis();
+      accountServiceMetrics.fetchRemoteAccountTimeInMs.update(endTimeMs - startTimeMs);
 
       if (!updatedAccountsInDB.isEmpty() || !updatedContainersInDB.isEmpty()) {
+        logger.info("Found {} accounts and {} containers", updatedAccountsInDB.size(), updatedContainersInDB.size());
+        for (Account account : updatedAccountsInDB) {
+          logger.info("Found account {}", account.getName());
+        }
+        for (Container container : updatedContainersInDB) {
+          logger.info("Found container {}", container.getName());
+        }
         // Update cache with fetched accounts and containers
         infoMapLock.writeLock().lock();
         try {
@@ -177,6 +190,7 @@ public class MySqlAccountService extends AbstractAccountService {
         }
         // At this point we can safely say cache is refreshed
         needRefresh = false;
+        lastSyncTime = endTimeMs;
 
         // Notify updated accounts to consumers
         Set<Account> updatedAccounts = new HashSet<>();
@@ -199,6 +213,10 @@ public class MySqlAccountService extends AbstractAccountService {
             account -> accountMap.put(Short.toString(account.getId()), account.toJson(false).toString()));
         backupFileManager.persistAccountMap(accountMap, backupFileManager.getLatestVersion() + 1,
             SystemTime.getInstance().seconds());
+      } else {
+        // Cache is up to date
+        needRefresh = false;
+        lastSyncTime = endTimeMs;
       }
     } catch (SQLException e) {
       accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
@@ -459,6 +477,20 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     return new Pair<>(addedContainers, updatedContainers);
+  }
+
+  /**
+   * @return the time in seconds since the last database sync / cache refresh
+   */
+  public int getTimeInSecondsSinceLastSync() {
+    return lastSyncTime > 0 ? (int) (System.currentTimeMillis() - lastSyncTime) / 1000 : Integer.MAX_VALUE;
+  }
+
+  /**
+   * @return the total number of containers in all accounts.
+   */
+  public int getContainerCount() {
+    return accountInfoMapRef.get().getContainerCount();
   }
 
   /**

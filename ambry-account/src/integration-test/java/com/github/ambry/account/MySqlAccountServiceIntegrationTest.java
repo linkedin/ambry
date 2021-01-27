@@ -66,7 +66,6 @@ public class MySqlAccountServiceIntegrationTest {
   private static final String DESCRIPTION = "Indescribable";
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private MySqlAccountStore mySqlAccountStore;
-  private final AccountServiceMetrics accountServiceMetrics;
   private final Properties mySqlConfigProps;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
@@ -77,7 +76,6 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
-    accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
         new MetricRegistry()).getMySqlAccountStore());
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
@@ -88,6 +86,7 @@ public class MySqlAccountServiceIntegrationTest {
   }
 
   private MySqlAccountService getAccountService() throws Exception {
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // Don't initialize account store here as it may have preinitialized data
     return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
@@ -215,6 +214,7 @@ public class MySqlAccountServiceIntegrationTest {
         new MetricRegistry()).getMySqlAccountStore());
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
     // constructor does initial fetch which will fail on first endpoint and succeed on second
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
     MySqlMetrics storeMetrics = mySqlAccountStore.getMySqlDataAccessor().getMetrics();
@@ -292,6 +292,7 @@ public class MySqlAccountServiceIntegrationTest {
             new MetricRegistry()).getMySqlAccountStore());
     MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     MySqlAccountService consumerAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
 
@@ -388,6 +389,13 @@ public class MySqlAccountServiceIntegrationTest {
     assertNotSame(newId, result.iterator().next().getId());
     assertEquals(2, accountServiceMetrics.updateAccountErrorCount.getCount());
     assertEquals(2, accountServiceMetrics.conflictRetryCount.getCount());
+
+    // Check gauge values
+    assertTrue("Sync time not updated",
+        accountServiceMetrics.timeInSecondsSinceLastSyncGauge.getValue() < 10);
+    assertEquals("Unexpected container count", 7,
+        accountServiceMetrics.containerCountGauge.getValue().intValue());
+
   }
 
   /**
@@ -416,6 +424,7 @@ public class MySqlAccountServiceIntegrationTest {
     existingAccounts.add(new AccountBuilder((short) 1, "a", Account.AccountStatus.ACTIVE).build());
     existingAccounts.add(new AccountBuilder((short) 2, "b", Account.AccountStatus.ACTIVE).build());
     mySqlAccountService.updateAccounts(existingAccounts);
+    AccountServiceMetrics accountServiceMetrics = mySqlAccountService.accountServiceMetrics;
 
     // case A: verify updating status of account (1, "a") replaces existing record (1, "a")
     Account accountToUpdate =
@@ -465,6 +474,7 @@ public class MySqlAccountServiceIntegrationTest {
     containersList.add(new ContainerBuilder((short) 2, "c2", ContainerStatus.ACTIVE, "c2", (short) 1).build());
     Account accountToUpdate =
         new AccountBuilder((short) 1, "a", Account.AccountStatus.ACTIVE).containers(containersList).build();
+    AccountServiceMetrics accountServiceMetrics = mySqlAccountService.accountServiceMetrics;
 
     // write account (1,a) with containers (1,c1), (2,c2)
     mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));

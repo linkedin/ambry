@@ -158,6 +158,13 @@ class AccountInfoMap {
   }
 
   /**
+   * @return the total number of containers in all accounts.
+   */
+  int getContainerCount() {
+    return idToAccountMap.values().stream().mapToInt(account -> account.getContainerCount()).sum();
+  }
+
+  /**
    * Checks if there is any {@link Account} in a given collection of {@link Account}s conflicts against any {@link Account}
    * in a {@link AccountInfoMap}, according to the Javadoc of {@link AccountService}. Two {@link Account}s can be
    * conflicting with each other if they have different account Ids but the same account name.
