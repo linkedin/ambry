@@ -125,8 +125,8 @@ public class AccountServiceMetrics {
   }
 
   /**
-   * Tracks the number of seconds elapsed since the last database sync.
-   * @param gauge the function returning the elapsed time.
+   * Tracks the total number of containers across all accounts.
+   * @param gauge the function returning the container count.
    */
   void trackContainerCount(Gauge<Integer> gauge) {
     containerCountGauge = gauge;
