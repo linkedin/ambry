@@ -128,6 +128,8 @@ public class HelixClusterAggregator {
       default:
         throw new IllegalArgumentException("Unrecognized stats report type: " + type);
     }
+    reducedRawSnapshot.removeZeroValueSnapshots();
+    reducedSnapshot.removeZeroValueSnapshots();
     if (logger.isTraceEnabled()) {
       logger.trace("Reduced raw snapshot {}", mapper.writeValueAsString(reducedRawSnapshot));
       logger.trace("Reduced valid snapshot {}", mapper.writeValueAsString(reducedSnapshot));
