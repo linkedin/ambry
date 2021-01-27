@@ -62,7 +62,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public final String dbInfo;
 
   /**
-   * The time interval in seconds between two consecutive account pulling for the background account updater of
+   * The time interval in seconds between two consecutive account polling for the background account updater of
    * {@code MySqlAccountService}. Setting to 0 will disable it. Default value is 60 seconds.
    */
   @Config(UPDATER_POLLING_INTERVAL_SECONDS)

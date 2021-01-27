@@ -102,11 +102,6 @@ public class Account {
    */
   public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
 
-  /**
-   * The name of the {@code HELIX_ACCOUNT_SERVICE_ACCOUNT_ID}.
-   */
-  public static final String HELIX_ACCOUNT_SERVICE_ACCOUNT_NAME = "helix-account-service-account-name";
-
   // account member variables
   private final short id;
   private final String name;
@@ -282,6 +277,13 @@ public class Account {
    */
   public Collection<Container> getAllContainers() {
     return Collections.unmodifiableCollection(containerIdToContainerMap.values());
+  }
+
+  /**
+   * @return the number of containers in this account.
+   */
+  public int getContainerCount() {
+    return containerIdToContainerMap.size();
   }
 
   /**

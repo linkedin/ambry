@@ -51,7 +51,10 @@ public class AccountServiceMetrics {
   public final Counter accountUpdatesToStoreErrorCount;
   public final Counter getAccountInconsistencyCount;
 
+  // Gauge
   Gauge<Integer> accountDataInconsistencyCount;
+  Gauge<Integer> timeInSecondsSinceLastSyncGauge;
+  Gauge<Integer> containerCountGauge;
 
   private final MetricRegistry metricRegistry;
 
@@ -109,5 +112,25 @@ public class AccountServiceMetrics {
     accountDataInconsistencyCount = compositeAccountService::getAccountsMismatchCount;
     metricRegistry.register(MetricRegistry.name(CompositeAccountService.class, "AccountDataInconsistencyCount"),
         accountDataInconsistencyCount);
+  }
+
+  /**
+   * Tracks the number of seconds elapsed since the last database sync.
+   * @param gauge the function returning the elapsed time.
+   */
+  void trackTimeSinceLastSync(Gauge<Integer> gauge) {
+    timeInSecondsSinceLastSyncGauge = gauge;
+    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, "TimeInSecondsSinceLastSync"),
+        timeInSecondsSinceLastSyncGauge);
+  }
+
+  /**
+   * Tracks the total number of containers across all accounts.
+   * @param gauge the function returning the container count.
+   */
+  void trackContainerCount(Gauge<Integer> gauge) {
+    containerCountGauge = gauge;
+    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, "ContainerCount"),
+        containerCountGauge);
   }
 }
