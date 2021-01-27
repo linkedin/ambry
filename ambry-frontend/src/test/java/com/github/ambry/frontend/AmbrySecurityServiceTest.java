@@ -310,7 +310,7 @@ public class AmbrySecurityServiceTest {
       restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY,
           new ContainerBuilder(throttledContainerId, "container11", Container.ContainerStatus.ACTIVE, "",
               throttledAccountId).build());
-      ((MockRestRequest) restRequest).addContent(ByteBuffer.wrap(new byte[size]));
+      restRequest.setArg(RestUtils.Headers.BLOB_SIZE, size);
       restRequestRef.set(restRequest);
     };
     // RestRequest's size is only half of the threshold
@@ -333,6 +333,26 @@ public class AmbrySecurityServiceTest {
       Assert.assertEquals(RestServiceErrorCode.TooManyRequests, restServiceException.getErrorCode());
       Assert.assertEquals("StorageQuotaExceeded", restServiceException.getMessage());
     }
+
+    // test some error cases.
+    makeRequest.accept(1);
+    restRequestRef.get().setArg(RestUtils.Headers.BLOB_SIZE, null);
+    restRequestRef.get().setArg(RestUtils.Headers.CONTENT_LENGTH, 1);
+
+    try {
+      ambrySecurityService.postProcessRequest(restRequestRef.get()).get();
+      Assert.fail("Should fail due to throttle");
+    } catch (ExecutionException e) {
+      Throwable throwable = e.getCause();
+      Assert.assertTrue(throwable instanceof RestServiceException);
+      RestServiceException restServiceException = (RestServiceException) throwable;
+      Assert.assertEquals(RestServiceErrorCode.TooManyRequests, restServiceException.getErrorCode());
+      Assert.assertEquals("StorageQuotaExceeded", restServiceException.getMessage());
+    }
+
+    makeRequest.accept(1);
+    restRequestRef.get().setArg(RestUtils.Headers.BLOB_SIZE, null); // getSize would return -1
+    ambrySecurityService.postProcessRequest(restRequestRef.get()).get();
   }
 
   /**

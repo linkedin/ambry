@@ -140,7 +140,8 @@ class AmbrySecurityService implements SecurityService {
           exception = e;
         }
       }
-    } else if (restRequest.getRestMethod() == RestMethod.POST && storageQuotaService != null) {
+    } else if (restRequest.getRestMethod() == RestMethod.POST && storageQuotaService != null
+        && restRequest.getSize() > 0) {
       try {
         Account account = getAccountFromArgs(restRequest.getArgs());
         Container container = getContainerFromArgs(restRequest.getArgs());
