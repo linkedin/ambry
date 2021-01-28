@@ -2514,8 +2514,6 @@ public class BlobStoreCompactorTest {
           state.time.milliseconds(), getFileSpanForLogSegments(logSegments), seenPuts, deleteTombstoneStats,
           expiredDeletes);
     }
-//    System.out.println("[Get valid data size] expired deletes (no PUT): " + expiredDeletes.getFirst().size()
-//        + ", expired deletes (with PUT): " + expiredDeletes.getSecond().size() + ", seen Puts = " + seenPuts.size());
     return size;
   }
 
@@ -2592,7 +2590,10 @@ public class BlobStoreCompactorTest {
     List<LogEntry> validLogEntriesInOrder =
         getValidLogEntriesInOrder(segmentsUnderCompaction, deleteReferenceTimeMs, expiredDeletes, false);
     Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
+    // "compactedDeletes" are those tombstones that should be compacted in single run (if no exception occurs);
+    // "deletesWithPuts" are those tombstones temporarily with PUTs but may be eligible to be compacted in subsequent cycle
     Set<MockId> compactedDeletes = expiredDeletes.getFirst();
+    Set<MockId> deletesWithPuts = expiredDeletes.getSecond();
 
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
@@ -2602,9 +2603,19 @@ public class BlobStoreCompactorTest {
     } finally {
       compactor.close(0);
     }
-//    Set<MockId> remainingBlobIds = new HashSet<>();
-//    findRemovableDeletesOrAllIdsFromIndex(state.index, null, remainingBlobIds);
-//    compactedDeletes.
+    Set<MockId> remainingBlobIds = new HashSet<>();
+    findRemovableDeletesOrAllIdsFromIndex(state.index, null, remainingBlobIds);
+    // since this method aims to verify success compaction case, we only need to account for some deletes with PUTs are
+    // compacted in the multi-cycle compaction (i.e. PUT is 1st log segment and gets compacted in 1st cycle. DELETE is
+    // in 2nd log segment and the 2nd cycle compaction may compact the DELETE as well because source index is updated
+    // when switching out the 1st log segment and original PUT is not found in source index)
+    deletesWithPuts.removeAll(remainingBlobIds);
+    expectedValidDataSize -= deletesWithPuts.size() * DELETE_RECORD_SIZE;
+    compactedDeletes.addAll(deletesWithPuts);
+    // remove these deletes from valid log entries (if any)
+    validLogEntriesInOrder = deletesWithPuts.isEmpty() ? validLogEntriesInOrder : validLogEntriesInOrder.stream()
+        .filter(logEntry -> !deletesWithPuts.contains(logEntry.getId()))
+        .collect(Collectors.toList());
 
     assertFalse("No compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
     assertEquals("Swap segments should not be found", 0, compactor.getSwapSegmentsInUse().length);
@@ -2977,7 +2988,9 @@ public class BlobStoreCompactorTest {
    * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
    * @param expiredDeletes a pair of two sets of deletes. The first one contains expired delete tombstones (with no
    *                      associated PUT); the second one includes expired deletes currently with PUTs ahead of them.
-   * @param includeExpiredTombstone whether to treat expired delete tombstone (left by compaction) valid.
+   * @param includeExpiredTombstone whether to treat "solitary" expired delete tombstone (left by compaction) valid.
+   *                                This is introduced for special test case where expired delete tombstone is not
+   *                                compacted due to exception in the middle way.
    * @return the valid log entries in {@code logSegmentsUnderConsideration} in order of their occurrence in the log.
    */
   private List<LogEntry> getValidLogEntriesInOrder(List<String> logSegmentsUnderConsideration,
@@ -3511,7 +3524,7 @@ public class BlobStoreCompactorTest {
 
   /**
    * Creates state required for some TTL update specific tests that need PUTs and TTL updates
-   * @return
+   * @return a pair of ids of newly added PUTs and expiry time associated with them.
    * @throws Exception
    */
   private Pair<List<MockId>, Long> createStateWithPutAndTtlUpdate() throws Exception {

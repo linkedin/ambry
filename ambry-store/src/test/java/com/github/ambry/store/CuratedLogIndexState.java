@@ -1601,7 +1601,8 @@ class CuratedLogIndexState {
             if (latestValue.isDelete() && latestValue.getLifeVersion() == currentValue.getLifeVersion()) {
               // check if this is a delete tombstone left by compaction
               boolean isValid = true;
-              if (!seenPuts.contains(key)) {
+              try{
+              if (index.findKey(key, null, EnumSet.of(PersistentIndex.IndexEntryType.PUT)) == null) {
                 if (currentValue.getExpiresAtMs() == Utils.Infinite_Time || currentValue.isTtlUpdate()) {
                   // TODO check validity of permanent delete tombstone
                   deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
@@ -1610,16 +1611,19 @@ class CuratedLogIndexState {
                   deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
                   deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
                   if(currentValue.getExpiresAtMs() < time.milliseconds()) {
-//                    System.out.println("Expired delete: " + key);
                     isValid = includeExpiredTombstone;
                     expiredDeletes.getFirst().add(key);
                   }
                 }
               } else {
                 // if this is a delete with PUT, we check if it has expired and track it in a separate set
-                if (currentValue.getExpiresAtMs() < time.milliseconds()) {
+                if (currentValue.getExpiresAtMs() != Utils.Infinite_Time
+                    && currentValue.getExpiresAtMs() < time.milliseconds()) {
                   expiredDeletes.getSecond().add(key);
                 }
+              }
+              }catch (Exception e){
+                // do nothing for now
               }
               if (isValid) {
                 validEntries.add(currentEntry);
@@ -1641,7 +1645,6 @@ class CuratedLogIndexState {
             }
           } else {
             // current index value PUT
-//            System.out.println("Seen PUT: " + key);
             seenPuts.add(key);
             if (!isExpiredAt(key, expiryReferenceTimeMs)) {
               if (latestValue.isPut()) {

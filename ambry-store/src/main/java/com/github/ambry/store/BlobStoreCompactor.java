@@ -1218,7 +1218,7 @@ class BlobStoreCompactor {
             // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
             // tombstone is removable.
             if (isDeleteTombstoneRemovable(value)) {
-              System.out.println("Delete key in compaction: " + indexEntry.getKey());
+//              System.out.println("Delete key in compaction: " + indexEntry.getKey());
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   indexEntry.getKey(), value.getExpiresAtMs());
