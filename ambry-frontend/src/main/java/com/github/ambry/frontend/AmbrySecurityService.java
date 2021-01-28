@@ -145,6 +145,9 @@ class AmbrySecurityService implements SecurityService {
       try {
         Account account = getAccountFromArgs(restRequest.getArgs());
         Container container = getContainerFromArgs(restRequest.getArgs());
+        // We are optimistically accounting request size beforehand and add it to usage of this account/container. This
+        // would mistakingly adds storage usage if this request fails in the end.
+        // TODO: find a way to revert this mistake when requests fail
         if (storageQuotaService.shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post,
             restRequest.getSize())) {
           exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);

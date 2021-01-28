@@ -74,6 +74,9 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
             return v;
           }
         });
+    logger.debug("Account id {} container id {} quota {}, existing usage {} new size {}, new usage {}", accountId,
+        containerId, quota == Long.MAX_VALUE ? "MAX_VALUE" : String.valueOf(quota), existingUsage.get(), size,
+        storageUsage.get(String.valueOf(accountId)).get(String.valueOf(containerId)));
     if (exceedQuota.get()) {
       metrics.quotaExceededCount.inc();
     }
