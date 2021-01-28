@@ -320,6 +320,82 @@ public class HelixClusterAggregatorTest {
   }
 
   /**
+   * Test removing zero value snapshots from aggregated result.
+   * @throws IOException
+   */
+  @Test
+  public void testStatsAggregationWithZeroValueSnapshots() throws IOException {
+    int nodeCount = 3;
+    Random random = new Random();
+    // For each type of report, create snapshots for 3 stores with 3 accounts, 4 accounts and 5 accounts respectively.
+    for (StatsReportType type : EnumSet.of(StatsReportType.ACCOUNT_REPORT, StatsReportType.PARTITION_CLASS_REPORT)) {
+      List<StatsSnapshot> storeSnapshots = new ArrayList<>();
+      for (int i = 3; i < 6; i++) {
+        storeSnapshots.add(TestUtils.generateStoreStats(i, 3, random, type));
+      }
+      // add zero value to the first snapshot
+      if (type == StatsReportType.ACCOUNT_REPORT) {
+        Map<String, StatsSnapshot> accountStatsSnapshotMap = storeSnapshots.get(0).getSubMap();
+        accountStatsSnapshotMap.put("A[100]", new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>() {
+          {
+            put("C[100]", new StatsSnapshot(0L, null));
+          }
+        }));
+      } else {
+        Map<String, StatsSnapshot> accountContainerStatsSnapshotMap = storeSnapshots.get(0).getSubMap();
+        accountContainerStatsSnapshotMap.put("A[100]_C[100]", new StatsSnapshot(0L, null));
+      }
+      StatsWrapper nodeStats = TestUtils.generateNodeStats(storeSnapshots, DEFAULT_TIMESTAMP, type);
+      String nodeStatsJSON = mapper.writeValueAsString(nodeStats);
+
+      Map<String, String> instanceToStatsMap = new HashMap<>();
+      for (int i = 0; i < nodeCount; i++) {
+        instanceToStatsMap.put("Instance_" + i, nodeStatsJSON);
+      }
+      // 1. Aggregate all snapshots into the first snapshot in snapshots list. The intention is to get expected aggregated snapshot.
+      // 2. Then invoke clusterAggregator to do work on stats across all instances.
+      // 3. Verify both raw stats and valid stats after aggregation
+      Pair<StatsSnapshot, StatsSnapshot> aggregatedRawAndValidStats =
+          clusterAggregator.doWork(instanceToStatsMap, type);
+
+      // Remove 0 values snapshots first
+      StatsSnapshot expectedSnapshot = null;
+      switch (type) {
+        case ACCOUNT_REPORT:
+          storeSnapshots.get(0).getSubMap().remove("A[100]");
+          // Since all nodes have exactly same statsSnapshot, aggregated snapshot of storeSnapshots list on single node is what
+          // we expect for valid data aggregation.
+          for (int i = 1; i < storeSnapshots.size(); i++) {
+            StatsSnapshot.aggregate(storeSnapshots.get(0), storeSnapshots.get(i));
+          }
+          expectedSnapshot = storeSnapshots.get(0);
+          break;
+        case PARTITION_CLASS_REPORT:
+          storeSnapshots.get(0).getSubMap().remove("A[100]_C[100]");
+          // Invoke reduceByPartitionClass to remove partition level and only keep the partition class and account_container entries
+          expectedSnapshot = HelixClusterAggregator.reduceByPartitionClass(nodeStats.getSnapshot());
+          break;
+      }
+
+      // Verify cluster wide raw stats aggregation
+      StatsSnapshot rawSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getFirst()), StatsSnapshot.class);
+      assertEquals("Mismatch in total value of " + type, nodeCount * expectedSnapshot.getValue(),
+          rawSnapshot.getValue());
+      if (type == StatsReportType.ACCOUNT_REPORT) {
+        verifyAggregatedRawStatsForAccountReport(rawSnapshot, expectedSnapshot, nodeCount);
+      } else if (type == StatsReportType.PARTITION_CLASS_REPORT) {
+        verifyAggregatedRawStatsForPartitionClassReport(rawSnapshot, expectedSnapshot, nodeCount);
+      }
+
+      // Verify cluster wide stats aggregation
+      StatsSnapshot actualSnapshot =
+          mapper.readValue(mapper.writeValueAsString(aggregatedRawAndValidStats.getSecond()), StatsSnapshot.class);
+      assertTrue("Mismatch in the aggregated snapshot", expectedSnapshot.equals(actualSnapshot));
+    }
+  }
+
+  /**
    * Help verify the aggregated raw stats match expected stats snapshot for {@link StatsReportType#ACCOUNT_REPORT}
    * @param rawSnapshot the raw stats snapshot after aggregation
    * @param expectedSnapshot the expected stats snapshot
