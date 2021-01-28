@@ -45,6 +45,8 @@ import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.StatsUtils.*;
+
 
 /**
  * Exposes stats related to a {@link BlobStore} that is useful to different components.
@@ -158,7 +160,7 @@ class BlobStoreStats implements StoreStats, Closeable {
 
   @Override
   public Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException {
-    Pair<Long, NavigableMap<String, Long>> logSegmentValidSizeResult = getValidDataSizeByLogSegment(timeRange);
+    Pair<Long, NavigableMap<LogSegmentName, Long>> logSegmentValidSizeResult = getValidDataSizeByLogSegment(timeRange);
     Long totalValidSize = 0L;
     for (Long value : logSegmentValidSizeResult.getSecond().values()) {
       totalValidSize += value;
@@ -258,7 +260,8 @@ class BlobStoreStats implements StoreStats, Closeable {
    * valid data sizes.
    * @throws StoreException if BlobStoreStats is not enabled or closed
    */
-  Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException {
+  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange)
+      throws StoreException {
     return getValidDataSizeByLogSegment(timeRange, time.milliseconds());
   }
 
@@ -274,13 +277,13 @@ class BlobStoreStats implements StoreStats, Closeable {
    * valid data sizes.
    * @throws StoreException
    */
-  Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange, long expiryReferenceTime)
-      throws StoreException {
+  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange,
+      long expiryReferenceTime) throws StoreException {
     if (!enabled.get()) {
       throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
           StoreErrorCodes.Store_Shutting_Down);
     }
-    Pair<Long, NavigableMap<String, Long>> retValue = null;
+    Pair<Long, NavigableMap<LogSegmentName, Long>> retValue = null;
     ScanResults currentScanResults = scanResults.get();
     long referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
     if (enableBucketForLogSegmentReports) {
@@ -512,13 +515,13 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param expiryReferenceTimeInMs the reference tie in ms until which expiration is relevant
    * @return a {@link NavigableMap} of log segment name to valid data size
    */
-  private NavigableMap<String, Long> collectValidDataSizeByLogSegment(long deleteReferenceTimeInMs,
+  private NavigableMap<LogSegmentName, Long> collectValidDataSizeByLogSegment(long deleteReferenceTimeInMs,
       long expiryReferenceTimeInMs) throws StoreException {
     logger.trace("On demand index scanning to collect compaction data stats for store {} wrt ref time {}", storeId,
         deleteReferenceTimeInMs);
     long startTimeMs = time.milliseconds();
     Map<StoreKey, IndexFinalState> keyFinalStates = new HashMap<>();
-    NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>(LogSegmentNameHelper.COMPARATOR);
+    NavigableMap<LogSegmentName, Long> validSizePerLogSegment = new TreeMap<>();
     int indexSegmentCount = 0;
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       if (!enabled.get()) {
@@ -526,7 +529,7 @@ class BlobStoreStats implements StoreStats, Closeable {
             StoreErrorCodes.Store_Shutting_Down);
       }
       long indexSegmentStartProcessTimeMs = time.milliseconds();
-      String logSegmentName = indexSegment.getLogSegmentName();
+      LogSegmentName logSegmentName = indexSegment.getLogSegmentName();
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexSegment.size());
       forEachValidIndexEntry(indexSegment, deleteReferenceTimeInMs, expiryReferenceTimeInMs, keyFinalStates, true,
@@ -555,12 +558,12 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param validSizePerLogSegment a {@link NavigableMap} of log segment name to valid data size.
    */
   private void removeDeleteTombStonesFromValidSize(Collection<IndexFinalState> indexFinalStates,
-      NavigableMap<String, Long> validSizePerLogSegment) {
+      NavigableMap<LogSegmentName, Long> validSizePerLogSegment) {
     for (IndexFinalState finalState : indexFinalStates) {
       if (finalState.isDelete()) {
         if (finalState.getExpirationTime() != Utils.Infinite_Time) {
           // expired delete tombstone should be considered invalid
-          String logSegmentName = finalState.getOffset().getName();
+          LogSegmentName logSegmentName = finalState.getOffset().getName();
           validSizePerLogSegment.computeIfPresent(logSegmentName, (k, v) -> {
             v -= finalState.getRecordSize();
             return v;
@@ -725,32 +728,6 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   private boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
     return expirationTimeInMs != Utils.Infinite_Time && expirationTimeInMs < referenceTimeInMs;
-  }
-
-  /**
-   * Helper function to update nested map data structure.
-   * @param nestedMap nested {@link Map} to be updated
-   * @param firstKey of the nested map
-   * @param secondKey of the nested map
-   * @param value the value to be added at the corresponding entry
-   */
-  private void updateNestedMapHelper(Map<String, Map<String, Long>> nestedMap, String firstKey, String secondKey,
-      Long value) {
-    if (!nestedMap.containsKey(firstKey)) {
-      nestedMap.put(firstKey, new HashMap<String, Long>());
-    }
-    updateMapHelper(nestedMap.get(firstKey), secondKey, value);
-  }
-
-  /**
-   * Helper function to update map data structure.
-   * @param map {@link Map} to be updated
-   * @param key of the map
-   * @param value the value to be added at the corresponding entry
-   */
-  private void updateMapHelper(Map<String, Long> map, String key, Long value) {
-    Long newValue = map.containsKey(key) ? map.get(key) + value : value;
-    map.put(key, newValue);
   }
 
   /**

@@ -40,7 +40,7 @@ public class OffsetTest {
   public void offsetSerDeTest() throws IOException {
     long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    String name = LogSegmentNameHelper.getName(pos, gen);
+    LogSegmentName name = LogSegmentName.fromPositionAndGeneration(pos, gen);
     long offset = Utils.getRandomLong(new Random(), Long.MAX_VALUE);
     Offset logOffset = new Offset(name, offset);
     byte[] serialized = logOffset.toBytes();
@@ -63,9 +63,9 @@ public class OffsetTest {
   @Test
   public void offsetBadInputTest() throws IOException {
     doBadOffsetInputTest(null, 10);
-    doBadOffsetInputTest("1_11", -1);
+    doBadOffsetInputTest(LogSegmentName.fromString("1_11"), -1);
 
-    Offset offset = new Offset("1_11", 10);
+    Offset offset = new Offset(LogSegmentName.fromString("1_11"), 10);
     byte[] serialized = offset.toBytes();
     // mess with a version byte
     serialized[0] = serialized[0] == (byte) 1 ? (byte) 2 : (byte) 1;
@@ -83,16 +83,16 @@ public class OffsetTest {
   @Test
   public void compareToTest() {
     List<Offset> offsets = new ArrayList<>();
-    offsets.add(new Offset("0_0", 0));
-    offsets.add(new Offset("0_0", 1));
-    offsets.add(new Offset("0_1", 0));
-    offsets.add(new Offset("0_1", 1));
-    offsets.add(new Offset("1_0", 0));
-    offsets.add(new Offset("1_0", 1));
-    offsets.add(new Offset("2_0", 0));
-    offsets.add(new Offset("3_0", 1));
-    offsets.add(new Offset("10_0", 0));
-    offsets.add(new Offset("21_0", 0));
+    offsets.add(new Offset(LogSegmentName.fromString("0_0"), 0));
+    offsets.add(new Offset(LogSegmentName.fromString("0_0"), 1));
+    offsets.add(new Offset(LogSegmentName.fromString("0_1"), 0));
+    offsets.add(new Offset(LogSegmentName.fromString("0_1"), 1));
+    offsets.add(new Offset(LogSegmentName.fromString("1_0"), 0));
+    offsets.add(new Offset(LogSegmentName.fromString("1_0"), 1));
+    offsets.add(new Offset(LogSegmentName.fromString("2_0"), 0));
+    offsets.add(new Offset(LogSegmentName.fromString("3_0"), 1));
+    offsets.add(new Offset(LogSegmentName.fromString("10_0"), 0));
+    offsets.add(new Offset(LogSegmentName.fromString("21_0"), 0));
     for (int i = 0; i < offsets.size(); i++) {
       for (int j = 0; j < offsets.size(); j++) {
         int expectCompare = i == j ? 0 : i > j ? 1 : -1;
@@ -107,10 +107,10 @@ public class OffsetTest {
    */
   @Test
   public void equalsAndHashCodeTest() {
-    Offset o1 = new Offset("1_1", 2);
-    Offset o2 = new Offset("1_1", 2);
-    Offset o3 = new Offset("1_1", 3);
-    Offset o4 = new Offset("1_2", 2);
+    Offset o1 = new Offset(LogSegmentName.fromString("1_1"), 2);
+    Offset o2 = new Offset(LogSegmentName.fromString("1_1"), 2);
+    Offset o3 = new Offset(LogSegmentName.fromString("1_1"), 3);
+    Offset o4 = new Offset(LogSegmentName.fromString("1_2"), 2);
 
     assertTrue("Offset should be equal to itself", o1.equals(o1));
     assertFalse("Offset should not be equal to null", o1.equals(null));
@@ -131,7 +131,7 @@ public class OffsetTest {
    * @param name the name to use.
    * @param offset the offset to use.
    */
-  private void doBadOffsetInputTest(String name, long offset) {
+  private void doBadOffsetInputTest(LogSegmentName name, long offset) {
     try {
       new Offset(name, offset);
       fail("Should have thrown because one of the inputs is invalid");

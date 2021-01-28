@@ -353,16 +353,16 @@ class BlobStoreCompactor {
    * in the segments to compact are in the journal.
    */
   private void checkSanity(CompactionDetails details) {
-    List<String> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
+    List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
     // all segments should be available and should not have anything in the journal
     // segments should be in order
-    String prevSegmentName = null;
-    for (String segmentName : segmentsUnderCompaction) {
+    LogSegmentName prevSegmentName = null;
+    for (LogSegmentName segmentName : segmentsUnderCompaction) {
       LogSegment segment = srcLog.getSegment(segmentName);
       if (segment == null) {
         throw new IllegalArgumentException(segmentName + " does not exist in the log");
       }
-      if (prevSegmentName != null && LogSegmentNameHelper.COMPARATOR.compare(prevSegmentName, segmentName) >= 0) {
+      if (prevSegmentName != null && prevSegmentName.compareTo(segmentName) >= 0) {
         throw new IllegalArgumentException("Ordering of " + segmentsUnderCompaction + " is incorrect");
       }
       // should be outside the range of the journal
@@ -384,7 +384,7 @@ class BlobStoreCompactor {
    */
   private void copy() throws IOException, StoreException {
     setupState();
-    List<String> logSegmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
+    List<LogSegmentName> logSegmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
       // only records in the the very first log segment in the cycle could have been copied in a previous cycle
@@ -399,7 +399,7 @@ class BlobStoreCompactor {
       logger.trace("Duplicate search span is {} for {}", duplicateSearchSpan, storeId);
     }
 
-    for (String logSegmentName : logSegmentsUnderCompaction) {
+    for (LogSegmentName logSegmentName : logSegmentsUnderCompaction) {
       logger.debug("Processing {} in {}", logSegmentName, storeId);
       LogSegment srcLogSegment = srcLog.getSegment(logSegmentName);
       Offset logSegmentEndOffset = new Offset(srcLogSegment.getName(), srcLogSegment.getEndOffset());
@@ -447,7 +447,7 @@ class BlobStoreCompactor {
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
   private void commit(boolean recovering) throws StoreException {
-    List<String> logSegmentNames = getTargetLogSegmentNames();
+    List<LogSegmentName> logSegmentNames = getTargetLogSegmentNames();
     logger.debug("Target log segments are {} for {}", logSegmentNames, storeId);
     renameLogSegments(logSegmentNames);
     addNewLogSegmentsToSrcLog(logSegmentNames, recovering);
@@ -485,17 +485,17 @@ class BlobStoreCompactor {
   private void setupState() throws IOException, StoreException {
     CompactionDetails details = compactionLog.getCompactionDetails();
     long highestGeneration = 0;
-    for (String segmentName : details.getLogSegmentsUnderCompaction()) {
-      highestGeneration = Math.max(highestGeneration, LogSegmentNameHelper.getGeneration(segmentName));
+    for (LogSegmentName segmentName : details.getLogSegmentsUnderCompaction()) {
+      highestGeneration = Math.max(highestGeneration, segmentName.getGeneration());
     }
     logger.debug("Generation of target segments will be {} for {} in {}", highestGeneration + 1, details, storeId);
-    List<Pair<String, String>> targetSegmentNamesAndFilenames = new ArrayList<>();
+    List<Pair<LogSegmentName, String>> targetSegmentNamesAndFilenames = new ArrayList<>();
     List<LogSegment> existingTargetLogSegments = new ArrayList<>();
-    for (String segmentName : details.getLogSegmentsUnderCompaction()) {
-      long pos = LogSegmentNameHelper.getPosition(segmentName);
-      String targetSegmentName = LogSegmentNameHelper.getName(pos, highestGeneration + 1);
+    for (LogSegmentName segmentName : details.getLogSegmentsUnderCompaction()) {
+      long pos = segmentName.getPosition();
+      LogSegmentName targetSegmentName = LogSegmentName.fromPositionAndGeneration(pos, highestGeneration + 1);
       String targetSegmentFileName =
-          LogSegmentNameHelper.nameToFilename(targetSegmentName) + TEMP_LOG_SEGMENT_NAME_SUFFIX;
+          targetSegmentName.toFilename() + TEMP_LOG_SEGMENT_NAME_SUFFIX;
       File targetSegmentFile = new File(dataDir, targetSegmentFileName);
       if (targetSegmentFile.exists()) {
         existingTargetLogSegments.add(new LogSegment(targetSegmentName, targetSegmentFile, config, tgtMetrics));
@@ -668,7 +668,7 @@ class BlobStoreCompactor {
    * @return {@code true} if the offset is being compacted in the current cycle.
    */
   private boolean isOffsetUnderCompaction(Offset offset) {
-    List<String> segmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
+    List<LogSegmentName> segmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     LogSegment first = srcLog.getSegment(segmentsUnderCompaction.get(0));
     LogSegment last = srcLog.getSegment(segmentsUnderCompaction.get(segmentsUnderCompaction.size() - 1));
     Offset start = new Offset(first.getName(), first.getStartOffset());
@@ -891,14 +891,14 @@ class BlobStoreCompactor {
    * that are still in their temporary uncommitted state.
    * @return the list of target log segments that exist on the disk.
    */
-  private List<String> getTargetLogSegmentNames() {
+  private List<LogSegmentName> getTargetLogSegmentNames() {
     List<String> filenames = Arrays.asList(dataDir.list(TEMP_LOG_SEGMENTS_FILTER));
-    List<String> names = new ArrayList<>(filenames.size());
+    List<LogSegmentName> names = new ArrayList<>(filenames.size());
     for (String filename : filenames) {
       String transformed = filename.substring(0, filename.length() - TEMP_LOG_SEGMENT_NAME_SUFFIX.length());
-      names.add(LogSegmentNameHelper.nameFromFilename(transformed));
+      names.add(LogSegmentName.fromFilename(transformed));
     }
-    Collections.sort(names, LogSegmentNameHelper.COMPARATOR);
+    Collections.sort(names);
     return names;
   }
 
@@ -908,9 +908,9 @@ class BlobStoreCompactor {
    * @param logSegmentNames the names of the log segments whose backing files need to be renamed.
    * @throws StoreException if the rename fails.
    */
-  private void renameLogSegments(List<String> logSegmentNames) throws StoreException {
-    for (String segmentName : logSegmentNames) {
-      String filename = LogSegmentNameHelper.nameToFilename(segmentName);
+  private void renameLogSegments(List<LogSegmentName> logSegmentNames) throws StoreException {
+    for (LogSegmentName segmentName : logSegmentNames) {
+      String filename = segmentName.toFilename();
       File from = new File(dataDir, filename + TEMP_LOG_SEGMENT_NAME_SUFFIX);
       File to = new File(dataDir, filename);
       logger.debug("Renaming {} to {}", from, to);
@@ -927,10 +927,10 @@ class BlobStoreCompactor {
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
    * @throws StoreException if there were any store exception creating a log segment
    */
-  private void addNewLogSegmentsToSrcLog(List<String> logSegmentNames, boolean recovering) throws StoreException {
+  private void addNewLogSegmentsToSrcLog(List<LogSegmentName> logSegmentNames, boolean recovering) throws StoreException {
     logger.debug("Adding {} in {} to the application log", logSegmentNames, storeId);
-    for (String logSegmentName : logSegmentNames) {
-      File segmentFile = new File(dataDir, LogSegmentNameHelper.nameToFilename(logSegmentName));
+    for (LogSegmentName logSegmentName : logSegmentNames) {
+      File segmentFile = new File(dataDir, logSegmentName.toFilename());
       LogSegment segment = new LogSegment(logSegmentName, segmentFile, config, srcMetrics);
       srcLog.addSegment(segment, recovering);
     }
@@ -943,16 +943,16 @@ class BlobStoreCompactor {
    * @param logSegmentNames the names of the log segments whose index segments need to be committed.
    * @throws StoreException if there were any problems committing the changed index segments.
    */
-  private void updateSrcIndex(List<String> logSegmentNames) throws StoreException {
+  private void updateSrcIndex(List<LogSegmentName> logSegmentNames) throws StoreException {
     Set<Offset> indexSegmentsToRemove = new HashSet<>();
-    for (String logSegmentName : compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction()) {
+    for (LogSegmentName logSegmentName : compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction()) {
       indexSegmentsToRemove.addAll(getIndexSegmentDetails(logSegmentName).keySet());
     }
 
     List<File> indexSegmentFilesToAdd = new ArrayList<>();
-    Map<String, SortedMap<Offset, File>> newLogSegmentsToIndexSegmentDetails =
+    Map<LogSegmentName, SortedMap<Offset, File>> newLogSegmentsToIndexSegmentDetails =
         getLogSegmentsToIndexSegmentsMap(logSegmentNames);
-    for (Map.Entry<String, SortedMap<Offset, File>> entry : newLogSegmentsToIndexSegmentDetails.entrySet()) {
+    for (Map.Entry<LogSegmentName, SortedMap<Offset, File>> entry : newLogSegmentsToIndexSegmentDetails.entrySet()) {
       LogSegment logSegment = srcLog.getSegment(entry.getKey());
       SortedMap<Offset, File> indexSegmentDetails = entry.getValue();
       long endOffset = logSegment.getStartOffset();
@@ -975,9 +975,10 @@ class BlobStoreCompactor {
    * @param logSegmentNames the names of log segments whose index segment files are required.
    * @return a map keyed on log segment name and containing details about all the index segment files that refer to it.
    */
-  private Map<String, SortedMap<Offset, File>> getLogSegmentsToIndexSegmentsMap(List<String> logSegmentNames) {
-    Map<String, SortedMap<Offset, File>> logSegmentsToIndexSegmentDetails = new HashMap<>();
-    for (String logSegmentName : logSegmentNames) {
+  private Map<LogSegmentName, SortedMap<Offset, File>> getLogSegmentsToIndexSegmentsMap(
+      List<LogSegmentName> logSegmentNames) {
+    Map<LogSegmentName, SortedMap<Offset, File>> logSegmentsToIndexSegmentDetails = new HashMap<>();
+    for (LogSegmentName logSegmentName : logSegmentNames) {
       logSegmentsToIndexSegmentDetails.put(logSegmentName, getIndexSegmentDetails(logSegmentName));
     }
     return logSegmentsToIndexSegmentDetails;
@@ -993,8 +994,8 @@ class BlobStoreCompactor {
     if (isActive) {
       long singleWaitMs = Math.min(500, WAIT_TIME_FOR_CLEANUP_MS);
       long waitSoFar = 0;
-      List<String> segmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
-      for (String segmentName : segmentsUnderCompaction) {
+      List<LogSegmentName> segmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
+      for (LogSegmentName segmentName : segmentsUnderCompaction) {
         while (srcLog.getSegment(segmentName).refCount() > 0 && waitSoFar < WAIT_TIME_FOR_CLEANUP_MS) {
           time.sleep(singleWaitMs);
           waitSoFar += singleWaitMs;
@@ -1015,10 +1016,10 @@ class BlobStoreCompactor {
    */
   private void cleanupLogAndIndexSegments(boolean recovering) throws StoreException {
     CompactionDetails details = compactionLog.getCompactionDetails();
-    List<String> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
+    List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
     logger.debug("Cleaning up {} (and related index segments) in {}", segmentsUnderCompaction, storeId);
     for (int i = 0; i < segmentsUnderCompaction.size(); i++) {
-      String segmentName = segmentsUnderCompaction.get(i);
+      LogSegmentName segmentName = segmentsUnderCompaction.get(i);
       if (srcLog.getSegment(segmentName) != null) {
         PersistentIndex.cleanupIndexSegmentFilesForLogSegment(dataDir.getAbsolutePath(), segmentName);
         srcLog.dropSegment(segmentName, recovering || i >= numSwapsUsed);
@@ -1061,7 +1062,7 @@ class BlobStoreCompactor {
    * @param logSegmentName the name of the log segment whose index segment files are required.
    * @return a map that contains all the index segment files of the log segment - keyed on the start offset.
    */
-  private SortedMap<Offset, File> getIndexSegmentDetails(String logSegmentName) {
+  private SortedMap<Offset, File> getIndexSegmentDetails(LogSegmentName logSegmentName) {
     SortedMap<Offset, File> indexSegmentStartOffsetToFile = new TreeMap<>();
     File[] indexSegmentFiles =
         PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir.getAbsolutePath(), logSegmentName);

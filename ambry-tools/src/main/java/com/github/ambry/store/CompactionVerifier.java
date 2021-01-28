@@ -82,7 +82,7 @@ public class CompactionVerifier implements Closeable {
   private final long compactionStartTimeMs;
   private final long compactionEndTimeMs;
   private final long deleteRefTimeMs;
-  private final List<String> segmentsCompactedNames = new ArrayList<>();
+  private final List<LogSegmentName> segmentsCompactedNames = new ArrayList<>();
 
   // "src" store related
   private final File srcDir;
@@ -299,12 +299,12 @@ public class CompactionVerifier implements Closeable {
    */
   private void verifyStructure() {
     LOGGER.info("Verifying structure");
-    List<String> srcSegmentNames = getSegmentNames(srcLog);
-    List<String> tgtSegmentNames = getSegmentNames(tgtLog);
-    List<String> expectedTgtSegmentNames = new ArrayList<>();
+    List<LogSegmentName> srcSegmentNames = getSegmentNames(srcLog);
+    List<LogSegmentName> tgtSegmentNames = getSegmentNames(tgtLog);
+    List<LogSegmentName> expectedTgtSegmentNames = new ArrayList<>();
 
     // 1. Check that log segments that should exist, still exist and ones that should not, no longer do
-    for (String srcSegmentName : srcSegmentNames) {
+    for (LogSegmentName srcSegmentName : srcSegmentNames) {
       if (segmentsCompactedNames.contains(srcSegmentName)) {
         assert !tgtSegmentNames.contains(srcSegmentName) :
             "Compacted log should not contain segment: " + srcSegmentName;
@@ -315,21 +315,21 @@ public class CompactionVerifier implements Closeable {
     }
 
     // 2. Check that log segments that are newly created have the right generation number
-    for (String segmentCompactedName : segmentsCompactedNames) {
-      String tgtSegmentName = LogSegmentNameHelper.getNextGenerationName(segmentCompactedName);
+    for (LogSegmentName segmentCompactedName : segmentsCompactedNames) {
+      LogSegmentName tgtSegmentName = segmentCompactedName.getNextGenerationName();
       if (tgtSegmentNames.contains(tgtSegmentName)) {
         expectedTgtSegmentNames.add(tgtSegmentName);
       }
     }
 
     // 3. Check that the log segments that exist in the tgt are as expected
-    Collections.sort(expectedTgtSegmentNames, LogSegmentNameHelper.COMPARATOR);
+    Collections.sort(expectedTgtSegmentNames);
     assert tgtSegmentNames.equals(expectedTgtSegmentNames) : "Segment names in target log not as expected";
 
     // 4. Positions should be exclusive
     Set<Long> positionsSeen = new HashSet<>();
-    for (String tgtSegmentName : tgtSegmentNames) {
-      long position = LogSegmentNameHelper.getPosition(tgtSegmentName);
+    for (LogSegmentName tgtSegmentName : tgtSegmentNames) {
+      long position = tgtSegmentName.getPosition();
       assert !positionsSeen.contains(position) : "There are two log segments at position: " + position;
       positionsSeen.add(position);
     }
@@ -500,8 +500,8 @@ public class CompactionVerifier implements Closeable {
    * @param log the log whose segment names are required.
    * @return list of the names of all the segments in {@code log}
    */
-  private List<String> getSegmentNames(Log log) {
-    List<String> names = new ArrayList<>();
+  private List<LogSegmentName> getSegmentNames(Log log) {
+    List<LogSegmentName> names = new ArrayList<>();
     LogSegment segment = log.getFirstSegment();
     while (segment != null) {
       names.add(segment.getName());

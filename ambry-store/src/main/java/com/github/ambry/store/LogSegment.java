@@ -52,7 +52,7 @@ class LogSegment implements Read, Write {
   private final FileChannel fileChannel;
   private final File file;
   private final long capacityInBytes;
-  private final String name;
+  private final LogSegmentName name;
   private final Pair<File, FileChannel> segmentView;
   private final StoreMetrics metrics;
   private final long startOffset;
@@ -76,7 +76,7 @@ class LogSegment implements Read, Write {
    * @param writeHeader if {@code true}, headers are written that provide metadata about the segment.
    * @throws StoreException if the file cannot be read or created
    */
-  LogSegment(String name, File file, long capacityInBytes, StoreConfig config, StoreMetrics metrics,
+  LogSegment(LogSegmentName name, File file, long capacityInBytes, StoreConfig config, StoreMetrics metrics,
       boolean writeHeader) throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
@@ -113,7 +113,7 @@ class LogSegment implements Read, Write {
    * @param metrics the {@link StoreMetrics} instance to use.
    * @throws StoreException
    */
-  LogSegment(String name, File file, StoreConfig config, StoreMetrics metrics) throws StoreException {
+  LogSegment(LogSegmentName name, File file, StoreConfig config, StoreMetrics metrics) throws StoreException {
     if (!file.exists() || !file.isFile()) {
       throw new StoreException(file.getAbsolutePath() + " does not exist or is not a file",
           StoreErrorCodes.File_Not_Found);
@@ -167,7 +167,7 @@ class LogSegment implements Read, Write {
   LogSegment(File file, long capacityInBytes, StoreConfig config, StoreMetrics metrics, FileChannel fileChannel)
       throws StoreException {
     this.file = file;
-    this.name = file.getName();
+    this.name = LogSegmentName.fromFilename(file.getName());
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
     this.fileChannel = fileChannel;
@@ -303,7 +303,7 @@ class LogSegment implements Read, Write {
   }
 
   /**
-   * Initialize a {@link java.nio.DirectByteBuffer} for {@link LogSegment#appendFrom(ReadableByteChannel, long)}.
+   * Initialize a direct {@link ByteBuffer} for {@link LogSegment#appendFrom(ReadableByteChannel, long)}.
    * The buffer is to optimize JDK 8KB small IO write.
    */
   void initBufferForAppend() throws StoreException {
@@ -443,7 +443,7 @@ class LogSegment implements Read, Write {
   /**
    * @return the name of this segment.
    */
-  String getName() {
+  LogSegmentName getName() {
     return name;
   }
 

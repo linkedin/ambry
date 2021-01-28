@@ -42,9 +42,8 @@ class Log implements Write {
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final StoreConfig config;
   private final StoreMetrics metrics;
-  private final Iterator<Pair<String, String>> segmentNameAndFileNameIterator;
-  private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
-      new ConcurrentSkipListMap<>(LogSegmentNameHelper.COMPARATOR);
+  private final Iterator<Pair<LogSegmentName, String>> segmentNameAndFileNameIterator;
+  private final ConcurrentSkipListMap<LogSegmentName, LogSegment> segmentsByName = new ConcurrentSkipListMap<>();
   private static final Logger logger = LoggerFactory.getLogger(Log.class);
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
   private final String storeId;
@@ -72,11 +71,11 @@ class Log implements Write {
     this.diskSpaceAllocator = diskSpaceAllocator;
     this.config = config;
     this.metrics = metrics;
-    this.segmentNameAndFileNameIterator = Collections.EMPTY_LIST.iterator();
+    this.segmentNameAndFileNameIterator = Collections.emptyIterator();
     storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
 
     File dir = new File(dataDir);
-    File[] segmentFiles = dir.listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
+    File[] segmentFiles = dir.listFiles(LogSegmentName.LOG_FILE_FILTER);
     if (segmentFiles == null) {
       throw new StoreException("Could not read from directory: " + dataDir, StoreErrorCodes.File_Not_Found);
     } else {
@@ -104,7 +103,7 @@ class Log implements Write {
    */
   Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
       StoreMetrics metrics, boolean isLogSegmented, List<LogSegment> segmentsToLoad,
-      Iterator<Pair<String, String>> segmentNameAndFileNameIterator) throws StoreException {
+      Iterator<Pair<LogSegmentName, String>> segmentNameAndFileNameIterator) throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = isLogSegmented;
@@ -172,14 +171,14 @@ class Log implements Write {
    * @throws IllegalArgumentException if there no segment with name {@code name}.
    * @throws StoreException if there is any store exception while freeing segments.
    */
-  void setActiveSegment(String name) throws StoreException {
+  void setActiveSegment(LogSegmentName name) throws StoreException {
     if (!segmentsByName.containsKey(name)) {
       throw new IllegalArgumentException("There is no log segment with name: " + name);
     }
-    ConcurrentNavigableMap<String, LogSegment> extraSegments = segmentsByName.tailMap(name, false);
-    Iterator<Map.Entry<String, LogSegment>> iterator = extraSegments.entrySet().iterator();
+    ConcurrentNavigableMap<LogSegmentName, LogSegment> extraSegments = segmentsByName.tailMap(name, false);
+    Iterator<Map.Entry<LogSegmentName, LogSegment>> iterator = extraSegments.entrySet().iterator();
     while (iterator.hasNext()) {
-      Map.Entry<String, LogSegment> entry = iterator.next();
+      Map.Entry<LogSegmentName, LogSegment> entry = iterator.next();
       logger.info("Freeing extra segment with name [{}] ", entry.getValue().getName());
       free(entry.getValue(), false);
       remainingUnallocatedSegments.getAndIncrement();
@@ -239,11 +238,11 @@ class Log implements Write {
    * @return the {@link LogSegment} that is logically after the given {@code segment}.
    */
   LogSegment getNextSegment(LogSegment segment) {
-    String name = segment.getName();
+    LogSegmentName name = segment.getName();
     if (!segmentsByName.containsKey(name)) {
       throw new IllegalArgumentException("Invalid log segment name: " + name);
     }
-    Map.Entry<String, LogSegment> nextEntry = segmentsByName.higherEntry(name);
+    Map.Entry<LogSegmentName, LogSegment> nextEntry = segmentsByName.higherEntry(name);
     return nextEntry == null ? null : nextEntry.getValue();
   }
 
@@ -253,11 +252,11 @@ class Log implements Write {
    * @return the {@link LogSegment} that is logically before the given {@code segment}.
    */
   LogSegment getPrevSegment(LogSegment segment) {
-    String name = segment.getName();
+    LogSegmentName name = segment.getName();
     if (!segmentsByName.containsKey(name)) {
       throw new IllegalArgumentException("Invalid log segment name: " + name);
     }
-    Map.Entry<String, LogSegment> prevEntry = segmentsByName.lowerEntry(name);
+    Map.Entry<LogSegmentName, LogSegment> prevEntry = segmentsByName.lowerEntry(name);
     return prevEntry == null ? null : prevEntry.getValue();
   }
 
@@ -265,7 +264,7 @@ class Log implements Write {
    * @param name the name of the segment required.
    * @return a {@link LogSegment} with {@code name} if it exists.
    */
-  LogSegment getSegment(String name) {
+  LogSegment getSegment(LogSegmentName name) {
     return segmentsByName.get(name);
   }
 
@@ -322,7 +321,7 @@ class Log implements Write {
           "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity [" + segmentCapacity
               + "]");
     }
-    Pair<String, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
+    Pair<LogSegmentName, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
     logger.info("Allocating first segment with name [{}], back by file {} and capacity {} bytes. Total number of "
             + "segments is {}", segmentNameAndFilename.getFirst(), segmentNameAndFilename.getSecond(), segmentCapacity,
         numSegments);
@@ -341,10 +340,10 @@ class Log implements Write {
   private List<LogSegment> getSegmentsToLoad(File[] segmentFiles) throws StoreException {
     List<LogSegment> segments = new ArrayList<>(segmentFiles.length);
     for (File segmentFile : segmentFiles) {
-      String name = LogSegmentNameHelper.nameFromFilename(segmentFile.getName());
+      LogSegmentName name = LogSegmentName.fromFilename(segmentFile.getName());
       logger.info("Loading segment with name [{}]", name);
       LogSegment segment;
-      if (name.isEmpty()) {
+      if (name.isSingleSegment()) {
         // for backwards compatibility, a single segment log is loaded by providing capacity since the old logs have
         // no headers
         segment = new LogSegment(name, segmentFile, capacityInBytes, config, metrics, false);
@@ -362,7 +361,7 @@ class Log implements Write {
    * This should be run after a log is initialized to get the actual log segmentation state.
    */
   private boolean isExistingLogSegmented() {
-    return !segmentsByName.firstKey().isEmpty();
+    return !segmentsByName.firstKey().isSingleSegment();
   }
 
   /**
@@ -381,7 +380,7 @@ class Log implements Write {
     }
 
     LogSegment anySegment = segmentsToLoad.get(0);
-    long totalSegments = anySegment.getName().isEmpty() ? 1 : capacityInBytes / anySegment.getCapacityInBytes();
+    long totalSegments = anySegment.getName().isSingleSegment() ? 1 : capacityInBytes / anySegment.getCapacityInBytes();
     for (LogSegment segment : segmentsToLoad) {
       // putting the segments in the map orders them
       segmentsByName.put(segment.getName(), segment);
@@ -473,7 +472,7 @@ class Log implements Write {
       throw new IllegalStateException(
           "There is no more capacity left in [" + dataDir + "]. Max capacity is [" + capacityInBytes + "]");
     }
-    Pair<String, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
+    Pair<LogSegmentName, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
     logger.info("Allocating new segment with name: {}", segmentNameAndFilename.getFirst());
     File newSegmentFile = null;
     try {
@@ -502,17 +501,17 @@ class Log implements Write {
   /**
    * @return the name and filename of the segment that is to be created.
    */
-  private Pair<String, String> getNextSegmentNameAndFilename() {
-    Pair<String, String> nameAndFilename;
+  private Pair<LogSegmentName, String> getNextSegmentNameAndFilename() {
+    Pair<LogSegmentName, String> nameAndFilename;
     if (segmentNameAndFileNameIterator != null && segmentNameAndFileNameIterator.hasNext()) {
       nameAndFilename = segmentNameAndFileNameIterator.next();
     } else if (activeSegment == null) {
       // this code path gets exercised only on first startup
-      String name = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
-      nameAndFilename = new Pair<>(name, LogSegmentNameHelper.nameToFilename(name));
+      LogSegmentName name = LogSegmentName.generateFirstSegmentName(isLogSegmented);
+      nameAndFilename = new Pair<>(name, name.toFilename());
     } else {
-      String name = LogSegmentNameHelper.getNextPositionName(activeSegment.getName());
-      nameAndFilename = new Pair<>(name, LogSegmentNameHelper.nameToFilename(name));
+      LogSegmentName name = activeSegment.getName().getNextPositionName();
+      nameAndFilename = new Pair<>(name, name.toFilename());
     }
     return nameAndFilename;
   }
@@ -525,7 +524,7 @@ class Log implements Write {
    * @throws IllegalArgumentException if the {@code segment} being added is past the active segment
    */
   void addSegment(LogSegment segment, boolean increaseUsedSegmentCount) {
-    if (LogSegmentNameHelper.COMPARATOR.compare(segment.getName(), activeSegment.getName()) >= 0) {
+    if (segment.getName().compareTo(activeSegment.getName()) >= 0) {
       throw new IllegalArgumentException(
           "Cannot add segments past the current active segment. Active segment is [" + activeSegment.getName()
               + "]. Tried to add [" + segment.getName() + "]");
@@ -545,7 +544,7 @@ class Log implements Write {
    * @throws IllegalArgumentException if {@code segmentName} is not a part of the log.
    * @throws StoreException if there is any store exception while cleaning up the log segment.
    */
-  void dropSegment(String segmentName, boolean decreaseUsedSegmentCount) throws StoreException {
+  void dropSegment(LogSegmentName segmentName, boolean decreaseUsedSegmentCount) throws StoreException {
     LogSegment segment = segmentsByName.get(segmentName);
     if (segment == null || segment == activeSegment) {
       throw new IllegalArgumentException("Segment does not exist or is the active segment: " + segmentName);

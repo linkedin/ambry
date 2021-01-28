@@ -96,7 +96,7 @@ class IndexValue implements Comparable<IndexValue> {
    * @param value the {@link ByteBuffer} representation of the {@link IndexValue}
    * @param formatVersion the format version of the {@link PersistentIndex}
    */
-  IndexValue(String logSegmentName, ByteBuffer value, short formatVersion) {
+  IndexValue(LogSegmentName logSegmentName, ByteBuffer value, short formatVersion) {
     this.formatVersion = formatVersion;
     switch (formatVersion) {
       case PersistentIndex.VERSION_0:

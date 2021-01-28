@@ -26,10 +26,8 @@ public class JournalTest {
 
   @Test
   public void testJournalOperation() {
-    long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    String firstLogSegmentName = LogSegmentNameHelper.getName(pos, gen);
-    String secondLogSegmentName = LogSegmentNameHelper.getNextPositionName(firstLogSegmentName);
+    LogSegmentName firstLogSegmentName = StoreTestUtils.getRandomLogSegmentName(null);
+    LogSegmentName secondLogSegmentName = firstLogSegmentName.getNextPositionName();
     Journal journal = new Journal("test", 10, 5);
     // maintain a queue to keep track of entries in journal for verification purpose
     List<JournalEntry> journalEntries = new LinkedList<>();
@@ -110,9 +108,7 @@ public class JournalTest {
    */
   @Test
   public void testJournalBootstrapMode() {
-    long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
+    LogSegmentName logSegmentName = StoreTestUtils.getRandomLogSegmentName(null);
     Offset[] offsets = new Offset[4];
     MockId[] keys = new MockId[4];
     for (int i = 0; i < 4; i++) {

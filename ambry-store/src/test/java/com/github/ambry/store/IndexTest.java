@@ -288,7 +288,7 @@ public class IndexTest {
     if (isLogSegmented) {
       // FileSpan spans across segments
       Offset startOffset = state.index.getCurrentEndOffset();
-      String nextLogSegmentName = LogSegmentNameHelper.getNextPositionName(startOffset.getName());
+      LogSegmentName nextLogSegmentName = startOffset.getName().getNextPositionName();
       Offset endOffset = new Offset(nextLogSegmentName, 0);
       fileSpan = new FileSpan(startOffset, endOffset);
       try {
@@ -323,7 +323,7 @@ public class IndexTest {
     if (isLogSegmented) {
       // FileSpan spans across segments
       Offset startOffset = state.index.getCurrentEndOffset();
-      String nextLogSegmentName = LogSegmentNameHelper.getNextPositionName(startOffset.getName());
+      LogSegmentName nextLogSegmentName = startOffset.getName().getNextPositionName();
       Offset endOffset = new Offset(nextLogSegmentName, 0);
       fileSpan = new FileSpan(startOffset, endOffset);
       try {
@@ -495,7 +495,7 @@ public class IndexTest {
 
     // FileSpan spans across segments
     Offset startOffset = state.index.getCurrentEndOffset();
-    String nextLogSegmentName = LogSegmentNameHelper.getNextPositionName(startOffset.getName());
+    LogSegmentName nextLogSegmentName = startOffset.getName().getNextPositionName();
     Offset endOffset = new Offset(nextLogSegmentName, 0);
     fileSpan = new FileSpan(startOffset, endOffset);
     try {
@@ -1111,7 +1111,7 @@ public class IndexTest {
       assertTrue("The first index segment must have an offset > 0", firstIndexSegmentStartOffset.getOffset() > 0);
 
       // generate an offset that does not exist.
-      String newName = LogSegmentNameHelper.getNextGenerationName(firstIndexSegmentStartOffset.getName());
+      LogSegmentName newName = firstIndexSegmentStartOffset.getName().getNextGenerationName();
       long newOffset = firstIndexSegmentStartOffset.getOffset() + 1;
 
       // Generate an offset that is below the index start offset
@@ -1488,7 +1488,8 @@ public class IndexTest {
    */
   @Test
   public void getAbsolutePositionForOffsetBadArgsTest() {
-    Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(state.index.getLogSegmentCount() + 1, 0), 0);
+    Offset badSegmentOffset =
+        new Offset(LogSegmentName.fromPositionAndGeneration(state.index.getLogSegmentCount() + 1, 0), 0);
     Offset badOffsetOffset =
         new Offset(state.log.getFirstSegment().getName(), state.log.getFirstSegment().getCapacityInBytes() + 1);
     List<Offset> offsetsToCheck = new ArrayList<>();
@@ -1521,7 +1522,7 @@ public class IndexTest {
   }
 
   /**
-   * Tests correctness of {@link PersistentIndex#getIndexSegmentFilesForLogSegment(String, String)} and makes sure
+   * Tests correctness of {@link PersistentIndex#getIndexSegmentFilesForLogSegment(String, LogSegmentName)} and makes sure
    * it picks up all the files.
    */
   @Test
@@ -1590,7 +1591,7 @@ public class IndexTest {
   }
 
   /**
-   * Tests {@link PersistentIndex#cleanupIndexSegmentFilesForLogSegment(String, String)} and makes sure it deletes all
+   * Tests {@link PersistentIndex#cleanupIndexSegmentFilesForLogSegment(String, LogSegmentName)} and makes sure it deletes all
    * the relevant files and no more.
    * @throws StoreException
    */
@@ -1600,13 +1601,14 @@ public class IndexTest {
     LogSegment logSegment = state.log.getFirstSegment();
     while (logSegment != null) {
       LogSegment nextSegment = state.log.getNextSegment(logSegment);
-      final String logSegmentName = logSegment.getName();
+      final LogSegmentName logSegmentName = logSegment.getName();
       int totalFilesInDir = tempDir.listFiles().length;
       File[] filesToCheck = tempDir.listFiles(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {
-          return name.startsWith(logSegmentName) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
-              || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+          return name.startsWith(logSegmentName.toString()) && (
+              name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
+                  IndexSegment.BLOOM_FILE_NAME_SUFFIX));
         }
       });
       Offset from = new Offset(logSegment.getName(), logSegment.getStartOffset());
@@ -2036,8 +2038,8 @@ public class IndexTest {
    * @param segmentsToIgnoreFromLast number of log segments to be ignored from the last
    * @return a {@link List} of log segments
    */
-  private List<String> getExpectedLogSegmentNames(int segmentsToIgnoreFromLast) {
-    List<String> expectedLogSegments = new ArrayList<>();
+  private List<LogSegmentName> getExpectedLogSegmentNames(int segmentsToIgnoreFromLast) {
+    List<LogSegmentName> expectedLogSegments = new ArrayList<>();
     LogSegment logSegment = state.log.getFirstSegment();
     while (logSegment != null) {
       expectedLogSegments.add(logSegment.getName());

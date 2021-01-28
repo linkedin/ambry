@@ -94,14 +94,15 @@ public class LogSegmentTest {
     props.setProperty("store.data.file.permission", "rw-rw-r--");
     StoreConfig initialConfig = new StoreConfig(new VerifiableProperties(props));
     File segmentFile = new File(tempDir, "test_segment");
+    LogSegmentName segmentName = LogSegmentName.generateFirstSegmentName(true);
     assertTrue("Fail to create segment file", segmentFile.createNewFile());
     segmentFile.deleteOnExit();
     // create log segment instance by writing into brand new file (using initialConfig, file permission = "rw-rw-r--")
-    new LogSegment(segmentFile.getName(), segmentFile, STANDARD_SEGMENT_SIZE, initialConfig, metrics, true);
+    new LogSegment(segmentName, segmentFile, STANDARD_SEGMENT_SIZE, initialConfig, metrics, true);
     Set<PosixFilePermission> filePerm = Files.getPosixFilePermissions(segmentFile.toPath());
     assertEquals("File permissions are not expected", "rw-rw-r--", PosixFilePermissions.toString(filePerm));
     // create log segment instance by reading from existing file (using default store config, file permission = "rw-rw----")
-    new LogSegment(segmentFile.getName(), segmentFile, config, metrics);
+    new LogSegment(segmentName, segmentFile, config, metrics);
     filePerm = Files.getPosixFilePermissions(segmentFile.toPath());
     assertEquals("File permissions are not expected", "rw-rw----", PosixFilePermissions.toString(filePerm));
   }
@@ -112,7 +113,7 @@ public class LogSegmentTest {
    */
   @Test
   public void basicWriteAndReadTest() throws IOException, StoreException {
-    String segmentName = "log_current";
+    LogSegmentName segmentName = LogSegmentName.generateFirstSegmentName(false);
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     segment.initBufferForAppend();
     try {
@@ -161,7 +162,7 @@ public class LogSegmentTest {
       segment.flush();
       // close and reopen segment and ensure persistence.
       segment.close(false);
-      segment = new LogSegment(segmentName, new File(tempDir, segmentName), config, metrics);
+      segment = new LogSegment(segmentName, new File(tempDir, segmentName.toFilename()), config, metrics);
       segment.setEndOffset(writeStartOffset + buf.length);
       readAndEnsureMatch(segment, writeStartOffset, buf);
     } finally {
@@ -175,7 +176,7 @@ public class LogSegmentTest {
    */
   @Test
   public void viewAndRefCountTest() throws IOException, StoreException {
-    String segmentName = "log_current";
+    LogSegmentName segmentName = LogSegmentName.generateFirstSegmentName(false);
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
       long startOffset = segment.getStartOffset();
@@ -202,7 +203,7 @@ public class LogSegmentTest {
    */
   @Test
   public void endOffsetTest() throws IOException, StoreException {
-    String segmentName = "log_current";
+    LogSegmentName segmentName = LogSegmentName.generateFirstSegmentName(false);
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
       long writeStartOffset = segment.getStartOffset();
@@ -280,7 +281,7 @@ public class LogSegmentTest {
   @Test
   public void readTest() throws IOException, StoreException {
     Random random = new Random();
-    String segmentName = "log_current";
+    LogSegmentName segmentName = LogSegmentName.generateFirstSegmentName(false);
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
       long writeStartOffset = segment.getStartOffset();
@@ -382,7 +383,7 @@ public class LogSegmentTest {
    */
   @Test
   public void writeFromTest() throws IOException, StoreException {
-    String currSegmentName = "log_current";
+    LogSegmentName currSegmentName = LogSegmentName.generateFirstSegmentName(false);
     LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE, true);
     try {
       long writeStartOffset = segment.getStartOffset();
@@ -463,7 +464,8 @@ public class LogSegmentTest {
    */
   @Test
   public void closeLogSegmentTest() throws Exception {
-    Pair<LogSegment, FileChannel> segmentAndFileChannel = getSegmentAndFileChannel("log_current1");
+    Pair<LogSegment, FileChannel> segmentAndFileChannel =
+        getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     LogSegment segment = segmentAndFileChannel.getFirst();
     FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
 
@@ -471,7 +473,7 @@ public class LogSegmentTest {
     segment.close(false);
     verify(mockFileChannel).force(true);
     assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
-    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
+    assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
   }
 
   /**
@@ -480,7 +482,8 @@ public class LogSegmentTest {
    */
   @Test
   public void closeLogSegmentAndSkipFlushTest() throws Exception {
-    Pair<LogSegment, FileChannel> segmentAndFileChannel = getSegmentAndFileChannel("log_current2");
+    Pair<LogSegment, FileChannel> segmentAndFileChannel =
+        getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     LogSegment segment = segmentAndFileChannel.getFirst();
     FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
 
@@ -488,7 +491,7 @@ public class LogSegmentTest {
     segment.close(true);
     verify(mockFileChannel, times(0)).force(true);
     assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
-    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
+    assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
   }
 
   /**
@@ -496,7 +499,8 @@ public class LogSegmentTest {
    */
   @Test
   public void closeLogSegmentWithExceptionTest() throws Exception {
-    Pair<LogSegment, FileChannel> segmentAndFileChannel = getSegmentAndFileChannel("log_current3");
+    Pair<LogSegment, FileChannel> segmentAndFileChannel =
+        getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     LogSegment segment = segmentAndFileChannel.getFirst();
     FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
 
@@ -505,9 +509,9 @@ public class LogSegmentTest {
     doThrow(new IOException("close channel failure")).when(mockFileChannel).close();
     segment.close(true);
     verify(mockFileChannel, times(0)).force(true);
-    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
+    assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
 
-    segmentAndFileChannel = getSegmentAndFileChannel("log_current4");
+    segmentAndFileChannel = getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     segment = segmentAndFileChannel.getFirst();
     mockFileChannel = segmentAndFileChannel.getSecond();
 
@@ -520,7 +524,7 @@ public class LogSegmentTest {
       //expected
     }
     verify(mockFileChannel).force(true);
-    assertTrue("File couldn't be deleted.", (new File(tempDir, segment.getName()).delete()));
+    assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
   }
 
   /**
@@ -529,7 +533,7 @@ public class LogSegmentTest {
    */
   @Test
   public void constructorTest() throws IOException, StoreException {
-    LogSegment segment = getSegment("log_current", STANDARD_SEGMENT_SIZE, false);
+    LogSegment segment = getSegment(LogSegmentName.generateFirstSegmentName(false), STANDARD_SEGMENT_SIZE, false);
     assertEquals("Start offset should be 0 when no headers are written", 0, segment.getStartOffset());
   }
 
@@ -540,8 +544,8 @@ public class LogSegmentTest {
   @Test
   public void badConstructionTest() throws IOException, StoreException {
     // try to construct with a file that does not exist.
-    String name = "log_non_existent";
-    File file = new File(tempDir, name);
+    LogSegmentName name = LogSegmentName.generateFirstSegmentName(false);
+    File file = new File(tempDir, name.toFilename());
     try {
       new LogSegment(name, file, STANDARD_SEGMENT_SIZE, config, metrics, true);
       fail("Construction should have failed because the backing file does not exist");
@@ -557,8 +561,7 @@ public class LogSegmentTest {
     }
 
     // try to construct with a file that is a directory
-    name = tempDir.getName();
-    file = new File(tempDir.getParent(), name);
+    file = tempDir;
     try {
       new LogSegment(name, file, STANDARD_SEGMENT_SIZE, config, metrics, true);
       fail("Construction should have failed because the backing file does not exist");
@@ -566,8 +569,6 @@ public class LogSegmentTest {
       // expected. Nothing to do.
     }
 
-    name = tempDir.getName();
-    file = new File(tempDir.getParent(), name);
     try {
       new LogSegment(name, file, config, metrics);
       fail("Construction should have failed because the backing file does not exist");
@@ -576,7 +577,7 @@ public class LogSegmentTest {
     }
 
     // unknown version
-    LogSegment segment = getSegment("dummy_log", STANDARD_SEGMENT_SIZE, true);
+    LogSegment segment = getSegment(name, STANDARD_SEGMENT_SIZE, true);
     file = segment.getView().getFirst();
     byte[] header = getHeader(segment);
     byte savedByte = header[0];
@@ -631,22 +632,22 @@ public class LogSegmentTest {
    * {@code capacityInBytes}.
    * @throws IOException
    */
-  private LogSegment getSegment(String segmentName, long capacityInBytes, boolean writeHeaders)
+  private LogSegment getSegment(LogSegmentName segmentName, long capacityInBytes, boolean writeHeaders)
       throws IOException, StoreException {
-    File file = new File(tempDir, segmentName);
+    File file = new File(tempDir, segmentName.toFilename());
     if (file.exists()) {
       assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
     }
     assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
     file.deleteOnExit();
-    try (RandomAccessFile raf = new RandomAccessFile(tempDir + File.separator + segmentName, "rw")) {
+    try (RandomAccessFile raf = new RandomAccessFile(file, "rw")) {
       return new LogSegment(segmentName, file, capacityInBytes, config, metrics, writeHeaders);
     }
   }
 
   /**
    * Create a {@link LogSegment} and a mock file channel associated with it for testing.
-   * @param name the name of log segment
+   * @param name the name of log segment file.
    * @return a pair that contains log segment and mock file channel
    * @throws Exception
    */
@@ -713,7 +714,7 @@ public class LogSegmentTest {
   private void closeSegmentAndDeleteFile(LogSegment segment) throws IOException {
     segment.close(false);
     assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
-    File segmentFile = new File(tempDir, segment.getName());
+    File segmentFile = segment.getView().getFirst();
     assertTrue("The segment file [" + segmentFile.getAbsolutePath() + "] could not be deleted", segmentFile.delete());
   }
 
@@ -753,7 +754,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   private void doAppendTest(Appender appender) throws IOException, StoreException {
-    String currSegmentName = "log_current";
+    LogSegmentName currSegmentName = LogSegmentName.generateFirstSegmentName(false);
     LogSegment segment = getSegment(currSegmentName, BIG_SEGMENT_SIZE, true);
     segment.initBufferForAppend();
     try {

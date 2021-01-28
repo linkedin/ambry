@@ -148,7 +148,7 @@ public class LogTest {
     }
 
     // file which is not a directory
-    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(false)));
+    File file = create(LogSegmentName.generateFirstSegmentName(false).toFilename());
     try {
       new Log(file.getAbsolutePath(), 1, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
           createStoreConfig(1, setFilePermissionEnabled), metrics);
@@ -205,7 +205,7 @@ public class LogTest {
   }
 
   /**
-   * Tests cases where bad arguments are provided to {@link Log#setActiveSegment(String)}.
+   * Tests cases where bad arguments are provided to {@link Log#setActiveSegment(LogSegmentName)}.
    * @throws IOException
    */
   @Test
@@ -214,7 +214,7 @@ public class LogTest {
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics);
     long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
     try {
-      log.setActiveSegment(LogSegmentNameHelper.getName(numSegments + 1, 0));
+      log.setActiveSegment(LogSegmentName.fromPositionAndGeneration(numSegments + 1, 0));
       fail("Should have failed to set a non existent segment as active");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -232,7 +232,7 @@ public class LogTest {
   public void getNextSegmentBadArgsTest() throws IOException, StoreException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics);
-    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(1, 1), SEGMENT_CAPACITY, true);
+    LogSegment segment = getLogSegment(LogSegmentName.fromPositionAndGeneration(1, 1), SEGMENT_CAPACITY, true);
     try {
       log.getNextSegment(segment);
       fail("Getting next segment should have failed because provided segment does not exist in the log");
@@ -252,7 +252,7 @@ public class LogTest {
   public void getPrevSegmentBadArgsTest() throws IOException, StoreException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics);
-    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(1, 1), SEGMENT_CAPACITY, true);
+    LogSegment segment = getLogSegment(LogSegmentName.fromPositionAndGeneration(1, 1), SEGMENT_CAPACITY, true);
     try {
       log.getPrevSegment(segment);
       fail("Getting prev segment should have failed because provided segment does not exist in the log");
@@ -299,27 +299,27 @@ public class LogTest {
   }
 
   /**
-   * Tests all cases of {@link Log#addSegment(LogSegment, boolean)} and {@link Log#dropSegment(String, boolean)}.
+   * Tests all cases of {@link Log#addSegment(LogSegment, boolean)} and {@link Log#dropSegment(LogSegmentName, boolean)}.
    * @throws IOException
    */
   @Test
   public void addAndDropSegmentTest() throws IOException, StoreException {
     // start with a segment that has a high position to allow for addition of segments
     long activeSegmentPos = 2 * LOG_CAPACITY / SEGMENT_CAPACITY;
-    LogSegment loadedSegment = getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true);
+    LogSegment loadedSegment = getLogSegment(LogSegmentName.fromPositionAndGeneration(activeSegmentPos, 0), SEGMENT_CAPACITY, true);
     List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true, segmentsToLoad,
         Collections.EMPTY_LIST.iterator());
 
     // add a segment
-    String segmentName = LogSegmentNameHelper.getName(0, 0);
+    LogSegmentName segmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
     LogSegment uncountedSegment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
     log.addSegment(uncountedSegment, false);
     assertEquals("Log segment instance not as expected", uncountedSegment, log.getSegment(segmentName));
 
     // cannot add past the active segment
-    segmentName = LogSegmentNameHelper.getName(activeSegmentPos + 1, 0);
+    segmentName = LogSegmentName.fromPositionAndGeneration(activeSegmentPos + 1, 0);
     LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
     try {
       log.addSegment(segment, false);
@@ -332,7 +332,7 @@ public class LogTest {
     // more segments. This increments used segment count to the max.
     int max = (int) (LOG_CAPACITY / SEGMENT_CAPACITY);
     for (int i = 1; i < max; i++) {
-      segmentName = LogSegmentNameHelper.getName(i, 0);
+      segmentName = LogSegmentName.fromPositionAndGeneration(i, 0);
       segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
       log.addSegment(segment, true);
     }
@@ -359,8 +359,8 @@ public class LogTest {
 
     // cannot drop a segment that does not exist
     // cannot drop the active segment
-    String[] segmentsToDrop = {uncountedSegment.getName(), loadedSegment.getName()};
-    for (String segmentToDrop : segmentsToDrop) {
+    LogSegmentName[] segmentsToDrop = {uncountedSegment.getName(), loadedSegment.getName()};
+    for (LogSegmentName segmentToDrop : segmentsToDrop) {
       try {
         log.dropSegment(segmentToDrop, false);
         fail("Should have failed to drop segment");
@@ -381,11 +381,11 @@ public class LogTest {
     doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockDiskAllocator)
         .free(any(File.class), anyLong(), anyString(), anyBoolean());
     segmentsToLoad = Collections.singletonList(
-        getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true));
+        getLogSegment(LogSegmentName.fromPositionAndGeneration(activeSegmentPos, 0), SEGMENT_CAPACITY, true));
     Log mockLog = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, mockDiskAllocator,
         createStoreConfig(SEGMENT_CAPACITY, setFilePermissionEnabled), metrics, true, segmentsToLoad,
         Collections.EMPTY_LIST.iterator());
-    mockLog.addSegment(getLogSegment(LogSegmentNameHelper.getName(1, 0), SEGMENT_CAPACITY, true), true);
+    mockLog.addSegment(getLogSegment(LogSegmentName.fromPositionAndGeneration(1, 0), SEGMENT_CAPACITY, true), true);
     try {
       mockLog.dropSegment(mockLog.getFirstSegment().getName(), true);
       fail("Should have failed to drop segment");
@@ -404,21 +404,21 @@ public class LogTest {
   @Test
   public void logSegmentCustomNamesTest() throws IOException, StoreException {
     int numSegments = (int) (LOG_CAPACITY / SEGMENT_CAPACITY);
-    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(0, 0), SEGMENT_CAPACITY, true);
+    LogSegment segment = getLogSegment(LogSegmentName.fromPositionAndGeneration(0, 0), SEGMENT_CAPACITY, true);
     long startPos = 2 * numSegments;
-    List<Pair<String, String>> expectedSegmentAndFileNames = new ArrayList<>(numSegments);
+    List<Pair<LogSegmentName, String>> expectedSegmentAndFileNames = new ArrayList<>(numSegments);
     expectedSegmentAndFileNames.add(new Pair<>(segment.getName(), segment.getView().getFirst().getName()));
-    List<Pair<String, String>> segmentNameAndFileNamesDesired = new ArrayList<>();
-    String lastName = null;
+    List<Pair<LogSegmentName, String>> segmentNameAndFileNamesDesired = new ArrayList<>();
+    LogSegmentName lastName = null;
     for (int i = 0; i < 2; i++) {
-      lastName = LogSegmentNameHelper.getName(startPos + i, 0);
-      String fileName = LogSegmentNameHelper.nameToFilename(lastName) + "_modified";
+      lastName = LogSegmentName.fromPositionAndGeneration(startPos + i, 0);
+      String fileName = lastName.toFilename() + "_modified";
       segmentNameAndFileNamesDesired.add(new Pair<>(lastName, fileName));
       expectedSegmentAndFileNames.add(new Pair<>(lastName, fileName));
     }
     for (int i = expectedSegmentAndFileNames.size(); i < numSegments; i++) {
-      lastName = LogSegmentNameHelper.getNextPositionName(lastName);
-      String fileName = LogSegmentNameHelper.nameToFilename(lastName);
+      lastName = lastName.getNextPositionName();
+      String fileName = lastName.toFilename();
       expectedSegmentAndFileNames.add(new Pair<>(lastName, fileName));
     }
 
@@ -433,7 +433,7 @@ public class LogTest {
     }
 
     segment = log.getFirstSegment();
-    for (Pair<String, String> nameAndFilename : expectedSegmentAndFileNames) {
+    for (Pair<LogSegmentName, String> nameAndFilename : expectedSegmentAndFileNames) {
       assertEquals("Segment name does not match", nameAndFilename.getFirst(), segment.getName());
       assertEquals("Segment file does not match", nameAndFilename.getSecond(), segment.getView().getFirst().getName());
       segment = log.getNextSegment(segment);
@@ -449,12 +449,12 @@ public class LogTest {
   @Test
   public void ensureCapacityFailureTest() throws Exception {
     int numSegments = (int) (LOG_CAPACITY / SEGMENT_CAPACITY);
-    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(0, 0), SEGMENT_CAPACITY, true);
-    String lastName = LogSegmentNameHelper.getName(0, 0);
-    List<Pair<String, String>> segmentNameAndFileNamesDesired = new ArrayList<>();
+    LogSegment segment = getLogSegment(LogSegmentName.fromPositionAndGeneration(0, 0), SEGMENT_CAPACITY, true);
+    LogSegmentName lastName = LogSegmentName.fromPositionAndGeneration(0, 0);
+    List<Pair<LogSegmentName, String>> segmentNameAndFileNamesDesired = new ArrayList<>();
     for (int i = 0; i < numSegments; i++) {
-      lastName = LogSegmentNameHelper.getNextPositionName(lastName);
-      String fileName = LogSegmentNameHelper.nameToFilename(lastName);
+      lastName = lastName.getNextPositionName();
+      String fileName = lastName.toFilename();
       segmentNameAndFileNamesDesired.add(new Pair<>(lastName, fileName));
     }
 
@@ -529,9 +529,9 @@ public class LogTest {
    * @return a {@link LogSegment} instance with name {@code name} and capacity {@code capacityInBytes}.
    * @throws IOException
    */
-  private LogSegment getLogSegment(String name, long capacityInBytes, boolean writeHeader)
+  private LogSegment getLogSegment(LogSegmentName name, long capacityInBytes, boolean writeHeader)
       throws IOException, StoreException {
-    File file = create(LogSegmentNameHelper.nameToFilename(name));
+    File file = create(name.toFilename());
     return new LogSegment(name, file, capacityInBytes, createStoreConfig(capacityInBytes, setFilePermissionEnabled),
         metrics, writeHeader);
   }
@@ -560,11 +560,11 @@ public class LogTest {
       for (long writeSize : writeSizes) {
         // the index of the pre-created segment file that will be marked as active.
         for (int j = 0; j <= i; j++) {
-          List<String> expectedSegmentNames;
+          List<LogSegmentName> expectedSegmentNames;
           if (i == 0) {
             // first startup case - segment file is not pre-created but will be created by the Log.
             expectedSegmentNames = new ArrayList<>();
-            expectedSegmentNames.add(LogSegmentNameHelper.generateFirstSegmentName(numSegments > 1));
+            expectedSegmentNames.add(LogSegmentName.generateFirstSegmentName(numSegments > 1));
           } else if (i == j) {
             // invalid index for anything other than i == 0.
             break;
@@ -586,15 +586,15 @@ public class LogTest {
    * @return the names of the created files.
    * @throws IOException
    */
-  private List<String> createSegmentFiles(int numToCreate, long numFinalSegments, long segmentCapacity)
+  private List<LogSegmentName> createSegmentFiles(int numToCreate, long numFinalSegments, long segmentCapacity)
       throws IOException, StoreException {
     if (numToCreate > numFinalSegments) {
       throw new IllegalArgumentException("num segments to create cannot be more than num final segments");
     }
-    List<String> segmentNames = new ArrayList<>(numToCreate);
+    List<LogSegmentName> segmentNames = new ArrayList<>(numToCreate);
     if (numFinalSegments == 1) {
-      String name = LogSegmentNameHelper.generateFirstSegmentName(false);
-      File file = create(LogSegmentNameHelper.nameToFilename(name));
+      LogSegmentName name = LogSegmentName.generateFirstSegmentName(false);
+      File file = create(name.toFilename());
       new LogSegment(name, file, segmentCapacity, createStoreConfig(segmentCapacity, setFilePermissionEnabled), metrics,
           false).close(false);
       segmentNames.add(name);
@@ -606,14 +606,14 @@ public class LogTest {
         } while (positionsGenerated.contains(pos));
         positionsGenerated.add(pos);
         long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-        String name = LogSegmentNameHelper.getName(pos, gen);
-        File file = create(LogSegmentNameHelper.nameToFilename(name));
+        LogSegmentName name = LogSegmentName.fromPositionAndGeneration(pos, gen);
+        File file = create(name.toFilename());
         new LogSegment(name, file, segmentCapacity, createStoreConfig(segmentCapacity, setFilePermissionEnabled),
             metrics, true).close(false);
         segmentNames.add(name);
       }
     }
-    Collections.sort(segmentNames, LogSegmentNameHelper.COMPARATOR);
+    Collections.sort(segmentNames);
     return segmentNames;
   }
 
@@ -650,7 +650,7 @@ public class LogTest {
    * @throws IOException
    */
   private void doComprehensiveTest(long logCapacity, long segmentCapacity, long writeSize,
-      List<String> expectedSegmentNames, int segmentIdxToMarkActive, Appender appender)
+      List<LogSegmentName> expectedSegmentNames, int segmentIdxToMarkActive, Appender appender)
       throws IOException, StoreException {
     long numSegments = (logCapacity - 1) / segmentCapacity + 1;
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
@@ -660,12 +660,12 @@ public class LogTest {
     try {
       // only preloaded segments should be in expectedSegmentNames.
       checkLog(log, Math.min(logCapacity, segmentCapacity), expectedSegmentNames);
-      String activeSegmentName = expectedSegmentNames.get(segmentIdxToMarkActive);
+      LogSegmentName activeSegmentName = expectedSegmentNames.get(segmentIdxToMarkActive);
       log.setActiveSegment(activeSegmentName);
       // all segment files from segmentIdxToMarkActive + 1 to expectedSegmentNames.size() - 1 will be freed.
-      List<String> prunedSegmentNames = expectedSegmentNames.subList(0, segmentIdxToMarkActive + 1);
+      List<LogSegmentName> prunedSegmentNames = expectedSegmentNames.subList(0, segmentIdxToMarkActive + 1);
       checkLog(log, Math.min(logCapacity, segmentCapacity), prunedSegmentNames);
-      List<String> allSegmentNames = getSegmentNames(numSegments, prunedSegmentNames);
+      List<LogSegmentName> allSegmentNames = getSegmentNames(numSegments, prunedSegmentNames);
       writeAndCheckLog(log, logCapacity, Math.min(logCapacity, segmentCapacity), numSegments - segmentIdxToMarkActive,
           writeSize, allSegmentNames, segmentIdxToMarkActive, appender);
       // log full - so all segments should be there
@@ -685,10 +685,10 @@ public class LogTest {
    * @param expectedSegmentCapacity the expected capacity of each segment.
    * @param expectedSegmentNames the expected names of all segments that should have been created in the {@code log}.
    */
-  private void checkLog(Log log, long expectedSegmentCapacity, List<String> expectedSegmentNames) {
+  private void checkLog(Log log, long expectedSegmentCapacity, List<LogSegmentName> expectedSegmentNames) {
     LogSegment nextSegment = log.getFirstSegment();
     assertNull("Prev segment should be null", log.getPrevSegment(nextSegment));
-    for (String segmentName : expectedSegmentNames) {
+    for (LogSegmentName segmentName : expectedSegmentNames) {
       assertNotNull(
           "Next segment is null -  expectedSegmentNames=" + expectedSegmentNames + ". Expected next=" + segmentName,
           nextSegment);
@@ -731,12 +731,12 @@ public class LogTest {
    * @throws StoreException
    */
   private void writeAndCheckLog(Log log, long logCapacity, long segmentCapacity, long segmentsLeft, long writeSize,
-      List<String> segmentNames, int activeSegmentIdx, Appender appender) throws StoreException {
+      List<LogSegmentName> segmentNames, int activeSegmentIdx, Appender appender) throws StoreException {
     byte[] buf = TestUtils.getRandomBytes((int) writeSize);
     long expectedUsedCapacity = logCapacity - segmentCapacity * segmentsLeft;
     int nextSegmentIdx = activeSegmentIdx + 1;
     LogSegment expectedActiveSegment = log.getSegment(segmentNames.get(activeSegmentIdx));
-    String activeSegName = expectedActiveSegment.getName();
+    LogSegmentName activeSegName = expectedActiveSegment.getName();
     // add header space (if any) from the active segment.
     long currentSegmentWriteSize = expectedActiveSegment.getEndOffset();
     expectedUsedCapacity += currentSegmentWriteSize;
@@ -788,18 +788,18 @@ public class LogTest {
    * @param existingNames the names of log segments that are already known.
    * @return expected segment file names of {@code count} segment files.
    */
-  private List<String> getSegmentNames(long count, List<String> existingNames) {
-    List<String> segmentNames = new ArrayList<>();
+  private List<LogSegmentName> getSegmentNames(long count, List<LogSegmentName> existingNames) {
+    List<LogSegmentName> segmentNames = new ArrayList<>();
     if (existingNames != null) {
       segmentNames.addAll(existingNames);
     }
     if (count == segmentNames.size()) {
       return segmentNames;
     } else if (segmentNames.size() == 0) {
-      segmentNames.add(LogSegmentNameHelper.generateFirstSegmentName(count > 1));
+      segmentNames.add(LogSegmentName.generateFirstSegmentName(count > 1));
     }
     for (int i = segmentNames.size(); i < count; i++) {
-      String nextSegmentName = LogSegmentNameHelper.getNextPositionName(segmentNames.get(i - 1));
+      LogSegmentName nextSegmentName = segmentNames.get(i - 1).getNextPositionName();
       segmentNames.add(nextSegmentName);
     }
     return segmentNames;
@@ -813,7 +813,7 @@ public class LogTest {
    * @param allSegmentNames the expected names of the all the segments.
    * @throws IOException
    */
-  private void checkLogReload(long originalLogCapacity, long originalSegmentCapacity, List<String> allSegmentNames)
+  private void checkLogReload(long originalLogCapacity, long originalSegmentCapacity, List<LogSegmentName> allSegmentNames)
       throws IOException, StoreException {
     // modify the segment capacity (mimics modifying the config)
     long[] newConfigs = {originalSegmentCapacity - 1, originalSegmentCapacity + 1};

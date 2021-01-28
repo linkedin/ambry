@@ -69,7 +69,7 @@ public class StoreFindTokenTest {
   public void equalityTest() {
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
-    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
+    LogSegmentName logSegmentName = LogSegmentName.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     Offset otherOffset = new Offset(logSegmentName, 1);
     MockId key = new MockId(TestUtils.getRandomString(10));
@@ -132,7 +132,7 @@ public class StoreFindTokenTest {
   public void serDeTest() throws IOException {
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
-    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
+    LogSegmentName logSegmentName = LogSegmentName.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(TestUtils.getRandomString(10));
 
@@ -172,7 +172,7 @@ public class StoreFindTokenTest {
   public void constructionErrorCasesTest() {
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
-    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
+    LogSegmentName logSegmentName = LogSegmentName.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(TestUtils.getRandomString(10));
 

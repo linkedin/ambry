@@ -19,7 +19,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.Test;
@@ -28,39 +27,39 @@ import static org.junit.Assert.*;
 
 
 /**
- * Tests the helper functions of {@link LogSegmentNameHelper}
+ * Tests the helper functions of {@link LogSegmentName}
  */
-public class LogSegmentNameHelperTest {
+public class LogSegmentNameTest {
 
   /**
-   * Tests the comparator in {@link LogSegmentNameHelper} for correctness.
+   * Tests the comparator in {@link LogSegmentName} for correctness.
    */
   @Test
   public void comparatorTest() {
-    Comparator<String> comparator = LogSegmentNameHelper.COMPARATOR;
     // compare empty name with empty name
-    assertEquals("Empty names should be equal", 0, comparator.compare("", ""));
+    assertEquals("Empty names should be equal", 0,
+        LogSegmentName.fromString("").compareTo(LogSegmentName.fromString("")));
     // create sample names
-    String[] names =
-        {LogSegmentNameHelper.getName(0, 0), LogSegmentNameHelper.getName(0, 1), LogSegmentNameHelper.getName(1, 0),
-            LogSegmentNameHelper.getName(1, 1)};
+    LogSegmentName[] names =
+        {LogSegmentName.fromPositionAndGeneration(0, 0), LogSegmentName.fromPositionAndGeneration(0, 1),
+            LogSegmentName.fromPositionAndGeneration(1, 0), LogSegmentName.fromPositionAndGeneration(1, 1)};
     for (int i = 0; i < names.length; i++) {
       for (int j = 0; j < names.length; j++) {
         int expectCompare = Integer.compare(i, j);
-        assertEquals("Unexpected value on compare", expectCompare, comparator.compare(names[i], names[j]));
-        assertEquals("Unexpected value on compare", -1 * expectCompare, comparator.compare(names[j], names[i]));
+        assertEquals("Unexpected value on compare", expectCompare, names[i].compareTo(names[j]));
+        assertEquals("Unexpected value on compare", -1 * expectCompare, names[j].compareTo(names[i]));
       }
     }
     // empty name cannot be compared with anything else
-    String validName = LogSegmentNameHelper.getName(0, 0);
+    LogSegmentName validName = LogSegmentName.fromPositionAndGeneration(0, 0);
     try {
-      comparator.compare(validName, "");
+      validName.compareTo(LogSegmentName.fromString(""));
       fail("Should not have been able to compare empty name with anything else");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
     try {
-      comparator.compare("", validName);
+      LogSegmentName.fromString("").compareTo(validName);
       fail("Should not have been able to compare empty name with anything else");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -68,7 +67,7 @@ public class LogSegmentNameHelperTest {
   }
 
   /**
-   * Checks the file name filter in {@link LogSegmentNameHelper} for correctness by creating valid and invalid files
+   * Checks the file name filter in {@link LogSegmentName} for correctness by creating valid and invalid files
    * and checking that the invalid ones are filtered out and the valid ones correctly picked up.
    * @throws IOException
    */
@@ -80,13 +79,11 @@ public class LogSegmentNameHelperTest {
     File tempDir = Files.createTempDirectory("nameHelper-" + TestUtils.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     try {
-      String filename = LogSegmentNameHelper.nameToFilename("");
+      String filename = LogSegmentName.fromString("").toFilename();
       File file = createFile(tempDir, filename);
       validFiles.add(file);
       for (int i = 1; i < validFileCount; i++) {
-        long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-        long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-        filename = LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.getName(pos, gen));
+        filename = StoreTestUtils.getRandomLogSegmentName(null).toFilename();
         file = createFile(tempDir, filename);
         validFiles.add(file);
       }
@@ -104,7 +101,7 @@ public class LogSegmentNameHelperTest {
         }
         createFile(tempDir, filename);
       }
-      Set<File> filteredFiles = new HashSet<>(Arrays.asList(tempDir.listFiles(LogSegmentNameHelper.LOG_FILE_FILTER)));
+      Set<File> filteredFiles = new HashSet<>(Arrays.asList(tempDir.listFiles(LogSegmentName.LOG_FILE_FILTER)));
       assertEquals("Filtered files do not have the valid files", validFiles, filteredFiles);
     } finally {
       File[] files = tempDir.listFiles();
@@ -118,33 +115,24 @@ public class LogSegmentNameHelperTest {
   }
 
   /**
-   * Tests correctness of {@link LogSegmentNameHelper#hashcode(String)}
-   */
-  @Test
-  public void hashCodeTest() {
-    String name = TestUtils.getRandomString(10);
-    assertEquals("Hashcode is not as expected", name.hashCode(), LogSegmentNameHelper.hashcode(name));
-  }
-
-  /**
-   * Tests correctness of {@link LogSegmentNameHelper#getPosition(String)} and
-   * {@link LogSegmentNameHelper#getGeneration(String)}.
+   * Tests correctness of {@link LogSegmentName#getPosition} and
+   * {@link LogSegmentName#getGeneration}.
    */
   @Test
   public void getPositionAndGenerationTest() {
     for (int i = 0; i < 10; i++) {
       long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-      checkPosAndGeneration(LogSegmentNameHelper.getName(pos, gen), pos, gen);
+      checkPosAndGeneration(LogSegmentName.fromPositionAndGeneration(pos, gen), pos, gen);
     }
     try {
-      LogSegmentNameHelper.getPosition("");
+      LogSegmentName.fromString("").getPosition();
       fail("Should have failed to get position for empty log segment name");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
     try {
-      LogSegmentNameHelper.getGeneration("");
+      LogSegmentName.fromString("").getGeneration();
       fail("Should have failed to get generation for empty log segment name");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -152,7 +140,7 @@ public class LogSegmentNameHelperTest {
   }
 
   /**
-   * Tests correctness of {@link LogSegmentNameHelper#getName(long, long)}.
+   * Tests correctness of {@link LogSegmentName#fromPositionAndGeneration(long, long)}.
    */
   @Test
   public void getNameTest() {
@@ -160,31 +148,31 @@ public class LogSegmentNameHelperTest {
       long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       assertEquals("Did not get expected name", pos + BlobStore.SEPARATOR + gen,
-          LogSegmentNameHelper.getName(pos, gen));
+          LogSegmentName.fromPositionAndGeneration(pos, gen).toString());
     }
   }
 
   /**
-   * Tests correctness of {@link LogSegmentNameHelper#getNextPositionName(String)} and
-   * {@link LogSegmentNameHelper#getNextGenerationName(String)}.
+   * Tests correctness of {@link LogSegmentName#getNextPositionName} and
+   * {@link LogSegmentName#getNextGenerationName}.
    */
   @Test
   public void getNextPositionAndGenerationTest() {
     for (int i = 0; i < 10; i++) {
       long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-      String name = LogSegmentNameHelper.getName(pos, gen);
-      checkPosAndGeneration(LogSegmentNameHelper.getNextPositionName(name), pos + 1, 0);
-      checkPosAndGeneration(LogSegmentNameHelper.getNextGenerationName(name), pos, gen + 1);
+      LogSegmentName name = LogSegmentName.fromPositionAndGeneration(pos, gen);
+      checkPosAndGeneration(name.getNextPositionName(), pos + 1, 0);
+      checkPosAndGeneration(name.getNextGenerationName(), pos, gen + 1);
     }
     try {
-      LogSegmentNameHelper.getNextPositionName("");
+      LogSegmentName.fromString("").getNextPositionName();
       fail("Should have failed to get next position for empty log segment name");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
     try {
-      LogSegmentNameHelper.getNextGenerationName("");
+      LogSegmentName.fromString("").getNextGenerationName();
       fail("Should have failed to get next generation for empty log segment name");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -192,25 +180,29 @@ public class LogSegmentNameHelperTest {
   }
 
   /**
-   * Tests correctness of {@link LogSegmentNameHelper#generateFirstSegmentName(boolean)} for different numbers of log
+   * Tests correctness of {@link LogSegmentName#generateFirstSegmentName(boolean)} for different numbers of log
    * segments (including invalid ones).
    */
   @Test
   public void generateFirstSegmentNameTest() {
-    assertEquals("Did not get expected name", "", LogSegmentNameHelper.generateFirstSegmentName(false));
-    String firstSegmentName = LogSegmentNameHelper.getName(0, 0);
-    assertEquals("Did not get expected name", firstSegmentName, LogSegmentNameHelper.generateFirstSegmentName(true));
+    LogSegmentName singleSegmentName = LogSegmentName.generateFirstSegmentName(false);
+    assertEquals("Did not get expected name", "", singleSegmentName.toString());
+    assertTrue("Should be single segment name", singleSegmentName.isSingleSegment());
+    LogSegmentName firstSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
+    assertEquals("Did not get expected name", firstSegmentName, LogSegmentName.generateFirstSegmentName(true));
   }
 
   /**
-   * Tests correctness of {@link LogSegmentNameHelper#nameFromFilename(String)}.
+   * Tests correctness of {@link LogSegmentName#fromFilename(String)}.
    */
   @Test
   public void nameFromFilenameTest() {
-    assertEquals("Did not get expected name", "", LogSegmentNameHelper.nameFromFilename("log_current"));
-    String name = LogSegmentNameHelper.getName(0, 0);
-    String filename = LogSegmentNameHelper.nameToFilename(name);
-    assertEquals("Did not get expected name", name, LogSegmentNameHelper.nameFromFilename(filename));
+    LogSegmentName singleSegmentName = LogSegmentName.fromFilename("log_current");
+    assertEquals("Did not get expected name", "", singleSegmentName.toString());
+    assertTrue("Should be single segment name", singleSegmentName.isSingleSegment());
+    LogSegmentName name = LogSegmentName.fromPositionAndGeneration(0, 0);
+    String filename = name.toFilename();
+    assertEquals("Did not get expected name", name, LogSegmentName.fromFilename(filename));
 
     // bad file names
     String badNameBase = TestUtils.getRandomString(10);
@@ -218,7 +210,7 @@ public class LogSegmentNameHelperTest {
         {badNameBase, badNameBase + LogSegmentName.SUFFIX, name + BlobStore.SEPARATOR + "123" + LogSegmentName.SUFFIX};
     for (String badName : badNames) {
       try {
-        LogSegmentNameHelper.nameFromFilename(badName);
+        LogSegmentName.fromFilename(badName);
         fail("Should have failed to get name for filename [" + badName + "]");
       } catch (IllegalArgumentException | StringIndexOutOfBoundsException e) {
         // expected. Nothing to do.
@@ -227,14 +219,13 @@ public class LogSegmentNameHelperTest {
   }
 
   /**
-   * Tests correctness of {@link LogSegmentNameHelper#nameToFilename(String)}.
+   * Tests correctness of {@link LogSegmentName#toFilename}.
    */
   @Test
   public void nameToFilenameTest() {
-    assertEquals("Did not get expected file name", "log_current", LogSegmentNameHelper.nameToFilename(""));
-    String name = LogSegmentName.fromPositionAndGeneration(3, 1).toString();
-    assertEquals("Did not get expected file name", name + LogSegmentName.SUFFIX,
-        LogSegmentNameHelper.nameToFilename(name));
+    assertEquals("Did not get expected file name", "log_current", LogSegmentName.fromString("").toFilename());
+    LogSegmentName name = LogSegmentName.fromPositionAndGeneration(3, 1);
+    assertEquals("Did not get expected file name", name + LogSegmentName.SUFFIX, name.toFilename());
   }
 
   // helpers
@@ -244,12 +235,12 @@ public class LogSegmentNameHelperTest {
    * Checks the position and generation obtained from {@code name} match {@code expectedPos} and {@code expectedGen}
    * respectively.
    * @param name the name whose position and generation needs to be checked.
-   * @param expectedPos the expected return value from {@link LogSegmentNameHelper#getPosition(String)}.
-   * @param expectedGen the expected return value from {@link LogSegmentNameHelper#getGeneration(String)}.
+   * @param expectedPos the expected return value from {@link LogSegmentName#getPosition}.
+   * @param expectedGen the expected return value from {@link LogSegmentName#getGeneration}.
    */
-  private void checkPosAndGeneration(String name, long expectedPos, long expectedGen) {
-    assertEquals("Did not get expected position", expectedPos, LogSegmentNameHelper.getPosition(name));
-    assertEquals("Did not get expected generation number", expectedGen, LogSegmentNameHelper.getGeneration(name));
+  private void checkPosAndGeneration(LogSegmentName name, long expectedPos, long expectedGen) {
+    assertEquals("Did not get expected position", expectedPos, name.getPosition());
+    assertEquals("Did not get expected generation number", expectedGen, name.getGeneration());
   }
 
   // filenameFilterTest() helpers

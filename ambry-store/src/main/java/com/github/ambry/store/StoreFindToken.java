@@ -139,7 +139,7 @@ public class StoreFindToken implements FindToken {
     switch (version) {
       case VERSION_0:
         // backwards compatibility
-        String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(false);
+        LogSegmentName logSegmentName = LogSegmentName.generateFirstSegmentName(false);
         // read sessionId
         String sessionId = Utils.readIntString(stream);
         UUID sessionIdUUID = null;
