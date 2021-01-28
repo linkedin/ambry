@@ -1075,9 +1075,11 @@ class PersistentIndex {
     IndexValue value = findKey(id);
     BlobReadOptions readOptions;
     if (value == null) {
+//      System.out.println(id + " is not found");
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
     } else if (value.isDelete()) {
       if (!getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
+//        System.out.println(id + " is deleted and expiration time: " + value.getExpiresAtMs());
         throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
       } else {
         readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
