@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets;
  * Denotes an offset inside the log.
  */
 public class Offset implements Comparable<Offset> {
-  private final String name;
+  private final LogSegmentName name;
   private final long offset;
 
   private static final short CURRENT_VERSION = 0;
@@ -42,7 +42,7 @@ public class Offset implements Comparable<Offset> {
     if (name == null || offset < 0) {
       throw new IllegalArgumentException("Name [" + name + "] is null or offset [" + offset + "] < 0");
     }
-    this.name = name;
+    this.name = LogSegmentName.fromString(name);
     this.offset = offset;
   }
 
@@ -73,7 +73,7 @@ public class Offset implements Comparable<Offset> {
    * be non-null and non-empty.
    */
   public String getName() {
-    return name;
+    return name.toString();
   }
 
   /**
@@ -88,7 +88,7 @@ public class Offset implements Comparable<Offset> {
    * @return the byte representation of this object.
    */
   byte[] toBytes() {
-    byte[] nameBytes = name.getBytes(StandardCharsets.UTF_8);
+    byte[] nameBytes = name.toString().getBytes(StandardCharsets.UTF_8);
     int size = VERSION_SIZE + NAME_LENGTH_SIZE + nameBytes.length + OFFSET_SIZE;
     byte[] bytes = new byte[size];
     ByteBuffer buf = ByteBuffer.wrap(bytes);
@@ -101,7 +101,7 @@ public class Offset implements Comparable<Offset> {
 
   @Override
   public int compareTo(Offset o) {
-    int compare = LogSegmentNameHelper.COMPARATOR.compare(name, o.name);
+    int compare = name.compareTo(o.name);
     return compare == 0 ? Long.compare(offset, o.offset) : compare;
   }
 
@@ -120,7 +120,7 @@ public class Offset implements Comparable<Offset> {
 
   @Override
   public int hashCode() {
-    int result = LogSegmentNameHelper.hashcode(name);
+    int result = name.hashCode();
     result = 31 * result + (int) (offset ^ (offset >>> 32));
     return result;
   }

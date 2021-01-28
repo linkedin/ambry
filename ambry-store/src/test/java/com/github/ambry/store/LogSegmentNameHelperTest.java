@@ -97,7 +97,7 @@ public class LogSegmentNameHelperTest {
             filename = filename + "_index";
             break;
           case 1:
-            filename = filename + LogSegmentNameHelper.SUFFIX + "_temp";
+            filename = filename + LogSegmentName.SUFFIX + "_temp";
             break;
           default:
             break;
@@ -214,8 +214,8 @@ public class LogSegmentNameHelperTest {
 
     // bad file names
     String badNameBase = TestUtils.getRandomString(10);
-    String[] badNames = {badNameBase, badNameBase + LogSegmentNameHelper.SUFFIX,
-        name + BlobStore.SEPARATOR + "123" + LogSegmentNameHelper.SUFFIX};
+    String[] badNames =
+        {badNameBase, badNameBase + LogSegmentName.SUFFIX, name + BlobStore.SEPARATOR + "123" + LogSegmentName.SUFFIX};
     for (String badName : badNames) {
       try {
         LogSegmentNameHelper.nameFromFilename(badName);
@@ -232,8 +232,8 @@ public class LogSegmentNameHelperTest {
   @Test
   public void nameToFilenameTest() {
     assertEquals("Did not get expected file name", "log_current", LogSegmentNameHelper.nameToFilename(""));
-    String name = TestUtils.getRandomString(10);
-    assertEquals("Did not get expected file name", name + LogSegmentNameHelper.SUFFIX,
+    String name = LogSegmentName.fromPositionAndGeneration(3, 1).toString();
+    assertEquals("Did not get expected file name", name + LogSegmentName.SUFFIX,
         LogSegmentNameHelper.nameToFilename(name));
   }
 
