@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -29,9 +30,9 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
 
@@ -103,8 +104,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         } else if (restRequest.getRestMethod().equals(RestMethod.POST)) {
           convertedId = "/" + signIdIfRequired(restRequest, input);
         } else {
-          convertId(input, restRequest, blobInfo).whenComplete(
-              (id, throwable) -> completeConversion(id, extractCompletionExceptionCause(throwable), future, callback));
+          CallbackUtils.callCallbackAfter(convertId(input, restRequest, blobInfo),
+              (id, e) -> completeConversion(id, e, future, callback));
         }
       } catch (Exception e) {
         exception = e;
@@ -115,21 +116,6 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         }
       }
       return future;
-    }
-
-    /**
-     * @param throwable a throwable to possibly wrap in an exception.
-     * @return if the {@link Throwable} is an instance of {@link Exception}, return the throwable, otherwise return the
-     *         throwable wrapped in an exception.
-     */
-    private static Exception extractCompletionExceptionCause(Throwable throwable) {
-      if (throwable == null) {
-        return null;
-      }
-      if (throwable instanceof CompletionException) {
-        throwable = throwable.getCause();
-      }
-      return throwable instanceof Exception ? (Exception) throwable : new Exception("Encountered throwable", throwable);
     }
 
     /**
@@ -166,7 +152,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         throws RestServiceException {
       CompletionStage<String> conversionFuture;
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(input);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         if (restRequest.getRestMethod() == RestMethod.DELETE) {
           // on delete requests we can soft delete the record from NamedBlobDb and get the blob ID in one step.
           conversionFuture = getNamedBlobDb().delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
@@ -177,8 +163,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         }
       } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB)) {
-        NamedBlobPath namedBlobPath =
-            NamedBlobPath.parse(RestUtils.getRequestPath(restRequest).getOperationOrBlobId(false));
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String blobId = RestUtils.stripSlashAndExtensionFromId(input);
         BlobProperties properties = blobInfo.getBlobProperties();
         long expirationTimeMs =
@@ -192,24 +177,6 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         conversionFuture = CompletableFuture.completedFuture(RestUtils.stripSlashAndExtensionFromId(decryptedInput));
       }
       return conversionFuture;
-    }
-
-    /*
-     * will update this hack version once NamedBlobDb is in.
-     */
-    private CompletableFuture<String> get(String accountName, String containerName, String blobName) {
-      CompletableFuture<String> completableFuture = new CompletableFuture<>();
-      completableFuture.complete(accountName + containerName + blobName);
-      return completableFuture;
-    }
-
-    /*
-     * will update this hack version once NamedBlobDb is in.
-     */
-    private CompletableFuture<String> put(String accountName, String containerName, String blobName, String blobId) {
-      CompletableFuture<String> completableFuture = new CompletableFuture<>();
-      completableFuture.complete(blobId);
-      return completableFuture;
     }
 
     /**

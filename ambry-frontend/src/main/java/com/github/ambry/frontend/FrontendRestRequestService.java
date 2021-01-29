@@ -21,6 +21,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
@@ -79,6 +80,7 @@ class FrontendRestRequestService implements RestRequestService {
   private final GetReplicasHandler getReplicasHandler;
   private final UrlSigningService urlSigningService;
   private final IdSigningService idSigningService;
+  private final NamedBlobDb namedBlobDb;
   private final AccountService accountService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
@@ -90,6 +92,7 @@ class FrontendRestRequestService implements RestRequestService {
   private SecurityService securityService = null;
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
+  private NamedBlobListHandler listNamedBlobsHandler;
   private PostBlobHandler postBlobHandler;
   private NamedBlobPutHandler namedBlobPutHandler;
   private TtlUpdateHandler ttlUpdateHandler;
@@ -111,6 +114,7 @@ class FrontendRestRequestService implements RestRequestService {
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
    * @param urlSigningService the {@link UrlSigningService} used to sign URLs.
    * @param idSigningService the {@link IdSigningService} used to sign and verify IDs.
+   * @param namedBlobDb the {@link NamedBlobDb} for named blob metadata operations.
    * @param accountService the {@link AccountService} to use.
    * @param accountAndContainerInjector the {@link AccountAndContainerInjector} to use.
    * @param datacenterName the local datacenter name for this frontend.
@@ -120,9 +124,9 @@ class FrontendRestRequestService implements RestRequestService {
    */
   FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, Router router,
       ClusterMap clusterMap, IdConverterFactory idConverterFactory, SecurityServiceFactory securityServiceFactory,
-      UrlSigningService urlSigningService, IdSigningService idSigningService, AccountService accountService,
-      AccountAndContainerInjector accountAndContainerInjector, String datacenterName, String hostname,
-      String clusterName, StorageQuotaService storageQuotaService) {
+      UrlSigningService urlSigningService, IdSigningService idSigningService, NamedBlobDb namedBlobDb,
+      AccountService accountService, AccountAndContainerInjector accountAndContainerInjector, String datacenterName,
+      String hostname, String clusterName, StorageQuotaService storageQuotaService) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.router = router;
@@ -131,6 +135,7 @@ class FrontendRestRequestService implements RestRequestService {
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
     this.idSigningService = idSigningService;
+    this.namedBlobDb = namedBlobDb;
     this.accountService = accountService;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.datacenterName = datacenterName;
@@ -169,6 +174,8 @@ class FrontendRestRequestService implements RestRequestService {
     getSignedUrlHandler =
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap);
+    listNamedBlobsHandler =
+        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName);
@@ -228,6 +235,10 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         getAccountsHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
+          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
+        listNamedBlobsHandler.handle(restRequest, restResponseChannel,
+            ((result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception)));
       } else {
         SubResource subResource = requestPath.getSubResource();
         GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,
@@ -370,7 +381,7 @@ class FrontendRestRequestService implements RestRequestService {
       frontendMetrics.optionsSecurityResponseTimeInMs.update(
           securityResponseProcessingEndTime - securityRequestProcessingEndTime);
     } catch (Exception e) {
-      exception = Utils.extractExecutionExceptionCause(e);
+      exception = Utils.extractFutureExceptionCause(e);
     }
     submitResponse(restRequest, restResponseChannel, null, exception);
   }
@@ -675,7 +686,7 @@ class FrontendRestRequestService implements RestRequestService {
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
         } catch (Exception e) {
-          exception = Utils.extractExecutionExceptionCause(e);
+          exception = Utils.extractFutureExceptionCause(e);
         }
       }
 

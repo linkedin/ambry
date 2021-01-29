@@ -98,8 +98,8 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, idSigningService, accountAndContainerInjector, storageQuotaService);
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
-          securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-          clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
+          securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
+          accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
           clusterMapConfig.clusterMapClusterName, storageQuotaService);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);

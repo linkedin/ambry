@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,11 +13,12 @@
  *
  */
 
-package com.github.ambry.router;
+package com.github.ambry.commons;
 
-import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.ThrowingConsumer;
+import com.github.ambry.utils.Utils;
+import java.util.concurrent.CompletionStage;
 
 
 /**
@@ -57,5 +58,17 @@ public class CallbackUtils {
         asyncOperationTracker.markCallbackProcessingEnd();
       }
     };
+  }
+
+  /**
+   * Call an Ambry callback when a {@link CompletionStage} is completed, appropriately handling exception wrapping
+   * by the future implementation.
+   * @param completionStage the {@link CompletionStage} to attach to.
+   * @param callback the {@link Callback} to call upon completion.
+   * @param <T> the type of the future and callback.
+   */
+  public static <T> void callCallbackAfter(CompletionStage<T> completionStage, Callback<T> callback) {
+    completionStage.whenComplete(
+        (result, throwable) -> callback.onCompletion(result, Utils.extractFutureExceptionCause(throwable)));
   }
 }

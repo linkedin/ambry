@@ -29,11 +29,14 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
@@ -51,7 +54,6 @@ import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -91,6 +93,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
@@ -105,6 +108,7 @@ import org.junit.Test;
 
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -125,6 +129,7 @@ public class FrontendRestRequestServiceTest {
   private final short blobIdVersion;
   private final UrlSigningService urlSigningService;
   private final IdSigningService idSigningService;
+  private final NamedBlobDb namedBlobDb;
   private final String datacenterName = "Data-Center";
   private final String hostname = "localhost";
   private final String clusterName = "ambry-test";
@@ -162,7 +167,9 @@ public class FrontendRestRequestServiceTest {
         frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
         frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
     idSigningService = new AmbryIdSigningService();
-    idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, null);
+    namedBlobDb = mock(NamedBlobDb.class);
+    idConverterFactory =
+        new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, namedBlobDb);
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService, idSigningService,
             accountAndContainerInjector, null);
@@ -219,8 +226,8 @@ public class FrontendRestRequestServiceTest {
   public void startWithoutResponseHandler() throws InstantiationException {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName, null);
+            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
     try {
       frontendRestRequestService.start();
       fail("Test should fail if ResponseHandler is not setup");
@@ -786,8 +793,8 @@ public class FrontendRestRequestServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName, null);
+            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     JSONObject headers = new JSONObject();
@@ -809,8 +816,8 @@ public class FrontendRestRequestServiceTest {
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName, null);
+            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     // test good requests
@@ -1073,8 +1080,8 @@ public class FrontendRestRequestServiceTest {
     testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName, null);
+            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
@@ -1206,6 +1213,70 @@ public class FrontendRestRequestServiceTest {
     getBlobAndVerify(blobId, null, null, headers, content, account, noValidationContainer);
   }
 
+  /**
+   * Tests the handling of list named blobs requests.
+   * @throws Exception
+   */
+  @Test
+  public void listNamedBlobsTest() throws Exception {
+    List<NamedBlobRecord> blobs = Arrays.asList(
+        new NamedBlobRecord(refAccount.getName(), refContainer.getName(), "blob1", "abc", Utils.Infinite_Time),
+        new NamedBlobRecord(refAccount.getName(), refContainer.getName(), "blob2", "def", System.currentTimeMillis()),
+        new NamedBlobRecord(refAccount.getName(), refContainer.getName(), "blob3", "ghi", Utils.Infinite_Time));
+    Page<NamedBlobRecord> page = new Page<>(blobs, "blob4");
+    doListNamedBlobsTest("blob", null, page, null);
+    doListNamedBlobsTest("blob", "blob1", page, null);
+
+    // leave off required prefix query param
+    doListNamedBlobsTest(null, null, page, RestServiceErrorCode.BadRequest);
+
+    // throw exception in NamedBlobDb
+    doListNamedBlobsTest("blob", null, null, RestServiceErrorCode.ServiceUnavailable);
+  }
+
+  /**
+   *
+   * @param prefix the prefix to set in the request params.
+   * @param pageToken the page token to set in the request params.
+   * @param pageToReturn the page that {@link NamedBlobDb} should return, or {@code null} if it should throw an error.
+   * @param expectedErrorCode if non-null, check for this error code instead of a successful response.
+   * @throws Exception
+   */
+  private void doListNamedBlobsTest(String prefix, String pageToken, Page<NamedBlobRecord> pageToReturn,
+      RestServiceErrorCode expectedErrorCode) throws Exception {
+    reset(namedBlobDb);
+    String path = String.join("/", Operations.NAMED_BLOB, refAccount.getName(), refContainer.getName());
+    if (prefix != null) {
+      path += "?" + NamedBlobPath.PREFIX_PARAM + "=" + prefix;
+    }
+    if (pageToken != null) {
+      path += "&" + NamedBlobPath.PAGE_PARAM + "=" + pageToken;
+    }
+    RestRequest restRequest = createRestRequest(RestMethod.GET, path, null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    if (pageToReturn != null) {
+      when(namedBlobDb.list(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(pageToReturn));
+    } else {
+      CompletableFuture<Page<NamedBlobRecord>> future = new CompletableFuture<>();
+      future.completeExceptionally(new RestServiceException("NamedBlobDb error", expectedErrorCode));
+      when(namedBlobDb.list(any(), any(), any(), any())).thenReturn(future);
+    }
+
+    if (expectedErrorCode == null) {
+      assertNotNull("pageToReturn should be set", pageToReturn);
+      doOperation(restRequest, restResponseChannel);
+      verify(namedBlobDb).list(refAccount.getName(), refContainer.getName(), prefix, pageToken);
+      Page<NamedBlobListEntry> response =
+          Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())), NamedBlobListEntry::new);
+      assertEquals("Unexpected blobs returned",
+          pageToReturn.getEntries().stream().map(NamedBlobListEntry::new).collect(Collectors.toList()),
+          response.getEntries());
+      assertEquals("Unexpected nextPageToken", pageToReturn.getNextPageToken(), response.getNextPageToken());
+    } else {
+      TestUtils.assertException(RestServiceException.class, () -> doOperation(restRequest, restResponseChannel),
+          rse -> assertEquals("Unexpected error code", expectedErrorCode, rse.getErrorCode()));
+    }
+  }
   // helpers
   // general
 
@@ -1392,8 +1463,8 @@ public class FrontendRestRequestServiceTest {
   private FrontendRestRequestService getFrontendRestRequestService() {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName, null);
+            securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     return frontendRestRequestService;
   }
@@ -2091,8 +2162,8 @@ public class FrontendRestRequestServiceTest {
       throws InstantiationException, JSONException {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, converterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName, null);
+            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
@@ -2123,7 +2194,7 @@ public class FrontendRestRequestServiceTest {
       }
       frontendRestRequestService =
           new FrontendRestRequestService(frontendConfig, frontendMetrics, new FrontendTestRouter(), clusterMap,
-              idConverterFactory, securityFactory, urlSigningService, idSigningService, accountService,
+              idConverterFactory, securityFactory, urlSigningService, idSigningService, null, accountService,
               accountAndContainerInjector, datacenterName, hostname, clusterName, null);
       frontendRestRequestService.setupResponseHandler(responseHandler);
       frontendRestRequestService.start();
@@ -2182,8 +2253,8 @@ public class FrontendRestRequestServiceTest {
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
-            securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
-            datacenterName, hostname, clusterName, null);
+            securityServiceFactory, urlSigningService, idSigningService, null, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     for (RestMethod restMethod : RestMethod.values()) {

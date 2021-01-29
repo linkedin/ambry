@@ -19,6 +19,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -164,17 +165,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
-      String continuationToken) {
+      String pageToken) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY)) {
         statement.setInt(1, accountId);
         statement.setInt(2, containerId);
         statement.setString(3, blobNamePrefix + "%");
-        statement.setString(4, continuationToken != null ? continuationToken : blobNamePrefix);
+        statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
         statement.setInt(5, config.listMaxResults + 1);
         try (ResultSet resultSet = statement.executeQuery()) {
           String nextContinuationToken = null;
-          List<NamedBlobRecord> elements = new ArrayList<>();
+          List<NamedBlobRecord> entries = new ArrayList<>();
           long currentTime = System.currentTimeMillis();
           int resultIndex = 0;
           while (resultSet.next()) {
@@ -194,11 +195,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               logger.trace("LIST: Blob deleted, ignoring in list response; account='{}', container='{}', name='{}'",
                   accountName, containerName, blobName);
             } else {
-              elements.add(
+              entries.add(
                   new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime)));
             }
           }
-          return new Page<>(nextContinuationToken, elements);
+          return new Page<>(entries, nextContinuationToken);
         }
       }
     });

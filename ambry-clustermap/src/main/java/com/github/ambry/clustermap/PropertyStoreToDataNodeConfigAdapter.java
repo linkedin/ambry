@@ -107,7 +107,7 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
       try {
         initFuture.get();
       } catch (ExecutionException e) {
-        throw Utils.extractExecutionExceptionCause(e);
+        throw Utils.extractFutureExceptionCause(e);
       }
     }
 
