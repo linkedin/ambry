@@ -165,7 +165,7 @@ public class FrontendRestRequestServiceTest {
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, null);
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService, idSigningService,
-            accountAndContainerInjector);
+            accountAndContainerInjector, null);
     accountService.clear();
     accountService.updateAccounts(Collections.singleton(InMemAccountService.UNKNOWN_ACCOUNT));
     refAccount = accountService.createAndAddRandomAccount();

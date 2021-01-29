@@ -66,6 +66,7 @@ public class MySqlStorageUsageRefresherTest {
   private Properties properties;
   private static ScheduledExecutorService scheduler = Utils.newScheduler(1, "storage-usage-refresher", false);
   private final AccountStatsMySqlStore accountStatsMySqlStore;
+  private final StorageQuotaServiceMetrics metrics = new StorageQuotaServiceMetrics(new MetricRegistry());
 
   public MySqlStorageUsageRefresherTest() throws Exception {
     properties = createProperties();
@@ -144,7 +145,7 @@ public class MySqlStorageUsageRefresherTest {
     StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(new VerifiableProperties(properties));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     MySqlStorageUsageRefresher refresher =
-        new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig);
+        new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig, metrics);
 
     // we should get an container storage usage full of zero
     Map<String, Map<String, Long>> usage = refresher.getContainerStorageUsage();
@@ -164,7 +165,7 @@ public class MySqlStorageUsageRefresherTest {
         TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages));
     accountStatsMySqlStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(CLUSTER_NAME,
         MySqlStorageUsageRefresher.getCurrentMonth());
-    refresher = new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig);
+    refresher = new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig, metrics);
     Map<String, Map<String, Long>> currentMonthlyStorageUsages = refresher.getContainerStorageUsageMonthlyBase();
     TestUtils.assertContainerMap(backupContainerStorageUsages, currentMonthlyStorageUsages);
   }
@@ -226,7 +227,7 @@ public class MySqlStorageUsageRefresherTest {
     StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(new VerifiableProperties(properties));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     MySqlStorageUsageRefresher refresher =
-        new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig);
+        new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig, metrics);
 
     AtomicReference<Map<String, Map<String, Long>>> containerUsageRef = new AtomicReference<>(null);
     AtomicReference<CountDownLatch> latchRef = new AtomicReference<>(null);
@@ -273,7 +274,7 @@ public class MySqlStorageUsageRefresherTest {
       StorageQuotaConfig storageQuotaConfig = new StorageQuotaConfig(new VerifiableProperties(properties));
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
       MySqlStorageUsageRefresher refresher =
-          new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig);
+          new MySqlStorageUsageRefresher(accountStatsMySqlStore, scheduler, storageQuotaConfig, clusterMapConfig, metrics);
 
       // Fetch monthly storage usage
       refresher.fetchStorageUsageMonthlyBase();

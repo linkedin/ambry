@@ -88,15 +88,15 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               clusterMap.getMetricRegistry()).getUrlSigningService();
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
-      SecurityServiceFactory securityServiceFactory =
-          Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
-              urlSigningService, idSigningService, accountAndContainerInjector);
       StorageQuotaService storageQuotaService = null;
       if (frontendConfig.enableStorageQuotaService) {
         storageQuotaService =
             Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
                 clusterMap.getMetricRegistry()).getStorageQuotaService();
       }
+      SecurityServiceFactory securityServiceFactory =
+          Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
+              urlSigningService, idSigningService, accountAndContainerInjector, storageQuotaService);
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
           securityServiceFactory, urlSigningService, idSigningService, accountService, accountAndContainerInjector,
           clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,

@@ -33,7 +33,7 @@ public class AmbryStorageQuotaServiceFactory implements StorageQuotaServiceFacto
    */
   public AmbryStorageQuotaServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry)
       throws Exception {
-    storageQuotaService = new AmbryStorageQuotaService(new StorageQuotaConfig(verifiableProperties));
+    storageQuotaService = new AmbryStorageQuotaService(new StorageQuotaConfig(verifiableProperties), metricRegistry);
   }
 
   @Override

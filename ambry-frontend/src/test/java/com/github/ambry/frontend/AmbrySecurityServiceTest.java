@@ -15,7 +15,9 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.commons.HostLevelThrottler;
@@ -24,6 +26,7 @@ import com.github.ambry.config.HostThrottleConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -58,6 +61,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Assert;
@@ -73,7 +78,8 @@ import static org.mockito.Mockito.*;
 public class AmbrySecurityServiceTest {
 
   private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
-  private static final HostThrottleConfig HOST_THROTTLE_CONFIG = new HostThrottleConfig(new VerifiableProperties(new Properties()));
+  private static final HostThrottleConfig HOST_THROTTLE_CONFIG =
+      new HostThrottleConfig(new VerifiableProperties(new Properties()));
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
   private static final String CLUSTER_NAME = "ambry-test";
@@ -97,7 +103,7 @@ public class AmbrySecurityServiceTest {
 
   private final SecurityService securityService =
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler);
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, null);
 
   static {
     try {
@@ -157,7 +163,7 @@ public class AmbrySecurityServiceTest {
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(properties));
     SecurityService securityServiceWithTrackingDisabled =
         new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
-            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler);
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, null);
     restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
     Assert.assertFalse("The arg with key: ambry-internal-keys-send-tracking-info should be set to false",
@@ -223,8 +229,8 @@ public class AmbrySecurityServiceTest {
     HostLevelThrottler quotaManager = Mockito.mock(HostLevelThrottler.class);
     AmbrySecurityService ambrySecurityService =
         new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
-            new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(),
-            quotaManager);
+            new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager,
+            null);
     // Everything should be good.
     Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
     for (int i = 0; i < 100; i++) {
@@ -245,6 +251,108 @@ public class AmbrySecurityServiceTest {
             ((RestServiceException) e.getCause()).getErrorCode());
       }
     }
+  }
+
+  /**
+   * Test {@link AmbrySecurityService#postProcessRequest(RestRequest)} should throw RestServiceException on storage quota
+   * when the quota limit is reached.
+   * @throws Exception
+   */
+  @Test
+  public void postProcessStorageQuotaServiceTest() throws Exception {
+    HostLevelThrottler quotaManager = Mockito.mock(HostLevelThrottler.class);
+    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
+    StorageQuotaService quotaService = Mockito.mock(StorageQuotaService.class);
+
+    AmbrySecurityService ambrySecurityService =
+        new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
+            new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager,
+            quotaService);
+
+    // Everything should be good.
+    Mockito.when(quotaService.shouldThrottle(anyShort(), anyShort(), any(), anyLong())).thenReturn(false);
+    for (int i = 0; i < 100; i++) {
+      for (RestMethod restMethod : RestMethod.values()) {
+        RestRequest restRequest = createRestRequest(restMethod, "/", null);
+        restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY,
+            new AccountBuilder((short) 10, "account10", Account.AccountStatus.ACTIVE).build());
+        restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY,
+            new ContainerBuilder((short) 11, "container11", Container.ContainerStatus.ACTIVE, "", (short) 10).build());
+        ambrySecurityService.postProcessRequest(restRequest).get();
+      }
+    }
+
+    short throttledAccountId = (short) 1;
+    short throttledContainerId = (short) 10;
+    long throttledSize = 1000;
+    AtomicLong currentSize = new AtomicLong(0);
+    doAnswer(invocation -> {
+      short accountId = invocation.getArgument(0);
+      short containerId = invocation.getArgument(1);
+      long size = invocation.getArgument(3);
+      if (accountId == throttledAccountId && containerId == throttledContainerId) {
+        if (size + currentSize.get() > throttledSize) {
+          return true;
+        } else {
+          currentSize.addAndGet(size);
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }).when(quotaService).shouldThrottle(anyShort(), anyShort(), any(), anyLong());
+
+    AtomicReference<RestRequest> restRequestRef = new AtomicReference<>(null);
+    ThrowingConsumer<Integer> makeRequest = size -> {
+      RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY,
+          new AccountBuilder(throttledAccountId, "account10", Account.AccountStatus.ACTIVE).build());
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY,
+          new ContainerBuilder(throttledContainerId, "container11", Container.ContainerStatus.ACTIVE, "",
+              throttledAccountId).build());
+      restRequest.setArg(RestUtils.Headers.BLOB_SIZE, size);
+      restRequestRef.set(restRequest);
+    };
+    // RestRequest's size is only half of the threshold
+    makeRequest.accept((int) throttledSize / 2);
+    ambrySecurityService.postProcessRequest(restRequestRef.get()).get();
+    Assert.assertEquals(throttledSize / 2, currentSize.get());
+
+    makeRequest.accept((int) throttledSize / 2);
+    ambrySecurityService.postProcessRequest(restRequestRef.get()).get();
+    Assert.assertEquals(throttledSize, currentSize.get());
+
+    try {
+      makeRequest.accept(1);
+      ambrySecurityService.postProcessRequest(restRequestRef.get()).get();
+      Assert.fail("Should fail due to throttle");
+    } catch (ExecutionException e) {
+      Throwable throwable = e.getCause();
+      Assert.assertTrue(throwable instanceof RestServiceException);
+      RestServiceException restServiceException = (RestServiceException) throwable;
+      Assert.assertEquals(RestServiceErrorCode.TooManyRequests, restServiceException.getErrorCode());
+      Assert.assertEquals("StorageQuotaExceeded", restServiceException.getMessage());
+    }
+
+    // test some error cases.
+    makeRequest.accept(1);
+    restRequestRef.get().setArg(RestUtils.Headers.BLOB_SIZE, null);
+    restRequestRef.get().setArg(RestUtils.Headers.CONTENT_LENGTH, 1);
+
+    try {
+      ambrySecurityService.postProcessRequest(restRequestRef.get()).get();
+      Assert.fail("Should fail due to throttle");
+    } catch (ExecutionException e) {
+      Throwable throwable = e.getCause();
+      Assert.assertTrue(throwable instanceof RestServiceException);
+      RestServiceException restServiceException = (RestServiceException) throwable;
+      Assert.assertEquals(RestServiceErrorCode.TooManyRequests, restServiceException.getErrorCode());
+      Assert.assertEquals("StorageQuotaExceeded", restServiceException.getMessage());
+    }
+
+    makeRequest.accept(1);
+    restRequestRef.get().setArg(RestUtils.Headers.BLOB_SIZE, null); // getSize would return -1
+    ambrySecurityService.postProcessRequest(restRequestRef.get()).get();
   }
 
   /**

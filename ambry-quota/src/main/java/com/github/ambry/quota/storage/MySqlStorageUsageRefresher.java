@@ -80,18 +80,30 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   private final ScheduledExecutorService scheduler;
   private final StorageQuotaConfig config;
   private final ClusterMapConfig clusterMapConfig;
+  private final StorageQuotaServiceMetrics metrics;
   private final BackupFileManager backupFileManager;
 
   private volatile Map<String, Map<String, Long>> containerStorageUsageMonthlyBase;
   private volatile int retries = 0;
   private volatile String currentMonth = getCurrentMonth();
 
+  /**
+   * Constructor to instantiate a {@link MySqlStorageUsageRefresher}.
+   * @param accountStatsMySqlStore The {@link AccountStatsMySqlStore} to interact with mysql database.
+   * @param scheduler The {@link ScheduledExecutorService} to schedule background tasks.
+   * @param config The {@link StorageQuotaConfig}.
+   * @param clusterMapConfig The {@link ClusterMapConfig}.
+   * @param metrics The {@link StorageQuotaServiceMetrics} to update metrics
+   * @throws IOException
+   */
   public MySqlStorageUsageRefresher(AccountStatsMySqlStore accountStatsMySqlStore, ScheduledExecutorService scheduler,
-      StorageQuotaConfig config, ClusterMapConfig clusterMapConfig) throws IOException {
+      StorageQuotaConfig config, ClusterMapConfig clusterMapConfig, StorageQuotaServiceMetrics metrics)
+      throws IOException {
     this.accountStatsMySqlStore = Objects.requireNonNull(accountStatsMySqlStore, "AccountStatsMySqlStore is null");
     this.scheduler = Objects.requireNonNull(scheduler, "Scheduler is null");
     this.config = config;
     this.clusterMapConfig = clusterMapConfig;
+    this.metrics = metrics;
     this.backupFileManager =
         this.config.backupFileDir.isEmpty() ? null : new BackupFileManager(this.config.backupFileDir);
     initializeContainerStorageUsageMonthlyBase();
@@ -117,34 +129,35 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
    * exist for this month, then load it from mysql database.
    */
   private void initializeContainerStorageUsageMonthlyBase() {
+    long startTimeMs = System.currentTimeMillis();
     // First try to get the monthly base storage usage from backup
     try {
       if (backupFileManager != null) {
-        logger.trace("Fetching monthly base from backup directory for this month: {}", currentMonth);
+        logger.info("Fetching monthly base from backup directory for this month: {}", currentMonth);
         containerStorageUsageMonthlyBase = backupFileManager.getBackupFileContent(currentMonth);
-      }
-      if (containerStorageUsageMonthlyBase != null) {
-        return;
       }
     } catch (IOException e) {
       logger.error("Failed to get container monthly usage for {} from backup", currentMonth, e);
     }
 
-    try {
-      // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
-      logger.trace("Fetching monthly base from mysql database for this month: {}", currentMonth);
-      containerStorageUsageMonthlyBase =
-          accountStatsMySqlStore.queryMonthlyAggregatedStats(clusterMapConfig.clusterMapClusterName);
-      // If the monthly base is indeed for this month, then try to persist it in the backup file.
-      // There is a chance that the database has a snapshot from last month since the aggregation task is executed
-      // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
-      // would have the snapshot of last month.
-      if (currentMonth.equals(accountStatsMySqlStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName))) {
-        tryPersistMonthlyUsage();
+    if (containerStorageUsageMonthlyBase == null) {
+      try {
+        // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
+        logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
+        containerStorageUsageMonthlyBase =
+            accountStatsMySqlStore.queryMonthlyAggregatedStats(clusterMapConfig.clusterMapClusterName);
+        // If the monthly base is indeed for this month, then try to persist it in the backup file.
+        // There is a chance that the database has a snapshot from last month since the aggregation task is executed
+        // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
+        // would have the snapshot of last month.
+        if (currentMonth.equals(accountStatsMySqlStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName))) {
+          tryPersistMonthlyUsage();
+        }
+      } catch (Exception e) {
+        throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
       }
-    } catch (Exception e) {
-      throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
     }
+    metrics.mysqlRefresherInitTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
   /**
@@ -154,6 +167,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     if (backupFileManager != null) {
       try {
         backupFileManager.persistentBackupFile(currentMonth, containerStorageUsageMonthlyBase);
+        logger.info("Persisted monthly container usage for {}", currentMonth);
       } catch (IOException e) {
         // Error already been logged from backup file manager.
       }
@@ -169,9 +183,12 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     try {
       String monthValue = accountStatsMySqlStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName);
       if (monthValue.equals(currentMonth)) {
+        logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}", currentMonth);
         containerStorageUsageMonthlyBase =
             accountStatsMySqlStore.queryMonthlyAggregatedStats(clusterMapConfig.clusterMapClusterName);
       } else {
+        logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
+            monthValue);
         shouldRetry = true;
       }
     } catch (Exception e) {
@@ -189,6 +206,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       }
       retries++;
       if (config.mysqlStoreRetryBackoffMs != 0) {
+        logger.info("Schedule to retry to fetch monthly base from mysql database after {} ms, the retry count: {}",
+            config.mysqlStoreRetryBackoffMs, retries);
         scheduler.schedule(this::fetchMonthlyStorageUsageAndMaybeRetry, config.mysqlStoreRetryBackoffMs,
             TimeUnit.MILLISECONDS);
       }
@@ -238,6 +257,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   private void initialFetchAndSchedule() {
     Runnable updater = () -> {
       try {
+        long startTimeMs = System.currentTimeMillis();
         Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
         Map<String, Map<String, Long>> storageUsage =
             accountStatsMySqlStore.queryAggregatedStats(clusterMapConfig.clusterMapClusterName);
@@ -246,6 +266,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
         if (listener.get() != null) {
           listener.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));
         }
+        metrics.mysqlRefresherRefreshUsageTimeMs.update(System.currentTimeMillis() - startTimeMs);
       } catch (Exception e) {
         logger.error("Failed to retrieve the container usage from mysql", e);
         // If we already have a container usage map in memory, then don't replace it with empty map.

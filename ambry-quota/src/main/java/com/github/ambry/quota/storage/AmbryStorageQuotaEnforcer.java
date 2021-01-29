@@ -15,6 +15,7 @@ package com.github.ambry.quota.storage;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -37,13 +38,16 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   private volatile Map<String, Map<String, Long>> storageQuota;
   private volatile Map<String, Map<String, Long>> storageUsage;
   private final QuotaExceededCallback quotaExceededCallback;
+  private final StorageQuotaServiceMetrics metrics;
 
   /**
    * Constructor to instantiate {@link AmbryStorageQuotaEnforcer}.
    * @param quotaExceededCallback The {@link QuotaExceededCallback}
+   * @param metrics The {@link StorageQuotaServiceMetrics}.
    */
-  public AmbryStorageQuotaEnforcer(QuotaExceededCallback quotaExceededCallback) {
+  public AmbryStorageQuotaEnforcer(QuotaExceededCallback quotaExceededCallback, StorageQuotaServiceMetrics metrics) {
     this.quotaExceededCallback = quotaExceededCallback;
+    this.metrics = Objects.requireNonNull(metrics, "StorageQuotaServiceMetrics is null");
   }
 
   @Override
@@ -51,6 +55,7 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
     if (op != QuotaOperation.Post) {
       return false;
     }
+    long startTimeMs = System.currentTimeMillis();
     long quota = storageQuota.getOrDefault(String.valueOf(accountId), new HashMap<>())
         .getOrDefault(String.valueOf(containerId), Long.MAX_VALUE);
 
@@ -69,9 +74,18 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
             return v;
           }
         });
-    if (exceedQuota.get() && quota != Long.MAX_VALUE && quotaExceededCallback != null) {
-      quotaExceededCallback.onQuotaExceeded(mode, accountId, containerId, op, quota, existingUsage.get(), size);
+    logger.debug("Account id {} container id {} quota {}, existing usage {} new size {}, new usage {}", accountId,
+        containerId, quota == Long.MAX_VALUE ? "MAX_VALUE" : String.valueOf(quota), existingUsage.get(), size,
+        storageUsage.get(String.valueOf(accountId)).get(String.valueOf(containerId)));
+    if (exceedQuota.get()) {
+      metrics.quotaExceededCount.inc();
     }
+    if (exceedQuota.get() && quota != Long.MAX_VALUE && quotaExceededCallback != null) {
+      long cbStartTimeMs = System.currentTimeMillis();
+      quotaExceededCallback.onQuotaExceeded(mode, accountId, containerId, op, quota, existingUsage.get(), size);
+      metrics.quotaExceededCallbackTimeMs.update(System.currentTimeMillis() - cbStartTimeMs);
+    }
+    metrics.shouldThrottleTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
   }
 
