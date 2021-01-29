@@ -1218,7 +1218,6 @@ class BlobStoreCompactor {
             // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
             // tombstone is removable.
             if (isDeleteTombstoneRemovable(value)) {
-//              System.out.println("Delete key in compaction: " + indexEntry.getKey());
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   indexEntry.getKey(), value.getExpiresAtMs());
@@ -1244,7 +1243,6 @@ class BlobStoreCompactor {
                 // Add all values in this index segment (to account for the presence of TTL updates)
                 addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
               } else {
-//                System.out.println("Found deleted PUT and is compacted in compaction: " + indexEntry.getKey());
                 logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
                     indexEntry, indexSegment.getStartOffset(), storeId);
               }
@@ -1254,7 +1252,6 @@ class BlobStoreCompactor {
               addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
             }
           } else {
-//            System.out.println("Found expired PUT and is compacted in compaction: " + indexEntry.getKey() + ", expiry = " + valueFromIdx.getExpiresAtMs() + ", current time = " + time.milliseconds());
             logger.trace("{} in index segment with start offset {} in {} is not valid because it is an expired PUT",
                 indexEntry, indexSegment.getStartOffset(), storeId);
           }
