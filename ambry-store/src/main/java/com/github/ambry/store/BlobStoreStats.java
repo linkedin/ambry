@@ -542,7 +542,23 @@ class BlobStoreStats implements StoreStats, Closeable {
     if (validSizePerLogSegment.isEmpty()) {
       validSizePerLogSegment.put(index.getStartOffset().getName(), 0L);
     }
+    removeDeleteTombStonesFromValidSize(keyFinalStates.values(), validSizePerLogSegment);
     return validSizePerLogSegment;
+  }
+
+  private void removeDeleteTombStonesFromValidSize(Collection<IndexFinalState> indexFinalStates, NavigableMap<String, Long> validSizePerLogSegment){
+    for(IndexFinalState finalState : indexFinalStates){
+      if(finalState.isDelete()){
+        if(finalState.getExpirationTime() != Utils.Infinite_Time ){
+          // expired delete tombstone should be considered invalid
+          String logSegmentName = finalState.getOffset().getName();
+          validSizePerLogSegment.computeIfPresent(logSegmentName, (k, v) -> {
+            v -= finalState.getRecordSize();
+            return v;
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -583,7 +599,7 @@ class BlobStoreStats implements StoreStats, Closeable {
                   : indexValue.getOperationTimeInMs();
           keyFinalStates.put(indexEntry.getKey(),
               new IndexFinalState(indexValue.getFlags(), operationTimeInMs, indexValue.getLifeVersion(),
-                  indexValue.getSize(), indexValue.getExpiresAtMs()));
+                  indexValue.getSize(), indexValue.getExpiresAtMs(), indexValue.getOffset()));
         }
         validIndexEntryAction.accept(indexEntry);
       } else if (indexValue.isUndelete()) {
@@ -604,7 +620,7 @@ class BlobStoreStats implements StoreStats, Closeable {
                   : indexValue.getOperationTimeInMs();
           keyFinalStates.put(indexEntry.getKey(),
               new IndexFinalState(indexValue.getFlags(), operationTimeInMs, indexValue.getLifeVersion(),
-                  indexValue.getSize(), indexValue.getExpiresAtMs()));
+                  indexValue.getSize(), indexValue.getExpiresAtMs(), indexValue.getOffset()));
         }
         if (!isExpired(indexValue.getExpiresAtMs(), expiryReferenceTimeInMs)) {
           validIndexEntryAction.accept(indexEntry);
@@ -666,7 +682,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     if (valid && !keyFinalStates.containsKey(key)) {
       keyFinalStates.put(key, new IndexFinalState(ttlUpdateValue.getFlags(), ttlUpdateValue.
           getOperationTimeInMs(), ttlUpdateValue.getLifeVersion(), ttlUpdateValue.getSize(),
-          ttlUpdateValue.getExpiresAtMs()));
+          ttlUpdateValue.getExpiresAtMs(), ttlUpdateValue.getOffset()));
     }
     // else, valid = true because a ttl update entry with a put in another log segment is considered valid as long as
     // the put still exists (regardless of its validity)
@@ -1042,7 +1058,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     long permanentDeleteTotalSize = 0;
     for (IndexFinalState finalState : indexFinalStates) {
       if (finalState.isDelete()) {
-        if (finalState.getExpirationTime() != -1) {
+        if (finalState.getExpirationTime() != Utils.Infinite_Time) {
           expiredDeleteCount++;
           expiredDeleteTotalSize += finalState.getRecordSize();
         } else {
@@ -1184,6 +1200,12 @@ class BlobStoreStats implements StoreStats, Closeable {
           }
           // The remaining index entries in keyFinalStates are DELETE tombstones left by compaction (whose associated PUT is not found)
           updateDeleteTombstoneStats(keyFinalStates.values());
+          // Remove delete tombstones from scan results
+          for(IndexFinalState state: keyFinalStates.values()){
+            if(state.isDelete() && state.getExpirationTime() != Utils.Infinite_Time){
+              newScanResults.updateLogSegmentBaseBucket(state.getOffset().getName(), -1 * state.getRecordSize());
+            }
+          }
         } else {
           newScanResults.updateLogSegmentBaseBucket(index.getStartOffset().getName(), 0L);
         }
@@ -1351,6 +1373,8 @@ class BlobStoreStats implements StoreStats, Closeable {
     private final short lifeVersion;
     private final long recordSize;
     private final long expirationTime;
+    private final Offset offset;
+    // TODO add offset here to help identify the log segment delete refers to.
 
     /**
      * Constructor to construct an {@link IndexFinalState}.
@@ -1359,13 +1383,16 @@ class BlobStoreStats implements StoreStats, Closeable {
      * @param lifeVersion the life version associated with final {@link IndexValue}
      * @param recordSize the size of message record in the log that associated with final {@link IndexValue}
      * @param expirationTime the expiration time in ms of final {@link IndexValue}
+     * @param offset the {@link Offset} in log that this final {@link IndexValue} refers to.
      */
-    IndexFinalState(byte flags, long operationTime, short lifeVersion, long recordSize, long expirationTime) {
+    IndexFinalState(byte flags, long operationTime, short lifeVersion, long recordSize, long expirationTime,
+        Offset offset) {
       this.flags = flags;
       this.operationTime = operationTime;
       this.lifeVersion = lifeVersion;
       this.recordSize = recordSize;
       this.expirationTime = expirationTime;
+      this.offset = offset;
     }
 
     /**
@@ -1389,6 +1416,12 @@ class BlobStoreStats implements StoreStats, Closeable {
       return recordSize;
     }
 
+    /**
+     * @return the {@link Offset} in log that the {@link IndexValue} refers to.
+     */
+    public Offset getOffset() {
+      return offset;
+    }
     /**
      * @return the expiration time of the final {@link IndexValue}.
      */
