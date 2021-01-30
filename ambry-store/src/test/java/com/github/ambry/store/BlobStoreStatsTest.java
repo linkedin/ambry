@@ -1214,7 +1214,7 @@ public class BlobStoreStatsTest {
 
       long expectedLogSegmentValidSize =
           state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInMs(), expiryReferenceTime, null,
-              deleteTombstoneStats, expiredDeletes);
+              deleteTombstoneStats, expiredDeletes, true);
       long actualLogSegmentValidSize = actualLogSegmentValidSizeMap.getSecond().get(logSegmentName);
       assertEquals("Valid data size mismatch for log segment: " + logSegmentName + " in TimeRange " + timeRange,
           expectedLogSegmentValidSize, actualLogSegmentValidSize);
@@ -1252,7 +1252,7 @@ public class BlobStoreStatsTest {
     for (Offset indSegStartOffset : state.referenceIndex.keySet()) {
       List<IndexEntry> validEntries =
           state.getValidIndexEntriesForIndexSegment(indSegStartOffset, deleteReferenceTimeInMs, expiryReferenceTimeInMs,
-              null, deleteTombstoneStats, expiredDeletes);
+              null, deleteTombstoneStats, expiredDeletes, true);
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
         if (indexValue.isPut()) {

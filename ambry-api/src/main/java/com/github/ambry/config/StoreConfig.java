@@ -125,6 +125,13 @@ public class StoreConfig {
   public final boolean storeCompactionEnableDirectIO;
 
   /**
+   * Whether to purge expired delete tombstone in compaction.
+   */
+  @Config("store.compaction.purge.expired.delete.tombstone")
+  @Default("false")
+  public final boolean storeCompactionPurgeExpiredDeleteTombstone;
+
+  /**
    * The minimum buffer size for compaction copy phase.
    */
   @Config("store.compaction.min.buffer.size")
@@ -387,6 +394,8 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.compaction.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
     storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
+    storeCompactionPurgeExpiredDeleteTombstone =
+        verifiableProperties.getBoolean("store.compaction.purge.expired.delete.tombstone", false);
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);
     storeCompactionFilter =
