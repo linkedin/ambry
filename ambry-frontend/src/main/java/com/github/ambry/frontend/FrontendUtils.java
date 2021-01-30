@@ -13,14 +13,21 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import com.github.ambry.quota.storage.QuotaOperation;
+import com.github.ambry.quota.storage.StorageQuotaService;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.ThrowingConsumer;
@@ -100,6 +107,32 @@ class FrontendUtils {
       return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
     } catch (Exception e) {
       throw new RestServiceException("Could not serialize response json.", e, RestServiceErrorCode.InternalServerError);
+    }
+  }
+
+  /**
+   * Apply the storage quota service's throttling logic to Post {@link RestRequest}.
+   * @param restRequest The {@link RestRequest}.
+   * @param storageQuotaService the {@link StorageQuotaService}.
+   * @param logger The {@link Logger}.
+   * @throws RestServiceException
+   */
+  static void applyingStorageQuotaServiceToPost(RestRequest restRequest, StorageQuotaService storageQuotaService,
+      Logger logger) throws RestServiceException {
+    logger.debug("RestRequest: method {}, size {}, storage quota service != null {}", restRequest.getRestMethod(),
+        restRequest.getSize(), storageQuotaService != null);
+    if (restRequest.getRestMethod() == RestMethod.POST && storageQuotaService != null && restRequest.getSize() > 0) {
+      Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
+      Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+      // We are optimistically accounting request size beforehand and add it to usage of this account/container. This
+      // would mistakingly adds storage usage if this request fails in the end.
+      // TODO: find a way to revert this mistake when requests fail
+      logger.debug("Account id: {}, Container id: {}, size: {}", account.getId(), container.getId(),
+          restRequest.getSize());
+      if (storageQuotaService.shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post,
+          restRequest.getSize())) {
+        throw new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
+      }
     }
   }
 }
