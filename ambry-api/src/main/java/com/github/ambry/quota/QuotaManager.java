@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@ package com.github.ambry.quota;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
-import java.util.List;
 
 
 /**
@@ -31,22 +30,12 @@ public interface QuotaManager {
   void init();
 
   /**
-   * Computes the overall boolean recommendation to throttle a request or not, for all the types of quotas that depend on
-   * the load on host resources, and populates the specified enforcementRecommendations list with the
-   * recommendations. This method should be used for throttling on quota that doesn't depend upon request characteristics.
-   * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
-   * @return true if the request should be throttled. false otherwise.
-   */
-  boolean shouldThrottleOnHost(List<EnforcementRecommendation> enforcementRecommendations);
-
-  /**
    * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
    * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
-   * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
-   * @return true if the request should be throttled. false otherwise.
+   * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
-  boolean shouldThrottleOnRequest(RestRequest restRequest, List<EnforcementRecommendation> enforcementRecommendations);
+  ThrottlingRecommendation shouldThrottle(RestRequest restRequest);
 
   /**
    * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
@@ -54,11 +43,9 @@ public interface QuotaManager {
    * @param restRequest {@link RestRequest} object.
    * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
    *                                 determined by enforcers.
-   * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s to be populated.
-   * @return true if the request should be throttled. false otherwise.
+   * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
-  boolean charge(RestRequest restRequest, BlobInfo blobInfo,
-      List<EnforcementRecommendation> enforcementRecommendations);
+  ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo);
 
   /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.

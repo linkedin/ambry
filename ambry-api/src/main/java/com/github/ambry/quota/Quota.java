@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,31 +23,30 @@ import java.util.Set;
  * @param <T> the type of the quota value.
  */
 public class Quota<T> {
-  private final QuotaMetric quotaMetric;
+  private final QuotaName quotaName;
   private final T quotaValue;
   private final QuotaResource quotaResource;
   private final Set<QuotaOperation> quotaOperations;
 
   /**
    * Constructor for {@link Quota}.
-   * @param quotaMetric {@link QuotaMetric} object.
+   * @param quotaName {@link QuotaName} object.
    * @param quotaValue value of the quota limit.
    * @param quotaResource {@link QuotaResource} for which quota is specified.
    * @param quotaOperations {@link Set} of {@link QuotaOperation}s.
    */
-  public Quota(QuotaMetric quotaMetric, T quotaValue, QuotaResource quotaResource,
-      Set<QuotaOperation> quotaOperations) {
-    this.quotaMetric = quotaMetric;
+  public Quota(QuotaName quotaName, T quotaValue, QuotaResource quotaResource, Set<QuotaOperation> quotaOperations) {
+    this.quotaName = quotaName;
     this.quotaValue = quotaValue;
     this.quotaResource = quotaResource;
     this.quotaOperations = quotaOperations;
   }
 
   /**
-   * @return QuotaMetric object.
+   * @return QuotaName object.
    */
-  public QuotaMetric getQuotaMetric() {
-    return quotaMetric;
+  public QuotaName getQuotaName() {
+    return quotaName;
   }
 
   /**

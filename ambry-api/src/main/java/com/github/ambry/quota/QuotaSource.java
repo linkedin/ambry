@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,15 +25,15 @@ public interface QuotaSource {
    * Get the {@link Quota} for specified resource and operation.
    * @param quotaResource {@link QuotaResource} object.
    * @param quotaOperation {@link QuotaOperation} object.
-   * @param quotaMetric {@link QuotaMetric} object.
+   * @param quotaName {@link QuotaName} object.
    */
-  Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric);
+  Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaName quotaName);
 
   /**
    * Get the {@link Quota} for host resource.
    * @param quotaResource {@link QuotaResource} object.
-   * @param quotaMetric {@link QuotaMetric} object.
+   * @param quotaName {@link QuotaName} object.
    * @return
    */
-  Quota getHostQuota(QuotaResource quotaResource, QuotaMetric quotaMetric);
+  Quota getHostQuota(QuotaResource quotaResource, QuotaName quotaName);
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@ package com.github.ambry.quota.capacityunit;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.AmbryEnforcementRecommendation;
 import com.github.ambry.quota.EnforcementRecommendation;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaSource;
-import com.github.ambry.quota.RequestCost;
 import com.github.ambry.quota.RequestQuotaEnforcer;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 
 
@@ -28,7 +29,8 @@ import com.github.ambry.rest.RestRequest;
 // TODO: The current implementation allows all requests without any processing. It needs to be replaced by an implementation that enforces quota.
 public class AmbryCapacityUnitQuotaEnforcer implements RequestQuotaEnforcer {
   private final QuotaSource quotaSource;
-  private final EnforcementRecommendation allowRecommendation;
+  private final EnforcementRecommendation allowReadRecommendation;
+  private final EnforcementRecommendation allowWriteRecommendation;
 
   /**
    * Constructor for {@link AmbryCapacityUnitQuotaEnforcer}.
@@ -36,24 +38,32 @@ public class AmbryCapacityUnitQuotaEnforcer implements RequestQuotaEnforcer {
    */
   public AmbryCapacityUnitQuotaEnforcer(QuotaSource quotaSource) {
     this.quotaSource = quotaSource;
-    allowRecommendation =
-        new AmbryEnforcementRecommendation(false, 0, AmbryCapacityUnitQuotaEnforcer.class.getSimpleName(), 200,
-            new RequestCost(null, null));
+    this.allowReadRecommendation =
+        new AmbryEnforcementRecommendation(false, 0, QuotaName.READ_CAPACITY_UNIT, 200, 0, -1);
+    this.allowWriteRecommendation =
+        new AmbryEnforcementRecommendation(false, 0, QuotaName.WRITE_CAPACITY_UNIT, 200, 0, -1);
   }
 
   @Override
   public void init() {
-
   }
 
   @Override
   public EnforcementRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo) {
-    return allowRecommendation;
+    if (isReadRequest(restRequest)) {
+      return allowReadRecommendation;
+    } else {
+      return allowWriteRecommendation;
+    }
   }
 
   @Override
   public EnforcementRecommendation recommend(RestRequest restRequest) {
-    return allowRecommendation;
+    if (isReadRequest(restRequest)) {
+      return allowReadRecommendation;
+    } else {
+      return allowWriteRecommendation;
+    }
   }
 
   @Override
@@ -64,5 +74,14 @@ public class AmbryCapacityUnitQuotaEnforcer implements RequestQuotaEnforcer {
   @Override
   public void shutdown() {
 
+  }
+
+  /**
+   * Check if the restRequest passed is for a READ request.
+   * @param restRequest {@link RestRequest} object.
+   * @return true is restRequest is a READ request. False otherwise.
+   */
+  private boolean isReadRequest(RestRequest restRequest) {
+    return (restRequest.getRestMethod() == RestMethod.GET || restRequest.getRestMethod() == RestMethod.HEAD);
   }
 }

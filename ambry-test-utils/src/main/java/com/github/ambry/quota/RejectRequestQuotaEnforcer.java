@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,13 +41,13 @@ public class RejectRequestQuotaEnforcer implements RequestQuotaEnforcer {
   @Override
   public EnforcementRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo) {
     return new AmbryEnforcementRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE,
-        RejectRequestQuotaEnforcer.class.getSimpleName(), REJECT_HTTP_STATUS, null);
+        QuotaName.READ_CAPACITY_UNIT, REJECT_HTTP_STATUS, 1, -1);
   }
 
   @Override
   public EnforcementRecommendation recommend(RestRequest restRequest) {
     return new AmbryEnforcementRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE,
-        RejectRequestQuotaEnforcer.class.getSimpleName(), REJECT_HTTP_STATUS, null);
+        QuotaName.READ_CAPACITY_UNIT, REJECT_HTTP_STATUS, 1, -1);
   }
 
   @Override

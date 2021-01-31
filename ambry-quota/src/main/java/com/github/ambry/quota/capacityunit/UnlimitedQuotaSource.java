@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.quota.Quota;
-import com.github.ambry.quota.QuotaMetric;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.storage.QuotaOperation;
@@ -28,12 +28,12 @@ import java.util.HashSet;
 public class UnlimitedQuotaSource implements QuotaSource {
 
   @Override
-  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
-    return new Quota<>(quotaMetric, Long.MAX_VALUE, quotaResource, new HashSet<>(Arrays.asList(quotaOperation)));
+  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaName quotaName) {
+    return new Quota<>(quotaName, Long.MAX_VALUE, quotaResource, new HashSet<>(Arrays.asList(quotaOperation)));
   }
 
   @Override
-  public Quota getHostQuota(QuotaResource quotaResource, QuotaMetric quotaMetric) {
-    return new Quota<>(quotaMetric, Long.MAX_VALUE, quotaResource, null);
+  public Quota getHostQuota(QuotaResource quotaResource, QuotaName quotaName) {
+    return new Quota<>(quotaName, Long.MAX_VALUE, quotaResource, null);
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,25 +19,28 @@ package com.github.ambry.quota;
 public class AmbryEnforcementRecommendation implements EnforcementRecommendation {
   private final boolean shouldThrottle;
   private final float usagePercentage;
-  private final String quotaEnforcerName;
+  private final QuotaName quotaName;
   private final int recommendedHttpStatus;
-  private final RequestCost requestCost;
+  private final double requestCost;
+  private final long retryAfterMs;
 
   /**
    * Constructor for {@link AmbryEnforcementRecommendation}.
    * @param shouldThrottle boolean flag indicating throttling recommendation.
    * @param usagePercentage percentage of resource usage.
-   * @param quotaEnforcerName name of the enforcement that made the recommendation.
+   * @param quotaName name of the enforcement that made the recommendation.
    * @param recommendedHttpStatus recommended http status.
-   * @param requestCost {@link RequestCost} of the request.
+   * @param requestCost cost of the request.
+   * @param retryAfterMs time after which request can be retried.
    */
-  public AmbryEnforcementRecommendation(boolean shouldThrottle, float usagePercentage, String quotaEnforcerName,
-      int recommendedHttpStatus, RequestCost requestCost) {
+  public AmbryEnforcementRecommendation(boolean shouldThrottle, float usagePercentage, QuotaName quotaName,
+      int recommendedHttpStatus, float requestCost, long retryAfterMs) {
     this.shouldThrottle = shouldThrottle;
     this.usagePercentage = usagePercentage;
-    this.quotaEnforcerName = quotaEnforcerName;
+    this.quotaName = quotaName;
     this.recommendedHttpStatus = recommendedHttpStatus;
     this.requestCost = requestCost;
+    this.retryAfterMs = retryAfterMs;
   }
 
   @Override
@@ -51,8 +54,8 @@ public class AmbryEnforcementRecommendation implements EnforcementRecommendation
   }
 
   @Override
-  public String getQuotaEnforcerName() {
-    return quotaEnforcerName;
+  public QuotaName getQuotaName() {
+    return quotaName;
   }
 
   @Override
@@ -61,7 +64,12 @@ public class AmbryEnforcementRecommendation implements EnforcementRecommendation
   }
 
   @Override
-  public RequestCost getRequestCost() {
+  public double getRequestCost() {
     return requestCost;
+  }
+
+  @Override
+  public long getRetryAfterMs() {
+    return retryAfterMs;
   }
 }

@@ -1,5 +1,5 @@
-/*
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+/**
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
 package com.github.ambry.quota;
 
 /**
- * Interface representing enforcement recommendation made by a {@link RequestQuotaEnforcer} or {@link HostQuotaEnforcer}
- * implementation. QuotaEnforcer implementations can use this object to provide a boolean recommendation to throttle the
+ * Interface representing enforcement recommendation made by a {@link RequestQuotaEnforcer} implementation. QuotaEnforcer
+ * implementations can use this object to provide a boolean recommendation to throttle the
  * request or not, along with usage information like usage percentage, name of the enforcer that made this recommendation,
  * the recommended http status (indicating whether or not throttled request should be retried) and cost to serve the request.
  */
@@ -32,9 +32,9 @@ public interface EnforcementRecommendation {
   float getQuotaUsagePercentage();
 
   /**
-   * @return name of the enforcer that created this recommendation.
+   * @return name of the quota for which recommendation is made.
    */
-  String getQuotaEnforcerName();
+  QuotaName getQuotaName();
 
   /**
    * @return http status recommended by enforcer.
@@ -42,7 +42,13 @@ public interface EnforcementRecommendation {
   int getRecommendedHttpStatus();
 
   /**
-   * @return the {@link RequestCost} for serving the request.
+   * @return the cost of serving the request.
    */
-  RequestCost getRequestCost();
+  double getRequestCost();
+
+  /**
+   * @return the time interval in milliseconds after the request can be retried.
+   * If request is not throttled then returns -1.
+   */
+  long getRetryAfterMs();
 }

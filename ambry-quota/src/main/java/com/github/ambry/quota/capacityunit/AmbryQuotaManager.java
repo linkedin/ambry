@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,12 +11,22 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.quota.AmbryThrottlingRecommendation;
+import com.github.ambry.quota.EnforcementRecommendation;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.quota.QuotaSourceFactory;
+import com.github.ambry.quota.RequestQuotaEnforcer;
+import com.github.ambry.quota.RequestQuotaEnforcerFactory;
+import com.github.ambry.quota.ThrottlePolicy;
+import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,95 +43,72 @@ import org.json.JSONObject;
  * {@link QuotaManager} implementation to handle all the quota and quota enforcement for Ambry.
  */
 public class AmbryQuotaManager implements QuotaManager {
-  private final Set<HostQuotaEnforcer> hostQuotaEnforcers;
+  private static final ThrottlingRecommendation allowRecommendation =
+      new AmbryThrottlingRecommendation(false, new HashMap<>(), 200, new HashMap<>(), -1);
   private final Set<RequestQuotaEnforcer> requestQuotaEnforcers;
+  private final ThrottlePolicy throttlePolicy;
 
   /**
    * Constructor for {@link AmbryQuotaManager}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @throws ReflectiveOperationException in case of any exception.
    */
-  public AmbryQuotaManager(QuotaConfig quotaConfig, List<HostQuotaEnforcer> addedHostQuotaEnforcers,
-      List<RequestQuotaEnforcer> addedRequestQuotaEnforcers) throws ReflectiveOperationException {
+  public AmbryQuotaManager(QuotaConfig quotaConfig, List<RequestQuotaEnforcer> addedRequestQuotaEnforcers,
+      ThrottlePolicy throttlePolicy) throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap = buildQuotaSources(quotaEnforcerSourceMap.values(), quotaConfig);
     requestQuotaEnforcers = new HashSet<>(addedRequestQuotaEnforcers);
-    hostQuotaEnforcers = new HashSet<>(addedHostQuotaEnforcers);
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((RequestQuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)))).getRequestQuotaEnforcer());
     }
-    for (String quotaEnforcerFactory : quotaConfig.hostQuotaEnforcerFactories) {
-      hostQuotaEnforcers.add(
-          ((HostQuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig)).getHostQuotaEnforcer());
-    }
+    this.throttlePolicy = throttlePolicy;
   }
 
   @Override
   public void init() {
-    for (HostQuotaEnforcer quotaEnforcer : hostQuotaEnforcers) {
-      quotaEnforcer.init();
-    }
     for (RequestQuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
       quotaEnforcer.init();
     }
   }
 
   @Override
-  public boolean shouldThrottleOnHost(List<EnforcementRecommendation> enforcementRecommendations) {
-    if (hostQuotaEnforcers.isEmpty()) {
-      return false;
-    }
-    boolean shouldThrottle = true;
-    Iterator<HostQuotaEnforcer> quotaEnforcerIterator = hostQuotaEnforcers.iterator();
-    while (quotaEnforcerIterator.hasNext()) {
-      EnforcementRecommendation enforcementRecommendation = quotaEnforcerIterator.next().recommend(null);
-      shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
-      enforcementRecommendations.add(enforcementRecommendation);
-    }
-    return shouldThrottle;
-  }
-
-  @Override
-  public boolean shouldThrottleOnRequest(RestRequest restRequest,
-      List<EnforcementRecommendation> enforcementRecommendations) {
+  public ThrottlingRecommendation shouldThrottle(RestRequest restRequest) {
     if (requestQuotaEnforcers.isEmpty()) {
-      return false;
+      return allowRecommendation;
     }
     boolean shouldThrottle = true;
     Iterator<RequestQuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
+    List<EnforcementRecommendation> enforcementRecommendations = new ArrayList<>();
     while (quotaEnforcerIterator.hasNext()) {
       EnforcementRecommendation enforcementRecommendation = quotaEnforcerIterator.next().recommend(restRequest);
       shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
       enforcementRecommendations.add(enforcementRecommendation);
     }
-    return shouldThrottle;
+    return throttlePolicy.recommend(enforcementRecommendations);
   }
 
   @Override
-  public boolean charge(RestRequest restRequest, BlobInfo blobInfo,
-      List<EnforcementRecommendation> enforcementRecommendations) {
+  public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo) {
     if (requestQuotaEnforcers.isEmpty()) {
-      return false;
+      return allowRecommendation;
     }
     boolean shouldThrottle = true;
     Iterator<RequestQuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
+    List<EnforcementRecommendation> enforcementRecommendations = new ArrayList<>();
     while (quotaEnforcerIterator.hasNext()) {
       EnforcementRecommendation enforcementRecommendation =
           quotaEnforcerIterator.next().chargeAndRecommend(restRequest, blobInfo);
       shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
       enforcementRecommendations.add(enforcementRecommendation);
     }
-    return shouldThrottle;
+    return throttlePolicy.recommend(enforcementRecommendations);
   }
 
   @Override
   public void shutdown() {
     for (RequestQuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
-      quotaEnforcer.shutdown();
-    }
-    for (HostQuotaEnforcer quotaEnforcer : hostQuotaEnforcers) {
       quotaEnforcer.shutdown();
     }
   }

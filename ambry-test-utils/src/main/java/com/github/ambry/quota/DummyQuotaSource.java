@@ -1,5 +1,5 @@
 /**
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,12 @@ import com.github.ambry.quota.storage.QuotaOperation;
 public class DummyQuotaSource implements QuotaSource {
 
   @Override
-  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaMetric quotaMetric) {
+  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaName quotaName) {
     return null;
   }
 
   @Override
-  public Quota getHostQuota(QuotaResource quotaResource, QuotaMetric quotaMetric) {
+  public Quota getHostQuota(QuotaResource quotaResource, QuotaName quotaName) {
     return null;
   }
 }

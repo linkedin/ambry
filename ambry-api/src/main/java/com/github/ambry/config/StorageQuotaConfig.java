@@ -128,12 +128,4 @@ public class StorageQuotaConfig {
     enforcerMode =
         QuotaMode.valueOf(verifiableProperties.getString(ENFORCER_MODE, DEFAULT_VALUE_ENFORCE_MODE).toUpperCase());
   }
-
-  private String capitalize(String str) {
-    if (str == null || str.isEmpty() || str.trim().isEmpty()) {
-      return str;
-    }
-    str = str.trim();
-    return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
-  }
 }
