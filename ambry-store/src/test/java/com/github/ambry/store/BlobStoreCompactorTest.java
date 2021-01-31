@@ -2591,8 +2591,8 @@ public class BlobStoreCompactorTest {
     Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
     // "compactedDeletes" are those tombstones that should be compacted in single run (if no exception occurs);
     // "deletesWithPuts" are those tombstones temporarily with PUTs but may be eligible to be compacted in subsequent cycle
-    Set<MockId> compactedDeletes = purgeExpiredDelete ? expiredDeletes.getFirst() : new HashSet<>();
-    Set<MockId> deletesWithPuts = purgeExpiredDelete ? expiredDeletes.getSecond() : new HashSet<>();
+    Set<MockId> compactedDeletes = expiredDeletes.getFirst();
+    Set<MockId> deletesWithPuts = expiredDeletes.getSecond();
 
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
@@ -2667,8 +2667,8 @@ public class BlobStoreCompactorTest {
     // get valid log entries including deletes as a backup (in case exception occurred in the middle of compaction)
     List<LogEntry> validLogEntriesInOrder =
         getValidLogEntriesInOrder(segmentsUnderCompaction, deleteReferenceTimeMs, expiredDeletes, purgeExpiredDelete);
-    Set<MockId> compactedDeletes = purgeExpiredDelete ? expiredDeletes.getFirst() : new HashSet<>();
-    Set<MockId> deletesWithPuts = purgeExpiredDelete ? expiredDeletes.getSecond() : new HashSet<>();
+    Set<MockId> compactedDeletes = expiredDeletes.getFirst();
+    Set<MockId> deletesWithPuts = expiredDeletes.getSecond();
     Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
     compactor = getCompactor(log, diskIOScheduler);
     compactor.initialize(index);
