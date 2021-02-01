@@ -366,7 +366,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       newReplicaInfoAdded = true;
     }
     if (newReplicaInfoAdded) {
-      //logger.info("Updating config: {} in Helix by adding partition {}", dataNodeConfig, partitionName);
+      logger.info("Updating config: {} in Helix by adding partition {}", dataNodeConfig, partitionName);
       additionResult = dataNodeConfigSource.set(dataNodeConfig);
     }
     return additionResult;

@@ -91,9 +91,10 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   /**
    * Remove data config from property store
    * @param instanceName the name of instance
+   * @return {@code true} if the config was successfully removed.
    */
-  public void remove(String instanceName) {
-    propertyStore.remove(CONFIG_PATH + "/" + instanceName, AccessOption.PERSISTENT);
+  public boolean remove(String instanceName) {
+    return propertyStore.remove(CONFIG_PATH + "/" + instanceName, AccessOption.PERSISTENT);
   }
 
   /**

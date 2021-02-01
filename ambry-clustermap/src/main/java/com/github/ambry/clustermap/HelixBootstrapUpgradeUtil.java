@@ -950,7 +950,8 @@ public class HelixBootstrapUpgradeUtil {
           new InstanceConfigToDataNodeConfigAdapter.Converter(config);
       info("[{}] Getting list of instances in {}", dcName.toUpperCase(), dcName);
       Set<String> instancesInHelix = new HashSet<>(getInstanceNamesInHelix(dcName, propertyStoreAdapter));
-      Set<String> instancesInStatic = dcToInstanceNameToDataNodeId.get(dcName) == null ? new HashSet<>() : new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
+      Set<String> instancesInStatic = dcToInstanceNameToDataNodeId.get(dcName) == null ? new HashSet<>()
+          : new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
       Set<String> instancesInBoth = new HashSet<>(instancesInHelix);
       // set instances in both correctly.
       instancesInBoth.retainAll(instancesInStatic);
@@ -960,11 +961,12 @@ public class HelixBootstrapUpgradeUtil {
       instancesInStatic.removeAll(instancesInBoth);
       int totalInstances = instancesInBoth.size() + instancesInHelix.size() + instancesInStatic.size();
       for (String instanceName : instancesInBoth) {
-        DataNodeConfig nodeConfigFromHelix = getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
+        DataNodeConfig nodeConfigFromHelix =
+            getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
         DataNodeConfig nodeConfigFromStatic =
             createDataNodeConfigFromStatic(dcName, instanceName, nodeConfigFromHelix, partitionsToInstancesInDc,
                 instanceConfigConverter);
-        if (!areDataNodeConfigsEquivalent(nodeConfigFromStatic, nodeConfigFromHelix, !overrideReplicaStatus)) {
+        if (!nodeConfigFromStatic.equals(nodeConfigFromHelix, !overrideReplicaStatus)) {
           if (helixAdminOperation == HelixAdminOperation.BootstrapCluster) {
             if (!dryRun) {
               info(
@@ -980,15 +982,16 @@ public class HelixBootstrapUpgradeUtil {
               info(
                   "[{}] Instance {} already present in Helix {}, but config has changed, no action as dry run. Remaining instances: {}",
                   dcName.toUpperCase(), instanceName, dataNodeConfigSourceType.name(), --totalInstances);
-              logger.debug("[{}] Previous config: {} \n New config: {}", dcName.toUpperCase(),
-                  nodeConfigFromHelix, nodeConfigFromStatic);
+              logger.debug("[{}] Previous config: {} \n New config: {}", dcName.toUpperCase(), nodeConfigFromHelix,
+                  nodeConfigFromStatic);
             }
             // for dryRun, we update counter but don't really change the DataNodeConfig in Helix
             instancesUpdated.getAndIncrement();
           }
         } else {
           if (!dryRun) {
-            info("[{}] Instance {} already present in Helix {}, with same Data, skipping. Remaining instances: {}", dcName.toUpperCase(), instanceName, --totalInstances);
+            info("[{}] Instance {} already present in Helix {}, with same Data, skipping. Remaining instances: {}",
+                dcName.toUpperCase(), instanceName, --totalInstances);
           }
         }
       }
@@ -1065,24 +1068,6 @@ public class HelixBootstrapUpgradeUtil {
     return dataNodeConfig;
   }
 
-  private boolean areDataNodeConfigsEquivalent(DataNodeConfig configInStatic, DataNodeConfig configInHelix,
-      boolean ignoreListFields) {
-    if (ignoreListFields) {
-      // @formatter:off
-      return Objects.equals(configInStatic.getInstanceName(), configInHelix.getDatacenterName())
-          && Objects.equals(configInStatic.getHostName(), configInHelix.getHostName())
-          && Objects.equals(configInStatic.getDatacenterName(), configInHelix.getDatacenterName())
-          && configInStatic.getPort() == configInHelix.getPort()
-          && Objects.equals(configInStatic.getSslPort(), configInHelix.getSslPort())
-          && Objects.equals(configInStatic.getHttp2Port(), configInHelix.getHttp2Port())
-          && Objects.equals(configInStatic.getRackId(), configInHelix.getRackId())
-          && configInStatic.getDiskConfigs().equals(configInHelix.getDiskConfigs());
-      // @formatter:on
-    } else {
-      return configInStatic.equals(configInHelix);
-    }
-  }
-
   private void setDataNodeConfigInHelix(String dcName, String instanceName, DataNodeConfig config,
       PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
     if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
@@ -1117,7 +1102,10 @@ public class HelixBootstrapUpgradeUtil {
       PropertyStoreToDataNodeConfigAdapter adapter) {
     adminForDc.get(dcName).dropInstance(clusterName, new InstanceConfig(instanceName));
     if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
-      adapter.remove(instanceName);
+      if (adapter.remove(instanceName)) {
+        logger.error("[{}] Failed to remove config for node {} in the property store.", dcName.toUpperCase(),
+            instanceName);
+      }
     }
   }
 

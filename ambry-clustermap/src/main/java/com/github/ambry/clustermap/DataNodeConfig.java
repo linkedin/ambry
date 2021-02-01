@@ -185,6 +185,29 @@ class DataNodeConfig {
         that.disabledReplicas) && diskConfigs.equals(that.diskConfigs);
   }
 
+  /**
+   * Conditional equivalency check between two {@link DataNodeConfig}.
+   * @param other the other {@link DataNodeConfig} to compare with current config.
+   * @param ignoreReplicaStatusFields whether to ignore replica status fields (i.e Sealed/Stopped/Disabled) in comparison.
+   * @return {@code true} if two {@link DataNodeConfig}s are conditionally equivalent.
+   */
+  public boolean equals(DataNodeConfig other, boolean ignoreReplicaStatusFields){
+    if (ignoreReplicaStatusFields) {
+      // @formatter:off
+      return Objects.equals(instanceName, other.getInstanceName())
+          && Objects.equals(hostName, other.getHostName())
+          && Objects.equals(datacenterName, other.getDatacenterName())
+          && port == other.getPort()
+          && Objects.equals(sslPort, other.getSslPort())
+          && Objects.equals(http2Port, other.getHttp2Port())
+          && Objects.equals(rackId, other.getRackId())
+          && diskConfigs.equals(other.getDiskConfigs());
+      // @formatter:on
+    } else {
+      return this.equals(other);
+    }
+  }
+
   @Override
   public int hashCode() {
     return instanceName.hashCode();
