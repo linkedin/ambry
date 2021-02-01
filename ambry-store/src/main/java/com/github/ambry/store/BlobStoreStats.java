@@ -546,10 +546,16 @@ class BlobStoreStats implements StoreStats, Closeable {
     return validSizePerLogSegment;
   }
 
-  private void removeDeleteTombStonesFromValidSize(Collection<IndexFinalState> indexFinalStates, NavigableMap<String, Long> validSizePerLogSegment){
-    for(IndexFinalState finalState : indexFinalStates){
-      if(finalState.isDelete()){
-        if(finalState.getExpirationTime() != Utils.Infinite_Time ){
+  /**
+   * Remove expired delete tombstones from valid data size per log segment.
+   * @param indexFinalStates the {@link IndexFinalState} that contains delete tombstones.
+   * @param validSizePerLogSegment a {@link NavigableMap} of log segment name to valid data size.
+   */
+  private void removeDeleteTombStonesFromValidSize(Collection<IndexFinalState> indexFinalStates,
+      NavigableMap<String, Long> validSizePerLogSegment) {
+    for (IndexFinalState finalState : indexFinalStates) {
+      if (finalState.isDelete()) {
+        if (finalState.getExpirationTime() != Utils.Infinite_Time) {
           // expired delete tombstone should be considered invalid
           String logSegmentName = finalState.getOffset().getName();
           validSizePerLogSegment.computeIfPresent(logSegmentName, (k, v) -> {
@@ -1201,8 +1207,8 @@ class BlobStoreStats implements StoreStats, Closeable {
           // The remaining index entries in keyFinalStates are DELETE tombstones left by compaction (whose associated PUT is not found)
           updateDeleteTombstoneStats(keyFinalStates.values());
           // Remove delete tombstones from scan results
-          for(IndexFinalState state: keyFinalStates.values()){
-            if(state.isDelete() && state.getExpirationTime() != Utils.Infinite_Time){
+          for (IndexFinalState state : keyFinalStates.values()) {
+            if (state.isDelete() && state.getExpirationTime() != Utils.Infinite_Time) {
               newScanResults.updateLogSegmentBaseBucket(state.getOffset().getName(), -1 * state.getRecordSize());
             }
           }
@@ -1374,7 +1380,6 @@ class BlobStoreStats implements StoreStats, Closeable {
     private final long recordSize;
     private final long expirationTime;
     private final Offset offset;
-    // TODO add offset here to help identify the log segment delete refers to.
 
     /**
      * Constructor to construct an {@link IndexFinalState}.
@@ -1422,6 +1427,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     public Offset getOffset() {
       return offset;
     }
+
     /**
      * @return the expiration time of the final {@link IndexValue}.
      */

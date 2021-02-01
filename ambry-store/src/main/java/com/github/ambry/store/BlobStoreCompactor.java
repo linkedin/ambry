@@ -1086,7 +1086,7 @@ class BlobStoreCompactor {
         EnumSet.of(PersistentIndex.IndexEntryType.PUT));
     // in a non multi valued segment, if putValue is not found directly from the index, check if the PUT and DELETE
     // are the same segment so that the PUT entry can be constructed from the DELETE entry
-    if (putValue == null && updateValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+    if (putValue == null && updateValue.isDelete()) {
       putValue = getPutValueFromDeleteEntry(key, updateValue, indexSegmentOfUpdateValue);
     }
     return putValue;
@@ -1225,7 +1225,7 @@ class BlobStoreCompactor {
               validEntries.add(indexEntry);
             }
           }
-        } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        } else if (value.isTtlUpdate()) {
           // if IndexSegment::getIndexEntriesSince() returns a TTL update entry, it is because it is the ONLY entry i.e.
           // no PUT or DELETE in the same index segment.
           if (isTtlUpdateEntryValid(indexEntry.getKey(), indexSegment.getStartOffset())) {
@@ -1486,9 +1486,8 @@ class BlobStoreCompactor {
           }
           if (currentLatestState.isDelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()) {
             // check if this is a removable delete tombstone.
-            IndexValue putValue = getPutValueFromSrc(currentKey, currentValue, indexSegment);
-            if (putValue == null && config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(
-                currentValue)) {
+            if (config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(currentValue)
+                && getPutValueFromSrc(currentKey, currentValue, indexSegment) == null) {
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   currentKey, currentValue.getExpiresAtMs());
