@@ -221,6 +221,15 @@ public class HelixBootstrapUpgradeTool {
         .describedAs("admin_config_file_path")
         .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> dataNodeConfigSourceOpt = parser.accepts("dataNodeConfigSource",
+        "(Optional argument) The type of data node config source. See DataNodeConfigSourceType enum for more details.")
+        .withRequiredArg()
+        .describedAs("data_node_config_source")
+        .ofType(String.class);
+
+    OptionSpecBuilder overrideReplicaStatus = parser.accepts("overrideReplicaStatus",
+        "(Optional argument) whether to override replica status lists (i.e. sealed/stopped/disabled lists) in instance(datanode) config");
+
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
     String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
@@ -239,6 +248,9 @@ public class HelixBootstrapUpgradeTool {
             : Integer.parseInt(options.valueOf(maxPartitionsInOneResourceOpt));
     String stateModelDef = options.valueOf(stateModelDefinitionOpt) == null ? ClusterMapConfig.DEFAULT_STATE_MODEL_DEF
         : options.valueOf(stateModelDefinitionOpt);
+    DataNodeConfigSourceType dataNodeConfigSourceType =
+        options.valueOf(dataNodeConfigSourceOpt) == null ? DataNodeConfigSourceType.INSTANCE_CONFIG
+            : DataNodeConfigSourceType.valueOf(options.valueOf(dataNodeConfigSourceOpt));
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);
     listOpt.add(partitionLayoutPathOpt);
@@ -268,11 +280,11 @@ public class HelixBootstrapUpgradeTool {
       switch (operation) {
         case ValidateCluster:
           HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
-              dcs, stateModelDef);
+              dcs, stateModelDef, dataNodeConfigSourceType);
           break;
         case ListSealedPartition:
           HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-              clusterNamePrefix, dcs);
+              clusterNamePrefix, dcs, dataNodeConfigSourceType);
           break;
         case MigrateToPropertyStore:
           HelixBootstrapUpgradeUtil.migrateToPropertyStore(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
@@ -297,7 +309,8 @@ public class HelixBootstrapUpgradeTool {
         default:
           HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
               clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove), null,
-              !options.has(disableValidatingClusterManager), stateModelDef, operation);
+              !options.has(disableValidatingClusterManager), stateModelDef, operation, dataNodeConfigSourceType,
+              options.has(overrideReplicaStatus));
       }
     }
     System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");

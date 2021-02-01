@@ -440,30 +440,28 @@ public class TestUtils {
   }
 
   /**
-   * Verify updated {@link InstanceConfig}. If {@param shouldExist} is true, verify that replica is present in InstanceConfig.
+   * Verify updated {@link DataNodeConfig}. If {@param shouldExist} is true, verify that replica is present in InstanceConfig.
    * If false, InstanceConfig should not contain given replica info.
-   * @param instanceConfig the updated {@link InstanceConfig} to verify.
-   * @param replicaId the replica whose info should/shouldn't exist in InstanceConfig
-   * @param shouldExist whether given replica should exist in InstanceConfig.
+   * @param dataNodeConfig the updated {@link DataNodeConfig} to verify.
+   * @param replicaId the replica whose info should/shouldn't exist in dataNodeConfig
+   * @param shouldExist whether given replica should exist in dataNodeConfig.
    */
-  public static void verifyReplicaInfoInInstanceConfig(InstanceConfig instanceConfig, ReplicaId replicaId,
+  public static void verifyReplicaInfoInDataNodeConfig(DataNodeConfig dataNodeConfig, ReplicaId replicaId,
       boolean shouldExist) {
-    Map<String, Map<String, String>> mountPathToDiskInfos = instanceConfig.getRecord().getMapFields();
-    Map<String, String> diskInfo = mountPathToDiskInfos.get(replicaId.getMountPath());
-    Set<String> replicasOnDisk = new HashSet<>();
-    for (String replicaInfo : diskInfo.get(REPLICAS_STR).split(REPLICAS_DELIM_STR)) {
-      replicasOnDisk.add(replicaInfo.split(REPLICAS_STR_SEPARATOR)[0]);
-    }
-    List<String> sealedList = getSealedReplicas(instanceConfig);
-    List<String> stoppedList = getStoppedReplicas(instanceConfig);
+    DataNodeConfig.DiskConfig diskInfo = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
+    Set<String> replicasOnDisk = new HashSet<>(diskInfo.getReplicaConfigs().keySet());
+    Set<String> sealedList = dataNodeConfig.getSealedReplicas();
+    Set<String> stoppedList = dataNodeConfig.getStoppedReplicas();
+    Set<String> disabledList = dataNodeConfig.getDisabledReplicas();
     String partitionName = replicaId.getPartitionId().toPathString();
     if (shouldExist) {
-      assertTrue("New replica is not found in InstanceConfig", replicasOnDisk.contains(partitionName));
+      assertTrue("New replica is not found in DataNodeConfig", replicasOnDisk.contains(partitionName));
     } else {
-      assertFalse("Old replica should not exist in InstanceConfig", replicasOnDisk.contains(partitionName));
+      assertFalse("Old replica should not exist in DataNodeConfig", replicasOnDisk.contains(partitionName));
       // make sure the replica is not present in sealed/stopped list
       assertFalse("Old replica should not exist in sealed/stopped list",
-          sealedList.contains(partitionName) || stoppedList.contains(partitionName));
+          sealedList.contains(partitionName) || stoppedList.contains(partitionName) || disabledList.contains(
+              partitionName));
     }
   }
 

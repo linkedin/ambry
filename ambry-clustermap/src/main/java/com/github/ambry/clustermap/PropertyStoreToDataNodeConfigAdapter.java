@@ -88,6 +88,23 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
     propertyStore.stop();
   }
 
+  /**
+   * Remove data config from property store
+   * @param instanceName the name of instance
+   * @return {@code true} if the config was successfully removed.
+   */
+  public boolean remove(String instanceName) {
+    return propertyStore.remove(CONFIG_PATH + "/" + instanceName, AccessOption.PERSISTENT);
+  }
+
+  /**
+   * @return all data node names in the property store.
+   */
+  public List<String> getAllDataNodeNames() {
+    List<String> names = propertyStore.getChildNames(CONFIG_PATH, AccessOption.PERSISTENT);
+    return names == null ? Collections.emptyList() : names;
+  }
+
   private class Subscription implements HelixPropertyListener {
     private final DataNodeConfigChangeListener listener;
     private final CompletableFuture<Void> initFuture = new CompletableFuture<>();
@@ -187,8 +204,8 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
    * Convert between {@link DataNodeConfig}s and {@link ZNRecord}s.
    */
   static class Converter {
+    public static final String MOUNT_PREFIX = "mount-";
     private static final int VERSION_0 = 0;
-    private static final String MOUNT_PREFIX = "mount-";
     private static final String HOSTNAME_FIELD = "hostname";
     private static final String PORT_FIELD = "port";
     private final String defaultPartitionClass;

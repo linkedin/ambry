@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
 
 /**
@@ -37,7 +38,7 @@ class DataNodeConfig {
   private final Set<String> sealedReplicas = new HashSet<>();
   private final Set<String> stoppedReplicas = new HashSet<>();
   private final Set<String> disabledReplicas = new HashSet<>();
-  private final Map<String, DiskConfig> diskConfigs = new HashMap<>();
+  private final Map<String, DiskConfig> diskConfigs = new TreeMap<>();
   private final Map<String, Map<String, String>> extraMapFields = new HashMap<>();
 
   /**
@@ -184,6 +185,29 @@ class DataNodeConfig {
         that.disabledReplicas) && diskConfigs.equals(that.diskConfigs);
   }
 
+  /**
+   * Conditional equivalency check between two {@link DataNodeConfig}.
+   * @param other the other {@link DataNodeConfig} to compare with current config.
+   * @param ignoreReplicaStatusFields whether to ignore replica status fields (i.e Sealed/Stopped/Disabled) in comparison.
+   * @return {@code true} if two {@link DataNodeConfig}s are conditionally equivalent.
+   */
+  public boolean equals(DataNodeConfig other, boolean ignoreReplicaStatusFields){
+    if (ignoreReplicaStatusFields) {
+      // @formatter:off
+      return Objects.equals(instanceName, other.getInstanceName())
+          && Objects.equals(hostName, other.getHostName())
+          && Objects.equals(datacenterName, other.getDatacenterName())
+          && port == other.getPort()
+          && Objects.equals(sslPort, other.getSslPort())
+          && Objects.equals(http2Port, other.getHttp2Port())
+          && Objects.equals(rackId, other.getRackId())
+          && diskConfigs.equals(other.getDiskConfigs());
+      // @formatter:on
+    } else {
+      return this.equals(other);
+    }
+  }
+
   @Override
   public int hashCode() {
     return instanceName.hashCode();
@@ -195,7 +219,7 @@ class DataNodeConfig {
   static class DiskConfig {
     private final HardwareState state;
     private final long diskCapacityInBytes;
-    private final Map<String, ReplicaConfig> replicaConfigs = new HashMap<>();
+    private final Map<String, ReplicaConfig> replicaConfigs = new TreeMap<>();
 
     /**
      * @param state the configured {@link HardwareState} of the disk.
