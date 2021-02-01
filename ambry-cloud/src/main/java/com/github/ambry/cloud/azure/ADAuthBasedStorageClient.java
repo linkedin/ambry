@@ -24,6 +24,7 @@ import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.Utils;
 import com.microsoft.aad.msal4j.ClientCredentialFactory;
 import com.microsoft.aad.msal4j.ClientCredentialParameters;
 import com.microsoft.aad.msal4j.ConfidentialClientApplication;
@@ -32,6 +33,9 @@ import java.net.MalformedURLException;
 import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.http.HttpStatus;
 import reactor.core.publisher.Mono;
@@ -41,6 +45,10 @@ import reactor.core.publisher.Mono;
  * {@link StorageClient} implementation for AD based authentication.
  */
 public class ADAuthBasedStorageClient extends StorageClient {
+  private static final String AD_AUTH_TOKEN_REFRESHER_PREFIX = "AdAuthTokenRefresher";
+  private final ScheduledExecutorService tokenRefreshScheduler =
+      Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
+  private final AtomicReference<ScheduledFuture<?>> scheduledFutureRef = new AtomicReference<>(null);
   private AtomicReference<AccessToken> accessTokenRef;
 
   /**
@@ -67,6 +75,17 @@ public class ADAuthBasedStorageClient extends StorageClient {
     super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy);
   }
 
+  /**
+   * Note that this method is not thread safe. Its need to be called from a thread safe context.
+   * @param httpClient {@link HttpClient} object.
+   * @param configuration {@link Configuration} object.
+   * @param retryOptions {@link RequestRetryOptions} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @return BlobServiceClient object.
+   * @throws MalformedURLException
+   * @throws InterruptedException
+   * @throws ExecutionException
+   */
   @Override
   protected BlobServiceClient buildBlobServiceClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
@@ -85,6 +104,10 @@ public class ADAuthBasedStorageClient extends StorageClient {
     } else {
       accessTokenRef.set(accessToken);
     }
+    // schedule a task to refresh token.
+    scheduledFutureRef.set(tokenRefreshScheduler.schedule(() -> refreshStorageClient(),
+        (long) ((accessToken.getExpiresAt().toEpochSecond() - OffsetDateTime.now().toEpochSecond())
+            * azureCloudConfig.azureStorageClientRefreshFactor), TimeUnit.SECONDS));
     return new BlobServiceClientBuilder().credential(tokenCredential)
         .endpoint(azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
@@ -135,14 +158,26 @@ public class ADAuthBasedStorageClient extends StorageClient {
         // to attempt token refresh at the same time. It is expected that as a result of token refresh, accessTokenRef
         // will updated with the new token.
         if (accessTokenRef.get().isExpired()) {
-          azureMetrics.absTokenRefreshAttemptCount.inc();
-          BlobServiceClient blobServiceClient = createBlobStorageClient();
-          setClientReferences(blobServiceClient);
-          logger.info("Token refresh done.");
+          refreshStorageClient();
         }
       }
       return true;
     }
     return false;
+  }
+
+  /**
+   * Refreshes AD authentication token and creates a new ABS client with the new token.
+   */
+  private synchronized void refreshStorageClient() {
+    // if a task is scheduled to refresh token then remove it.
+    if (scheduledFutureRef.get() != null) {
+      scheduledFutureRef.get().cancel(false);
+      scheduledFutureRef.set(null);
+    }
+    azureMetrics.absTokenRefreshAttemptCount.inc();
+    BlobServiceClient blobServiceClient = createBlobStorageClient();
+    setClientReferences(blobServiceClient);
+    logger.info("Token refresh done.");
   }
 }

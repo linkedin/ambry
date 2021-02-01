@@ -45,6 +45,7 @@ public class AzureCloudConfig {
   public static final String AZURE_STORAGE_CLIENT_CLASS = "azure.storage.client.class";
   public static final String CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT = "container.compaction.cosmos.query.limit";
   public static final String CONTAINER_COMPACTION_ABS_PURGE_LIMIT = "container.compaction.abs.purge.limit";
+  public static final String AZURE_STORAGE_CLIENT_REFRESH_FACTOR = "azure.storage.client.refresh.factor";
   // Per docs.microsoft.com/en-us/rest/api/storageservices/blob-batch
   public static final int MAX_PURGE_BATCH_SIZE = 256;
   public static final int DEFAULT_PURGE_BATCH_SIZE = 100;
@@ -54,6 +55,7 @@ public class AzureCloudConfig {
   public static final int DEFAULT_COSMOS_CONTAINER_DELETION_BATCH_SIZE = 100;
   public static final int DEFAULT_CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT = 100;
   public static final int DEFAULT_CONTAINER_COMPACTION_ABS_PURGE_LIMIT = 100;
+  public static final double DEFAULT_AZURE_STORAGE_CLIENT_REFRESH_FACTOR = 0.9F;
 
   public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
@@ -185,6 +187,12 @@ public class AzureCloudConfig {
   @Config(CONTAINER_COMPACTION_ABS_PURGE_LIMIT)
   public int containerCompactionAbsPurgeLimit;
 
+  /**
+   * Fraction of token expiry time after which storage client token refresh will be attempted.
+   */
+  @Config(AZURE_STORAGE_CLIENT_REFRESH_FACTOR)
+  public double azureStorageClientRefreshFactor;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
@@ -216,5 +224,7 @@ public class AzureCloudConfig {
         verifiableProperties.getInt(CONTAINER_COMPACTION_ABS_PURGE_LIMIT, DEFAULT_CONTAINER_COMPACTION_ABS_PURGE_LIMIT);
     containerCompactionCosmosQueryLimit = verifiableProperties.getIntInRange(CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT,
         DEFAULT_CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT, 1, Integer.MAX_VALUE);
+    azureStorageClientRefreshFactor = verifiableProperties.getDoubleInRange(AZURE_STORAGE_CLIENT_REFRESH_FACTOR,
+        DEFAULT_AZURE_STORAGE_CLIENT_REFRESH_FACTOR, 0.0, 1.0);
   }
 }
