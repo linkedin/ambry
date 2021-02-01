@@ -396,6 +396,22 @@ public class RestUtils {
     String contentEncoding = getHeader(args, Headers.AMBRY_CONTENT_ENCODING, false);
     String filename = getHeader(args, Headers.AMBRY_FILENAME, false);
 
+    long ttl = getTtlFromRequestHeader(args);
+
+    // This field should not matter on newly created blobs, because all privacy/cacheability decisions should be made
+    // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
+    boolean isPrivate = !container.isCacheable();
+    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
+        container.isEncrypted(), externalAssetTag, contentEncoding, filename);
+  }
+
+  /**
+   * An util method to get ttl from arguments associated with a request.
+   * @param args the arguments associated with the request. Cannot be {@code null}.
+   * @return the ttl extracted from the arguments.
+   * @throws RestServiceException if required arguments aren't present or if they aren't in the format expected.
+   */
+  public static long getTtlFromRequestHeader(Map<String, Object> args) throws RestServiceException {
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
     if (ttlFromHeader != null) {
@@ -405,12 +421,7 @@ public class RestUtils {
       }
       ttl = ttlFromHeader;
     }
-
-    // This field should not matter on newly created blobs, because all privacy/cacheability decisions should be made
-    // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
-    boolean isPrivate = !container.isCacheable();
-    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
-        container.isEncrypted(), externalAssetTag, contentEncoding, filename);
+    return ttl;
   }
 
   /**

@@ -130,7 +130,9 @@ public class NamedBlobPutHandlerTest {
    */
   @Test
   public void putNamedBlobTest() throws Exception {
-    putBlobAndVerify(null);
+    idConverterFactory.returnInputIfTranslationNull = true;
+    putBlobAndVerify(null, TestUtils.TTL_SECS);
+    putBlobAndVerify(null, Utils.Infinite_Time);
   }
 
   /**
@@ -414,12 +416,13 @@ public class NamedBlobPutHandlerTest {
    * Make a stitch blob call using {@link PostBlobHandler} and verify the result of the operation.
    * @param errorChecker if non-null, expect an exception to be thrown by the post flow and verify it using this
    *                     {@link ThrowingConsumer}.
+   * @param ttl the ttl used for the blob
    * @throws Exception
    */
-  private void putBlobAndVerify(ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
+  private void putBlobAndVerify(ThrowingConsumer<ExecutionException> errorChecker, long ttl) throws Exception {
     JSONObject headers = new JSONObject();
-    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
-        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, ttl, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+        CONTENT_TYPE, OWNER_ID, null, null, null);
     byte[] content = TestUtils.getRandomBytes(1024);
     RestRequest request = getRestRequest(headers, request_path, content);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
