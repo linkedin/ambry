@@ -15,6 +15,7 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.rest.RestRequest;
 
 
 /**
@@ -47,6 +48,8 @@ public interface StorageQuotaService {
    * @return True is the given {@link QuotaOperation} should be throttled.
    */
   boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size);
+
+  boolean shouldThrottle(RestRequest restRequest);
 
   /**
    * Change the {@link StorageQuotaService}'s quotaMode to the given value. If the quotaMode is {@link QuotaMode#Tracking}, then {@link StorageQuotaService}
