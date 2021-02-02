@@ -21,7 +21,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.storage.QuotaOperation;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -41,8 +40,6 @@ import java.util.GregorianCalendar;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.router.GetBlobOptions.*;
@@ -53,7 +50,6 @@ import static com.github.ambry.router.GetBlobOptions.*;
  * sets the respective headers on response.
  */
 class AmbrySecurityService implements SecurityService {
-  private static final Logger logger = LoggerFactory.getLogger(AmbrySecurityService.class);
   static final Set<String> OPERATIONS = Collections.unmodifiableSet(
       Utils.getStaticFieldValuesAsStrings(Operations.class)
           .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
