@@ -11,9 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota.capacityunit;
+package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.quota.RequestQuotaEnforcer;

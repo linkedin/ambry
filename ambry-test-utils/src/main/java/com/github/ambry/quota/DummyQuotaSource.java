@@ -13,21 +13,13 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.quota.storage.QuotaOperation;
-
-
 /**
  * Dummy {@link QuotaSource} implementation for test.
  */
 public class DummyQuotaSource implements QuotaSource {
 
   @Override
-  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaName quotaName) {
-    return null;
-  }
-
-  @Override
-  public Quota getHostQuota(QuotaResource quotaResource, QuotaName quotaName) {
+  public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) {
     return null;
   }
 }

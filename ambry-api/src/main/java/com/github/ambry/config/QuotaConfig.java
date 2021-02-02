@@ -30,7 +30,7 @@ public class QuotaConfig {
   public static final String THROTTLING_MODE = QUOTA_CONFIG_PREFIX + "throttling.mode";
   public static final String REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON =
       QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
-  public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manger.factory.class";
+  public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manger.factory";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public StorageQuotaConfig storageQuotaConfig;

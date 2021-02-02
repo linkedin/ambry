@@ -13,33 +13,25 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.quota.storage.QuotaOperation;
-import java.util.Collections;
-import java.util.Set;
-
-
 /**
  * The quota for a particular Ambry resource.
- * @param <T> the type of the quota value.
+ * @param <T> the type of the quota value. Should be one of numeric types (long, int, float, double etc).
  */
 public class Quota<T> {
   private final QuotaName quotaName;
   private final T quotaValue;
   private final QuotaResource quotaResource;
-  private final Set<QuotaOperation> quotaOperations;
 
   /**
    * Constructor for {@link Quota}.
    * @param quotaName {@link QuotaName} object.
    * @param quotaValue value of the quota limit.
    * @param quotaResource {@link QuotaResource} for which quota is specified.
-   * @param quotaOperations {@link Set} of {@link QuotaOperation}s.
    */
-  public Quota(QuotaName quotaName, T quotaValue, QuotaResource quotaResource, Set<QuotaOperation> quotaOperations) {
+  public Quota(QuotaName quotaName, T quotaValue, QuotaResource quotaResource) {
     this.quotaName = quotaName;
     this.quotaValue = quotaValue;
     this.quotaResource = quotaResource;
-    this.quotaOperations = quotaOperations;
   }
 
   /**
@@ -61,12 +53,5 @@ public class Quota<T> {
    */
   public QuotaResource getQuotaResource() {
     return quotaResource;
-  }
-
-  /**
-   * @return Set of {@link QuotaOperation}s
-   */
-  public Set<QuotaOperation> getQuotaOperations() {
-    return Collections.unmodifiableSet(quotaOperations);
   }
 }

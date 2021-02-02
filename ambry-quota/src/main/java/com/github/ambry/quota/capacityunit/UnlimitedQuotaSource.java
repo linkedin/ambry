@@ -17,9 +17,6 @@ import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
-import com.github.ambry.quota.storage.QuotaOperation;
-import java.util.Arrays;
-import java.util.HashSet;
 
 
 /**
@@ -28,12 +25,7 @@ import java.util.HashSet;
 public class UnlimitedQuotaSource implements QuotaSource {
 
   @Override
-  public Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaName quotaName) {
-    return new Quota<>(quotaName, Long.MAX_VALUE, quotaResource, new HashSet<>(Arrays.asList(quotaOperation)));
-  }
-
-  @Override
-  public Quota getHostQuota(QuotaResource quotaResource, QuotaName quotaName) {
-    return new Quota<>(quotaName, Long.MAX_VALUE, quotaResource, null);
+  public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) {
+    return new Quota<>(quotaName, Long.MAX_VALUE, quotaResource);
   }
 }

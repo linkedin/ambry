@@ -11,19 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota.capacityunit;
+package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.quota.AmbryThrottlingRecommendation;
-import com.github.ambry.quota.EnforcementRecommendation;
-import com.github.ambry.quota.QuotaManager;
-import com.github.ambry.quota.QuotaSource;
-import com.github.ambry.quota.QuotaSourceFactory;
-import com.github.ambry.quota.RequestQuotaEnforcer;
-import com.github.ambry.quota.RequestQuotaEnforcerFactory;
-import com.github.ambry.quota.ThrottlePolicy;
-import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -44,7 +35,7 @@ import org.json.JSONObject;
  */
 public class AmbryQuotaManager implements QuotaManager {
   private static final ThrottlingRecommendation allowRecommendation =
-      new AmbryThrottlingRecommendation(false, new HashMap<>(), 200, new HashMap<>(), -1);
+      new ThrottlingRecommendation(false, new HashMap<>(), 200, new HashMap<>(), -1);
   private final Set<RequestQuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
 

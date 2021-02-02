@@ -51,7 +51,7 @@ public class QuotaTestUtils {
     properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
     properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
     properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, "" + isRequestThrottlingEnabled);
-    properties.setProperty(QuotaConfig.QUOTA_THROTTLING_MODE, quotaMode.name());
+    properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
     JSONArray jsonArray = new JSONArray();
     for (String enforcerFactoryClass : enforcerSourcemap.keySet()) {
       JSONObject jsonObject = new JSONObject();

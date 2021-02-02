@@ -13,9 +13,6 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.quota.storage.QuotaOperation;
-
-
 /**
  * Interface representing the backend source from which quota for a resource can be fetched, and to which the current
  * usage of a resource can be saved.
@@ -24,16 +21,7 @@ public interface QuotaSource {
   /**
    * Get the {@link Quota} for specified resource and operation.
    * @param quotaResource {@link QuotaResource} object.
-   * @param quotaOperation {@link QuotaOperation} object.
    * @param quotaName {@link QuotaName} object.
    */
-  Quota getRequestQuota(QuotaResource quotaResource, QuotaOperation quotaOperation, QuotaName quotaName);
-
-  /**
-   * Get the {@link Quota} for host resource.
-   * @param quotaResource {@link QuotaResource} object.
-   * @param quotaName {@link QuotaName} object.
-   * @return
-   */
-  Quota getHostQuota(QuotaResource quotaResource, QuotaName quotaName);
+  Quota getQuota(QuotaResource quotaResource, QuotaName quotaName);
 }

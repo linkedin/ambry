@@ -13,34 +13,70 @@
  */
 package com.github.ambry.quota;
 
+import java.util.HashMap;
 import java.util.Map;
 
 
-public interface ThrottlingRecommendation {
+/**
+ * Class that returns the overall throttling recommendation for all the quotas.
+ */
+public class ThrottlingRecommendation {
+  private final boolean throttle;
+  private final Map<QuotaName, Float> quotaUsagePercentage;
+  private final int recommendedHttpStatus;
+  private final Map<QuotaName, Double> requestCost;
+  private final long retryAfterMs;
+
+  /**
+   * Constructor for {@link ThrottlingRecommendation}.
+   * @param throttle flag indicating if request should be throttled.
+   * @param quotaUsagePercentage A {@link Map} of {@link QuotaName} to usage percentage.
+   * @param recommendedHttpStatus overall recommended http status.
+   * @param requestCost A {@link Map} of cost for all {@link QuotaName}s for this request.
+   * @param retryAfterMs time in ms after which request should be retried. -1 if request is not throttled.
+   */
+  public ThrottlingRecommendation(boolean throttle, Map<QuotaName, Float> quotaUsagePercentage,
+      int recommendedHttpStatus, Map<QuotaName, Double> requestCost, long retryAfterMs) {
+    this.throttle = throttle;
+    this.quotaUsagePercentage = new HashMap<>(quotaUsagePercentage);
+    this.recommendedHttpStatus = recommendedHttpStatus;
+    this.requestCost = new HashMap<>(requestCost);
+    this.retryAfterMs = retryAfterMs;
+  }
 
   /**
    * @return true if recommendation is to throttle. false otherwise.
    */
-  boolean shouldThrottle();
+  public boolean shouldThrottle() {
+    return false;
+  }
 
   /**
    * @return A {@link Map} of quota  name and estimation of percentage of quota in use when the recommendation was made.
    */
-  Map<QuotaName, Float> getQuotaUsagePercentage();
+  public Map<QuotaName, Float> getQuotaUsagePercentage() {
+    return null;
+  }
 
   /**
    * @return http status recommended.
    */
-  int getRecommendedHttpStatus();
+  public int getRecommendedHttpStatus() {
+    return 0;
+  }
 
   /**
    * @return A {@link Map} of quota name and cost value for serving the request.
    */
-  Map<QuotaName, Double> getRequestCost();
+  public Map<QuotaName, Double> getRequestCost() {
+    return null;
+  }
 
   /**
    * @return the time interval in milliseconds after the request can be retried.
    * If request is not throttled then returns 0.
    */
-  long getRetryAfterMs();
+  public long getRetryAfterMs() {
+    return 0;
+  }
 }
