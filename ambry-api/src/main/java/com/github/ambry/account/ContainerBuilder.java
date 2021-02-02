@@ -41,6 +41,7 @@ public class ContainerBuilder {
   private String replicationPolicy = null;
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
   private boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
+  private boolean overrideAccountAcl = OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE;
   private Set<String> contentTypeWhitelistForFilenamesOnDownload =
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
@@ -70,6 +71,7 @@ public class ContainerBuilder {
     ttlRequired = origin.isTtlRequired();
     parentAccountId = origin.getParentAccountId();
     securePathRequired = origin.isSecurePathRequired();
+    overrideAccountAcl = origin.isAccountAclOverridden();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
     lastModifiedTime = origin.getLastModifiedTime();
@@ -243,6 +245,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets whether to override account-level ACL in this container.
+   * @param overrideAccountAcl the boolean value indicating whether this container overrides account's ACL.
+   * @return This builder.
+   */
+  public ContainerBuilder setOverrideAccountAcl(boolean overrideAccountAcl) {
+    this.overrideAccountAcl = overrideAccountAcl;
+    return this;
+  }
+
+  /**
    * Sets the created/modified time of the {@link Container}
    * @param lastModifiedTime epoch time in milliseconds.
    * @return This builder.
@@ -271,7 +283,7 @@ public class ContainerBuilder {
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
-        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, parentAccountId, deleteTriggerTime, lastModifiedTime,
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, parentAccountId, deleteTriggerTime, lastModifiedTime,
         snapshotVersion);
   }
 }

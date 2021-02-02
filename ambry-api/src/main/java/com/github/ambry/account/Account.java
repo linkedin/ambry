@@ -82,10 +82,12 @@ public class Account {
   static final String SNAPSHOT_VERSION_KEY = "snapshotVersion";
   static final String CONTAINERS_KEY = "containers";
   static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
+  static final String ACL_INHERITED_BY_CONTAINER_KEY = "aclInheritedByContainer";
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
+  static final boolean ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE = false;
 
   /**
    * The id of unknown account.
@@ -108,6 +110,7 @@ public class Account {
   private AccountStatus status;
   private final int snapshotVersion;
   private final long lastModifiedTime;
+  private boolean aclInheritedByContainer;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
@@ -129,6 +132,8 @@ public class Account {
         status = AccountStatus.valueOf(metadata.getString(STATUS_KEY));
         snapshotVersion = metadata.optInt(SNAPSHOT_VERSION_KEY, SNAPSHOT_VERSION_DEFAULT_VALUE);
         lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+        aclInheritedByContainer =
+            metadata.optBoolean(ACL_INHERITED_BY_CONTAINER_KEY, ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE);
         checkRequiredFieldsForBuild();
         JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
         if (containerArray != null) {
@@ -150,11 +155,12 @@ public class Account {
    * @param id The id of the account. Cannot be null.
    * @param name The name of the account. Cannot be null.
    * @param status The status of the account. Cannot be null.
+   * @param aclInheritedByContainer Whether account's acl is inherited by container.
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
    */
-  Account(short id, String name, AccountStatus status, int snapshotVersion, Collection<Container> containers) {
-    this(id, name, status, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion, Collection<Container> containers) {
+    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE);
   }
 
   /**
@@ -162,17 +168,19 @@ public class Account {
    * @param id The id of the account. Cannot be null.
    * @param name The name of the account. Cannot be null.
    * @param status The status of the account. Cannot be null.
+   * @param aclInheritedByContainer whether account's ACL is inherited by container.
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
    * @param lastModifiedTime created/modified time of this Account
    */
-  Account(short id, String name, AccountStatus status, int snapshotVersion, Collection<Container> containers,
-      long lastModifiedTime) {
+  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
+      Collection<Container> containers, long lastModifiedTime) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.snapshotVersion = snapshotVersion;
     this.lastModifiedTime = lastModifiedTime;
+    this.aclInheritedByContainer = aclInheritedByContainer;
     checkRequiredFieldsForBuild();
     if (containers != null) {
       updateContainerMap(containers);
@@ -194,6 +202,7 @@ public class Account {
     metadata.put(STATUS_KEY, status.name());
     metadata.put(SNAPSHOT_VERSION_KEY, incrementSnapshotVersion ? snapshotVersion + 1 : snapshotVersion);
     metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
+    metadata.put(ACL_INHERITED_BY_CONTAINER_KEY, aclInheritedByContainer);
     JSONArray containerArray = new JSONArray();
     for (Container container : containerIdToContainerMap.values()) {
       containerArray.put(container.toJson());
@@ -249,6 +258,13 @@ public class Account {
    */
   public long getLastModifiedTime() {
     return lastModifiedTime;
+  }
+
+  /**
+   * @return whether account's ACL is inherited by containers.
+   */
+  public boolean isAclInheritedByContainer() {
+    return aclInheritedByContainer;
   }
 
   /**
