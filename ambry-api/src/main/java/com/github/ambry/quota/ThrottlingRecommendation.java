@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -48,28 +49,28 @@ public class ThrottlingRecommendation {
    * @return true if recommendation is to throttle. false otherwise.
    */
   public boolean shouldThrottle() {
-    return false;
+    return this.throttle;
   }
 
   /**
    * @return A {@link Map} of quota  name and estimation of percentage of quota in use when the recommendation was made.
    */
   public Map<QuotaName, Float> getQuotaUsagePercentage() {
-    return null;
+    return Collections.unmodifiableMap(this.quotaUsagePercentage);
   }
 
   /**
    * @return http status recommended.
    */
   public int getRecommendedHttpStatus() {
-    return 0;
+    return this.recommendedHttpStatus;
   }
 
   /**
    * @return A {@link Map} of quota name and cost value for serving the request.
    */
   public Map<QuotaName, Double> getRequestCost() {
-    return null;
+    return Collections.unmodifiableMap(this.requestCost);
   }
 
   /**
@@ -77,6 +78,6 @@ public class ThrottlingRecommendation {
    * If request is not throttled then returns 0.
    */
   public long getRetryAfterMs() {
-    return 0;
+    return this.retryAfterMs;
   }
 }

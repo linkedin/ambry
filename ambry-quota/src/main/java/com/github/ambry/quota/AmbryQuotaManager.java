@@ -17,15 +17,14 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -71,15 +70,9 @@ public class AmbryQuotaManager implements QuotaManager {
     if (requestQuotaEnforcers.isEmpty()) {
       return allowRecommendation;
     }
-    boolean shouldThrottle = true;
-    Iterator<QuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
-    List<EnforcementRecommendation> enforcementRecommendations = new ArrayList<>();
-    while (quotaEnforcerIterator.hasNext()) {
-      EnforcementRecommendation enforcementRecommendation = quotaEnforcerIterator.next().recommend(restRequest);
-      shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
-      enforcementRecommendations.add(enforcementRecommendation);
-    }
-    return throttlePolicy.recommend(enforcementRecommendations);
+    return throttlePolicy.recommend(requestQuotaEnforcers.stream()
+        .map(quotaEnforcer -> quotaEnforcer.recommend(restRequest))
+        .collect(Collectors.toList()));
   }
 
   @Override
@@ -87,16 +80,9 @@ public class AmbryQuotaManager implements QuotaManager {
     if (requestQuotaEnforcers.isEmpty()) {
       return allowRecommendation;
     }
-    boolean shouldThrottle = true;
-    Iterator<QuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
-    List<EnforcementRecommendation> enforcementRecommendations = new ArrayList<>();
-    while (quotaEnforcerIterator.hasNext()) {
-      EnforcementRecommendation enforcementRecommendation =
-          quotaEnforcerIterator.next().chargeAndRecommend(restRequest, blobInfo);
-      shouldThrottle = shouldThrottle && enforcementRecommendation.shouldThrottle();
-      enforcementRecommendations.add(enforcementRecommendation);
-    }
-    return throttlePolicy.recommend(enforcementRecommendations);
+    return throttlePolicy.recommend(requestQuotaEnforcers.stream()
+        .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo))
+        .collect(Collectors.toList()));
   }
 
   @Override

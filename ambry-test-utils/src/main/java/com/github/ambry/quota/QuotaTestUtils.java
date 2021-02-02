@@ -14,7 +14,6 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
-import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.Map;
 import java.util.Properties;
@@ -28,17 +27,6 @@ import org.json.JSONObject;
 public class QuotaTestUtils {
 
   /**
-   * Create a dummy {@link QuotaConfig} object with empty string values for required configs.
-   * @return QuotaConfig object.
-   */
-  public static QuotaConfig createDummyQuotaConfig() {
-    Properties properties = new Properties();
-    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
-    properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
-    return new QuotaConfig(new VerifiableProperties(properties));
-  }
-
-  /**
    * Create {@link QuotaConfig} object with {@link QuotaEnforcer} and corresponding {@link QuotaSource} map.
    * @param enforcerSourcemap {@link Map} for {@link QuotaEnforcer} and corresponding {@link QuotaSource} object.
    * @param isRequestThrottlingEnabled boolean flag indicating if request quota throttling should be enabled.
@@ -48,8 +36,6 @@ public class QuotaTestUtils {
   public static QuotaConfig createQuotaConfig(Map<String, String> enforcerSourcemap, boolean isRequestThrottlingEnabled,
       QuotaMode quotaMode) {
     Properties properties = new Properties();
-    properties.setProperty(StorageQuotaConfig.HELIX_PROPERTY_ROOT_PATH, "");
-    properties.setProperty(StorageQuotaConfig.ZK_CLIENT_CONNECT_ADDRESS, "");
     properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, "" + isRequestThrottlingEnabled);
     properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
     JSONArray jsonArray = new JSONArray();
