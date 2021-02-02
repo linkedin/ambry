@@ -287,9 +287,10 @@ public class AmbrySecurityServiceTest {
     long throttledSize = 1000;
     AtomicLong currentSize = new AtomicLong(0);
     doAnswer(invocation -> {
-      short accountId = invocation.getArgument(0);
-      short containerId = invocation.getArgument(1);
-      long size = invocation.getArgument(3);
+      RestRequest restRequest = invocation.getArgument(0);
+      short accountId = RestUtils.getAccountFromArgs(restRequest.getArgs()).getId();
+      short containerId = RestUtils.getContainerFromArgs(restRequest.getArgs()).getId();
+      long size = restRequest.getSize();
       if (accountId == throttledAccountId && containerId == throttledContainerId) {
         if (size + currentSize.get() > throttledSize) {
           return true;
@@ -300,7 +301,7 @@ public class AmbrySecurityServiceTest {
       } else {
         return false;
       }
-    }).when(quotaService).shouldThrottle(anyShort(), anyShort(), any(), anyLong());
+    }).when(quotaService).shouldThrottle(any());
 
     AtomicReference<RestRequest> restRequestRef = new AtomicReference<>(null);
     ThrowingConsumer<Integer> makeRequest = size -> {

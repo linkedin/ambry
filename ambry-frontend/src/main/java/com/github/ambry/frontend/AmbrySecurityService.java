@@ -127,8 +127,9 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+      } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
+        exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
       } else {
-        FrontendUtils.applyingStorageQuotaServiceToPost(restRequest, storageQuotaService, logger);
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
           accountAndContainerNamePreconditionCheck(restRequest);
         } else if (restRequest.getRestMethod() == RestMethod.GET) {

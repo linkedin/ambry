@@ -13,6 +13,11 @@
  */
 package com.github.ambry.quota.storage;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -87,6 +92,25 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
     }
     metrics.shouldThrottleTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
+  }
+
+  @Override
+  public boolean shouldThrottle(RestRequest restRequest) {
+    boolean rst = false;
+    logger.debug("RestRequest: method {}, size {}", restRequest.getRestMethod(), restRequest.getSize());
+    if (restRequest.getRestMethod() == RestMethod.POST && restRequest.getSize() > 0) {
+      try {
+        Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
+        Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+        logger.debug("Account id: {}, Container id: {}, size: {}", account.getId(), container.getId(),
+            restRequest.getSize());
+        rst = shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post, restRequest.getSize());
+      } catch (Exception e) {
+        logger.error("Failed to apply shouldThrottle logic to RestRequest {}", restRequest, e);
+        rst = false;
+      }
+    }
+    return rst;
   }
 
   @Override

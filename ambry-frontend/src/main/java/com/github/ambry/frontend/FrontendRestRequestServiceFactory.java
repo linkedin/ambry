@@ -14,9 +14,12 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.accountstats.AccountStatsMySqlStore;
+import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
@@ -90,9 +93,12 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       StorageQuotaService storageQuotaService = null;
       if (frontendConfig.enableStorageQuotaService) {
+        // TODO: after enabling StatsReport API, add mysql store to frontend rest request service.
+        AccountStatsMySqlStore mysqlStore = new AccountStatsMySqlStoreFactory(verifiableProperties, clusterMapConfig,
+            new StatsManagerConfig(verifiableProperties), clusterMap.getMetricRegistry()).getAccountStatsMySqlStore();
         storageQuotaService =
             Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
-                clusterMap.getMetricRegistry()).getStorageQuotaService();
+                mysqlStore, clusterMap.getMetricRegistry()).getStorageQuotaService();
       }
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
