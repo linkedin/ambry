@@ -56,45 +56,6 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   }
 
   @Override
-  public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
-    if (op != QuotaOperation.Post) {
-      return false;
-    }
-    long startTimeMs = System.currentTimeMillis();
-    long quota = storageQuota.getOrDefault(String.valueOf(accountId), new HashMap<>())
-        .getOrDefault(String.valueOf(containerId), Long.MAX_VALUE);
-
-    AtomicBoolean exceedQuota = new AtomicBoolean(false);
-    AtomicLong existingUsage = new AtomicLong();
-    storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
-        .compute(String.valueOf(containerId), (k, v) -> {
-          existingUsage.set(v == null ? 0 : v);
-          if (v == null) {
-            return size;
-          }
-          if (v + size < quota) {
-            return v + size;
-          } else {
-            exceedQuota.set(true);
-            return v;
-          }
-        });
-    logger.debug("Account id {} container id {} quota {}, existing usage {} new size {}, new usage {}", accountId,
-        containerId, quota == Long.MAX_VALUE ? "MAX_VALUE" : String.valueOf(quota), existingUsage.get(), size,
-        storageUsage.get(String.valueOf(accountId)).get(String.valueOf(containerId)));
-    if (exceedQuota.get()) {
-      metrics.quotaExceededCount.inc();
-    }
-    if (exceedQuota.get() && quota != Long.MAX_VALUE && quotaExceededCallback != null) {
-      long cbStartTimeMs = System.currentTimeMillis();
-      quotaExceededCallback.onQuotaExceeded(mode, accountId, containerId, op, quota, existingUsage.get(), size);
-      metrics.quotaExceededCallbackTimeMs.update(System.currentTimeMillis() - cbStartTimeMs);
-    }
-    metrics.shouldThrottleTimeMs.update(System.currentTimeMillis() - startTimeMs);
-    return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
-  }
-
-  @Override
   public boolean shouldThrottle(RestRequest restRequest) {
     boolean rst = false;
     logger.debug("RestRequest: method {}, size {}", restRequest.getRestMethod(), restRequest.getSize());
@@ -138,6 +99,44 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
     logger.info("Register quota source and usage refresher listeners");
     storageQuotaSource.registerListener(getQuotaSourceListener());
     storageUsageRefresher.registerListener(getUsageRefresherListener());
+  }
+
+  boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
+    if (op != QuotaOperation.Post) {
+      return false;
+    }
+    long startTimeMs = System.currentTimeMillis();
+    long quota = storageQuota.getOrDefault(String.valueOf(accountId), new HashMap<>())
+        .getOrDefault(String.valueOf(containerId), Long.MAX_VALUE);
+
+    AtomicBoolean exceedQuota = new AtomicBoolean(false);
+    AtomicLong existingUsage = new AtomicLong();
+    storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
+        .compute(String.valueOf(containerId), (k, v) -> {
+          existingUsage.set(v == null ? 0 : v);
+          if (v == null) {
+            return size;
+          }
+          if (v + size < quota) {
+            return v + size;
+          } else {
+            exceedQuota.set(true);
+            return v;
+          }
+        });
+    logger.debug("Account id {} container id {} quota {}, existing usage {} new size {}, new usage {}", accountId,
+        containerId, quota == Long.MAX_VALUE ? "MAX_VALUE" : String.valueOf(quota), existingUsage.get(), size,
+        storageUsage.get(String.valueOf(accountId)).get(String.valueOf(containerId)));
+    if (exceedQuota.get()) {
+      metrics.quotaExceededCount.inc();
+    }
+    if (exceedQuota.get() && quota != Long.MAX_VALUE && quotaExceededCallback != null) {
+      long cbStartTimeMs = System.currentTimeMillis();
+      quotaExceededCallback.onQuotaExceeded(mode, accountId, containerId, op, quota, existingUsage.get(), size);
+      metrics.quotaExceededCallbackTimeMs.update(System.currentTimeMillis() - cbStartTimeMs);
+    }
+    metrics.shouldThrottleTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
   }
 
   /**

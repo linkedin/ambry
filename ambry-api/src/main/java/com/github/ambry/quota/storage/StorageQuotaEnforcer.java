@@ -60,16 +60,6 @@ public interface StorageQuotaEnforcer {
   void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher);
 
   /**
-   * Return true if the given {@link QuotaOperation} should be throttled.
-   * @param accountId The accountId of this operation.
-   * @param containerId The containerId of this operation.
-   * @param op The {@link QuotaOperation}.
-   * @param size The size of this operation. eg, if the op is {@link QuotaOperation#Post}, size if the size of the content.
-   * @return True if the given {@link QuotaOperation} should be throttled.
-   */
-  boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size);
-
-  /**
    * Return true if the given {@link RestRequest} should be throttled. Since the {@link StorageQuotaEnforcer} decide to
    * throttle a request based on the account id and container id, the {@code restRequest} has to carry {@link Account}
    * and {@link Container} by header {@link InternalKeys#TARGET_ACCOUNT_KEY} and {@link InternalKeys#TARGET_CONTAINER_KEY}.

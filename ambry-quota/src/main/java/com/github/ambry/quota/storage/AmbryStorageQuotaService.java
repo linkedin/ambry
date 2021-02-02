@@ -65,11 +65,6 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   }
 
   @Override
-  public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
-    return this.storageQuotaEnforcer.shouldThrottle(accountId, containerId, op, size);
-  }
-
-  @Override
   public boolean shouldThrottle(RestRequest restRequest) {
     return this.storageQuotaEnforcer.shouldThrottle(restRequest);
   }
