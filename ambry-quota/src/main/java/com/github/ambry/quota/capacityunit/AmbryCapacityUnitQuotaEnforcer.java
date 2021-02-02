@@ -14,7 +14,7 @@
 package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.quota.EnforcementRecommendation;
+import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaSource;
@@ -28,8 +28,8 @@ import com.github.ambry.rest.RestRequest;
 // TODO: The current implementation allows all requests without any processing. It needs to be replaced by an implementation that enforces quota.
 public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
   private final QuotaSource quotaSource;
-  private final EnforcementRecommendation allowReadRecommendation;
-  private final EnforcementRecommendation allowWriteRecommendation;
+  private final QuotaRecommendation allowReadRecommendation;
+  private final QuotaRecommendation allowWriteRecommendation;
 
   /**
    * Constructor for {@link AmbryCapacityUnitQuotaEnforcer}.
@@ -37,8 +37,8 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
    */
   public AmbryCapacityUnitQuotaEnforcer(QuotaSource quotaSource) {
     this.quotaSource = quotaSource;
-    this.allowReadRecommendation = new EnforcementRecommendation(false, 0, QuotaName.READ_CAPACITY_UNIT, 200, 0, -1);
-    this.allowWriteRecommendation = new EnforcementRecommendation(false, 0, QuotaName.WRITE_CAPACITY_UNIT, 200, 0, -1);
+    this.allowReadRecommendation = new QuotaRecommendation(false, 0, QuotaName.READ_CAPACITY_UNIT, 200, 0, -1);
+    this.allowWriteRecommendation = new QuotaRecommendation(false, 0, QuotaName.WRITE_CAPACITY_UNIT, 200, 0, -1);
   }
 
   @Override
@@ -46,7 +46,7 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public EnforcementRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo) {
+  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo) {
     if (isReadRequest(restRequest)) {
       return allowReadRecommendation;
     } else {
@@ -55,7 +55,7 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public EnforcementRecommendation recommend(RestRequest restRequest) {
+  public QuotaRecommendation recommend(RestRequest restRequest) {
     if (isReadRequest(restRequest)) {
       return allowReadRecommendation;
     } else {

@@ -17,14 +17,14 @@ import java.util.List;
 
 
 /**
- * Interface to apply application specific policy to make overall recommendation based on {@link EnforcementRecommendation}s.
+ * Interface to apply application specific policy to make overall recommendation based on {@link QuotaRecommendation}s.
  */
 public interface ThrottlePolicy {
 
   /**
-   * Provide overall recommendation by merging {@link EnforcementRecommendation}s from all quota enforcers.
-   * @param enforcementRecommendations {@link List} of {@link EnforcementRecommendation}s.
+   * Provide overall recommendation by merging {@link QuotaRecommendation}s from all quota enforcers.
+   * @param quotaRecommendations {@link List} of {@link QuotaRecommendation}s.
    * @return ThrottlingRecommendation object containing overall quota usage and recommendation.
    */
-  ThrottlingRecommendation recommend(List<EnforcementRecommendation> enforcementRecommendations);
+  ThrottlingRecommendation recommend(List<QuotaRecommendation> quotaRecommendations);
 }

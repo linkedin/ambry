@@ -28,22 +28,22 @@ public interface QuotaEnforcer {
   void init();
 
   /**
-   * Makes an {@link EnforcementRecommendation} using the information in {@link BlobInfo} and {@link RestRequest}. This
+   * Makes an {@link QuotaRecommendation} using the information in {@link BlobInfo} and {@link RestRequest}. This
    * method also charges the request cost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
    *                                 determined by enforcers.
-   * @return EnforcementRecommendation object with the recommendation.
+   * @return QuotaRecommendation object with the recommendation.
    */
-  EnforcementRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo);
+  QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo);
 
   /**
-   * Makes an {@link EnforcementRecommendation} for the restRequest. This method doesn't know the
+   * Makes an {@link QuotaRecommendation} for the restRequest. This method doesn't know the
    * request details and hence makes the recommendation based on current quota usage.
    * @param restRequest {@link RestRequest} object.
-   * @return EnforcementRecommendation object with the recommendation.
+   * @return QuotaRecommendation object with the recommendation.
    */
-  EnforcementRecommendation recommend(RestRequest restRequest);
+  QuotaRecommendation recommend(RestRequest restRequest);
 
   /**
    * @return QuotaSource object of the enforcer.
