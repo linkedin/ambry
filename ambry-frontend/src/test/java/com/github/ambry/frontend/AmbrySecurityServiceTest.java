@@ -270,7 +270,7 @@ public class AmbrySecurityServiceTest {
             quotaService);
 
     // Everything should be good.
-    Mockito.when(quotaService.shouldThrottle(anyShort(), anyShort(), any(), anyLong())).thenReturn(false);
+    Mockito.when(quotaService.shouldThrottle(any())).thenReturn(false);
     for (int i = 0; i < 100; i++) {
       for (RestMethod restMethod : RestMethod.values()) {
         RestRequest restRequest = createRestRequest(restMethod, "/", null);
