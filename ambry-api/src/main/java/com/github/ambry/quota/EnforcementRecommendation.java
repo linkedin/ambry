@@ -14,10 +14,10 @@
 package com.github.ambry.quota;
 
 /**
- * Interface representing enforcement recommendation made by a {@link RequestQuotaEnforcer} implementation. QuotaEnforcer
+ * Class representing enforcement recommendation made by a {@link QuotaEnforcer} implementation. QuotaEnforcer
  * implementations can use this object to provide a boolean recommendation to throttle the
- * request or not, along with usage information like usage percentage, name of the enforcer that made this recommendation,
- * the recommended http status (indicating whether or not throttled request should be retried) and cost to serve the request.
+ * request or not, along with usage information like usage percentage, name of the quota for which this recommendation
+ * was made, the recommended http status (indicating whether or not throttled request should be retried) and cost to serve the request.
  */
 public class EnforcementRecommendation {
   private final boolean shouldThrottle;

@@ -14,16 +14,16 @@
 package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaSource;
-import com.github.ambry.quota.RequestQuotaEnforcer;
-import com.github.ambry.quota.RequestQuotaEnforcerFactory;
+import com.github.ambry.quota.QuotaEnforcerFactory;
 
 
 /**
- * Implementation of {@link RequestQuotaEnforcerFactory} that instantiates {@link AmbryCapacityUnitQuotaEnforcer}.
+ * Implementation of {@link QuotaEnforcerFactory} that instantiates {@link AmbryCapacityUnitQuotaEnforcer}.
  */
-public class AmbryCapacityUnitQuotaEnforcerFactory implements RequestQuotaEnforcerFactory {
-  private final RequestQuotaEnforcer quotaEnforcer;
+public class AmbryCapacityUnitQuotaEnforcerFactory implements QuotaEnforcerFactory {
+  private final QuotaEnforcer quotaEnforcer;
 
   /**
    * Constructor for {@link AmbryCapacityUnitQuotaEnforcerFactory}.
@@ -35,7 +35,7 @@ public class AmbryCapacityUnitQuotaEnforcerFactory implements RequestQuotaEnforc
   }
 
   @Override
-  public RequestQuotaEnforcer getRequestQuotaEnforcer() {
+  public QuotaEnforcer getRequestQuotaEnforcer() {
     return quotaEnforcer;
   }
 }

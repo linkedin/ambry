@@ -19,17 +19,17 @@ import com.github.ambry.rest.RestRequest;
 
 /**
  * Interface for class that would do the quota enforcement of a particular quota.
- * A {@link RequestQuotaEnforcer} object would need a {@link QuotaSource} to get and save quota and usage.
+ * A {@link QuotaEnforcer} object would need a {@link QuotaSource} to get and save quota and usage.
  */
-public interface RequestQuotaEnforcer {
+public interface QuotaEnforcer {
   /**
-   * Method to initialize the {@link RequestQuotaEnforcer}.
+   * Method to initialize the {@link QuotaEnforcer}.
    */
   void init();
 
   /**
-   * Makes an {@link EnforcementRecommendation} for the quotaResource and restMethod based on specified requestCost.
-   * This method also charges the specified requestCost against the quota.
+   * Makes an {@link EnforcementRecommendation} using the information in {@link BlobInfo} and {@link RestRequest}. This
+   * method also charges the request cost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
    *                                 determined by enforcers.
@@ -38,7 +38,7 @@ public interface RequestQuotaEnforcer {
   EnforcementRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo);
 
   /**
-   * Makes an {@link EnforcementRecommendation} for the quotaResource and restMethod. This method doesn't know the
+   * Makes an {@link EnforcementRecommendation} for the restRequest. This method doesn't know the
    * request details and hence makes the recommendation based on current quota usage.
    * @param restRequest {@link RestRequest} object.
    * @return EnforcementRecommendation object with the recommendation.
@@ -51,7 +51,7 @@ public interface RequestQuotaEnforcer {
   QuotaSource getQuotaSource();
 
   /**
-   * Shutdown the {@link RequestQuotaEnforcer} and perform any cleanup.
+   * Shutdown the {@link QuotaEnforcer} and perform any cleanup.
    */
   void shutdown();
 }

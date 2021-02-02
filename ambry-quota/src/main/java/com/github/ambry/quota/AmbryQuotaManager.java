@@ -36,30 +36,32 @@ import org.json.JSONObject;
 public class AmbryQuotaManager implements QuotaManager {
   private static final ThrottlingRecommendation allowRecommendation =
       new ThrottlingRecommendation(false, new HashMap<>(), 200, new HashMap<>(), -1);
-  private final Set<RequestQuotaEnforcer> requestQuotaEnforcers;
+  private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
+  private final QuotaConfig quotaConfig;
 
   /**
    * Constructor for {@link AmbryQuotaManager}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @throws ReflectiveOperationException in case of any exception.
    */
-  public AmbryQuotaManager(QuotaConfig quotaConfig, List<RequestQuotaEnforcer> addedRequestQuotaEnforcers,
+  public AmbryQuotaManager(QuotaConfig quotaConfig, List<QuotaEnforcer> addedRequestQuotaEnforcers,
       ThrottlePolicy throttlePolicy) throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap = buildQuotaSources(quotaEnforcerSourceMap.values(), quotaConfig);
     requestQuotaEnforcers = new HashSet<>(addedRequestQuotaEnforcers);
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
-      requestQuotaEnforcers.add(((RequestQuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
+      requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)))).getRequestQuotaEnforcer());
     }
     this.throttlePolicy = throttlePolicy;
+    this.quotaConfig = quotaConfig;
   }
 
   @Override
   public void init() {
-    for (RequestQuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+    for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
       quotaEnforcer.init();
     }
   }
@@ -70,7 +72,7 @@ public class AmbryQuotaManager implements QuotaManager {
       return allowRecommendation;
     }
     boolean shouldThrottle = true;
-    Iterator<RequestQuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
+    Iterator<QuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
     List<EnforcementRecommendation> enforcementRecommendations = new ArrayList<>();
     while (quotaEnforcerIterator.hasNext()) {
       EnforcementRecommendation enforcementRecommendation = quotaEnforcerIterator.next().recommend(restRequest);
@@ -86,7 +88,7 @@ public class AmbryQuotaManager implements QuotaManager {
       return allowRecommendation;
     }
     boolean shouldThrottle = true;
-    Iterator<RequestQuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
+    Iterator<QuotaEnforcer> quotaEnforcerIterator = requestQuotaEnforcers.iterator();
     List<EnforcementRecommendation> enforcementRecommendations = new ArrayList<>();
     while (quotaEnforcerIterator.hasNext()) {
       EnforcementRecommendation enforcementRecommendation =
@@ -99,9 +101,14 @@ public class AmbryQuotaManager implements QuotaManager {
 
   @Override
   public void shutdown() {
-    for (RequestQuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+    for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
       quotaEnforcer.shutdown();
     }
+  }
+
+  @Override
+  public QuotaConfig getQuotaConfig() {
+    return quotaConfig;
   }
 
   private Map<String, String> parseQuotaEnforcerAndSourceInfo(String quotaEnforcerSourceJson) {

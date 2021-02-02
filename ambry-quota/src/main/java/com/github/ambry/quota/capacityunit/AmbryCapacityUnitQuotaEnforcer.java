@@ -15,18 +15,18 @@ package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.EnforcementRecommendation;
+import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaSource;
-import com.github.ambry.quota.RequestQuotaEnforcer;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 
 
 /**
- * Implementation of {@link RequestQuotaEnforcer} for Capacity Units of ambry resource.
+ * Implementation of {@link QuotaEnforcer} for Capacity Units of ambry resource.
  */
 // TODO: The current implementation allows all requests without any processing. It needs to be replaced by an implementation that enforces quota.
-public class AmbryCapacityUnitQuotaEnforcer implements RequestQuotaEnforcer {
+public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
   private final QuotaSource quotaSource;
   private final EnforcementRecommendation allowReadRecommendation;
   private final EnforcementRecommendation allowWriteRecommendation;

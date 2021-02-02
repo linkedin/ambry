@@ -14,13 +14,13 @@
 package com.github.ambry.quota;
 
 /**
- * Factory to instantiate {@link RequestQuotaEnforcer} class.
+ * Factory to instantiate {@link QuotaEnforcer} class.
  */
-public interface RequestQuotaEnforcerFactory {
+public interface QuotaEnforcerFactory {
 
   /**
-   * Build and return {@link RequestQuotaEnforcer} class.
-   * @return RequestQuotaEnforcer object.
+   * Build and return {@link QuotaEnforcer} class.
+   * @return QuotaEnforcer object.
    */
-  RequestQuotaEnforcer getRequestQuotaEnforcer();
+  QuotaEnforcer getRequestQuotaEnforcer();
 }

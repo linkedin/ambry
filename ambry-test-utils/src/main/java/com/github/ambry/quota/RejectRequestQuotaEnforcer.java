@@ -18,9 +18,9 @@ import com.github.ambry.rest.RestRequest;
 
 
 /**
- * {@link RequestQuotaEnforcer} implementation for test that always rejects requests.
+ * {@link QuotaEnforcer} implementation for test that always rejects requests.
  */
-public class RejectRequestQuotaEnforcer implements RequestQuotaEnforcer {
+public class RejectRequestQuotaEnforcer implements QuotaEnforcer {
   private static final float DUMMY_REJECTABLE_USAGE_PERCENTAGE = 101;
   private static final int REJECT_HTTP_STATUS = 429;
   private static final boolean SHOULD_THROTTLE = true;

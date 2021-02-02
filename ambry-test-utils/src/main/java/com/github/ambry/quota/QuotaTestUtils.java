@@ -39,8 +39,8 @@ public class QuotaTestUtils {
   }
 
   /**
-   * Create {@link QuotaConfig} object with {@link RequestQuotaEnforcer} and corresponding {@link QuotaSource} map.
-   * @param enforcerSourcemap {@link Map} for {@link RequestQuotaEnforcer} and corresponding {@link QuotaSource} object.
+   * Create {@link QuotaConfig} object with {@link QuotaEnforcer} and corresponding {@link QuotaSource} map.
+   * @param enforcerSourcemap {@link Map} for {@link QuotaEnforcer} and corresponding {@link QuotaSource} object.
    * @param isRequestThrottlingEnabled boolean flag indicating if request quota throttling should be enabled.
    * @param quotaMode {@link QuotaMode} for quota enforcement.
    * @return QuotaConfig object.

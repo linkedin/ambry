@@ -19,20 +19,20 @@ import com.github.ambry.config.QuotaConfig;
 /**
  * Factory that instantiates {@link RejectRequestQuotaEnforcer} for tests.
  */
-public class RejectRequestQuotaEnforcerFactory implements RequestQuotaEnforcerFactory {
+public class RejectQuotaEnforcerFactory implements QuotaEnforcerFactory {
   private final RejectRequestQuotaEnforcer rejectQuotaEnforcer;
 
   /**
-   * Constructor for {@link RejectRequestQuotaEnforcerFactory}.
+   * Constructor for {@link RejectQuotaEnforcerFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param quotaSource {@link QuotaSource} object.
    */
-  public RejectRequestQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource) {
+  public RejectQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource) {
     this.rejectQuotaEnforcer = new RejectRequestQuotaEnforcer(quotaSource);
   }
 
   @Override
-  public RequestQuotaEnforcer getRequestQuotaEnforcer() {
+  public QuotaEnforcer getRequestQuotaEnforcer() {
     return rejectQuotaEnforcer;
   }
 }

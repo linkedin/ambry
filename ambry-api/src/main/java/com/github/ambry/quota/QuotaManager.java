@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 
@@ -46,6 +47,11 @@ public interface QuotaManager {
    * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
   ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo);
+
+  /**
+   * @return QuotaConfig object.
+   */
+  QuotaConfig getQuotaConfig();
 
   /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.
