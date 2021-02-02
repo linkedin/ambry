@@ -137,11 +137,7 @@ class AmbrySecurityService implements SecurityService {
           String operationOrBlobId = requestPath.getOperationOrBlobId(true);
           // ensure that secure path validation is only performed when getting blobs rather than other operations.
           if (!operationOrBlobId.isEmpty() && !OPERATIONS.contains(operationOrBlobId)) {
-            try {
-              validateSecurePathIfRequired(restRequest, requestPath.getPrefix(), frontendConfig.securePathPrefix);
-            } catch (Exception e) {
-              exception = e;
-            }
+            validateSecurePathIfRequired(restRequest, requestPath.getPrefix(), frontendConfig.securePathPrefix);
           }
         }
       }
