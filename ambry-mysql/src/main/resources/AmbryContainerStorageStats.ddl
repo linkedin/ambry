@@ -94,14 +94,14 @@ CREATE TABLE IF NOT EXISTS Partitions (
     partitionClassId SMALLINT NOT NULL,
 
     PRIMARY KEY(clusterName, id),
-    FOREIGN KEY (partitionClassId) REFERENCES PartitionClassNames(id)
+    FOREIGN KEY (clusterName, partitionClassId) REFERENCES PartitionClassNames(clusterName, id)
 )
 CHARACTER SET utf8 COLLATE utf8_bin;
 
 /**
  * This table is created to store the aggregated partition class report.
  */
-CREATE TABLE IF NOT EXISTS AggregatedPartitionClassReport (
+CREATE TABLE IF NOT EXISTS AggregatedPartitionClassReports (
     clusterName VARCHAR(25) NOT NULL,
     partitionClassId SMALLINT NOT NULL,
     accountId INT NOT NULL,
@@ -110,6 +110,6 @@ CREATE TABLE IF NOT EXISTS AggregatedPartitionClassReport (
     updatedAt TIMESTAMP NOT NULL,
 
     PRIMARY KEY (clusterName, partitionClassId, accountId, containerId),
-    FOREIGN KEY (partitionClassId) REFERENCES PartitionClassNames(id)
+    FOREIGN KEY (clusterName, partitionClassId) REFERENCES PartitionClassNames(clusterName, id)
 )
 CHARACTER SET utf8 COLLATE utf8_bin;
