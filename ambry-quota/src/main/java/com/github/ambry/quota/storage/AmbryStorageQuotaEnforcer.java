@@ -13,6 +13,11 @@
  */
 package com.github.ambry.quota.storage;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -51,7 +56,52 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   }
 
   @Override
-  public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
+  public boolean shouldThrottle(RestRequest restRequest) {
+    boolean rst = false;
+    logger.debug("RestRequest: method {}, size {}", restRequest.getRestMethod(), restRequest.getSize());
+    if (restRequest.getRestMethod() == RestMethod.POST && restRequest.getSize() > 0) {
+      try {
+        Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
+        Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+        logger.debug("Account id: {}, Container id: {}, size: {}", account.getId(), container.getId(),
+            restRequest.getSize());
+        rst = shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post, restRequest.getSize());
+      } catch (Exception e) {
+        logger.error("Failed to apply shouldThrottle logic to RestRequest {}", restRequest, e);
+        rst = false;
+      }
+    }
+    return rst;
+  }
+
+  @Override
+  public void setQuotaMode(QuotaMode mode) {
+    logger.info("Setting Quota mode to {}", mode.name());
+    this.mode = mode;
+  }
+
+  @Override
+  public void initStorageUsage(Map<String, Map<String, Long>> usage) {
+    logger.info("Initializing storage usage for {} accounts", usage.size());
+    storageUsage = new ConcurrentHashMap<>();
+    initMap(usage, storageUsage, true);
+  }
+
+  @Override
+  public void initStorageQuota(Map<String, Map<String, Long>> quota) {
+    logger.info("Initializing storage quota for {} accounts");
+    storageQuota = new HashMap<>();
+    initMap(quota, storageQuota, false);
+  }
+
+  @Override
+  public void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher) {
+    logger.info("Register quota source and usage refresher listeners");
+    storageQuotaSource.registerListener(getQuotaSourceListener());
+    storageUsageRefresher.registerListener(getUsageRefresherListener());
+  }
+
+  boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
     if (op != QuotaOperation.Post) {
       return false;
     }
@@ -87,33 +137,6 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
     }
     metrics.shouldThrottleTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
-  }
-
-  @Override
-  public void setQuotaMode(QuotaMode mode) {
-    logger.info("Setting Quota mode to {}", mode.name());
-    this.mode = mode;
-  }
-
-  @Override
-  public void initStorageUsage(Map<String, Map<String, Long>> usage) {
-    logger.info("Initializing storage usage for {} accounts", usage.size());
-    storageUsage = new ConcurrentHashMap<>();
-    initMap(usage, storageUsage, true);
-  }
-
-  @Override
-  public void initStorageQuota(Map<String, Map<String, Long>> quota) {
-    logger.info("Initializing storage quota for {} accounts");
-    storageQuota = new HashMap<>();
-    initMap(quota, storageQuota, false);
-  }
-
-  @Override
-  public void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher) {
-    logger.info("Register quota source and usage refresher listeners");
-    storageQuotaSource.registerListener(getQuotaSourceListener());
-    storageUsageRefresher.registerListener(getUsageRefresherListener());
   }
 
   /**

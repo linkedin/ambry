@@ -21,9 +21,8 @@ import com.github.ambry.quota.storage.QuotaMode;
  */
 public class StorageQuotaConfig {
   public static final String STORAGE_QUOTA_PREFIX = "storage.quota.";
-  public static final String HELIX_PROPERTY_ROOT_PATH = STORAGE_QUOTA_PREFIX + "helix.property.root.path";
-  public static final String ZK_CLIENT_CONNECT_ADDRESS = STORAGE_QUOTA_PREFIX + "zk.client.connect.address";
   public static final String REFRESHER_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "refresher.polling.interval.ms";
+  public static final String SOURCE_FACTORY = STORAGE_QUOTA_PREFIX + "source.factory";
   public static final String CONTAINER_STORAGE_QUOTA_IN_JSON = STORAGE_QUOTA_PREFIX + "container.storage.quota.in.json";
   public static final String SOURCE_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "source.polling.interval.ms";
   public static final String BACKUP_FILE_DIR = STORAGE_QUOTA_PREFIX + "backup.file.dir";
@@ -32,24 +31,9 @@ public class StorageQuotaConfig {
   public static final String MYSQL_STORE_RETRY_BACKOFF_MS = STORAGE_QUOTA_PREFIX + "mysql.store.retry.backoff.ms";
   public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
   public static final String ENFORCER_MODE = STORAGE_QUOTA_PREFIX + "enforcer.mode";
+  private static final String DEFAULT_VALUE_SOURCE_FACTORY =
+      "com.github.ambry.quota.storage.JSONStringStorageQuotaSourceFactory";
   private static final String DEFAULT_VALUE_ENFORCE_MODE = QuotaMode.Tracking.name();
-
-  //////////////// Config for HelixStorageUsageRefresher ///////////////
-
-  /**
-   * The root path of helix property store in ZooKeeper for HelixStorageUsageRefresher. Must start with {@code /}, and
-   * must not end with {@code /}. The root path should be {@code /{clustername}/PROPERTYSTORE}
-   */
-  @Config(HELIX_PROPERTY_ROOT_PATH)
-  @Default("")
-  public final String helixPropertyRootPath;
-
-  /**
-   * The ZooKeeper server address to connect to. This config is required.
-   */
-  @Config(ZK_CLIENT_CONNECT_ADDRESS)
-  @Default("")
-  public final String zkClientConnectAddress;
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -57,6 +41,10 @@ public class StorageQuotaConfig {
   @Config(REFRESHER_POLLING_INTERVAL_MS)
   @Default("30 * 60 * 1000") // 30 minutes
   public final int refresherPollingIntervalMs;
+
+  @Config(SOURCE_FACTORY)
+  @Default(DEFAULT_VALUE_SOURCE_FACTORY)
+  public final String sourceFactory;
 
   //////////////// Config for JSONStringStorageQuotaSource ///////////////
 
@@ -127,10 +115,9 @@ public class StorageQuotaConfig {
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
   public StorageQuotaConfig(VerifiableProperties verifiableProperties) {
-    helixPropertyRootPath = verifiableProperties.getString(HELIX_PROPERTY_ROOT_PATH, "");
-    zkClientConnectAddress = verifiableProperties.getString(ZK_CLIENT_CONNECT_ADDRESS, "");
     refresherPollingIntervalMs =
         verifiableProperties.getIntInRange(REFRESHER_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
+    sourceFactory = verifiableProperties.getString(SOURCE_FACTORY, DEFAULT_VALUE_SOURCE_FACTORY);
     containerStorageQuotaInJson = verifiableProperties.getString(CONTAINER_STORAGE_QUOTA_IN_JSON, "");
     sourcePollingIntervalMs =
         verifiableProperties.getIntInRange(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);

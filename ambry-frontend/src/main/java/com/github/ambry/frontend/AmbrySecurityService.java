@@ -21,7 +21,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.storage.QuotaOperation;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -51,7 +50,6 @@ import static com.github.ambry.router.GetBlobOptions.*;
  * sets the respective headers on response.
  */
 class AmbrySecurityService implements SecurityService {
-
   static final Set<String> OPERATIONS = Collections.unmodifiableSet(
       Utils.getStaticFieldValuesAsStrings(Operations.class)
           .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
@@ -114,50 +112,37 @@ class AmbrySecurityService implements SecurityService {
 
   @Override
   public void postProcessRequest(RestRequest restRequest, Callback<Void> callback) {
+    if (restRequest == null || callback == null) {
+      throw new IllegalArgumentException("RestRequest or Callback is null");
+    }
     Exception exception = null;
     frontendMetrics.securityServicePostProcessRequestRate.mark();
     long startTimeMs = System.currentTimeMillis();
-    if (!isOpen) {
-      exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
-    } else if (restRequest == null || callback == null) {
-      throw new IllegalArgumentException("RestRequest or Callback is null");
-    } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
-      exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
-    } else if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
-      try {
-        accountAndContainerNamePreconditionCheck(restRequest);
-      } catch (Exception e) {
-        exception = e;
-      }
-    } else if (restRequest.getRestMethod() == RestMethod.GET) {
-      RequestPath requestPath = getRequestPath(restRequest);
-      String operationOrBlobId = requestPath.getOperationOrBlobId(true);
-      // ensure that secure path validation is only performed when getting blobs rather than other operations.
-      if (!operationOrBlobId.isEmpty() && !OPERATIONS.contains(operationOrBlobId)) {
-        try {
-          validateSecurePathIfRequired(restRequest, requestPath.getPrefix(), frontendConfig.securePathPrefix);
-        } catch (Exception e) {
-          exception = e;
+    try {
+      if (!isOpen) {
+        exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
+      } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
+        exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+      } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
+        exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
+      } else {
+        if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
+          accountAndContainerNamePreconditionCheck(restRequest);
+        } else if (restRequest.getRestMethod() == RestMethod.GET) {
+          RequestPath requestPath = getRequestPath(restRequest);
+          String operationOrBlobId = requestPath.getOperationOrBlobId(true);
+          // ensure that secure path validation is only performed when getting blobs rather than other operations.
+          if (!operationOrBlobId.isEmpty() && !OPERATIONS.contains(operationOrBlobId)) {
+            validateSecurePathIfRequired(restRequest, requestPath.getPrefix(), frontendConfig.securePathPrefix);
+          }
         }
       }
-    } else if (restRequest.getRestMethod() == RestMethod.POST && storageQuotaService != null
-        && restRequest.getSize() > 0) {
-      try {
-        Account account = getAccountFromArgs(restRequest.getArgs());
-        Container container = getContainerFromArgs(restRequest.getArgs());
-        // We are optimistically accounting request size beforehand and add it to usage of this account/container. This
-        // would mistakingly adds storage usage if this request fails in the end.
-        // TODO: find a way to revert this mistake when requests fail
-        if (storageQuotaService.shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post,
-            restRequest.getSize())) {
-          exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
-        }
-      } catch (Exception e) {
-        exception = e;
-      }
+    } catch (Exception e) {
+      exception = e;
+    } finally {
+      frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+      callback.onCompletion(null, exception);
     }
-    frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
-    callback.onCompletion(null, exception);
   }
 
   @Override

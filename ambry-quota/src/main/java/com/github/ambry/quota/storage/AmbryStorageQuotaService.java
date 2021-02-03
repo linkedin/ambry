@@ -14,14 +14,14 @@
 package com.github.ambry.quota.storage;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.CommonUtils;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StorageQuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import org.apache.helix.store.HelixPropertyStore;
-import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
 
 /**
@@ -37,17 +37,15 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   private final StorageQuotaConfig config;
   private final StorageQuotaServiceMetrics metrics;
 
-  public AmbryStorageQuotaService(StorageQuotaConfig storageQuotaConfig, MetricRegistry metricRegistry)
-      throws IOException {
-    HelixPropertyStore<ZNRecord> helixStore =
-        CommonUtils.createHelixPropertyStore(storageQuotaConfig.zkClientConnectAddress,
-            storageQuotaConfig.helixPropertyRootPath, null);
+  public AmbryStorageQuotaService(VerifiableProperties verifiableProperties, AccountStatsStore accountStatsStore,
+      MetricRegistry metricRegistry) throws Exception {
     this.metrics = new StorageQuotaServiceMetrics(metricRegistry);
     this.scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
-    this.storageUsageRefresher = new HelixStorageUsageRefresher(helixStore, this.scheduler, storageQuotaConfig);
-    this.storageQuotaSource = new JSONStringStorageQuotaSource(storageQuotaConfig);
+    this.config = new StorageQuotaConfig(verifiableProperties);
+    this.storageUsageRefresher = new MySqlStorageUsageRefresher(accountStatsStore, this.scheduler, this.config,
+        new ClusterMapConfig(verifiableProperties), metrics);
+    this.storageQuotaSource = Utils.getObj(config.sourceFactory, scheduler, config);
     this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer(null, this.metrics);
-    this.config = storageQuotaConfig;
   }
 
   @Override
@@ -67,8 +65,8 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   }
 
   @Override
-  public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
-    return this.storageQuotaEnforcer.shouldThrottle(accountId, containerId, op, size);
+  public boolean shouldThrottle(RestRequest restRequest) {
+    return this.storageQuotaEnforcer.shouldThrottle(restRequest);
   }
 
   @Override
