@@ -47,9 +47,8 @@ public class FrontendConfig {
   private static final String DEFAULT_ENDPOINTS_STRING =
       "{\"POST\": \"" + DEFAULT_ENDPOINT + "\", \"GET\": \"" + DEFAULT_ENDPOINT + "\"}";
 
-
   private static final String DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY =
-      "com.github.ambry.quota.AmbryStorageQuotaServiceFactory";
+      "com.github.ambry.quota.storage.AmbryStorageQuotaServiceFactory";
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -152,8 +151,6 @@ public class FrontendConfig {
   @Default(DEFAULT_ENDPOINTS_STRING)
   public final String urlSignerEndpoints;
 
-
-
   /**
    * The default maximum size (in bytes) that can be uploaded using a signed POST URL unless otherwise specified at
    * the time of URL creation (depends on implementation).
@@ -240,7 +237,8 @@ public class FrontendConfig {
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
-    permanentNamedBlobInitialPutTtl = verifiableProperties.getLong("permanent.named.blob.initial.put.ttl", 25 * 60 * 60);
+    permanentNamedBlobInitialPutTtl =
+        verifiableProperties.getLong("permanent.named.blob.initial.put.ttl", 25 * 60 * 60);
     optionsAllowMethods =
         verifiableProperties.getString("frontend.options.allow.methods", "POST, GET, OPTIONS, HEAD, DELETE");
     idConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
@@ -287,8 +285,7 @@ public class FrontendConfig {
     enableStorageQuotaService = verifiableProperties.getBoolean(ENABLE_STORAGE_QUOTA_SERVICE, false);
     storageQuotaServiceFactory =
         verifiableProperties.getString(STORAGE_QUOTA_SERVICE_FACTORY, DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY);
-    namedBlobDbFactory =
-        verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
+    namedBlobDbFactory = verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
   }
 
   /**
