@@ -15,6 +15,7 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils.InternalKeys;
 
@@ -24,7 +25,7 @@ import com.github.ambry.rest.RestUtils.InternalKeys;
  * It keeps track of the storage usage of different {@link Container}s and decides to throttle the Frontend operations
  * based on the quota and the {@link QuotaMode}.
  * If you just want to keep track of the the usage without throttling the traffic, you can call {@link #setQuotaMode} to change
- * {@link QuotaMode} from {@link QuotaMode#Throttling} to {@link QuotaMode#Tracking}.
+ * {@link QuotaMode} from {@link QuotaMode#THROTTLING} to {@link QuotaMode#TRACKING}.
  * TODO: add a new method to deal with deleted containers.
  */
 public interface StorageQuotaService {
@@ -50,7 +51,7 @@ public interface StorageQuotaService {
   boolean shouldThrottle(RestRequest restRequest);
 
   /**
-   * Change the {@link StorageQuotaService}'s quotaMode to the given value. If the quotaMode is {@link QuotaMode#Tracking}, then {@link StorageQuotaService}
+   * Change the {@link StorageQuotaService}'s quotaMode to the given value. If the quotaMode is {@link QuotaMode#TRACKING}, then {@link StorageQuotaService}
    * should never return true in {@link #shouldThrottle} method.
    * @param quotaMode The new value for {@link QuotaMode}.
    */

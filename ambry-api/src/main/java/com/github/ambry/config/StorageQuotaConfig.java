@@ -13,7 +13,7 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.quota.storage.QuotaMode;
+import com.github.ambry.quota.QuotaMode;
 
 
 /**
@@ -33,7 +33,7 @@ public class StorageQuotaConfig {
   public static final String ENFORCER_MODE = STORAGE_QUOTA_PREFIX + "enforcer.mode";
   private static final String DEFAULT_VALUE_SOURCE_FACTORY =
       "com.github.ambry.quota.storage.JSONStringStorageQuotaSourceFactory";
-  private static final String DEFAULT_VALUE_ENFORCE_MODE = QuotaMode.Tracking.name();
+  private static final String DEFAULT_VALUE_ENFORCE_MODE = QuotaMode.TRACKING.name();
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -125,15 +125,7 @@ public class StorageQuotaConfig {
     mysqlStoreRetryBackoffMs = verifiableProperties.getLong(MYSQL_STORE_RETRY_BACKOFF_MS, 10 * 60 * 1000);
     mysqlStoreRetryMaxCount = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX_COUNT, 1);
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
-    enforcerMode = QuotaMode.valueOf(
-        capitalize(verifiableProperties.getString(ENFORCER_MODE, DEFAULT_VALUE_ENFORCE_MODE).toLowerCase()));
-  }
-
-  private String capitalize(String str) {
-    if (str == null || str.isEmpty() || str.trim().isEmpty()) {
-      return str;
-    }
-    str = str.trim();
-    return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
+    enforcerMode =
+        QuotaMode.valueOf(verifiableProperties.getString(ENFORCER_MODE, DEFAULT_VALUE_ENFORCE_MODE).toUpperCase());
   }
 }

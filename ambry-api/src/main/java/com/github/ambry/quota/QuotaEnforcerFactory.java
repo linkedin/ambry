@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,11 +11,16 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota.storage;
+package com.github.ambry.quota;
 
 /**
- * Quota service mode. If mode is tracking, it will not throttle traffics even if the quota is exceeded.
+ * Factory to instantiate {@link QuotaEnforcer} class.
  */
-public enum QuotaMode {
-  Tracking, Throttling
+public interface QuotaEnforcerFactory {
+
+  /**
+   * Build and return {@link QuotaEnforcer} class.
+   * @return QuotaEnforcer object.
+   */
+  QuotaEnforcer getRequestQuotaEnforcer();
 }

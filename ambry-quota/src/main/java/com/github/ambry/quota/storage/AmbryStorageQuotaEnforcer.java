@@ -15,6 +15,7 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
@@ -39,11 +40,11 @@ import org.slf4j.LoggerFactory;
  */
 public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
   private static final Logger logger = LoggerFactory.getLogger(AmbryStorageQuotaEnforcer.class);
-  private volatile QuotaMode mode = QuotaMode.Tracking;
-  private volatile Map<String, Map<String, Long>> storageQuota;
-  private volatile Map<String, Map<String, Long>> storageUsage;
   private final QuotaExceededCallback quotaExceededCallback;
   private final StorageQuotaServiceMetrics metrics;
+  private volatile QuotaMode mode = QuotaMode.TRACKING;
+  private volatile Map<String, Map<String, Long>> storageQuota;
+  private volatile Map<String, Map<String, Long>> storageUsage;
 
   /**
    * Constructor to instantiate {@link AmbryStorageQuotaEnforcer}.
@@ -136,7 +137,7 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
       metrics.quotaExceededCallbackTimeMs.update(System.currentTimeMillis() - cbStartTimeMs);
     }
     metrics.shouldThrottleTimeMs.update(System.currentTimeMillis() - startTimeMs);
-    return mode == QuotaMode.Throttling ? exceedQuota.get() : false;
+    return mode == QuotaMode.THROTTLING && exceedQuota.get();
   }
 
   /**

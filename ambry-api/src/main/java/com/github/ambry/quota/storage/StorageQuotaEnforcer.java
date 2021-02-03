@@ -15,6 +15,7 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils.InternalKeys;
 import java.util.Map;
@@ -69,7 +70,7 @@ public interface StorageQuotaEnforcer {
   boolean shouldThrottle(RestRequest restRequest);
 
   /**
-   * Change the {@link StorageQuotaEnforcer}'s mode to the given value. If the mode is {@link QuotaMode#Tracking}, then {@link StorageQuotaEnforcer}
+   * Change the {@link StorageQuotaEnforcer}'s mode to the given value. If the mode is {@link QuotaMode#TRACKING}, then {@link StorageQuotaEnforcer}
    * should never return true in {@link #shouldThrottle} method.
    * @param mode The new value for {@link QuotaMode}.
    */
