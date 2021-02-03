@@ -45,7 +45,8 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
     this.config = new StorageQuotaConfig(verifiableProperties);
     this.storageUsageRefresher = new MySqlStorageUsageRefresher(accountStatsStore, this.scheduler, this.config,
         new ClusterMapConfig(verifiableProperties), metrics);
-    this.storageQuotaSource = Utils.getObj(config.sourceFactory, scheduler, config);
+    this.storageQuotaSource =
+        Utils.<StorageQuotaSourceFactory>getObj(config.sourceFactory, scheduler, config).getStorageQuotaSource();
     this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer(null, this.metrics);
   }
 
