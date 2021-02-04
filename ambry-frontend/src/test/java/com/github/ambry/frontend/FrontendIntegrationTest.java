@@ -36,6 +36,11 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManagerFactory;
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
@@ -120,6 +125,7 @@ public class FrontendIntegrationTest {
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final QuotaManagerFactory QUOTA_MANAGER_FACTORY;
   private static final String DATA_CENTER_NAME = "Datacenter-Name";
   private static final String HOST_NAME = "localhost";
   private static final String CLUSTER_NAME = "Cluster-name";
@@ -127,6 +133,9 @@ public class FrontendIntegrationTest {
 
   static {
     try {
+      QUOTA_MANAGER_FACTORY =
+          new AmbryQuotaManagerFactory(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
+              Collections.emptyList(), new MaxThrottlePolicy());
       CLUSTER_MAP = new MockClusterMap();
       File trustStoreFile = File.createTempFile("truststore", ".jks");
       trustStoreFile.deleteOnExit();
@@ -172,7 +181,7 @@ public class FrontendIntegrationTest {
   @BeforeClass
   public static void setup() throws Exception {
     ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
+        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)), QUOTA_MANAGER_FACTORY);
     ambryRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
     sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT,
@@ -217,7 +226,7 @@ public class FrontendIntegrationTest {
         buildFrontendVProps(trustStoreFile, false, PLAINTEXT_SERVER_PORT + 100, SSL_SERVER_PORT + 100);
 
     RestServer ambryRestServer = new RestServer(vprop, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(vprop)));
+        SSLFactory.getNewInstance(new SSLConfig(vprop)), QUOTA_MANAGER_FACTORY);
     ambryRestServer.start();
     NettyClient plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT + 100, null);
     NettyClient sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT + 100,

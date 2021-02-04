@@ -23,6 +23,7 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.rest.RestRequestService;
@@ -41,6 +42,7 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getRestRequestService()}.
  */
 public class FrontendRestRequestServiceFactory implements RestRequestServiceFactory {
+  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestServiceFactory.class);
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final VerifiableProperties verifiableProperties;
@@ -48,7 +50,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
   private final ClusterMapConfig clusterMapConfig;
   private final Router router;
   private final AccountService accountService;
-  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestServiceFactory.class);
+  private final QuotaManager quotaManager;
 
   /**
    * Creates a new instance of FrontendRestRequestServiceFactory.
@@ -59,11 +61,12 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public FrontendRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      Router router, AccountService accountService) {
+      Router router, AccountService accountService, QuotaManager quotaManager) {
     this.verifiableProperties = Objects.requireNonNull(verifiableProperties, "Provided VerifiableProperties is null");
     this.clusterMap = Objects.requireNonNull(clusterMap, "Provided ClusterMap is null");
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
+    this.quotaManager = quotaManager;
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
@@ -102,7 +105,8 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       }
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
-              urlSigningService, idSigningService, accountAndContainerInjector, storageQuotaService);
+              urlSigningService, idSigningService, accountAndContainerInjector, storageQuotaService,
+              quotaManager);
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
           securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
           accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,

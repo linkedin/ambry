@@ -26,14 +26,14 @@ import org.junit.Test;
 public class AmbrySecurityServiceFactoryTest {
 
   /**
-   * Tests intantiation of {@link AmbrySecurityServiceFactory}.
+   * Tests instantiation of {@link AmbrySecurityServiceFactory}.
    * @throws Exception
    */
   @Test
   public void getAmbrySecurityServiceFactoryTest() throws Exception {
     SecurityService securityService =
         new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MockClusterMap(), null, null,
-            null, null, null).getSecurityService();
+            null, null, null, null).getSecurityService();
     Assert.assertNotNull(securityService);
   }
 }

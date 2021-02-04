@@ -19,12 +19,16 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.utils.InvocationOptions;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.Collections;
 import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,8 +54,14 @@ public class RestServerMain {
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       clusterMap = clusterAgentsFactory.getClusterMap();
       SSLFactory sslFactory = getSSLFactoryIfRequired(verifiableProperties);
+
+      // Quota
+      QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
+      QuotaManagerFactory quotaManagerFactory =
+          Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, Collections.emptyList(), new MaxThrottlePolicy());
       logger.info("Bootstrapping RestServer");
-      restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory);
+      restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory,
+          quotaManagerFactory);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         logger.info("Received shutdown signal. Shutting down RestServer");

@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.router.Router;
 
 
@@ -30,7 +31,7 @@ public class MockRestRequestServiceFactory implements RestRequestServiceFactory 
   private final Router router;
 
   public MockRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap, Router router,
-      AccountService accountService) {
+      AccountService accountService, QuotaManager quotaManager) {
     this.verifiableProperties = verifiableProperties;
     this.router = router;
   }

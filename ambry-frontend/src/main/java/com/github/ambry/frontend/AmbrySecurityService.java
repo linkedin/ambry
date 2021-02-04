@@ -21,6 +21,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -58,16 +59,18 @@ class AmbrySecurityService implements SecurityService {
   private final UrlSigningService urlSigningService;
   private final HostLevelThrottler hostLevelThrottler;
   private final StorageQuotaService storageQuotaService;
+  private final QuotaManager quotaManager;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler,
-      StorageQuotaService storageQuotaService) {
+      StorageQuotaService storageQuotaService, QuotaManager quotaManager) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
     this.storageQuotaService = storageQuotaService;
+    this.quotaManager = quotaManager;
     isOpen = true;
   }
 
@@ -125,6 +128,10 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
         exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
+      } else if (quotaManager.getQuotaConfig().requestThrottlingEnabled && quotaManager.shouldThrottle(restRequest)
+          .shouldThrottle()) {
+        // TODO Use ThrottlingRecommendation to set response headers about quota usage.
+        exception = new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests);
       } else {
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
           accountAndContainerNamePreconditionCheck(restRequest);
@@ -239,6 +246,10 @@ class AmbrySecurityService implements SecurityService {
       } catch (RestServiceException e) {
         exception = e;
       }
+    }
+    if (quotaManager.getQuotaConfig().requestThrottlingEnabled) {
+      quotaManager.charge(restRequest, blobInfo);
+      // TODO Use ThrottlingRecommendation returned from charge() to set appropriate response headers.
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

@@ -38,6 +38,11 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -115,6 +120,17 @@ import static org.mockito.Mockito.*;
  * Unit tests for {@link FrontendRestRequestService}. Also tests {@link AccountAndContainerInjector}.
  */
 public class FrontendRestRequestServiceTest {
+  private final static QuotaManager QUOTA_MANAGER;
+
+  static {
+    try {
+      QUOTA_MANAGER =
+          new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
+              Collections.emptyList(), new MaxThrottlePolicy());
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -174,7 +190,7 @@ public class FrontendRestRequestServiceTest {
         new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, namedBlobDb);
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService, idSigningService,
-            accountAndContainerInjector, null);
+            accountAndContainerInjector, null, QUOTA_MANAGER);
     accountService.clear();
     accountService.updateAccounts(Collections.singleton(InMemAccountService.UNKNOWN_ACCOUNT));
     refAccount = accountService.createAndAddRandomAccount();
