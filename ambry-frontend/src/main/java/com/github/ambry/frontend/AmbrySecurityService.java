@@ -128,7 +128,7 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
         exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
-      } else if (quotaManager.getQuotaConfig().requestThrottlingEnabled && quotaManager.shouldThrottle(restRequest)
+      } else if (quotaManager.getQuotaConfig().requestThrottlingEnabled && quotaManager.getThrottleRecommendation(restRequest)
           .shouldThrottle()) {
         // TODO Use ThrottlingRecommendation to set response headers about quota usage.
         exception = new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests);

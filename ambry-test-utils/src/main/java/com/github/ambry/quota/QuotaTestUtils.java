@@ -15,7 +15,6 @@ package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
