@@ -66,14 +66,15 @@ CREATE TABLE IF NOT EXISTS AggregatedAccountReportsMonth
 CHARACTER SET utf8 COLLATE utf8_bin;
 
 /**
- * This table is created to keep a list of partition class names. In main cluster, we have max-replicas-all-datacenters.
- * In video cluster, we have video-311. For these two classes, we would have rows below:
- * -------------------------------------------------
- * clusterName  |id  |name                         |
- * -------------------------------------------------
- * Ambry-Prod   |1   |max-replicas-all-datacenters |
- * Ambry-Video  |1   |video-311                    |
- * -------------------------------------------------
+ * This table is created to keep a list of partition class names. In "prod" cluster, we have "default".
+ * In "test" cluster, we have "default" and "new-replication". For these three classes, we would have rows below:
+ * -------------------------------------
+ * clusterName  |id  |name             |
+ * -------------------------------------
+ * prod         |1   |default          |
+ * test         |1   |default          |
+ * test         |2   |new-replication  |
+ * -------------------------------------
  */
 CREATE TABLE IF NOT EXISTS PartitionClassNames
 (
@@ -93,8 +94,7 @@ CREATE TABLE IF NOT EXISTS Partitions (
     id INT NOT NULL,
     partitionClassId SMALLINT NOT NULL,
 
-    PRIMARY KEY(clusterName, id),
-    FOREIGN KEY (clusterName, partitionClassId) REFERENCES PartitionClassNames(clusterName, id)
+    PRIMARY KEY(clusterName, id)
 )
 CHARACTER SET utf8 COLLATE utf8_bin;
 
@@ -109,7 +109,6 @@ CREATE TABLE IF NOT EXISTS AggregatedPartitionClassReports (
     storageUsage BIGINT NOT NULL,
     updatedAt TIMESTAMP NOT NULL,
 
-    PRIMARY KEY (clusterName, partitionClassId, accountId, containerId),
-    FOREIGN KEY (clusterName, partitionClassId) REFERENCES PartitionClassNames(clusterName, id)
+    PRIMARY KEY (clusterName, partitionClassId, accountId, containerId)
 )
 CHARACTER SET utf8 COLLATE utf8_bin;
