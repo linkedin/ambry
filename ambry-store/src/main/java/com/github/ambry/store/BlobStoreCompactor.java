@@ -1073,6 +1073,63 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Gets the {@link IndexValue} for the PUT from the {@link #srcIndex} (if it exists)
+   * @param key the {@link StoreKey} whose PUT is required
+   * @param updateValue the update (TTL update/delete) {@link IndexValue} associated with the same {@code key}
+   * @param indexSegmentOfUpdateValue the {@link IndexSegment} that {@code updateValue} belongs to
+   * @return the {@link IndexValue} for the PUT in the {@link #srcIndex} (if it exists)
+   * @throws StoreException if there are problems with the index
+   */
+  private IndexValue getPutValueFromSrc(StoreKey key, IndexValue updateValue, IndexSegment indexSegmentOfUpdateValue)
+      throws StoreException {
+    IndexValue putValue = srcIndex.findKey(key, new FileSpan(srcIndex.getStartOffset(), updateValue.getOffset()),
+        EnumSet.of(PersistentIndex.IndexEntryType.PUT));
+    // in a non multi valued segment, if putValue is not found directly from the index, check if the PUT and DELETE
+    // are the same segment so that the PUT entry can be constructed from the DELETE entry
+    if (putValue == null && updateValue.isDelete()) {
+      putValue = getPutValueFromDeleteEntry(key, updateValue, indexSegmentOfUpdateValue);
+    }
+    return putValue;
+  }
+
+  /**
+   * Gets the {@link IndexValue} for the PUT using info in the {@code deleteValue)
+   * @param key the {@link StoreKey} whose PUT is required
+   * @param deleteValue the delete {@link IndexValue} associated with the same {@code key}
+   * @param indexSegmentOfUpdateValue the {@link IndexSegment} that {@code deleteValue} belongs to
+   * @return the {@link IndexValue} for the PUT in the {@link #srcIndex} (if it exists)
+   */
+  private IndexValue getPutValueFromDeleteEntry(StoreKey key, IndexValue deleteValue,
+      IndexSegment indexSegmentOfUpdateValue) {
+    // TODO: find a way to test this?
+    IndexValue putValue = null;
+    long putRecordOffset = deleteValue.getOriginalMessageOffset();
+    if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != deleteValue.getOffset()
+        .getOffset() && indexSegmentOfUpdateValue.getStartOffset().getOffset() <= putRecordOffset) {
+      try (BlobReadOptions options = srcIndex.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class))) {
+        Offset offset = new Offset(indexSegmentOfUpdateValue.getStartOffset().getName(), options.getOffset());
+        MessageInfo info = options.getMessageInfo();
+        putValue = new IndexValue(info.getSize(), offset, info.getExpirationTimeInMs(), info.getOperationTimeMs(),
+            info.getAccountId(), info.getContainerId());
+      } catch (StoreException e) {
+        logger.error("Fetching PUT index entry of {} in {} failed", key, indexSegmentOfUpdateValue.getStartOffset());
+      }
+    }
+    return putValue;
+  }
+
+  /**
+   * Check if given delete tombstone is removable. There are two cases where delete tombstone can be safely removed:
+   * 1. delete record has finite expiration time and it has expired already;
+   * 2. (TODO) all peer replica tokens have passed the offset that refers to this delete (That is, they have replicated this delete already)
+   * @param deleteIndexValue the {@link IndexValue} associated with delete tombstone
+   * @return {@code true} if this delete tombstone can be safely removed. {@code false} otherwise.
+   */
+  private boolean isDeleteTombstoneRemovable(IndexValue deleteIndexValue) {
+    return srcIndex.isExpired(deleteIndexValue);
+  }
+
+  /**
    * IndexSegmentValidEntryFilter without undelete log records.
    */
   class IndexSegmentValidEntryFilterWithoutUndelete implements IndexSegmentValidEntryFilter {
@@ -1137,7 +1194,7 @@ class BlobStoreCompactor {
       List<IndexEntry> validEntries = new ArrayList<>();
       for (IndexEntry indexEntry : allIndexEntries) {
         IndexValue value = indexEntry.getValue();
-        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (value.isDelete()) {
           IndexValue putValue = getPutValueFromSrc(indexEntry.getKey(), value, indexSegment);
           if (putValue != null) {
             // In PersistentIndex.markAsDeleted(), the expiry time of the put/ttl update value is copied into the
@@ -1158,10 +1215,17 @@ class BlobStoreCompactor {
               addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
             }
           } else {
-            // DELETE entry. Always valid.
-            validEntries.add(indexEntry);
+            // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
+            // tombstone is removable.
+            if (config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(value)) {
+              logger.debug(
+                  "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
+                  indexEntry.getKey(), value.getExpiresAtMs());
+            } else {
+              validEntries.add(indexEntry);
+            }
           }
-        } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        } else if (value.isTtlUpdate()) {
           // if IndexSegment::getIndexEntriesSince() returns a TTL update entry, it is because it is the ONLY entry i.e.
           // no PUT or DELETE in the same index segment.
           if (isTtlUpdateEntryValid(indexEntry.getKey(), indexSegment.getStartOffset())) {
@@ -1219,52 +1283,6 @@ class BlobStoreCompactor {
         }
       }
       return cutoffOffset;
-    }
-
-    /**
-     * Gets the {@link IndexValue} for the PUT from the {@link #srcIndex} (if it exists)
-     * @param key the {@link StoreKey} whose PUT is required
-     * @param updateValue the update (TTL update/delete) {@link IndexValue} associated with the same {@code key}
-     * @param indexSegmentOfUpdateValue the {@link IndexSegment} that {@code updateValue} belongs to
-     * @return the {@link IndexValue} for the PUT in the {@link #srcIndex} (if it exists)
-     * @throws StoreException if there are problems with the index
-     */
-    private IndexValue getPutValueFromSrc(StoreKey key, IndexValue updateValue, IndexSegment indexSegmentOfUpdateValue)
-        throws StoreException {
-      IndexValue putValue = srcIndex.findKey(key, new FileSpan(srcIndex.getStartOffset(), updateValue.getOffset()),
-          EnumSet.of(PersistentIndex.IndexEntryType.PUT));
-      // in a non multi valued segment, if putValue is not found directly from the index, check if the PUT and DELETE
-      // are the same segment so that the PUT entry can be constructed from the DELETE entry
-      if (putValue == null && updateValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        putValue = getPutValueFromDeleteEntry(key, updateValue, indexSegmentOfUpdateValue);
-      }
-      return putValue;
-    }
-
-    /**
-     * Gets the {@link IndexValue} for the PUT using info in the {@code deleteValue)
-     * @param key the {@link StoreKey} whose PUT is required
-     * @param deleteValue the delete {@link IndexValue} associated with the same {@code key}
-     * @param indexSegmentOfUpdateValue the {@link IndexSegment} that {@code deleteValue} belongs to
-     * @return the {@link IndexValue} for the PUT in the {@link #srcIndex} (if it exists)
-     */
-    private IndexValue getPutValueFromDeleteEntry(StoreKey key, IndexValue deleteValue,
-        IndexSegment indexSegmentOfUpdateValue) {
-      // TODO: find a way to test this?
-      IndexValue putValue = null;
-      long putRecordOffset = deleteValue.getOriginalMessageOffset();
-      if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != deleteValue.getOffset()
-          .getOffset() && indexSegmentOfUpdateValue.getStartOffset().getOffset() <= putRecordOffset) {
-        try (BlobReadOptions options = srcIndex.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class))) {
-          Offset offset = new Offset(indexSegmentOfUpdateValue.getStartOffset().getName(), options.getOffset());
-          MessageInfo info = options.getMessageInfo();
-          putValue = new IndexValue(info.getSize(), offset, info.getExpirationTimeInMs(), info.getOperationTimeMs(),
-              info.getAccountId(), info.getContainerId());
-        } catch (StoreException e) {
-          logger.error("Fetching PUT index entry of {} in {} failed", key, indexSegmentOfUpdateValue.getStartOffset());
-        }
-      }
-      return putValue;
     }
 
     /**
@@ -1391,7 +1409,7 @@ class BlobStoreCompactor {
 
     /**
      * Gets all the valid index entries in the given list of index entries.
-     * @param indexSegment the {@link IndexSegment} that {@code allIndexEntries} are from.
+     * @param indexSegment the {@link IndexSegment} that index entries are from.
      * @return the list of valid entries generated from {@code allIndexEntries}. May contain entries not in
      * {@code allIndexEntries}.
      * @throws StoreException if {@link BlobReadOptions} could not be obtained from the store for deleted blobs.
@@ -1411,7 +1429,7 @@ class BlobStoreCompactor {
       // ----------------------------------------------------------------------------------------
       // Current IndexValue  | Latest IndexValue | Is Valid                                     |
       // --------------------+-------------------+----------------------------------------------|
-      // Put(verion c)       | Put(version f)    | isExpired(Pc)?false:true                     |
+      // Put(version c)      | Put(version f)    | isExpired(Pc)?false:true                     |
       //                     | Delete(f)         | reachRetention(Df)||isExpired(Df)?false:true |
       //                     | Undelete(f)       | isExpired(Uf)?false:true                     |
       // --------------------+-------------------+----------------------------------------------|
@@ -1420,7 +1438,7 @@ class BlobStoreCompactor {
       //                     | Undelete(f)       | true                                         |
       // --------------------+-------------------+----------------------------------------------|
       // Delete(c)           | Put(f)            | Exception                                    |
-      //                     | Delete(f)         | c==f?true:false                              |
+      //                     | Delete(f)         | c==f && !isRemovable(Df) ? true : false      |
       //                     | Undelete(f)       | false                                        |
       // --------------------+-------------------+----------------------------------------------|
       // Undelete(c)         | Put(f)            | Exception                                    |
@@ -1443,7 +1461,7 @@ class BlobStoreCompactor {
           logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
         }
         // If an IndexSegment contains more than one IndexValue for the same StoreKey, then they must follow each other
-        // since IndexSegment store IndexValues based on StoreKey. If the current key equals to the previous key, then
+        // since IndexSegment stores IndexValues based on StoreKey. If the current key equals to the previous key, then
         // we don't have to query the latest state again.
         if (currentKey.equals(previousKey)) {
           currentLatestState = previousLatestState;
@@ -1467,7 +1485,15 @@ class BlobStoreCompactor {
                 "Delete's latest state can't be put for key" + currentKey + " in store " + dataDir);
           }
           if (currentLatestState.isDelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()) {
-            validEntries.add(entry);
+            // check if this is a removable delete tombstone.
+            if (config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(currentValue)
+                && getPutValueFromSrc(currentKey, currentValue, indexSegment) == null) {
+              logger.debug(
+                  "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
+                  currentKey, currentValue.getExpiresAtMs());
+            } else {
+              validEntries.add(entry);
+            }
           }
         } else if (currentValue.isTtlUpdate()) {
           if (currentLatestState.isPut()) {

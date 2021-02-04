@@ -1227,7 +1227,7 @@ public class BlobStoreStatsTest {
     int expectedNumberOfLogSegments = 0;
     long expectedTotalLogSegmentValidSize = 0L;
     LogSegment logSegment = state.log.getFirstSegment();
-    Set<MockId> seenPuts = new HashSet<>();
+    Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     while (logSegment != null) {
       String logSegmentName = logSegment.getName();
@@ -1236,7 +1236,7 @@ public class BlobStoreStatsTest {
 
       long expectedLogSegmentValidSize =
           state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInMs(), expiryReferenceTime, null,
-              seenPuts, deleteTombstoneStats);
+              deleteTombstoneStats, expiredDeletes, true);
       long actualLogSegmentValidSize = actualLogSegmentValidSizeMap.getSecond().get(logSegmentName);
       assertEquals("Valid data size mismatch for log segment: " + logSegmentName + " in TimeRange " + timeRange,
           expectedLogSegmentValidSize, actualLogSegmentValidSize);
@@ -1270,11 +1270,11 @@ public class BlobStoreStatsTest {
   private Map<String, Map<String, Long>> getValidSizeByContainer(long deleteReferenceTimeInMs,
       long expiryReferenceTimeInMs, Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
     Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
-    Set<MockId> seenPuts = new HashSet<>();
+    Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     for (Offset indSegStartOffset : state.referenceIndex.keySet()) {
       List<IndexEntry> validEntries =
           state.getValidIndexEntriesForIndexSegment(indSegStartOffset, deleteReferenceTimeInMs, expiryReferenceTimeInMs,
-              null, seenPuts, deleteTombstoneStats);
+              null, deleteTombstoneStats, expiredDeletes, true);
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
         if (indexValue.isPut()) {

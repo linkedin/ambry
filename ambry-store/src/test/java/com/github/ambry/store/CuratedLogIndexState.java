@@ -846,16 +846,18 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
    *                                cleaned up. All other use cases should use {@code null}.
-   * @param seenPuts the PUTs in previous log segments seen so far.
    * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
+   * @param expiredDeletes a pair of two sets of deletes. The first one contains expired delete tombstones (with no
+   *                       associated PUT); the second one includes expired deletes currently with PUTs ahead of them.
+   * @param invalidateExpiredDelete whether to invalidate the expired delete.
    * @return the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
    */
   long getValidDataSizeForLogSegment(LogSegment segment, long deleteReferenceTimeMs, long expiryReferenceTimeMs,
-      FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
-      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
+      FileSpan fileSpanUnderCompaction, Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats,
+      Pair<Set<MockId>, Set<MockId>> expiredDeletes, boolean invalidateExpiredDelete) {
     List<IndexEntry> validEntries =
         getValidIndexEntriesForLogSegment(segment, deleteReferenceTimeMs, expiryReferenceTimeMs,
-            fileSpanUnderCompaction, seenPuts, deleteTombstoneStats);
+            fileSpanUnderCompaction, deleteTombstoneStats, expiredDeletes, invalidateExpiredDelete);
     long size = 0;
     for (IndexEntry indexEntry : validEntries) {
       size += indexEntry.getValue().getSize();
@@ -870,19 +872,22 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
    *                                cleaned up. All other use cases should use {@code null}.
-   * @param seenPuts the PUTs in previous segments seen so far.
    * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
+   * @param expiredDeletes a pair of two sets of deletes. The first one contains expired delete tombstones (with no
+   *                       associated PUT); the second one includes expired deletes currently with PUTs ahead of them.
+   * @param invalidateExpiredDelete whether to invalidate expired delete.
    * @return all the valid index entries in the {@code segment}.
    */
   List<IndexEntry> getValidIndexEntriesForLogSegment(LogSegment segment, long deleteReferenceTimeMs,
-      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
-      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
+      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction,
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats, Pair<Set<MockId>, Set<MockId>> expiredDeletes,
+      boolean invalidateExpiredDelete) {
     List<IndexEntry> validEntries = new ArrayList<>();
     Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
     while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
       validEntries.addAll(
           getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, deleteReferenceTimeMs, expiryReferenceTimeMs,
-              fileSpanUnderCompaction, seenPuts, deleteTombstoneStats));
+              fileSpanUnderCompaction, deleteTombstoneStats, expiredDeletes, invalidateExpiredDelete));
       indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
     }
     return validEntries;
@@ -1565,13 +1570,16 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant
    * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will
    *                                cleaned up. All other use cases should use {@code null}.
-   * @param seenPuts the PUTs in previous segments seen so far.
    * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
+   * @param expiredDeletes a pair of two sets of deletes. The first one contains expired delete tombstones (with no
+   *                       associated PUT); the second one includes expired deletes currently with PUTs ahead of them.
+   * @param invalidateExpiredDelete whether to invalidate expired delete.
    * @return all the valid index entries valid in the index segment with start offset {@code indexSegmentStartOffset}.
    */
   List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
-      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction, Set<MockId> seenPuts,
-      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
+      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction,
+      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats, Pair<Set<MockId>, Set<MockId>> expiredDeletes,
+      boolean invalidateExpiredDelete) {
     List<IndexEntry> validEntries = new ArrayList<>();
     if (referenceIndex.containsKey(indexSegmentStartOffset)) {
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset)
@@ -1589,16 +1597,34 @@ class CuratedLogIndexState {
             }
           } else if (currentValue.isDelete()) {
             if (latestValue.isDelete() && latestValue.getLifeVersion() == currentValue.getLifeVersion()) {
-              validEntries.add(currentEntry);
-            }
-            // if this is a delete tombstone left by compaction, do some counting.
-            if (!seenPuts.contains(key)) {
-              if (currentValue.getExpiresAtMs() == -1 || currentValue.isTtlUpdate()) {
-                deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
-                deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
-              } else {
-                deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
-                deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
+              // check if this is a delete tombstone left by compaction
+              boolean isValid = true;
+              try {
+                if (index.findKey(key, null, EnumSet.of(PersistentIndex.IndexEntryType.PUT)) == null) {
+                  if (currentValue.getExpiresAtMs() == Utils.Infinite_Time || currentValue.isTtlUpdate()) {
+                    // TODO check validity of permanent delete tombstone
+                    deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
+                    deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
+                  } else {
+                    deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
+                    deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
+                    if (invalidateExpiredDelete && currentValue.getExpiresAtMs() < time.milliseconds()) {
+                      isValid = false;
+                      expiredDeletes.getFirst().add(key);
+                    }
+                  }
+                } else {
+                  // if this is a delete with PUT, we check if it has expired and track it in a separate set
+                  if (invalidateExpiredDelete && currentValue.getExpiresAtMs() != Utils.Infinite_Time
+                      && currentValue.getExpiresAtMs() < time.milliseconds()) {
+                    expiredDeletes.getSecond().add(key);
+                  }
+                }
+              } catch (Exception e) {
+                // do nothing for now
+              }
+              if (isValid) {
+                validEntries.add(currentEntry);
               }
             }
           } else if (currentValue.isTtlUpdate()) {
@@ -1616,8 +1642,7 @@ class CuratedLogIndexState {
               validEntries.add(currentEntry);
             }
           } else {
-            // current index value PUT
-            seenPuts.add(key);
+            // current index value is PUT
             if (!isExpiredAt(key, expiryReferenceTimeMs)) {
               if (latestValue.isPut()) {
                 validEntries.add(new IndexEntry(key, currentValue));
