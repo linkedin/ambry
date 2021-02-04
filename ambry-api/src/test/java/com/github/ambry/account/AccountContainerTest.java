@@ -52,6 +52,7 @@ public class AccountContainerTest {
   private AccountStatus refAccountStatus;
   private int refAccountSnapshotVersion;
   private JSONObject refAccountJson;
+  private boolean refAccountAclInheritedByContainer;
 
   // Reference Container fields
   private List<Short> refContainerIds;
@@ -67,6 +68,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerTtlRequiredValues;
   private List<Long> refContainerDeleteTriggerTime;
   private List<Boolean> refContainerSignedPathRequiredValues;
+  private List<Boolean> refContainerOverrideAccountAcls;
   private List<Set<String>> refContainerContentTypeWhitelistForFilenamesOnDownloadValues;
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
@@ -90,6 +92,7 @@ public class AccountContainerTest {
     refAccountId = Utils.getRandomShort(random);
     refAccountName = UUID.randomUUID().toString();
     refAccountStatus = random.nextBoolean() ? AccountStatus.ACTIVE : AccountStatus.INACTIVE;
+    refAccountAclInheritedByContainer = random.nextBoolean();
     refAccountSnapshotVersion = random.nextInt();
     initializeRefContainers();
     refAccountJson = new JSONObject();
@@ -97,6 +100,7 @@ public class AccountContainerTest {
     refAccountJson.put(ACCOUNT_ID_KEY, refAccountId);
     refAccountJson.put(ACCOUNT_NAME_KEY, refAccountName);
     refAccountJson.put(Account.STATUS_KEY, refAccountStatus.name());
+    refAccountJson.put(ACL_INHERITED_BY_CONTAINER_KEY, refAccountAclInheritedByContainer);
     refAccountJson.put(Account.SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion);
     refAccountJson.put(CONTAINERS_KEY, containerJsonList);
     refAccountJson.put(Account.LAST_MODIFIED_TIME_KEY, 0);
@@ -116,7 +120,8 @@ public class AccountContainerTest {
   @Test
   public void testConstructAccountAndContainerFromArguments() throws JSONException {
     Account accountFromArguments =
-        new Account(refAccountId, refAccountName, refAccountStatus, refAccountSnapshotVersion, refContainers);
+        new Account(refAccountId, refAccountName, refAccountStatus, refAccountAclInheritedByContainer,
+            refAccountSnapshotVersion, refContainers);
     assertAccountAgainstReference(accountFromArguments, true, true);
   }
 
@@ -359,15 +364,14 @@ public class AccountContainerTest {
   public void testAccountBuilder() throws JSONException {
     // build an account with arguments supplied
     AccountBuilder accountBuilder =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).snapshotVersion(refAccountSnapshotVersion);
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).snapshotVersion(refAccountSnapshotVersion)
+            .aclInheritedByContainer(refAccountAclInheritedByContainer);
     Account accountByBuilder = accountBuilder.build();
     assertAccountAgainstReference(accountByBuilder, false, false);
 
     // set containers
-    List<Container> containers = new ArrayList<>();
     for (int i = 0; i < CONTAINER_COUNT; i++) {
       Container container = Container.fromJson(containerJsonList.get(i), refAccountId);
-      containers.add(container);
       accountBuilder.addOrUpdateContainer(container);
     }
     accountByBuilder = accountBuilder.build();
@@ -404,6 +408,7 @@ public class AccountContainerTest {
               .setSecurePathRequired(refContainerSignedPathRequiredValues.get(i))
               .setContentTypeWhitelistForFilenamesOnDownload(
                   refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i))
+              .setOverrideAccountAcl(refContainerOverrideAccountAcls.get(i))
               .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(i));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
@@ -745,12 +750,12 @@ public class AccountContainerTest {
     // Check two accounts with same fields but no containers.
     Account accountNoContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
     Account accountNoContainerDuplicate = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
-    assertTrue("Two accounts should be equal.", accountNoContainer.equals(accountNoContainerDuplicate));
+    assertEquals("Two accounts should be equal.", accountNoContainer, accountNoContainerDuplicate);
 
     // Check two accounts with same fields and containers.
     Account accountWithContainers = Account.fromJson(refAccountJson);
     Account accountWithContainersDuplicate = Account.fromJson(refAccountJson);
-    assertTrue("Two accounts should be equal.", accountWithContainers.equals(accountWithContainersDuplicate));
+    assertEquals("Two accounts should be equal.", accountWithContainers, accountWithContainersDuplicate);
 
     // Check two accounts with same fields but one has containers, the other one does not.
     assertFalse("Two accounts should not be equal.", accountNoContainer.equals(accountWithContainers));
@@ -766,6 +771,8 @@ public class AccountContainerTest {
             .setMediaScanDisabled(refContainerMediaScanDisabledValues.get(0))
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
+            .setSecurePathRequired(refContainerSignedPathRequiredValues.get(0))
+            .setOverrideAccountAcl(refContainerOverrideAccountAcls.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
@@ -791,6 +798,8 @@ public class AccountContainerTest {
     assertEquals(refAccountName, account.getName());
     assertEquals(refAccountStatus, account.getStatus());
     assertEquals("Snapshot versions do not match", refAccountSnapshotVersion, account.getSnapshotVersion());
+    assertEquals("Acl inherited by container settings don't match", refAccountAclInheritedByContainer,
+        account.isAclInheritedByContainer());
     if (compareMetadata) {
       assertAccountJsonSerDe(false, account);
       assertAccountJsonSerDe(true, account);
@@ -860,6 +869,8 @@ public class AccountContainerTest {
         assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, container.isTtlRequired());
         assertEquals("Wrong secure path required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
             container.isSecurePathRequired());
+        assertEquals("Wrong override account acl setting", OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE,
+            container.isAccountAclOverridden());
         break;
       case Container.JSON_VERSION_2:
         assertEquals("Wrong encryption setting", refContainerEncryptionValues.get(index), container.isEncrypted());
@@ -872,6 +883,8 @@ public class AccountContainerTest {
         assertEquals("Wrong ttl required setting", refContainerTtlRequiredValues.get(index), container.isTtlRequired());
         assertEquals("Wrong secure path required setting", refContainerSignedPathRequiredValues.get(index),
             container.isSecurePathRequired());
+        assertEquals("Wrong override account acl setting", refContainerOverrideAccountAcls.get(index),
+            container.isAccountAclOverridden());
         Set<String> expectedContentTypeWhitelistForFilenamesOnDownloadValue =
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index) == null ? Collections.emptySet()
                 : refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index);
@@ -919,8 +932,8 @@ public class AccountContainerTest {
   private void createAccountWithBadContainersAndFail(List<Container> containers,
       Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass,
-        () -> new Account(refAccountId, refAccountName, refAccountStatus, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
-            containers), null);
+        () -> new Account(refAccountId, refAccountName, refAccountStatus, refAccountAclInheritedByContainer,
+            Account.SNAPSHOT_VERSION_DEFAULT_VALUE, containers), null);
   }
 
   /**
@@ -945,7 +958,7 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          false, Collections.emptySet(), false, (short) 0, System.currentTimeMillis());
+          false, Collections.emptySet(), false, false, (short) 0, System.currentTimeMillis());
     }, null);
   }
 
@@ -967,6 +980,7 @@ public class AccountContainerTest {
     refContainerTtlRequiredValues = new ArrayList<>();
     refContainerDeleteTriggerTime = new ArrayList<>();
     refContainerSignedPathRequiredValues = new ArrayList<>();
+    refContainerOverrideAccountAcls = new ArrayList<>();
     refContainerContentTypeWhitelistForFilenamesOnDownloadValues = new ArrayList<>();
     containerJsonList = new ArrayList<>();
     refContainers = new ArrayList<>();
@@ -997,6 +1011,7 @@ public class AccountContainerTest {
       }
       refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
+      refContainerOverrideAccountAcls.add(random.nextBoolean());
       refContainerDeleteTriggerTime.add((long) 0);
       if (i == 0) {
         refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
@@ -1012,7 +1027,7 @@ public class AccountContainerTest {
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
           refContainerTtlRequiredValues.get(i), refContainerSignedPathRequiredValues.get(i),
           refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
-          refAccountId, refContainerDeleteTriggerTime.get(i)));
+          refContainerOverrideAccountAcls.get(i), refAccountId, refContainerDeleteTriggerTime.get(i)));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
   }
@@ -1060,6 +1075,7 @@ public class AccountContainerTest {
         containerJson.putOpt(REPLICATION_POLICY_KEY, container.getReplicationPolicy());
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
         containerJson.put(SECURE_PATH_REQUIRED_KEY, container.isSecurePathRequired());
+        containerJson.put(OVERRIDE_ACCOUNT_ACL_KEY, container.isAccountAclOverridden());
         containerJson.put(Container.LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
         containerJson.put(Container.SNAPSHOT_VERSION_KEY, container.getSnapshotVersion());
         if (container.getContentTypeWhitelistForFilenamesOnDownload() != null

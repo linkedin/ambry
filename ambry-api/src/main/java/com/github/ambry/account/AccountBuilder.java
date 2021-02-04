@@ -30,8 +30,9 @@ public class AccountBuilder {
   private short id;
   private String name;
   private AccountStatus status;
-  private int snapshotVersion = Account.SNAPSHOT_VERSION_DEFAULT_VALUE;
+  private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
+  private boolean aclInheritedByContainer = ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE;
   private Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
 
   /**
@@ -46,6 +47,7 @@ public class AccountBuilder {
     id = origin.getId();
     name = origin.getName();
     status = origin.getStatus();
+    aclInheritedByContainer = origin.isAclInheritedByContainer();
     snapshotVersion = origin.getSnapshotVersion();
     lastModifiedTime = origin.getLastModifiedTime();
     for (Container container : origin.getAllContainers()) {
@@ -119,6 +121,16 @@ public class AccountBuilder {
   }
 
   /**
+   * Specifies whether acl of {@link Account} is inherited by {@link Container}.
+   * @param aclInheritedByContainer whether account's ACL is inherited by container.
+   * @return This builder.
+   */
+  public AccountBuilder aclInheritedByContainer(boolean aclInheritedByContainer) {
+    this.aclInheritedByContainer = aclInheritedByContainer;
+    return this;
+  }
+
+  /**
    * Clear the set of containers for the {@link Account} to build and add the provided ones.
    * @param containers A collection of {@link Container}s to use. Can be {@code null} to just remove all containers.
    * @return This builder.
@@ -170,6 +182,6 @@ public class AccountBuilder {
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
   public Account build() {
-    return new Account(id, name, status, snapshotVersion, idToContainerMetadataMap.values(), lastModifiedTime);
+    return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(), lastModifiedTime);
   }
 }
