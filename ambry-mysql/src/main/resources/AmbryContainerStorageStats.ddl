@@ -19,18 +19,19 @@
  */
 CREATE TABLE IF NOT EXISTS AccountReports
 (
-    clusterName VARCHAR(25) NOT NULL,
-    hostname VARCHAR(30) NOT NULL,
-    partitionId INT NOT NULL,
-    accountId INT NOT NULL,
-    containerId INT NOT NULL,
-    storageUsage BIGINT NOT NULL,
-    updatedAt TIMESTAMP NOT NULL,
+    clusterName  VARCHAR(25) NOT NULL,
+    hostname     VARCHAR(30) NOT NULL,
+    partitionId  INT         NOT NULL,
+    accountId    INT         NOT NULL,
+    containerId  INT         NOT NULL,
+    storageUsage BIGINT      NOT NULL,
+    updatedAt    TIMESTAMP   NOT NULL,
 
-    PRIMARY KEY(clusterName, hostname, partitionId, accountId, containerId),
+    PRIMARY KEY (clusterName, hostname, partitionId, accountId, containerId),
     INDEX updatedAtIndex (updatedAt)
 )
-CHARACTER SET utf8 COLLATE utf8_bin;
+    CHARACTER SET utf8
+    COLLATE utf8_bin;
 
 /**
  * This table is created to store aggregated account storage usage. An aggregation task will be activated to read all
@@ -38,15 +39,16 @@ CHARACTER SET utf8 COLLATE utf8_bin;
  */
 CREATE TABLE IF NOT EXISTS AggregatedAccountReports
 (
-    clusterName VARCHAR(25) NOT NULL,
-    accountId INT NOT NULL,
-    containerId INT NOT NULL,
-    storageUsage BIGINT NOT NULL,
-    updatedAt TIMESTAMP NOT NULL,
+    clusterName  VARCHAR(25) NOT NULL,
+    accountId    INT         NOT NULL,
+    containerId  INT         NOT NULL,
+    storageUsage BIGINT      NOT NULL,
+    updatedAt    TIMESTAMP   NOT NULL,
 
     PRIMARY KEY (clusterName, accountId, containerId)
 )
-CHARACTER SET utf8 COLLATE utf8_bin;
+    CHARACTER SET utf8
+    COLLATE utf8_bin;
 
 /**
  * This table is created to keep a copy of aggregated container storage usage from table AggregatedAccountReports at the
@@ -61,6 +63,59 @@ CREATE TABLE IF NOT EXISTS MonthlyAggregatedAccountReports LIKE AggregatedAccoun
 CREATE TABLE IF NOT EXISTS AggregatedAccountReportsMonth
 (
     clusterName VARCHAR(25) NOT NULL PRIMARY KEY,
-    month VARCHAR(25) NOT NULL
+    month       VARCHAR(25) NOT NULL
 )
-CHARACTER SET utf8 COLLATE utf8_bin;
+    CHARACTER SET utf8
+    COLLATE utf8_bin;
+
+/**
+ * This table is created to keep a list of partition class names. In "prod" cluster, we have "default".
+ * In "test" cluster, we have "default" and "new-replication". For these three classes, we would have rows below:
+ * ------------------------------------
+ * clusterName  |name             |id |
+ * ------------------------------------
+ * prod         |default          |1  |
+ * test         |default          |2  |
+ * test         |new-replication  |3  |
+ * ------------------------------------
+ */
+CREATE TABLE IF NOT EXISTS PartitionClassNames
+(
+    id          SMALLINT    NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    clusterName VARCHAR(25) NOT NULL,
+    name        VARCHAR(45) NOT NULL,
+
+    UNIQUE KEY (clusterName, name)
+)
+    CHARACTER SET utf8
+    COLLATE utf8_bin;
+
+/**
+ * This table is created to store all the partition ids and its corresponding partition class id.
+ */
+CREATE TABLE IF NOT EXISTS Partitions
+(
+    clusterName      VARCHAR(25) NOT NULL,
+    id               INT         NOT NULL,
+    partitionClassId SMALLINT    NOT NULL,
+
+    PRIMARY KEY (clusterName, id)
+)
+    CHARACTER SET utf8
+    COLLATE utf8_bin;
+
+/**
+ * This table is created to store the aggregated partition class report.
+ */
+CREATE TABLE IF NOT EXISTS AggregatedPartitionClassReports
+(
+    partitionClassId SMALLINT  NOT NULL,
+    accountId        INT       NOT NULL,
+    containerId      INT       NOT NULL,
+    storageUsage     BIGINT    NOT NULL,
+    updatedAt        TIMESTAMP NOT NULL,
+
+    PRIMARY KEY (partitionClassId, accountId, containerId)
+)
+    CHARACTER SET utf8
+    COLLATE utf8_bin;
