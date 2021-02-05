@@ -133,6 +133,7 @@ public class FrontendRestRequestServiceTest {
   private final String datacenterName = "Data-Center";
   private final String hostname = "localhost";
   private final String clusterName = "ambry-test";
+  private final String excludedAccountName = "multitenant";
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
@@ -157,6 +158,7 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.secure.path.prefix", SECURE_PATH_PREFIX);
     configProps.setProperty("frontend.path.prefixes.to.remove", "/media");
     configProps.setProperty("frontend.enable.undelete", "true");
+    configProps.setProperty(FrontendConfig.CONTAINER_METRICS_EXCLUDED_ACCOUNTS, "random-name," + excludedAccountName);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
@@ -655,6 +657,25 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
         !refContainer.isCacheable(), null, null, RestServiceErrorCode.InternalServerError);
+  }
+
+  /**
+   * Tests that container metrics are not generated when the target account is in the excluded list.
+   * @throws Exception
+   */
+  @Test
+  public void containerMetricsExclusionTest() throws Exception {
+    short excludedAccountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = 2;
+    String containerName = "tenant1";
+    Container container = new ContainerBuilder(containerId, containerName, Container.ContainerStatus.ACTIVE, "test",
+        excludedAccountId).build();
+    Account excludedAccount =
+        new AccountBuilder(excludedAccountId, excludedAccountName, Account.AccountStatus.ACTIVE).addOrUpdateContainer(
+            container).build();
+    accountService.updateAccounts(Collections.singletonList(excludedAccount));
+    postBlobAndVerifyWithAccountAndContainer(excludedAccountName, containerName, "serviceId", !container.isCacheable(),
+        excludedAccount, container, null);
   }
 
   /**
@@ -2423,6 +2444,15 @@ public class FrontendRestRequestServiceTest {
         restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
     assertEquals("Wrong container object in RestRequest's args", expectedContainer,
         restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
+    if (expectedRestErrorCode == null) {
+      // Verify that container metrics were injected iff the account is not in the exclusion list
+      ContainerMetrics containerMetrics = restRequest.getMetricsTracker().getContainerMetrics();
+      if (frontendConfig.containerMetricsExcludedAccounts.contains(accountName)) {
+        assertNull("Expected no container metrics", containerMetrics);
+      } else {
+        assertNotNull("Expected container metrics", containerMetrics);
+      }
+    }
     return expectedRestErrorCode == null ? restResponseChannel.getHeader(RestUtils.Headers.LOCATION) : null;
   }
 

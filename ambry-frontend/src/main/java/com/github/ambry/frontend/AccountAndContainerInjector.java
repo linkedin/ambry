@@ -287,8 +287,11 @@ public class AccountAndContainerInjector {
     logger.trace("Setting targetAccount={} and targetContainer={} for restRequest={} ", targetAccount, targetContainer,
         restRequest);
     if (metricsGroup != null) {
-      restRequest.getMetricsTracker()
-          .injectContainerMetrics(metricsGroup.getContainerMetrics(targetAccount.getName(), targetContainer.getName()));
+      if (!frontendConfig.containerMetricsExcludedAccounts.contains(targetAccount.getName())) {
+        restRequest.getMetricsTracker()
+            .injectContainerMetrics(
+                metricsGroup.getContainerMetrics(targetAccount.getName(), targetContainer.getName()));
+      }
     }
   }
 
