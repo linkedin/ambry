@@ -22,6 +22,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -128,10 +129,12 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
         exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
-      } else if (quotaManager.getQuotaConfig().requestThrottlingEnabled && quotaManager.getThrottleRecommendation(restRequest)
-          .shouldThrottle()) {
-        // TODO Use ThrottlingRecommendation to set response headers about quota usage.
-        exception = new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests);
+      } else if (quotaManager != null && quotaManager.getQuotaConfig().requestThrottlingEnabled) {
+        ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
+        if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()) {
+          // TODO Use ThrottlingRecommendation to set response headers about quota usage.
+          exception = new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests);
+        }
       } else {
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
           accountAndContainerNamePreconditionCheck(restRequest);
@@ -247,7 +250,7 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
-    if (quotaManager.getQuotaConfig().requestThrottlingEnabled) {
+    if (quotaManager != null) {
       quotaManager.charge(restRequest, blobInfo);
       // TODO Use ThrottlingRecommendation returned from charge() to set appropriate response headers.
     }

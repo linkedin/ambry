@@ -36,7 +36,7 @@ public interface QuotaManager {
    * @param restRequest {@link RestRequest} object.
    * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
-    ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
+  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
 
   /**
    * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
