@@ -236,9 +236,6 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals(expectedConnectionFail, storeMetrics.connectionFailureCount.getCount());
     assertEquals(expectedConnectionSuccess, storeMetrics.connectionSuccessCount.getCount());
     mySqlAccountService.fetchAndUpdateCache();
-    // TODO: after getPreparedStatement tries to upgrade, should fail then succeed
-    assertEquals(expectedConnectionFail, storeMetrics.connectionFailureCount.getCount());
-    assertEquals(expectedConnectionSuccess, storeMetrics.connectionSuccessCount.getCount());
   }
 
   /**
@@ -610,12 +607,7 @@ public class MySqlAccountServiceIntegrationTest {
     //3. close db connection manually
     mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection(true).close();
 
-    //4. query db - should fail with exception and clear prepared statement cache
-    ThrowingConsumer<SQLException> errorAction = e -> assertFalse("Exception should not be a non-transient exception",
-        e.getCause() instanceof SQLNonTransientException);
-    TestUtils.assertException(SQLException.class, () -> mySqlAccountStore.getNewAccounts(0), errorAction);
-
-    //5. query db - should establish new connection and get results.
+    //4. query db - should establish new connection and get results.
     assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
   }
 
