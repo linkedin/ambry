@@ -54,10 +54,6 @@ public class MySqlDataAccessorTest {
     // Pass no endpoints
     expectFailure(() -> new MySqlDataAccessor(Collections.emptyList(), localDc, metrics), "no endpoints",
         e -> e instanceof IllegalArgumentException);
-    // Pass endpoints with none writable
-    DbEndpoint readOnlyEndpoint = new DbEndpoint(localUrl, localDc, false, username, password);
-    expectFailure(() -> new MySqlDataAccessor(Collections.singletonList(readOnlyEndpoint), localDc, metrics),
-        "no writable endpoint", e -> e instanceof IllegalArgumentException);
   }
 
   @Test
@@ -76,14 +72,22 @@ public class MySqlDataAccessorTest {
     bringEndpointDown(localEndpoint, localConnection);
     assertEquals(remoteConnection, dataAccessor.getDatabaseConnection(true));
 
+    // Single read-only endpoint
+    DbEndpoint readOnlyEndpoint = new DbEndpoint(readonlyUrl, remoteDc, false, username, password);
+    Connection readOnlyConnection = mock(Connection.class);
+    bringEndpointUp(readOnlyEndpoint, readOnlyConnection);
+    dataAccessor = new MySqlDataAccessor(Collections.singletonList(readOnlyEndpoint), mockDriver, metrics);
+    // Ask for readonly connection: expect to connect
+    assertEquals(readOnlyConnection, dataAccessor.getDatabaseConnection(false));
+    // Ask for writable connection, expect to fail
+    expectFailure(() -> dataAccessor.getDatabaseConnection(true), "no writable connection",
+        e -> e instanceof SQLException);
+
     // Two endpoints, one writable one readonly
     DbEndpoint writableEndpoint = new DbEndpoint(writableUrl, remoteDc, true, username, password);
-    DbEndpoint readonlyEndpoint = new DbEndpoint(readonlyUrl, remoteDc, false, username, password);
     Connection writableConnection = mock(Connection.class);
-    Connection readonlyConnection = mock(Connection.class);
     bringEndpointUp(writableEndpoint, writableConnection);
-    bringEndpointUp(readonlyEndpoint, readonlyConnection);
-    dataAccessor = new MySqlDataAccessor(Arrays.asList(readonlyEndpoint, writableEndpoint), mockDriver, metrics);
+    dataAccessor = new MySqlDataAccessor(Arrays.asList(readOnlyEndpoint, writableEndpoint), mockDriver, metrics);
     // If both endpoints are available, expect to connect to writable one
     assertEquals(writableConnection, dataAccessor.getDatabaseConnection(true));
     // Bring writable endpoint down
@@ -92,7 +96,7 @@ public class MySqlDataAccessorTest {
     expectFailure(() -> dataAccessor.getDatabaseConnection(true), "no writable connection",
         e -> e.equals(connectionException));
     // Ask for readonly connection: expect to connect
-    assertEquals(readonlyConnection, dataAccessor.getDatabaseConnection(false));
+    assertEquals(readOnlyConnection, dataAccessor.getDatabaseConnection(false));
     // Now bring writable endpoint back up.  Request for readonly connection should fail back.
     bringEndpointUp(writableEndpoint, writableConnection);
     assertEquals(writableConnection, dataAccessor.getDatabaseConnection(false));

@@ -95,4 +95,13 @@ public class MySqlAccountStore {
   public Collection<Container> getContainersByAccount(short accountId) throws SQLException {
     return accountDao.getContainers(accountId);
   }
+
+  /**
+   * Helper method to close the active connection, if there is one.
+   */
+  public void closeConnection() {
+    if (mySqlDataAccessor != null) {
+      mySqlDataAccessor.closeActiveConnection();
+    }
+  }
 }

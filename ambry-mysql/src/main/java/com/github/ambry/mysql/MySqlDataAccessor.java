@@ -101,15 +101,11 @@ public class MySqlDataAccessor {
     endpointComparator = new EndpointComparator(localDatacenter);
     Collections.sort(inputEndpoints, endpointComparator);
     sortedDbEndpoints = inputEndpoints;
-    if (!sortedDbEndpoints.get(0).isWriteable()) {
-      throw new IllegalArgumentException("No endpoints are writable");
-    }
-
     initializeDriver(sortedDbEndpoints.get(0).getUrl());
 
     // AccountService needs to work if mysql is down.  Mysql can also reboot.
     try {
-      getDatabaseConnection(true);
+      getDatabaseConnection(false);
     } catch (SQLException e) {
       if (isCredentialError(e)) {
         throw e;
@@ -126,7 +122,6 @@ public class MySqlDataAccessor {
   }
 
   /**
-   * Return true when active connection is available.
    * @return True when active connection is available.
    */
   public synchronized boolean hasActiveConnection() {
@@ -192,13 +187,19 @@ public class MySqlDataAccessor {
    */
   public synchronized Connection getDatabaseConnection(boolean needWritable) throws SQLException {
 
+    DbEndpoint bestEndpoint = sortedDbEndpoints.get(0);
+    if (needWritable && !bestEndpoint.isWriteable()) {
+      // Can never be satisfied
+      throw noWritableEndpointException;
+    }
+
     // Close active connection if no longer valid
     if (activeConnection != null && !activeConnection.isValid(5)) {
       closeActiveConnection();
     }
 
     // If the active connection is good and it's the best endpoint, keep it.
-    if (activeConnection != null && !isBetterEndpoint(sortedDbEndpoints.get(0), connectedEndpoint)) {
+    if (activeConnection != null && !isBetterEndpoint(bestEndpoint, connectedEndpoint)) {
       return activeConnection;
     }
     // See if we can do better
@@ -281,7 +282,7 @@ public class MySqlDataAccessor {
       lastConnectionAttemptTime = now;
     }
     PreparedStatement statement = statementCache.get(sql);
-    if (statement != null) {
+    if (statement != null && !statement.isClosed()) {
       return statement;
     }
     Connection connection = getDatabaseConnection(needWritable);
@@ -346,9 +347,8 @@ public class MySqlDataAccessor {
 
   /**
    * Close the active connection and clear the statement cache.
-   * This should be called after a failed database operation.
    */
-  synchronized void closeActiveConnection() {
+  public synchronized void closeActiveConnection() {
     for (PreparedStatement statement : statementCache.values()) {
       closeQuietly(statement);
     }

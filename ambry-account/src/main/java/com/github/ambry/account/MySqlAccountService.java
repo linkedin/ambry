@@ -168,6 +168,8 @@ public class MySqlAccountService extends AbstractAccountService {
       Collection<Container> updatedContainersInDB = mySqlAccountStore.getNewContainers(lastModifiedTime);
       long endTimeMs = System.currentTimeMillis();
       accountServiceMetrics.fetchRemoteAccountTimeInMs.update(endTimeMs - startTimeMs);
+      // Close connection and get fresh one next time
+      mySqlAccountStore.closeConnection();
 
       if (!updatedAccountsInDB.isEmpty() || !updatedContainersInDB.isEmpty()) {
         logger.info("Found {} accounts and {} containers", updatedAccountsInDB.size(), updatedContainersInDB.size());
