@@ -50,6 +50,7 @@ public class AccountServiceMetrics {
   public final Counter accountFetchFromAmbryServerErrorCount;
   public final Counter accountUpdatesToStoreErrorCount;
   public final Counter getAccountInconsistencyCount;
+  public final Counter onDemandContainerFetchCount;
 
   // Gauge
   Gauge<Integer> accountDataInconsistencyCount;
@@ -102,6 +103,8 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "AccountFetchFromAmbryServerErrorCount"));
     getAccountInconsistencyCount =
         metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, "GetAccountInconsistencyCount"));
+    onDemandContainerFetchCount =
+        metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, "onDemandContainerFetchCount"));
   }
 
   /**
@@ -130,7 +133,6 @@ public class AccountServiceMetrics {
    */
   void trackContainerCount(Gauge<Integer> gauge) {
     containerCountGauge = gauge;
-    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, "ContainerCount"),
-        containerCountGauge);
+    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, "ContainerCount"), containerCountGauge);
   }
 }

@@ -125,9 +125,21 @@ public interface AccountService extends Closeable {
    * @return the requested {@link Container} object or null if not present.
    * @throws AccountServiceException if exception occurs when getting container.
    */
-  default Container getContainer(String accountName, String containerName) throws AccountServiceException {
+  default Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
     Account account = getAccountByName(accountName);
     return account != null ? account.getContainerByName(containerName) : null;
+  }
+
+  /**
+   * Get an existing container from a given account.
+   * @param accountId the name of account which container belongs to.
+   * @param containerId the id of container to get.
+   * @return the requested {@link Container} object or null if not present.
+   * @throws AccountServiceException if exception occurs when getting container.
+   */
+  default Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
+    Account account = getAccountById(accountId);
+    return account != null ? account.getContainerById(containerId) : null;
   }
 
   /**

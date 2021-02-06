@@ -47,6 +47,7 @@ public class AccountDao {
   // Container table fields
   public static final String CONTAINER_TABLE = "Containers";
   public static final String CONTAINER_ID = "containerId";
+  public static final String CONTAINER_NAME = "containerName";
   public static final String CONTAINER_INFO = "containerInfo";
 
   // Common fields
@@ -61,9 +62,11 @@ public class AccountDao {
 
   // Container table query strings
   private final String insertContainersSql;
+  private final String updateContainersSql;
   private final String getContainersSinceSql;
   private final String getContainersByAccountSql;
-  private final String updateContainersSql;
+  private final String getContainerByNameSql;
+  private final String getContainerByIdSql;
 
   /**
    * Types of MySql statements.
@@ -95,6 +98,12 @@ public class AccountDao {
     updateContainersSql =
         String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ", CONTAINER_TABLE,
             CONTAINER_INFO, VERSION, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID);
+    getContainerByNameSql =
+        String.format("select %s, %s, %s, %s from %s where %s = ? and %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
+            LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_NAME);
+    getContainerByIdSql =
+        String.format("select %s, %s, %s, %s from %s where %s = ? and %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
+            LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_ID);
   }
 
   /**
@@ -184,6 +193,58 @@ public class AccountDao {
       List<Container> containers = convertContainersResultSet(rs);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return containers;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    } finally {
+      closeQuietly(rs);
+    }
+  }
+
+  /**
+   * Gets container by its name and parent account Id.
+   * @param accountId the id for the parent account.
+   * @param containerName name of the container.
+   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
+   * @throws SQLException
+   */
+  public synchronized Container getContainerByName(int accountId, String containerName) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    ResultSet rs = null;
+    try {
+      PreparedStatement getContainerByNameStatement = dataAccessor.getPreparedStatement(getContainerByNameSql, false);
+      getContainerByNameStatement.setInt(1, accountId);
+      getContainerByNameStatement.setString(2, containerName);
+      rs = getContainerByNameStatement.executeQuery();
+      List<Container> containers = convertContainersResultSet(rs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return containers.isEmpty() ? null : containers.get(0);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    } finally {
+      closeQuietly(rs);
+    }
+  }
+
+  /**
+   * Gets container by its Id and parent account Id.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
+   * @throws SQLException
+   */
+  public synchronized Container getContainerById(int accountId, int containerId) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    ResultSet rs = null;
+    try {
+      PreparedStatement getContainerByIdStatement = dataAccessor.getPreparedStatement(getContainerByIdSql, false);
+      getContainerByIdStatement.setInt(1, accountId);
+      getContainerByIdStatement.setInt(2, containerId);
+      rs = getContainerByIdStatement.executeQuery();
+      List<Container> containers = convertContainersResultSet(rs);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return containers.isEmpty() ? null : containers.get(0);
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;

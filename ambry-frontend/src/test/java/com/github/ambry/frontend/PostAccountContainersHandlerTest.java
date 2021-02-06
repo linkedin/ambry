@@ -91,7 +91,7 @@ public class PostAccountContainersHandlerTest {
       assertEquals("Unexpected count returned", inputContainers.size(), outputContainers.size());
       for (Container container : outputContainers) {
         assertEquals("Container in account service not as expected", container,
-            accountService.getContainer(accountName, container.getName()));
+            accountService.getContainerByName(accountName, container.getName()));
       }
     };
 

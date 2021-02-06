@@ -25,14 +25,12 @@ import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.SQLNonTransientException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -345,7 +343,7 @@ public class MySqlAccountServiceIntegrationTest {
     consumerAccountService.fetchAndUpdateCache();
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
-    assertEquals("Container mismatch", c1Mod, consumerAccountService.getContainer(accountName, "c1"));
+    assertEquals("Container mismatch", c1Mod, consumerAccountService.getContainerByName(accountName, "c1"));
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
     lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
 
@@ -361,7 +359,7 @@ public class MySqlAccountServiceIntegrationTest {
     consumerAccountService.fetchAndUpdateCache();
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
-    assertEquals("Container mismatch", cNew, consumerAccountService.getContainer(accountName, "c4"));
+    assertEquals("Container mismatch", cNew, consumerAccountService.getContainerByName(accountName, "c4"));
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
 
     // TODO:
@@ -388,11 +386,114 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals(2, accountServiceMetrics.conflictRetryCount.getCount());
 
     // Check gauge values
-    assertTrue("Sync time not updated",
-        accountServiceMetrics.timeInSecondsSinceLastSyncGauge.getValue() < 10);
-    assertEquals("Unexpected container count", 7,
-        accountServiceMetrics.containerCountGauge.getValue().intValue());
+    assertTrue("Sync time not updated", accountServiceMetrics.timeInSecondsSinceLastSyncGauge.getValue() < 10);
+    assertEquals("Unexpected container count", 7, accountServiceMetrics.containerCountGauge.getValue().intValue());
+  }
 
+  /** Container on-demand fetch for multiple account services. */
+  @Test
+  public void testContainerFetchOnDemand() throws Exception {
+    MySqlAccountService producerAccountService = mySqlAccountService;
+    // Create second account service with scheduled polling disabled
+    mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
+    accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
+    MySqlAccountStore consumerAccountStore =
+        spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+            new MetricRegistry()).getMySqlAccountStore());
+    MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
+    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    MySqlAccountService consumerAccountService =
+        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+
+    // Add new account on producer account service
+    short accountId = 101;
+    String accountName = "a1";
+    int onDemandContainerFetchCount = 0;
+    Container container = new ContainerBuilder((short) 1, "c1", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build();
+    Account account = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(
+        Collections.singletonList(container)).build();
+    producerAccountService.updateAccounts(Collections.singletonList(account));
+
+    // Test getContainer on consumer account service should fail since account doesn't exist
+    assertNull("Expected null since Account doesn't exist in consumerAccountService cache",
+        consumerAccountService.getContainerByName(accountName, "c1"));
+    assertNull("Expected null since Account doesn't exist in consumerAccountService cache",
+        consumerAccountService.getContainerById(accountId, (short) 1));
+
+    // Fetch and update cache in consumer account service
+    consumerAccountService.fetchAndUpdateCache();
+    assertEquals("Account mismatch", account, consumerAccountService.getAccountByName(accountName));
+    assertEquals("Container mismatch", container, consumerAccountService.getContainerByName(accountName, "c1"));
+    assertEquals("Container mismatch", container, consumerAccountService.getContainerById(accountId, (short) 1));
+
+    // Add new container in producer account service
+    producerAccountService.updateContainers(accountName, Collections.singletonList(
+        new ContainerBuilder((short) -1, "c2", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build()));
+    Container newContainer = producerAccountService.getContainerByName(accountName, "c2");
+
+    // Test getContainerByName() on consumer account service is successful (by fetching from mysql on demand)
+    assertEquals("getContainerByName() expected to fetch container from MySql db", newContainer,
+        consumerAccountService.getContainerByName(accountName, "c2"));
+    verify(consumerAccountStore).getContainerByName(eq((int) accountId), eq(newContainer.getName()));
+    assertEquals("Number of on-demand container requests should be 1", ++onDemandContainerFetchCount,
+        accountServiceMetrics.onDemandContainerFetchCount.getCount());
+
+    // verify in-memory cache is updated with the fetched container "c2"
+    assertEquals("Container c2 should be present in consumer account service", newContainer,
+        consumerAccountService.getAccountByName(accountName).getContainerByName(newContainer.getName()));
+
+    // Add new container in producer account service
+    producerAccountService.updateContainers(accountName, Collections.singletonList(
+        new ContainerBuilder((short) -1, "c3", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build()));
+    newContainer = producerAccountService.getContainerById(accountId, (short) 3);
+
+    // Test getContainerById() on consumer account service is successful (by fetching from mysql on demand)
+    assertEquals("getContainerById() expected to fetch container from MySql db", newContainer,
+        consumerAccountService.getContainerById(accountId, (short) 3));
+    verify(consumerAccountStore).getContainerById(eq((int) accountId), eq((int) newContainer.getId()));
+    assertEquals("Number of on-demand container requests should be 2", ++onDemandContainerFetchCount,
+        accountServiceMetrics.onDemandContainerFetchCount.getCount());
+
+    // verify in-memory cache is updated with the fetched container "c3"
+    assertEquals("Container c3 should be present in consumer account service", newContainer,
+        consumerAccountService.getAccountByName(accountName).getContainerById(newContainer.getId()));
+  }
+
+  /** Test LRU cache for containers not found recently. */
+  @Test
+  public void testLRUCacheForNotFoundContainers() throws Exception {
+
+    // Add new account on account service
+    short accountId = 101;
+    String accountName = "a1";
+    Container container = new ContainerBuilder((short) 1, "c1", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build();
+    Account account = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE).containers(
+        Collections.singletonList(container)).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(account));
+
+    // Look up container "c2" in account service
+    assertNull("Container must not be present in account service",
+        mySqlAccountService.getContainerByName(accountName, "c2"));
+    // verify call to query container from mysql db
+    verify(mySqlAccountStore).getContainerByName(eq((int) accountId), eq("c2"));
+    // verify container name "a1_c2" is added to LRU cache
+    assertTrue("container a1_c2 must be present in LRU cache",
+        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1_c2"));
+
+    // Look up container "c2" again in account service
+    assertNull("Container must not be present in account service",
+        mySqlAccountService.getContainerByName(accountName, "c2"));
+    // verify mysql is not queried this time
+    verify(mySqlAccountStore, times(1)).getContainerByName(anyInt(), anyString());
+
+    // Add container "c2" to account service
+    mySqlAccountService.updateContainers(accountName, Collections.singletonList(
+        new ContainerBuilder((short) -1, "c2", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build()));
+
+    // verify container "c2" is removed from not-found LRU cache
+    assertFalse("Added container a1_c2 must no longer be present in LRU cache",
+        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1_c2"));
   }
 
   /**

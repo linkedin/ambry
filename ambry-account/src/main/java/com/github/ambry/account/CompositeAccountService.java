@@ -114,11 +114,11 @@ public class CompositeAccountService implements AccountService {
   }
 
   @Override
-  public Container getContainer(String accountName, String containerName) throws AccountServiceException {
-    Container primaryResult = primaryAccountService.getContainer(accountName, containerName);
+  public Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
+    Container primaryResult = primaryAccountService.getContainerByName(accountName, containerName);
     if (shouldCompare()) {
       try {
-        Container secondaryResult = secondaryAccountService.getContainer(accountName, containerName);
+        Container secondaryResult = secondaryAccountService.getContainerByName(accountName, containerName);
         if (primaryResult != null && !primaryResult.equals(secondaryResult)) {
           logger.warn("Inconsistency detected between primary and secondary for accountName ={}, containerName = {}",
               accountName, containerName);

@@ -97,6 +97,28 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Gets container by its name and parent account Id.
+   * @param accountId the id for the parent account.
+   * @param containerName name of the container.
+   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
+   * @throws SQLException
+   */
+  public Container getContainerByName(int accountId, String containerName) throws SQLException {
+    return accountDao.getContainerByName(accountId, containerName);
+  }
+
+  /**
+   * Gets container by its Id and parent account Id.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
+   * @throws SQLException
+   */
+  public Container getContainerById(int accountId, int containerId) throws SQLException {
+    return accountDao.getContainerById(accountId, containerId);
+  }
+
+  /**
    * Helper method to close the active connection, if there is one.
    */
   public void closeConnection() {

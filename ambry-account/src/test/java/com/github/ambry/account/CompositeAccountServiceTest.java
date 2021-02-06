@@ -116,12 +116,12 @@ public class CompositeAccountServiceTest {
   @Test
   public void testGetContainerByNameBothSuccess() throws AccountServiceException {
     Container testContainer = testAccount.getAllContainers().iterator().next();
-    when(primaryAccountService.getContainer(any(), any())).thenReturn(testContainer);
-    when(secondaryAccountService.getContainer(any(), any())).thenReturn(testContainer);
+    when(primaryAccountService.getContainerByName(any(), any())).thenReturn(testContainer);
+    when(secondaryAccountService.getContainerByName(any(), any())).thenReturn(testContainer);
     assertEquals("Unexpected response", testContainer,
-        compositeAccountService.getContainer(testAccount.getName(), testContainer.getName()));
-    verify(primaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
-    verify(secondaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
+        compositeAccountService.getContainerByName(testAccount.getName(), testContainer.getName()));
+    verify(primaryAccountService).getContainerByName(testAccount.getName(), testContainer.getName());
+    verify(secondaryAccountService).getContainerByName(testAccount.getName(), testContainer.getName());
     assertEquals("Expected zero inconsistency", 0, metrics.getAccountInconsistencyCount.getCount());
   }
 
@@ -131,12 +131,12 @@ public class CompositeAccountServiceTest {
   @Test
   public void testGetContainerByNameResultsDifferent() throws AccountServiceException {
     Container testContainer = testAccount.getAllContainers().iterator().next();
-    when(primaryAccountService.getContainer(any(), any())).thenReturn(testContainer);
-    when(secondaryAccountService.getContainer(any(), any())).thenReturn(null);
+    when(primaryAccountService.getContainerByName(any(), any())).thenReturn(testContainer);
+    when(secondaryAccountService.getContainerByName(any(), any())).thenReturn(null);
     assertEquals("Unexpected response", testContainer,
-        compositeAccountService.getContainer(testAccount.getName(), testContainer.getName()));
-    verify(primaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
-    verify(secondaryAccountService).getContainer(testAccount.getName(), testContainer.getName());
+        compositeAccountService.getContainerByName(testAccount.getName(), testContainer.getName()));
+    verify(primaryAccountService).getContainerByName(testAccount.getName(), testContainer.getName());
+    verify(secondaryAccountService).getContainerByName(testAccount.getName(), testContainer.getName());
     assertEquals("Expected one inconsistency", 1, metrics.getAccountInconsistencyCount.getCount());
   }
 
@@ -268,8 +268,8 @@ public class CompositeAccountServiceTest {
     when(primaryAccountService.getAllAccounts()).thenReturn(accountsInPrimary);
     when(secondaryAccountService.getAllAccounts()).thenReturn(accountsInSecondary);
     when(secondaryAccountService.getAccountById((short) 1)).thenReturn(accountsInSecondary.iterator().next());
-    when(secondaryAccountService.getContainer("a1", "c1")).thenReturn(c1);
-    when(secondaryAccountService.getContainer("a1", "c2")).thenReturn(c2);
+    when(secondaryAccountService.getContainerByName("a1", "c1")).thenReturn(c1);
+    when(secondaryAccountService.getContainerByName("a1", "c2")).thenReturn(c2);
 
     ((CompositeAccountService) compositeAccountService).compareAccountMetadata();
     verify(primaryAccountService, atLeastOnce()).getAllAccounts();

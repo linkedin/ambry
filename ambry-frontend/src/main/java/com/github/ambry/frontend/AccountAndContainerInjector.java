@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
@@ -106,7 +107,14 @@ public class AccountAndContainerInjector {
     }
     ensureAccountNameMatch(targetAccount, restRequest);
     String containerName = namedBlobPath.getContainerName();
-    Container targetContainer = targetAccount.getContainerByName(containerName);
+    Container targetContainer;
+    try {
+      targetContainer = accountService.getContainerByName(accountName, containerName);
+    } catch (AccountServiceException e) {
+      throw new RestServiceException("Failed to get container " + containerName + " from account " + accountName
+          + " in put request with account and container headers.",
+          RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+    }
     if (targetContainer == null) {
       frontendMetrics.unrecognizedContainerNameCount.inc();
       throw new RestServiceException(
@@ -145,7 +153,14 @@ public class AccountAndContainerInjector {
         targetAccount = accountService.getAccountById(Account.UNKNOWN_ACCOUNT_ID);
       }
     }
-    Container targetContainer = targetAccount.getContainerById(blobId.getContainerId());
+    Container targetContainer;
+    try {
+      targetContainer = accountService.getContainerById(blobId.getAccountId(), blobId.getContainerId());
+    } catch (AccountServiceException e) {
+      throw new RestServiceException(
+          "Failed to get container with Id= " + blobId.getContainerId() + " from account " + targetAccount.getName()
+              + "for blobId=" + blobId.getID(), RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+    }
     if (targetContainer == null) {
       frontendMetrics.getHeadDeleteUnrecognizedContainerCount.inc();
       throw new RestServiceException(
@@ -203,8 +218,16 @@ public class AccountAndContainerInjector {
       targetAccount = accountService.getAccountById(Account.UNKNOWN_ACCOUNT_ID);
     }
     // Either the UNKNOWN_ACCOUNT, or the migrated account should contain default public/private containers
-    Container targetContainer = targetAccount.getContainerById(
-        isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER_ID : Container.DEFAULT_PUBLIC_CONTAINER_ID);
+    Container targetContainer;
+    short containerId = isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER_ID : Container.DEFAULT_PUBLIC_CONTAINER_ID;
+    try {
+      targetContainer = accountService.getContainerById(targetAccount.getId(), containerId);
+    } catch (AccountServiceException e) {
+      throw new RestServiceException(
+          "Failed to get container with Id= " + containerId + " from account " + targetAccount.getName()
+              + "for put request; ServiceId=" + serviceId + ", isPrivate=" + isPrivate,
+          RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+    }
     if (targetContainer == null) {
       throw new RestServiceException(
           "Invalid account or container to inject; serviceId=" + serviceId + ", isPrivate=" + isPrivate,
@@ -231,7 +254,14 @@ public class AccountAndContainerInjector {
     }
     ensureAccountNameMatch(targetAccount, restRequest);
     String containerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    Container targetContainer = targetAccount.getContainerByName(containerName);
+    Container targetContainer;
+    try {
+      targetContainer = accountService.getContainerByName(accountName, containerName);
+    } catch (AccountServiceException e) {
+      throw new RestServiceException("Failed to get container " + containerName + " from account " + accountName
+          + " for put request with account and container headers.",
+          RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+    }
     if (targetContainer == null) {
       frontendMetrics.unrecognizedContainerNameCount.inc();
       throw new RestServiceException(

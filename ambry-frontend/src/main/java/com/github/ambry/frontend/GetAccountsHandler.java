@@ -174,7 +174,7 @@ class GetAccountsHandler {
       String containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
       Container container;
       try {
-        container = accountService.getContainer(accountName, containerName);
+        container = accountService.getContainerByName(accountName, containerName);
       } catch (AccountServiceException e) {
         throw new RestServiceException("Failed to get container " + containerName + " from account " + accountName,
             RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));

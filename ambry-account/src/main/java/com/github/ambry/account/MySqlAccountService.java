@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -53,6 +54,10 @@ import static com.github.ambry.utils.Utils.*;
 public class MySqlAccountService extends AbstractAccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountService.class);
+  private static final String SEPARATOR = "_";
+  private static final int cacheInitialCapacity = 100;
+  private static final float cacheLoadFactor = 0.75f;
+  private static final int cacheMaxLimit = 1000;
   static final String MYSQL_ACCOUNT_UPDATER_PREFIX = "mysql-account-updater";
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final MySqlAccountServiceConfig config;
@@ -64,6 +69,7 @@ public class MySqlAccountService extends AbstractAccountService {
   private final MySqlAccountStoreFactory mySqlAccountStoreFactory;
   private boolean needRefresh = false;
   private long lastSyncTime = -1;
+  private final Set<String> recentNotFoundContainersCache;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
       MySqlAccountStoreFactory mySqlAccountStoreFactory) throws SQLException, IOException {
@@ -93,6 +99,21 @@ public class MySqlAccountService extends AbstractAccountService {
     initCacheFromBackupFile();
     // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
     initialFetchAndSchedule();
+
+    // A local LRA cache of containers not found in mysql db. This is used to avoid repeated queries to db during getContainerByName() calls.
+    recentNotFoundContainersCache = Collections.newSetFromMap(
+        Collections.synchronizedMap(new LinkedHashMap<String, Boolean>(cacheInitialCapacity, cacheLoadFactor, true) {
+          protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+            return size() > cacheMaxLimit;
+          }
+        }));
+  }
+
+  /**
+   * @return set (LRA cache) of containers not found in recent get attempts. Used in only tests.
+   */
+  Set<String> getRecentNotFoundContainersCache() {
+    return Collections.unmodifiableSet(recentNotFoundContainersCache);
   }
 
   /**
@@ -179,17 +200,14 @@ public class MySqlAccountService extends AbstractAccountService {
         for (Container container : updatedContainersInDB) {
           logger.info("Found container {}", container.getName());
         }
+
         // Update cache with fetched accounts and containers
-        infoMapLock.writeLock().lock();
-        try {
-          AccountInfoMap accountInfoMap = accountInfoMapRef.get();
-          accountInfoMap.addOrUpdateAccounts(updatedAccountsInDB);
-          accountInfoMap.addOrUpdateContainers(updatedContainersInDB);
-          // Refresh last modified time of Accounts and Containers in cache
-          accountInfoMap.refreshLastModifiedTime();
-        } finally {
-          infoMapLock.writeLock().unlock();
-        }
+        updateAccountsInCache(updatedAccountsInDB);
+        updateContainersInCache(updatedContainersInDB);
+
+        // Refresh last modified time of Accounts and Containers in cache
+        accountInfoMapRef.get().refreshLastModifiedTime();
+
         // At this point we can safely say cache is refreshed
         needRefresh = false;
         lastSyncTime = endTimeMs;
@@ -303,12 +321,7 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     // write added/modified accounts to in-memory cache
-    infoMapLock.writeLock().lock();
-    try {
-      accountInfoMapRef.get().addOrUpdateAccounts(accounts);
-    } finally {
-      infoMapLock.writeLock().unlock();
-    }
+    updateAccountsInCache(accounts);
   }
 
   @Override
@@ -372,12 +385,87 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     // write added/modified containers to in-memory cache
-    infoMapLock.writeLock().lock();
-    try {
-      accountInfoMapRef.get().addOrUpdateContainers(resolvedContainers);
-    } finally {
-      infoMapLock.writeLock().unlock();
+    updateContainersInCache(resolvedContainers);
+  }
+
+  /**
+   * Gets the {@link Container} by its name and parent {@link Account} name by looking up in in-memory cache.
+   * If it is not present in in-memory cache, it queries from mysql db and updates the cache.
+   * @param accountName the name of account which container belongs to.
+   * @param containerName the name of container to get.
+   * @return {@link Container} if found in cache or mysql db. Else, returns {@code null}.
+   * @throws AccountServiceException
+   */
+  @Override
+  public Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
+    Container container = null;
+
+    if (recentNotFoundContainersCache.contains(accountName + SEPARATOR + containerName)) {
+      // If container was not found in recent get attempts, avoid another query to db and return null.
+      return null;
     }
+
+    Account account = getAccountByName(accountName);
+    if (account != null) {
+      container = account.getContainerByName(containerName);
+      if (container == null) {
+        // If container is not present in the cache, query from mysql db
+        try {
+          container = mySqlAccountStore.getContainerByName(account.getId(), containerName);
+          if (container != null) {
+            // write container to in-memory cache
+            updateContainersInCache(Collections.singletonList(container));
+            logger.info("Container {} in Account {} is not found locally; Fetched from mysql db", containerName,
+                accountName);
+            accountServiceMetrics.onDemandContainerFetchCount.inc();
+          } else {
+            // Add account_container to not-found LRU cache
+            recentNotFoundContainersCache.add(accountName + SEPARATOR + containerName);
+            logger.error("Container {} is not found in Account {}", containerName, accountName);
+          }
+        } catch (SQLException e) {
+          throw translateSQLException(e);
+        }
+      }
+    }
+    return container;
+  }
+
+  /**
+   * Gets the {@link Container} by its Id and parent {@link Account} Id by looking up in in-memory cache.
+   * If it is not present in in-memory cache, it queries from mysql db and updates the cache.
+   * @param accountId the name of account which container belongs to.
+   * @param containerId the id of container to get.
+   * @return {@link Container} if found in cache or mysql db. Else, returns {@code null}.
+   * @throws AccountServiceException
+   */
+  @Override
+  public Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
+    Container container = null;
+    Account account = getAccountById(accountId);
+    if (account != null) {
+      container = account.getContainerById(containerId);
+      if (container == null) {
+        // If container is not present in the cache, query from mysql db
+        try {
+          container = mySqlAccountStore.getContainerById(accountId, containerId);
+          if (container != null) {
+            // write container to in-memory cache
+            updateContainersInCache(Collections.singletonList(container));
+            logger.info("Container Id {} in Account {} is not found locally, fetched from mysql db", containerId,
+                account.getName());
+            accountServiceMetrics.onDemandContainerFetchCount.inc();
+          } else {
+            logger.error("Container Id {} is not found in Account {}", containerId, account.getName());
+            // Note: We are not using LRU cache for storing recent unsuccessful get attempts by container Ids since this
+            // will be called in getBlob() path which should have valid account-container in most cases.
+          }
+        } catch (SQLException e) {
+          throw translateSQLException(e);
+        }
+      }
+    }
+    return container;
   }
 
   /**
@@ -479,6 +567,39 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     return new Pair<>(addedContainers, updatedContainers);
+  }
+
+  /**
+   * Updates {@link Account}s to in-memory cache.
+   * @param accounts added or modified {@link Account}s
+   */
+  private void updateAccountsInCache(Collection<Account> accounts) {
+    infoMapLock.writeLock().lock();
+    try {
+      accountInfoMapRef.get().addOrUpdateAccounts(accounts);
+    } finally {
+      infoMapLock.writeLock().unlock();
+    }
+  }
+
+  /**
+   * Updates {@link Container}s to in-memory cache.
+   * @param containers added or modified {@link Container}s
+   */
+  private void updateContainersInCache(Collection<Container> containers) {
+
+    infoMapLock.writeLock().lock();
+    try {
+      accountInfoMapRef.get().addOrUpdateContainers(containers);
+    } finally {
+      infoMapLock.writeLock().unlock();
+    }
+
+    // Remove containers from not-found LRU cache.
+    for (Container container : containers) {
+      recentNotFoundContainersCache.remove(
+          getAccountById(container.getParentAccountId()).getName() + SEPARATOR + container.getName());
+    }
   }
 
   /**

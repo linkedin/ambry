@@ -508,7 +508,7 @@ public class MySqlAccountServiceTest {
         .build();
     mySqlAccountService.updateContainers(accountToUpdate.getName(), Collections.singletonList(containerToUpdate));
     assertEquals("Mismatch in container information", containerToUpdate,
-        mySqlAccountService.getContainer(accountToUpdate.getName(), containerToUpdate.getName()));
+        mySqlAccountService.getContainerByName(accountToUpdate.getName(), containerToUpdate.getName()));
   }
 
   /**
