@@ -19,6 +19,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.UUID;
 
 
@@ -37,16 +38,18 @@ public class StoreFindToken implements FindToken {
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
+  static final short VERSION_3 = 3;
   static final short CURRENT_VERSION = VERSION_2;
 
-  private static final int VERSION_SIZE = 2;
-  private static final int TYPE_SIZE = 2;
-  private static final int SESSION_ID_LENGTH_SIZE = 4;
-  private static final int INCARNATION_ID_LENGTH_SIZE = 4;
-  private static final int INCLUSIVE_BYTE_SIZE = 1;
+  static final int VERSION_SIZE = 2;
+  static final int TYPE_SIZE = 2;
+  static final int SESSION_ID_LENGTH_SIZE = 4;
+  static final int INCARNATION_ID_LENGTH_SIZE = 4;
+  static final int INCLUSIVE_BYTE_SIZE = 1;
 
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final int UNINITIALIZED_OFFSET = -1;
+
   // refers to the type of the token
   private final FindTokenType type;
   // refers to the offset in the log. Could be either of Journal or Index based token
@@ -54,6 +57,9 @@ public class StoreFindToken implements FindToken {
   // refers to the store key in case of Index based token
   // in case of journal based token, represents if the blob at the offset(of the token)
   private final StoreKey storeKey;
+  // refers to the store key lies at index segment start offset in the log (used to find valid start point if previous
+  // index segment has been compacted)
+  private final StoreKey resetKey;
   // is inclusive or not
   private final byte inclusive;
   // refers to the sessionId of the store. On every restart a new sessionId is created
@@ -69,7 +75,7 @@ public class StoreFindToken implements FindToken {
    * Uninitialized token. Refers to the starting of the log.
    */
   StoreFindToken() {
-    this(FindTokenType.Uninitialized, null, null, null, null, true, CURRENT_VERSION);
+    this(FindTokenType.Uninitialized, null, null, null, null, true, CURRENT_VERSION, null);
   }
 
   /**
@@ -78,9 +84,12 @@ public class StoreFindToken implements FindToken {
    * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
    * @param sessionId the sessionId of the store
    * @param incarnationId the incarnationId of the store
+   * @param resetKey The {@link StoreKey} used to find closest valid starting point in case the index segment the token
+   *                 refers to has been compacted.
    */
-  StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId) {
-    this(FindTokenType.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, CURRENT_VERSION);
+  StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId, StoreKey resetKey) {
+    this(FindTokenType.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, CURRENT_VERSION,
+        resetKey);
   }
 
   /**
@@ -90,9 +99,11 @@ public class StoreFindToken implements FindToken {
    * @param incarnationId the incarnationId of the store
    * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
    *                  {@code false} otherwise
+   * @param resetKey The {@link StoreKey} used to find closest valid starting point in case the index segment the token
+   *                 refers to has been compacted.
    */
-  StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive) {
-    this(FindTokenType.JournalBased, offset, null, sessionId, incarnationId, inclusive, CURRENT_VERSION);
+  StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive, StoreKey resetKey) {
+    this(FindTokenType.JournalBased, offset, null, sessionId, incarnationId, inclusive, CURRENT_VERSION, resetKey);
   }
 
   /**
@@ -105,17 +116,22 @@ public class StoreFindToken implements FindToken {
    * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
    *                  {@code false} otherwise
    * @param version refers to the version of the token
+   * @param resetKey The {@link StoreKey} used to find closest valid starting point in case the index segment the token
+   *                 refers to has been compacted.
    */
-  private StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId,
-      boolean inclusive, short version) {
+   StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId,
+      boolean inclusive, short version, StoreKey resetKey) {
     if (!type.equals(FindTokenType.Uninitialized)) {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
       } else if (type.equals(FindTokenType.IndexBased) && key == null) {
         throw new IllegalArgumentException("StoreKey cannot be null for an index based token");
       }
-      if (version == VERSION_2 && incarnationId == null) {
+      if (version >= VERSION_2 && incarnationId == null) {
         throw new IllegalArgumentException("IncarnationId cannot be null for StoreFindToken of version 2");
+      }
+      if (version == VERSION_3 && resetKey == null) {
+        throw new IllegalArgumentException("Reset key cannot be null for StoreFindToken of version 3.");
       }
     }
     this.type = type;
@@ -126,6 +142,7 @@ public class StoreFindToken implements FindToken {
     this.incarnationId = incarnationId;
     this.bytesRead = -1;
     this.version = version;
+    this.resetKey = resetKey;
   }
 
   void setBytesRead(long bytesRead) {
@@ -153,13 +170,14 @@ public class StoreFindToken implements FindToken {
         if (indexStartOffset != UNINITIALIZED_OFFSET) {
           // read store key if needed
           storeFindToken = new StoreFindToken(FindTokenType.IndexBased, new Offset(logSegmentName, indexStartOffset),
-              factory.getStoreKey(stream), sessionIdUUID, null, false, VERSION_0);
+              factory.getStoreKey(stream), sessionIdUUID, null, false, VERSION_0, null);
         } else if (offset != UNINITIALIZED_OFFSET) {
           storeFindToken =
               new StoreFindToken(FindTokenType.JournalBased, new Offset(logSegmentName, offset), null, sessionIdUUID,
-                  null, false, VERSION_0);
+                  null, false, VERSION_0, null);
         } else {
-          storeFindToken = new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_0);
+          storeFindToken =
+              new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_0, null);
         }
         break;
       case VERSION_1:
@@ -173,18 +191,20 @@ public class StoreFindToken implements FindToken {
         FindTokenType type = FindTokenType.values()[stream.readShort()];
         switch (type) {
           case Uninitialized:
-            storeFindToken = new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_1);
+            storeFindToken =
+                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_1, null);
             break;
           case JournalBased:
             Offset logOffset = Offset.fromBytes(stream);
             storeFindToken =
-                new StoreFindToken(FindTokenType.JournalBased, logOffset, null, sessionIdUUID, null, false, VERSION_1);
+                new StoreFindToken(FindTokenType.JournalBased, logOffset, null, sessionIdUUID, null, false, VERSION_1,
+                    null);
             break;
           case IndexBased:
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             storeFindToken =
                 new StoreFindToken(FindTokenType.IndexBased, indexSegmentStartOffset, factory.getStoreKey(stream),
-                    sessionIdUUID, null, false, VERSION_1);
+                    sessionIdUUID, null, false, VERSION_1, null);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -206,7 +226,8 @@ public class StoreFindToken implements FindToken {
             sessionIdUUID = UUID.fromString(sessionId);
             Offset logOffset = Offset.fromBytes(stream);
             byte inclusive = stream.readByte();
-            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1);
+            storeFindToken =
+                new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1, null);
             break;
           case IndexBased:
             // read incarnationId
@@ -217,7 +238,51 @@ public class StoreFindToken implements FindToken {
             sessionIdUUID = UUID.fromString(sessionId);
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             StoreKey storeKey = factory.getStoreKey(stream);
-            storeFindToken = new StoreFindToken(storeKey, indexSegmentStartOffset, sessionIdUUID, incarnationIdUUID);
+            storeFindToken =
+                new StoreFindToken(storeKey, indexSegmentStartOffset, sessionIdUUID, incarnationIdUUID, null);
+            break;
+          default:
+            throw new IllegalStateException("Unknown store find token type: " + type);
+        }
+        break;
+      case VERSION_3:
+        // read type
+        type = FindTokenType.values()[stream.readShort()];
+        switch (type) {
+          // TODO update StoreFindToken method once CURRENT VERSION = VERSION 3.
+          case Uninitialized:
+            storeFindToken =
+                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_3, null);
+            break;
+          case JournalBased:
+            // read incarnationId
+            String incarnationId = Utils.readIntString(stream);
+            UUID incarnationIdUUID = UUID.fromString(incarnationId);
+            // read sessionId
+            sessionId = Utils.readIntString(stream);
+            sessionIdUUID = UUID.fromString(sessionId);
+            Offset logOffset = Offset.fromBytes(stream);
+            byte inclusive = stream.readByte();
+            // read reset key
+            StoreKey journalTokenResetKey = factory.getStoreKey(stream);
+            storeFindToken =
+                new StoreFindToken(FindTokenType.JournalBased, logOffset, null, sessionIdUUID, incarnationIdUUID,
+                    inclusive == (byte) 1, VERSION_3, journalTokenResetKey);
+            break;
+          case IndexBased:
+            // read incarnationId
+            incarnationId = Utils.readIntString(stream);
+            incarnationIdUUID = UUID.fromString(incarnationId);
+            // read sessionId
+            sessionId = Utils.readIntString(stream);
+            sessionIdUUID = UUID.fromString(sessionId);
+            Offset indexSegmentStartOffset = Offset.fromBytes(stream);
+            StoreKey storeKey = factory.getStoreKey(stream);
+            // read reset key
+            StoreKey indexTokenResetKey = factory.getStoreKey(stream);
+            storeFindToken =
+                new StoreFindToken(FindTokenType.IndexBased, indexSegmentStartOffset, storeKey, sessionIdUUID,
+                    incarnationIdUUID, false, VERSION_3, indexTokenResetKey);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -235,6 +300,10 @@ public class StoreFindToken implements FindToken {
 
   public StoreKey getStoreKey() {
     return storeKey;
+  }
+
+  public StoreKey getResetKey() {
+    return resetKey;
   }
 
   public Offset getOffset() {
@@ -273,8 +342,8 @@ public class StoreFindToken implements FindToken {
       case VERSION_0:
         int offsetSize = 8;
         int startOffsetSize = 8;
-        byte[] sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
-        byte[] storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+        byte[] sessionIdBytes = getSessionIdInBytes();
+        byte[] storeKeyBytes = getStoreKeyInBytes();
         int size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length + offsetSize + startOffsetSize
             + storeKeyBytes.length;
         buf = new byte[size];
@@ -288,13 +357,13 @@ public class StoreFindToken implements FindToken {
         bufWrap.putLong((type == FindTokenType.JournalBased) ? offset.getOffset() : UNINITIALIZED_OFFSET);
         // add index start offset for Index based token
         bufWrap.putLong((type == FindTokenType.IndexBased) ? offset.getOffset() : UNINITIALIZED_OFFSET);
-        // add storekey
+        // add store key
         bufWrap.put(storeKeyBytes);
         break;
       case VERSION_1:
-        byte[] offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
-        sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
-        storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+        byte[] offsetBytes = getOffsetInBytes();
+        sessionIdBytes = getSessionIdInBytes();
+        storeKeyBytes = getStoreKeyInBytes();
         size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length + TYPE_SIZE + offsetBytes.length
             + storeKeyBytes.length;
         buf = new byte[size];
@@ -312,10 +381,10 @@ public class StoreFindToken implements FindToken {
         bufWrap.put(storeKeyBytes);
         break;
       case VERSION_2:
-        offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
-        sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
-        byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
-        storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+        offsetBytes = getOffsetInBytes();
+        sessionIdBytes = getSessionIdInBytes();
+        byte[] incarnationIdBytes = getIncarnationIdInBytes();
+        storeKeyBytes = getStoreKeyInBytes();
         size = VERSION_SIZE + TYPE_SIZE;
         if (type != FindTokenType.Uninitialized) {
           size +=
@@ -353,6 +422,22 @@ public class StoreFindToken implements FindToken {
     return buf;
   }
 
+  byte[] getOffsetInBytes() {
+    return offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
+  }
+
+  byte[] getStoreKeyInBytes() {
+    return storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+  }
+
+  byte[] getSessionIdInBytes() {
+    return sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+  }
+
+  byte [] getIncarnationIdInBytes() {
+    return incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
@@ -368,6 +453,9 @@ public class StoreFindToken implements FindToken {
       }
       if (storeKey != null) {
         sb.append(" storeKey ").append(storeKey);
+      }
+      if (resetKey != null) {
+        sb.append(" resetKey ").append(resetKey);
       }
       sb.append(" offset ").append(offset);
       sb.append(" bytesRead ").append(bytesRead);
@@ -389,13 +477,16 @@ public class StoreFindToken implements FindToken {
     if (type != that.type) {
       return false;
     }
-    if (offset != null ? !offset.equals(that.offset) : that.offset != null) {
+    if (!Objects.equals(offset, that.offset)) {
       return false;
     }
     if (inclusive != that.inclusive) {
       return false;
     }
-    return storeKey != null ? storeKey.equals(that.storeKey) : that.storeKey == null;
+    if (!Objects.equals(storeKey, that.storeKey)) {
+      return false;
+    }
+    return Objects.equals(resetKey, that.resetKey);
   }
 
   @Override
@@ -404,6 +495,7 @@ public class StoreFindToken implements FindToken {
     result = 31 * result + (offset != null ? offset.hashCode() : 0);
     result = 31 * result + inclusive;
     result = 31 * result + (storeKey != null ? storeKey.hashCode() : 0);
+    result = 31 * result + (resetKey != null ? resetKey.hashCode() : 0);
     return result;
   }
 }

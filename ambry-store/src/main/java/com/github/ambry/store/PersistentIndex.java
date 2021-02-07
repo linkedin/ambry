@@ -1232,7 +1232,7 @@ class PersistentIndex {
           logger.trace("Journal based token, Time used to eliminate duplicates: {}",
               (time.milliseconds() - startTimeInMs));
 
-          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false);
+          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false, null);
           // use the latest ref of indexSegments
           long bytesRead = getTotalBytesRead(storeFindToken, messageEntries, logEndOffsetBeforeFind, indexSegments);
           storeFindToken.setBytesRead(bytesRead);
@@ -1325,7 +1325,7 @@ class PersistentIndex {
             && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
           logger.info("Index : {} resetting offset after not clean shutdown {} before offset {}", dataDir,
               logEndOffsetOnStartup, storeToken.getOffset());
-          storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true);
+          storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true, null);
         }
       } else if (!storeToken.getType().equals(FindTokenType.Uninitialized)
           && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
@@ -1524,7 +1524,7 @@ class PersistentIndex {
       logger.trace("Index : {} findEntriesFromOffset segment start offset {} with key {} total entries received {}",
           dataDir, segmentStartOffset, key, messageEntries.size());
       // Notice that we might not finish scanning the segmentToProcess, it's possible that current index segment contains
-      // enough index values so that the findEngtriesCondition returns false. But we are still moving to the next index segment
+      // enough index values so that the findEntriesCondition returns false. But we are still moving to the next index segment
       // because when findEntriesCondition returns false, we will skip the while loop below and return the new find token
       // right away. And if findEntriesCondition returns true, that means we finish scanning of the current index segment so
       // we can move to the next one.
@@ -1603,9 +1603,9 @@ class PersistentIndex {
       }
     }
     if (newTokenOffsetInJournal != null) {
-      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false);
+      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, null);
     } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
-      // If the condition does not have an endtime, then since we have entered a segment, we should return at least one
+      // If the condition does not have an end time, then since we have entered a segment, we should return at least one
       // message
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
@@ -1615,7 +1615,7 @@ class PersistentIndex {
       // uninitialized token
       return newTokenSegmentStartOffset == null ? new StoreFindToken()
           : new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
-              sessionId, incarnationId);
+              sessionId, incarnationId, null);
     }
   }
 
@@ -1899,7 +1899,7 @@ class PersistentIndex {
             break;
           }
         }
-        newToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false);
+        newToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false, null);
       } else {
         // Case 3: offset based, but offset out of journal
         Map.Entry<Offset, IndexSegment> entry = indexSegments.floorEntry(offsetToStart);
