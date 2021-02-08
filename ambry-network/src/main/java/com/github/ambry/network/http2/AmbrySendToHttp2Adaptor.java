@@ -37,14 +37,16 @@ import org.slf4j.LoggerFactory;
 public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
   private static final Logger logger = LoggerFactory.getLogger(AmbrySendToHttp2Adaptor.class);
   private final boolean forServer;
-  private final int maxFrameSize = 5000;
+  private final int maxFrameSize;
 
   /**
    * @param forServer if true, the handler is used as server side outbound handler. Otherwise, it's use as client side
    *                  outbound handler.
+   * @param maxFrameSize
    */
-  public AmbrySendToHttp2Adaptor(boolean forServer) {
+  public AmbrySendToHttp2Adaptor(boolean forServer, int maxFrameSize) {
     this.forServer = forServer;
+    this.maxFrameSize = maxFrameSize;
   }
 
   /**
@@ -73,8 +75,6 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     ctx.write(headersFrame);
 
-    int frameNumber =
-        send.content().readableBytes() / maxFrameSize + (send.content().readableBytes() % maxFrameSize == 0 ? 0 : 1);
     // Referencing counting for derived {@link ByteBuf}: https://netty.io/wiki/reference-counted-objects.html#derived-buffers
     try {
       while (send.content().readableBytes() > maxFrameSize) {

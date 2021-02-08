@@ -69,7 +69,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
         new Http2MultiplexedChannelPool(new InetSocketAddress(hostName, port), nettySslHttp2Factory,
             Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
             http2ClientMetrics,
-            new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig.http2MaxContentLength));
+            new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig));
   }
 
   @Override

@@ -17,12 +17,13 @@ import com.github.ambry.network.Send;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
+import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -54,31 +55,44 @@ public class AmbrySendToHttp2AdaptorTest {
    */
   @Test
   public void testServerWrite() throws Exception {
-    EmbeddedChannel channel = newChannel();
-    // Test server writing the Send
-    Send send = new SendWithContent();
+    int maxFrameSize = 2001;
+    EmbeddedChannel channel = new EmbeddedChannel(new AmbrySendToHttp2Adaptor(true, maxFrameSize));
+    int contentSize = 7000;
+    byte[] byteArray = new byte[contentSize];
+    new Random().nextBytes(byteArray);
+    ByteBuf content = UnpooledByteBufAllocator.DEFAULT.heapBuffer(contentSize).writeBytes(byteArray);
+    // Retain the ByteBuf for data comparison
+    content.retain();
+    Send send = new MockSend(content);
     channel.writeOutbound(send);
 
     DefaultHttp2HeadersFrame header = channel.readOutbound();
     Assert.assertNotNull(header.headers());
     Assert.assertEquals(header.headers().status().toString(), "200");
 
+    byte[] resultArray = new byte[contentSize];
+    int i;
+    for (i = 0; i < contentSize / maxFrameSize; i++) {
+      DefaultHttp2DataFrame data = channel.readOutbound();
+      data.content().readBytes(resultArray, i * maxFrameSize, maxFrameSize);
+      data.content().release();
+    }
+    // The last frame
     DefaultHttp2DataFrame data = channel.readOutbound();
+    data.content().readBytes(resultArray, i * maxFrameSize, data.content().readableBytes());
     data.content().release();
-  }
-
-  /**
-   * @return a new {@link EmbeddedChannel} with {@link AmbrySendToHttp2Adaptor} added to the pipeline.
-   */
-  static EmbeddedChannel newChannel() {
-    return new EmbeddedChannel(new AmbrySendToHttp2Adaptor(true));
+    Assert.assertArrayEquals(byteArray, resultArray);
   }
 
   /**
    * A mock {@link Send} implementation that returns non-null value for {@link #content()} method.
    */
-  private static class SendWithContent extends AbstractByteBufHolder<SendWithContent> implements Send {
-    protected final ByteBuf buf = PooledByteBufAllocator.DEFAULT.heapBuffer(16).writeBytes(new byte[16]);
+  private static class MockSend extends AbstractByteBufHolder<MockSend> implements Send {
+    protected ByteBuf buf;
+
+    MockSend(ByteBuf content) {
+      buf = content;
+    }
 
     @Override
     public long writeTo(WritableByteChannel channel) throws IOException {
@@ -103,7 +117,7 @@ public class AmbrySendToHttp2AdaptorTest {
     }
 
     @Override
-    public SendWithContent replace(ByteBuf content) {
+    public MockSend replace(ByteBuf content) {
       return null;
     }
   }

@@ -35,7 +35,6 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
-import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +69,7 @@ public class Http2NetworkClient implements NetworkClient {
     this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
     this.http2StreamFrameToHttpObjectCodec = new Http2StreamFrameToHttpObjectCodec(false);
-    this.ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false);
+    this.ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false, http2ClientConfig.http2FrameMaxSize);
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
