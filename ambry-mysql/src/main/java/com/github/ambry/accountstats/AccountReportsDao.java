@@ -48,30 +48,26 @@ public class AccountReportsDao {
           CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
           HOSTNAME_COLUMN);
   private final MySqlDataAccessor dataAccessor;
-  private final String clusterName;
-  private final String hostname;
 
   /**
    * Constructor to create a {@link AccountReportsDao}.
    * @param dataAccessor The underlying {@link MySqlDataAccessor}.
-   * @param clusterName The name of the cluster this host is belonging to, like Ambry-test.
-   * @param hostname The name of the host. It should include the hostname and the port.
    */
-  AccountReportsDao(MySqlDataAccessor dataAccessor, String clusterName, String hostname) {
+  AccountReportsDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
-    this.clusterName = Objects.requireNonNull(clusterName, "clusterName is empty");
-    this.hostname = Objects.requireNonNull(hostname, "hostname is empty");
   }
 
   /**
    * Update the storage usage for the given account/container.
+   * @param clusterName the name of target cluster
+   * @param hostname the name of target host
    * @param partitionId The partition id of this account/container usage.
    * @param accountId The account id.
    * @param containerId The container id.
    * @param storageUsage The storage usage in bytes.
    */
-  void updateStorageUsage(short partitionId, short accountId, short containerId, long storageUsage)
-      throws SQLException {
+  void updateStorageUsage(String clusterName, String hostname, short partitionId, short accountId, short containerId,
+      long storageUsage) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
@@ -143,14 +139,16 @@ public class AccountReportsDao {
 
     /**
      * Supply values to the prepared statement and add it to the batch updater.
+     * @param clusterName the cluster name
+     * @param hostname the hostname
      * @param partitionId The partition id of this account/container usage.
      * @param accountId The account id.
      * @param containerId The container id.
      * @param storageUsage The storage usage in bytes.
      * @throws SQLException
      */
-    public void addUpdateToBatch(short partitionId, short accountId, short containerId, long storageUsage)
-        throws SQLException {
+    public void addUpdateToBatch(String clusterName, String hostname, short partitionId, short accountId,
+        short containerId, long storageUsage) throws SQLException {
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setString(2, hostname);

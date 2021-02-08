@@ -24,12 +24,16 @@ import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import joptsimple.internal.Strings;
 
 
@@ -41,14 +45,23 @@ import joptsimple.internal.Strings;
  */
 public class AccountStatsMySqlStore implements AccountStatsStore {
 
+  public static final String[] TABLES =
+      {AccountReportsDao.ACCOUNT_REPORTS_TABLE, AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE,
+          AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
+          AggregatedAccountReportsDao.MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
+          PartitionClassReportsDao.PARTITION_CLASS_NAMES_TABLE, PartitionClassReportsDao.PARTITIONS_TABLE,
+          PartitionClassReportsDao.AGGREGATED_PARTITION_CLASS_REPORTS_TABLE};
+
   private final MySqlDataAccessor mySqlDataAccessor;
   private final AccountReportsDao accountReportsDao;
   private final AggregatedAccountReportsDao aggregatedaccountReportsDao;
+  private final PartitionClassReportsDao partitionClassReportsDao;
   private final HostnameHelper hostnameHelper;
+  private final String clusterName;
+  private final String hostname;
   private StatsWrapper previousStats;
   private final Metrics storeMetrics;
   private final AccountStatsMySqlConfig config;
-  private final boolean batchEnabled;
 
   /**
    * Metrics for {@link AccountStatsMySqlStore}.
@@ -63,6 +76,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public final Histogram queryMonthlyAggregatedStatsTimeMs;
     public final Histogram queryMonthTimeMs;
     public final Histogram takeSnapshotTimeMs;
+
+    public final Histogram queryPartitionNameAndIdTimeMs;
+    public final Histogram storePartitionClassStatsTimeMs;
+    public final Histogram queryPartitionClassStatsTimeMs;
+    public final Histogram storeAggregatedPartitionClassStatsTimeMs;
+    public final Histogram queryAggregatedPartitionClassStatsTimeMs;
 
     /**
      * Constructor to create the Metrics.
@@ -82,6 +101,16 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryMonthlyAggregatedStatsTimeMs"));
       queryMonthTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryMonthTimeMs"));
       takeSnapshotTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "TakeSnapshotTimeMs"));
+      queryPartitionNameAndIdTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryPartitionNameAndIdsTimeMs"));
+      storePartitionClassStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "StorePartitionClassStatsTimeMs"));
+      queryPartitionClassStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryPartitionClassStatsTimeMs"));
+      storeAggregatedPartitionClassStatsTimeMs = registry.histogram(
+          MetricRegistry.name(AccountStatsMySqlStore.class, "StoreAggregatedPartitionClassStatsTimeMs"));
+      queryAggregatedPartitionClassStatsTimeMs = registry.histogram(
+          MetricRegistry.name(AccountStatsMySqlStore.class, "QueryAggregatedPartitionClassStatsTimeMs"));
     }
   }
 
@@ -117,12 +146,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   AccountStatsMySqlStore(AccountStatsMySqlConfig config, MySqlDataAccessor dataAccessor, String clusterName,
       String hostname, String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry) {
     this.config = config;
+    this.clusterName = clusterName;
+    this.hostname = hostname;
     mySqlDataAccessor = dataAccessor;
-    accountReportsDao = new AccountReportsDao(dataAccessor, clusterName, hostname);
-    aggregatedaccountReportsDao = new AggregatedAccountReportsDao(dataAccessor, clusterName);
+    accountReportsDao = new AccountReportsDao(dataAccessor);
+    aggregatedaccountReportsDao = new AggregatedAccountReportsDao(dataAccessor);
+    partitionClassReportsDao = new PartitionClassReportsDao(dataAccessor);
     this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
-    this.batchEnabled = this.config.updateBatchSize >= 0;
     if (!Strings.isNullOrEmpty(localBackupFilePath)) {
       // load backup file and this backup is the previous stats
       ObjectMapper objectMapper = new ObjectMapper();
@@ -140,13 +171,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param statsWrapper The {@link StatsWrapper} to publish.
    */
   @Override
-  public void storeStats(StatsWrapper statsWrapper) throws SQLException {
+  public synchronized void storeAccountStats(StatsWrapper statsWrapper) throws SQLException {
     StatsSnapshot prevSnapshot =
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
-    AccountReportsDao.StorageBatchUpdater batch = null;
-    if (batchEnabled) {
-      batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
-    }
+    AccountReportsDao.StorageBatchUpdater batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
 
@@ -180,40 +208,33 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           long prevStorageUsage =
               prevContainerMap.getOrDefault(containerIdKey, new StatsSnapshot((long) -1, null)).getValue();
           if (currStorageUsage != prevStorageUsage) {
-            if (batchEnabled) {
-              batch.addUpdateToBatch(partitionId, accountId, containerId, currStorageUsage);
-            } else {
-              accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, currStorageUsage);
-            }
+            batch.addUpdateToBatch(clusterName, hostname, partitionId, accountId, containerId, currStorageUsage);
             batchSize++;
           }
         }
       }
     }
-    if (batchEnabled) {
-      batch.flush();
-    }
+    batch.flush();
     storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.batchSize.update(batchSize);
     previousStats = statsWrapper;
   }
 
   /**
-   * Query mysql database to get all the container storage usage for given {@code clusterName} and {@code hostname} and
+   * Query mysql database to get all the container storage usage for given {@code clusterName} and {@code queryHostname} and
    * construct a {@link StatsSnapshot} from them.
-   * @param clusterName the clusterName.
-   * @param hostname the hostname
+   * @param queryHostname the hostname to query
    * @return {@link StatsSnapshot} published by the given host.
    * @throws SQLException
    */
   @Override
-  public StatsWrapper queryStatsOf(String clusterName, String hostname) throws SQLException {
+  public synchronized StatsWrapper queryAccountStatsOf(String queryHostname) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    hostname = hostnameHelper.simplifyHostname(hostname);
+    queryHostname = hostnameHelper.simplifyHostname(queryHostname);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
     StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
     AtomicLong timestamp = new AtomicLong(0);
-    accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
+    accountReportsDao.queryStorageUsageForHost(clusterName, queryHostname,
         (partitionId, accountId, containerId, storageUsage, updatedAtMs) -> {
           StatsSnapshot partitionSnapshot = hostSnapshot.getSubMap()
               .computeIfAbsent("Partition[" + partitionId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));
@@ -235,13 +256,11 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param snapshot The aggregated account stats snapshot.
    */
   @Override
-  public void storeAggregatedStats(StatsSnapshot snapshot) throws SQLException {
+  public synchronized void storeAggregatedAccountStats(StatsSnapshot snapshot) throws SQLException {
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
-    AggregatedAccountReportsDao.AggregatedStorageBatchUpdater batch = null;
-    if (batchEnabled) {
-      batch = aggregatedaccountReportsDao.new AggregatedStorageBatchUpdater(config.updateBatchSize);
-    }
+    AggregatedAccountReportsDao.AggregatedStorageBatchUpdater batch =
+        aggregatedaccountReportsDao.new AggregatedStorageBatchUpdater(config.updateBatchSize);
     for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
       String accountIdKey = accountMapEntry.getKey();
       short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
@@ -250,17 +269,11 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         String containerIdKey = currContainerMapEntry.getKey();
         short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
         long currStorageUsage = currContainerMapEntry.getValue().getValue();
-        if (batchEnabled) {
-          batch.addUpdateToBatch(accountId, containerId, currStorageUsage);
-        } else {
-          aggregatedaccountReportsDao.updateStorageUsage(accountId, containerId, currStorageUsage);
-        }
+        batch.addUpdateToBatch(clusterName, accountId, containerId, currStorageUsage);
         batchSize++;
       }
     }
-    if (batchEnabled) {
-      batch.flush();
-    }
+    batch.flush();
     storeMetrics.aggregatedPublishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.aggregatedBatchSize.update(batchSize);
   }
@@ -270,12 +283,11 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * a map from those data. The map is structured as such:
    * <p>Outer map's key is the string format of account id, inner map's key is the string format of container id and the
    * value of the inner map is the storage usage of the container.</p>
-   * @param clusterName the clusterName.
    * @return A map that represents container storage usage.
    * @throws Exception
    */
   @Override
-  public Map<String, Map<String, Long>> queryAggregatedStats(String clusterName) throws Exception {
+  public synchronized Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
     aggregatedaccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
@@ -287,7 +299,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public Map<String, Map<String, Long>> queryMonthlyAggregatedStats(String clusterName) throws Exception {
+  public synchronized Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
     aggregatedaccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
@@ -300,7 +312,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public String queryRecordedMonth(String clusterName) throws SQLException {
+  public synchronized String queryRecordedMonth() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     String result = aggregatedaccountReportsDao.queryMonthForCluster(clusterName);
     storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -310,16 +322,177 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   /**
    * Copy the row of table {@link AggregatedAccountReportsDao#AGGREGATED_ACCOUNT_REPORTS_TABLE} to {@link AggregatedAccountReportsDao#MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE}
    * and update the {@code monthValue} in table {@link AggregatedAccountReportsDao#AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE}.
-   * @param clusterName The clusterName
    * @param monthValue The month value.
    * @throws Exception
    */
   @Override
-  public void takeSnapshotOfAggregatedStatsAndUpdateMonth(String clusterName, String monthValue) throws Exception {
+  public synchronized void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception {
     long startTimeMs = System.currentTimeMillis();
     aggregatedaccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
     aggregatedaccountReportsDao.updateMonth(clusterName, monthValue);
     storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
+  public synchronized void storePartitionClassStats(StatsWrapper statsWrapper) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    // 1. Get all the partition class names in this statswrapper
+    Map<String, StatsSnapshot> partitionClassSubMap = statsWrapper.getSnapshot().getSubMap();
+    Set<String> partitionClassNames = new HashSet<>(partitionClassSubMap.keySet());
+    Map<String, Short> partitionClassNamesInDB = partitionClassReportsDao.queryPartitionClassNames(clusterName);
+    // 2. Add partition class names not in db
+    partitionClassNames.removeAll(partitionClassNamesInDB.keySet());
+    if (!partitionClassNames.isEmpty()) {
+      for (String partitionClassName : partitionClassNames) {
+        partitionClassReportsDao.insertPartitionClassName(clusterName, partitionClassName);
+      }
+      // Fresh the partition class names
+      partitionClassNamesInDB = partitionClassReportsDao.queryPartitionClassNames(clusterName);
+    }
+
+    // 3. Get partition ids under each partition class name
+    Map<String, List<Short>> partitionIdsUnderClassNames = partitionClassSubMap.entrySet()
+        .stream()
+        .collect(Collectors.toMap(Map.Entry::getKey, ent -> ent.getValue()
+            .getSubMap()
+            .keySet()
+            .stream()
+            .map(pk -> Short.valueOf(pk.substring("Partition[".length(), pk.length() - 1)))
+            .collect(Collectors.toList())));
+
+    // 4. Add partition ids not in db
+    Set<Short> partitionIdsInDB = partitionClassReportsDao.queryPartitionIds(clusterName);
+    for (String partitionClassName : partitionIdsUnderClassNames.keySet()) {
+      short partitionClassId = partitionClassNamesInDB.get(partitionClassName);
+      for (Short pid : partitionIdsUnderClassNames.get(partitionClassName)) {
+        if (!partitionIdsInDB.contains(pid)) {
+          partitionClassReportsDao.insertPartitionId(clusterName, pid, partitionClassId);
+        }
+      }
+    }
+    storeMetrics.storePartitionClassStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
+  public synchronized void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    PartitionClassReportsDao.StorageBatchUpdater batch =
+        partitionClassReportsDao.new StorageBatchUpdater(config.updateBatchSize);
+    for (Map.Entry<String, StatsSnapshot> partitionClassMapEntry : statsSnapshot.getSubMap().entrySet()) {
+      String partitionClassName = partitionClassMapEntry.getKey();
+      for (Map.Entry<String, StatsSnapshot> accountContainerMapEntry : partitionClassMapEntry.getValue()
+          .getSubMap()
+          .entrySet()) {
+        String accountContainer = accountContainerMapEntry.getKey();
+        long usage = accountContainerMapEntry.getValue().getValue();
+        String[] parts = accountContainer.split(Utils.ACCOUNT_CONTAINER_SEPARATOR);
+        short accountId = Short.valueOf(parts[0].substring(2, parts[0].length() - 1));
+        short containerId = Short.valueOf(parts[1].substring(2, parts[1].length() - 1));
+        batch.addUpdateToBatch(clusterName, partitionClassName, accountId, containerId, usage);
+      }
+    }
+    batch.flush();
+    storeMetrics.storeAggregatedPartitionClassStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
+  public synchronized StatsSnapshot queryAggregatedPartitionClassStatsOf() throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    Map<String, Map<Short, Map<Short, Long>>> partitionClassNameAccountContainerUsages = new HashMap<>();
+    AtomicLong timestamp = new AtomicLong(0);
+    partitionClassReportsDao.queryAggregatedPartitionClassReport(clusterName,
+        (partitionClassName, accountId, containerId, storageUsage, updatedAt) -> {
+          partitionClassNameAccountContainerUsages.computeIfAbsent(partitionClassName, k -> new HashMap<>())
+              .computeIfAbsent(accountId, k -> new HashMap<>())
+              .put(containerId, storageUsage);
+          timestamp.set(Math.max(timestamp.get(), updatedAt));
+        });
+    Map<String, StatsSnapshot> partitionClassNameSubMap = new HashMap<>();
+    for (String partitionClassName : partitionClassNameAccountContainerUsages.keySet()) {
+      Map<String, StatsSnapshot> accountContainerSubMap = new HashMap<>();
+      for (short accountId : partitionClassNameAccountContainerUsages.get(partitionClassName).keySet()) {
+        for (Map.Entry<Short, Long> usageEntry : partitionClassNameAccountContainerUsages.get(partitionClassName)
+            .get(accountId)
+            .entrySet()) {
+          short containerId = usageEntry.getKey();
+          long usage = usageEntry.getValue();
+          accountContainerSubMap.put(
+              "A[" + accountId + "]" + Utils.ACCOUNT_CONTAINER_SEPARATOR + "C[" + containerId + "]",
+              new StatsSnapshot(usage, null));
+        }
+      }
+      long accountContainerValue = accountContainerSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+      partitionClassNameSubMap.put(partitionClassName,
+          new StatsSnapshot(accountContainerValue, accountContainerSubMap));
+    }
+    long partitionClassNameValue = partitionClassNameSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+    storeMetrics.queryAggregatedPartitionClassStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return new StatsSnapshot(partitionClassNameValue, partitionClassNameSubMap);
+  }
+
+  @Override
+  public synchronized Map<String, Set<Short>> queryPartitionNameAndIds() throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    Map<String, Set<Short>> result = partitionClassReportsDao.queryPartitionNameAndIds(clusterName);
+    storeMetrics.queryPartitionNameAndIdTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return result;
+  }
+
+  @Override
+  public synchronized StatsWrapper queryPartitionClassStatsOf(String hostname,
+      Map<String, Set<Short>> partitionNameAndIds) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    hostname = hostnameHelper.simplifyHostname(hostname);
+    Map<Short, Map<Short, Map<Short, Long>>> partitionAccountContainerUsage = new HashMap<>();
+    AtomicLong timestamp = new AtomicLong(0);
+    accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
+        (partitionId, accountId, containerId, storageUsage, updatedAtMs) -> {
+          partitionAccountContainerUsage.computeIfAbsent(partitionId, pid -> new HashMap<>())
+              .computeIfAbsent(accountId, aid -> new HashMap<>())
+              .put(containerId, storageUsage);
+          timestamp.set(Math.max(timestamp.get(), updatedAtMs));
+        });
+    // Get all the partition ids;
+    Set<Short> partitionIds = partitionAccountContainerUsage.keySet();
+    Map<String, Set<Short>> partitionNameAndIdsForHost = new HashMap<>();
+    for (Short partitionId : partitionIds) {
+      boolean found = false;
+      for (Map.Entry<String, Set<Short>> namesAndIdsEntry : partitionNameAndIds.entrySet()) {
+        if (namesAndIdsEntry.getValue().contains(partitionId)) {
+          partitionNameAndIdsForHost.computeIfAbsent(namesAndIdsEntry.getKey(), k -> new HashSet<>()).add(partitionId);
+          found = true;
+          break;
+        }
+      }
+    }
+    Map<String, StatsSnapshot> partitionClassSubMap = new HashMap<>();
+    for (Map.Entry<String, Set<Short>> nameAndIdsEntry : partitionNameAndIdsForHost.entrySet()) {
+      String partitionClassName = nameAndIdsEntry.getKey();
+      Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
+      for (short partitionId : nameAndIdsEntry.getValue()) {
+        Map<Short, Map<Short, Long>> accountContainerUsage = partitionAccountContainerUsage.get(partitionId);
+        Map<String, StatsSnapshot> accountContainerSubMap = new HashMap<>();
+        for (short accountId : accountContainerUsage.keySet()) {
+          Map<Short, Long> containerUsage = accountContainerUsage.get(accountId);
+          containerUsage.entrySet()
+              .forEach(ent -> accountContainerSubMap.put(
+                  "A[" + accountId + "]" + Utils.ACCOUNT_CONTAINER_SEPARATOR + "C[" + ent.getKey() + "]",
+                  new StatsSnapshot(ent.getValue(), null)));
+        }
+        long partitionValue = accountContainerSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+        StatsSnapshot partitionStats = new StatsSnapshot(partitionValue, accountContainerSubMap);
+        partitionSubMap.put("Partition[" + partitionId + "]", partitionStats);
+      }
+      long partitionClassValue = partitionSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+      StatsSnapshot partitionClassStats = new StatsSnapshot(partitionClassValue, partitionSubMap);
+      partitionClassSubMap.put(partitionClassName, partitionClassStats);
+    }
+    long hostValue = partitionClassSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+    StatsSnapshot hostStats = new StatsSnapshot(hostValue, partitionClassSubMap);
+
+    storeMetrics.queryPartitionClassStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return new StatsWrapper(new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp.get(),
+        partitionAccountContainerUsage.size(), partitionAccountContainerUsage.size(), null), hostStats);
   }
 
   /**

@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -26,7 +27,7 @@ public interface AccountStatsStore {
    * and container. This method will be used for individual ambry server to store local stats.
    * @param statsWrapper The {@link StatsWrapper} that contains stats and other metadata.
    */
-  void storeStats(StatsWrapper statsWrapper) throws Exception;
+  void storeAccountStats(StatsWrapper statsWrapper) throws Exception;
 
   /**
    * Store aggregated stats in the {@link StatsSnapshot}. The StatsSnapshot should include account and container. This
@@ -34,21 +35,19 @@ public interface AccountStatsStore {
    * @param snapshot The {@link StatsSnapshot} that contains aggregated container usage.
    * @throws Exception
    */
-  void storeAggregatedStats(StatsSnapshot snapshot) throws Exception;
+  void storeAggregatedAccountStats(StatsSnapshot snapshot) throws Exception;
 
   /**
-   * Return individual ambry server's stats for the given {@code clusterName} and {@code hostname}. This is the stats
-   * stored by method {@link #storeStats}.
-   * @param clusterName The clusterName.
+   * Return individual ambry server's stats for the given {@code hostname}. This is the stats stored by method {@link #storeAccountStats}.
    * @param hostname The hostname.
-   * @return {@link StatsWrapper} of given {@code hostname} in the {@code clusterName}.
+   * @return {@link StatsWrapper} of given {@code hostname}.
    * @throws Exception
    */
-  StatsWrapper queryStatsOf(String clusterName, String hostname) throws Exception;
+  StatsWrapper queryAccountStatsOf(String hostname) throws Exception;
 
   /**
-   * Return the aggregated stats for the given {@code clusterName}. This is the stats stored by method {@link #storeAggregatedStats}.
-   * Since the {@link StatsSnapshot} passed to {@link #storeAggregatedStats} only have account and container stats, this
+   * Return the aggregated stats. This is the stats stored by method {@link #storeAggregatedAccountStats}.
+   * Since the {@link StatsSnapshot} passed to {@link #storeAggregatedAccountStats} only have account and container stats, this
    * method returns a map back to the caller. The key of the outer map is the account id in string format, and the key of
    * the inner map is the container id in string format, the value of the inner map is the storage usage for this container.
    * <pre>
@@ -62,37 +61,117 @@ public interface AccountStatsStore {
    *     }
    *   }
    * </pre>
-   * @param clusterName The clusterName.
    * @return The map that represents the container storage usage.
    * @throws Exception
    */
-  Map<String, Map<String, Long>> queryAggregatedStats(String clusterName) throws Exception;
+  Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception;
 
   /**
-   * Return the monthly aggregated stats. This method returns a map in the same format as the {@link #queryAggregatedStats}.
+   * Return the monthly aggregated stats. This method returns a map in the same format as the {@link #queryAggregatedAccountStats}.
    * The only difference these two methods have is that this method's returned value only changes in the beginning of each
    * month. For every new month(in local zone offset), an aggregated stats will be written to storage and a snapshot will
    * be created. This method will return current snapshot. This method doesn't require a month value to fetch the snapshot
    * as this new snapshot will be override the old ones.
-   * @param clusterName The clusterName.
-   * @return The map thtat represents the container storage usage.
+   * @return The map that represents the container storage usage.
    * @throws Exception
    */
-  Map<String, Map<String, Long>> queryMonthlyAggregatedStats(String clusterName) throws Exception;
+  Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception;
 
   /**
    * Return the month value of the current container storage snapshot.
-   * @param clusterName The clusterName.
    * @return The month value for current snapshot, like "2020-01". Empty string will be returned if there is no record.
    * @throws Exception
    */
-  String queryRecordedMonth(String clusterName) throws Exception;
+  String queryRecordedMonth() throws Exception;
 
   /**
    * Taking a snapshot of current aggregated stats and update the month value.
-   * @param clusterName The clusterName.
    * @param monthValue The month in string format, like "2020-01".
    * @throws Exception
    */
-  void takeSnapshotOfAggregatedStatsAndUpdateMonth(String clusterName, String monthValue) throws Exception;
+  void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception;
+
+  /**
+   * Return all the partition class names and their corresponding partition ids in a set.
+   * @return A map whose key is the partition class name and the value is a set of a partition ids.
+   * @throws Exception
+   */
+  Map<String, Set<Short>> queryPartitionNameAndIds() throws Exception;
+
+  /**
+   * Store partition class stats in {@link StatsWrapper}. This stats are per host stats. The stats is first grouped
+   * by partition class name. Within each partition class name stats, it's then grouped by partition id. Within each
+   * partition id, it's then grouped by the AccountID___ContainerId. It looks like this:
+   * <pre>
+   *   {
+   *     "default-partition-class": {
+   *        "Partition[10]": {
+   *          "A[1]___C[1]: { "v" : 1000},
+   *          "A[1]___C[2]: { "v" : 2000},
+   *          "A[5]___C[1]: { "v" : 1000}
+   *        },
+   *        "Partition[11]": {
+   *          "A[1]___C[1]: { "v": 1200 }
+   *        }
+   *     },
+   *     "new-partition-class": {
+   *        "Partition[20]": {
+   *          "A[1]___C[1]: { "v" : 1000},
+   *          "A[1]___C[2]: { "v" : 2000},
+   *          "A[5]___C[1]: { "v" : 1000}
+   *        },
+   *        "Partition[21]": {
+   *          "A[1]___C[1]: { "v": 1200 }
+   *        }
+   *     }
+   *   }
+   * </pre>
+   * This is the same data as account stats and we store account stats with method {@link #storeAccountStats} much more often
+   * then partition class stats, in this method, we have have to store the same container storage usage data again.
+   * @param statsWrapper
+   * @throws Exception
+   */
+  void storePartitionClassStats(StatsWrapper statsWrapper) throws Exception;
+
+  /**
+   * Return the per host partition class stats for given {@code hostname}. The {@code partitionNameAndIds} are the return
+   * value from {@link #queryPartitionNameAndIds()}. The returned StatsWrapper is constructed in the same way as it's
+   * passed to method {@link #storePartitionClassStats}.
+   * @param hostname The hostname
+   * @param partitionNameAndIds the return value of {@link #queryPartitionNameAndIds()}.
+   * @return A {@link StatsWrapper} represents the per host partition class stats.
+   * @throws Exception
+   */
+  StatsWrapper queryPartitionClassStatsOf(String hostname, Map<String, Set<Short>> partitionNameAndIds)
+      throws Exception;
+
+  /**
+   * Store aggregated partition class stats in the {@link StatsWrapper}. The stats looks a bit different then the per host
+   * stats. It's constructed like this:
+   * <pre>
+   *   {
+   *     "default-partition-class": {
+   *       "A[1]___C[1]": { "v": 2200},
+   *       "A[1]___C[2]": { "v": 2000},
+   *       "A[5]___C[2]": { "v": 1000},
+   *     },
+   *     "new-partition-class": {
+   *       "A[1]___C[1]": { "v": 2200},
+   *       "A[1]___C[2]": { "v": 2000},
+   *       "A[5]___C[2]": { "v": 1000},
+   *     }
+   *   }
+   * </pre>
+   * @param statsSnapshot The {@link StatsSnapshot} that contains aggregated partition class container usage stats
+   * @throws Exception
+   */
+  void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws Exception;
+
+  /**
+   * Return the aggregated partition class stats for given. The returned StatsSnapshot is constructed in the same way
+   * as it's passed to method {@link #storeAggregatedPartitionClassStats}.
+   * @return A {@link StatsSnapshot} represents the aggregated partition class stats.
+   * @throws Exception
+   */
+  StatsSnapshot queryAggregatedPartitionClassStatsOf() throws Exception;
 }

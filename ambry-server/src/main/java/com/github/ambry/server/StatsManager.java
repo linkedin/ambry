@@ -471,7 +471,7 @@ class StatsManager {
           // First write to account stats
           StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
           if (accountStatsMySqlStore != null) {
-            accountStatsMySqlStore.storeStats(statsWrapper);
+            accountStatsMySqlStore.storeAccountStats(statsWrapper);
           }
           publish(statsWrapper);
           logger.info("Local stats snapshot published to {}", statsOutputFile.getAbsolutePath());

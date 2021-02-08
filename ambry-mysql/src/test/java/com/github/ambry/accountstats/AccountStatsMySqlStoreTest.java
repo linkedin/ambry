@@ -120,7 +120,7 @@ public class AccountStatsMySqlStoreTest {
     StatsHeader header =
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, System.currentTimeMillis(), 10, 10, null);
     StatsWrapper statsWrapper = new StatsWrapper(header, snapshot);
-    store.storeStats(statsWrapper);
+    store.storeAccountStats(statsWrapper);
     assertEquals("Write success count should be " + (10 * 10), 10 * 10, metrics.writeSuccessCount.getCount());
 
     ObjectMapper objectMapper = new ObjectMapper();
@@ -131,7 +131,7 @@ public class AccountStatsMySqlStoreTest {
 
     // We have a local backup to start with.
     // Write the statsWrapper from local backup
-    store.storeStats(statsWrapper);
+    store.storeAccountStats(statsWrapper);
     assertEquals("Write success count should be " + (10 * 10), (10 * 10), metrics.writeSuccessCount.getCount());
   }
 
@@ -151,13 +151,13 @@ public class AccountStatsMySqlStoreTest {
     AccountStatsMySqlStore store =
         new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
-    store.storeStats(statsWrapper);
+    store.storeAccountStats(statsWrapper);
     assertEquals("Write success count should be 0", 0, metrics.writeSuccessCount.getCount());
 
     // Since all container storage usages are default values, second Snapshot should be the same as the first snapshot
     StatsSnapshot secondSnapshot = createStatsSnapshot(10, 10, 1, true);
     StatsWrapper secondStatsWrapper = new StatsWrapper(header, secondSnapshot);
-    store.storeStats(secondStatsWrapper);
+    store.storeAccountStats(secondStatsWrapper);
     assertEquals("Write success count should be 0", 0, metrics.writeSuccessCount.getCount());
     // Now the previous stats wrapper should be the second statsWrapper
     assertTrue(secondStatsWrapper == store.getPreviousStats());
@@ -172,7 +172,7 @@ public class AccountStatsMySqlStoreTest {
         .get("A[" + accountId + "]")
         .getSubMap()
         .put("C[" + BASE_CONTAINER_ID + "]", new StatsSnapshot((long) (DEFAULT_CONTAINER_USAGE + 1), null));
-    store.storeStats(statsWrapper);
+    store.storeAccountStats(statsWrapper);
     assertEquals("Write success count should be 1", 1, metrics.writeSuccessCount.getCount());
     assertTrue(statsWrapper == store.getPreviousStats());
 
@@ -183,7 +183,7 @@ public class AccountStatsMySqlStoreTest {
         .put("Partition[" + (BASE_PARTITION_ID + 10) + "]",
             additionalSnapshot.getSubMap().get("Partition[" + BASE_PARTITION_ID + "]"));
     // With the change from the previous one, we should see 10 + 1 writes
-    store.storeStats(secondStatsWrapper);
+    store.storeAccountStats(secondStatsWrapper);
     assertEquals("Write success count should be 12", 12, metrics.writeSuccessCount.getCount());
     assertTrue(secondStatsWrapper == store.getPreviousStats());
   }

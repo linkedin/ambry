@@ -75,16 +75,13 @@ public class AggregatedAccountReportsDao {
           AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN, MONTH_COLUMN, MONTH_COLUMN);
 
   private final MySqlDataAccessor dataAccessor;
-  private final String clusterName;
 
   /**
    * Constructor to create {@link AggregatedAccountReportsDao}.
    * @param dataAccessor The {@link MySqlDataAccessor}.
-   * @param clusterName The clusterName.
    */
-  AggregatedAccountReportsDao(MySqlDataAccessor dataAccessor, String clusterName) {
+  AggregatedAccountReportsDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
-    this.clusterName = Objects.requireNonNull(clusterName, "clusterName is empty");
   }
 
   /**
@@ -94,7 +91,8 @@ public class AggregatedAccountReportsDao {
    * @param storageUsage The storage usage in bytes.
    * @throws SQLException
    */
-  void updateStorageUsage(short accountId, short containerId, long storageUsage) throws SQLException {
+  void updateStorageUsage(String clusterName, short accountId, short containerId, long storageUsage)
+      throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
@@ -258,7 +256,8 @@ public class AggregatedAccountReportsDao {
      * @param storageUsage The storage usage in bytes.
      * @throws SQLException
      */
-    public void addUpdateToBatch(short accountId, short containerId, long storageUsage) throws SQLException {
+    public void addUpdateToBatch(String clusterName, short accountId, short containerId, long storageUsage)
+        throws SQLException {
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setInt(2, accountId);

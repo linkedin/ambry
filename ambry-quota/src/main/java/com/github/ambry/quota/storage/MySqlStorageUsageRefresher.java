@@ -16,7 +16,6 @@ package com.github.ambry.quota.storage;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.MySqlReportAggregatorTask;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.utils.SystemTime;
@@ -79,7 +78,6 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   private final AtomicReference<Listener> listener = new AtomicReference<>(null);
   private final ScheduledExecutorService scheduler;
   private final StorageQuotaConfig config;
-  private final ClusterMapConfig clusterMapConfig;
   private final StorageQuotaServiceMetrics metrics;
   private final BackupFileManager backupFileManager;
 
@@ -92,17 +90,14 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
    * @param accountStatsStore The {@link AccountStatsStore} to interact with mysql database.
    * @param scheduler The {@link ScheduledExecutorService} to schedule background tasks.
    * @param config The {@link StorageQuotaConfig}.
-   * @param clusterMapConfig The {@link ClusterMapConfig}.
    * @param metrics The {@link StorageQuotaServiceMetrics} to update metrics
    * @throws IOException
    */
   public MySqlStorageUsageRefresher(AccountStatsStore accountStatsStore, ScheduledExecutorService scheduler,
-      StorageQuotaConfig config, ClusterMapConfig clusterMapConfig, StorageQuotaServiceMetrics metrics)
-      throws IOException {
+      StorageQuotaConfig config, StorageQuotaServiceMetrics metrics) throws IOException {
     this.accountStatsStore = Objects.requireNonNull(accountStatsStore, "AccountStatsStore is null");
     this.scheduler = Objects.requireNonNull(scheduler, "Scheduler is null");
     this.config = config;
-    this.clusterMapConfig = clusterMapConfig;
     this.metrics = metrics;
     this.backupFileManager =
         this.config.backupFileDir.isEmpty() ? null : new BackupFileManager(this.config.backupFileDir);
@@ -144,13 +139,12 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       try {
         // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
         logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
-        containerStorageUsageMonthlyBase =
-            accountStatsStore.queryMonthlyAggregatedStats(clusterMapConfig.clusterMapClusterName);
+        containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
         // If the monthly base is indeed for this month, then try to persist it in the backup file.
         // There is a chance that the database has a snapshot from last month since the aggregation task is executed
         // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
         // would have the snapshot of last month.
-        if (currentMonth.equals(accountStatsStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName))) {
+        if (currentMonth.equals(accountStatsStore.queryRecordedMonth())) {
           tryPersistMonthlyUsage();
         }
       } catch (Exception e) {
@@ -181,11 +175,10 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   private void fetchMonthlyStorageUsageAndMaybeRetry() {
     boolean shouldRetry = false;
     try {
-      String monthValue = accountStatsStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName);
+      String monthValue = accountStatsStore.queryRecordedMonth();
       if (monthValue.equals(currentMonth)) {
         logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}", currentMonth);
-        containerStorageUsageMonthlyBase =
-            accountStatsStore.queryMonthlyAggregatedStats(clusterMapConfig.clusterMapClusterName);
+        containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
       } else {
         logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
             monthValue);
@@ -259,8 +252,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       try {
         long startTimeMs = System.currentTimeMillis();
         Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
-        Map<String, Map<String, Long>> storageUsage =
-            accountStatsStore.queryAggregatedStats(clusterMapConfig.clusterMapClusterName);
+        Map<String, Map<String, Long>> storageUsage = accountStatsStore.queryAggregatedAccountStats();
         subtract(storageUsage, base);
         containerStorageUsageForCurrentMonthRef.set(storageUsage);
         if (listener.get() != null) {

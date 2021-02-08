@@ -25,6 +25,7 @@ public interface ContainerUsageFunction {
    * @param accountId
    * @param containerId
    * @param storageUsage
+   * @param updatedAtMs
    */
   void apply(short partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs);
 }
