@@ -46,9 +46,9 @@ import reactor.core.publisher.Mono;
  */
 public class ADAuthBasedStorageClient extends StorageClient {
   private static final String AD_AUTH_TOKEN_REFRESHER_PREFIX = "AdAuthTokenRefresher";
-  private final ScheduledExecutorService tokenRefreshScheduler =
+  private ScheduledExecutorService tokenRefreshScheduler =
       Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
-  private final AtomicReference<ScheduledFuture<?>> scheduledFutureRef = new AtomicReference<>(null);
+  private AtomicReference<ScheduledFuture<?>> scheduledFutureRef = new AtomicReference<>(null);
   private AtomicReference<AccessToken> accessTokenRef;
 
   /**
@@ -100,7 +100,11 @@ public class ADAuthBasedStorageClient extends StorageClient {
       }
     };
     if (accessTokenRef == null) {
+      // This means the object is not initialized yet, because this method was called from base class's constructor.
       accessTokenRef = new AtomicReference<>(accessToken);
+      tokenRefreshScheduler =
+          Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
+      scheduledFutureRef = new AtomicReference<>(null);
     } else {
       accessTokenRef.set(accessToken);
     }
