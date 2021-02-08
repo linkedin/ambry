@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
   private static final Logger logger = LoggerFactory.getLogger(AmbrySendToHttp2Adaptor.class);
   private final boolean forServer;
+  private final int maxFrameSize = 5000;
 
   /**
    * @param forServer if true, the handler is used as server side outbound handler. Otherwise, it's use as client side
@@ -71,9 +72,26 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
     }
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     ctx.write(headersFrame);
-    ByteBuf dataContent = send.content();
-    DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(dataContent, true);
-    // Caller should call writeAndFlush().
-    ctx.write(dataFrame, promise);
+
+    int frameNumber =
+        send.content().readableBytes() / maxFrameSize + (send.content().readableBytes() % maxFrameSize == 0 ? 0 : 1);
+    // Referencing counting for derived {@link ByteBuf}: https://netty.io/wiki/reference-counted-objects.html#derived-buffers
+    try {
+      while (send.content().readableBytes() > maxFrameSize) {
+        ByteBuf slice = send.content().readSlice(maxFrameSize);
+        slice.retain();
+        DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, false);
+        ctx.write(dataFrame, promise);
+      }
+      // The last slice
+      ByteBuf slice = send.content().readSlice(send.content().readableBytes());
+      slice.retain();
+      DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, true);
+      ctx.writeAndFlush(dataFrame, promise);
+    } catch (Exception e) {
+      logger.error("Error while processing frames. Channel: {}", ctx.channel(), e);
+    } finally {
+      send.content().release();
+    }
   }
 }
