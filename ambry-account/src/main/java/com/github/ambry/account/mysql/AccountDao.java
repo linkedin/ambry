@@ -103,7 +103,7 @@ public class AccountDao {
    * @return a list of {@link Account}s.
    * @throws SQLException
    */
-  public List<Account> getNewAccounts(long updatedSince) throws SQLException {
+  public synchronized List<Account> getNewAccounts(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
     ResultSet rs = null;
@@ -149,7 +149,7 @@ public class AccountDao {
    * @return a list of {@link Container}s.
    * @throws SQLException
    */
-  public List<Container> getContainers(int accountId) throws SQLException {
+  public synchronized List<Container> getContainers(int accountId) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     ResultSet rs = null;
     try {
@@ -173,7 +173,7 @@ public class AccountDao {
    * @return a list of {@link Container}s.
    * @throws SQLException
    */
-  public List<Container> getNewContainers(long updatedSince) throws SQLException {
+  public synchronized List<Container> getNewContainers(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
     ResultSet rs = null;
