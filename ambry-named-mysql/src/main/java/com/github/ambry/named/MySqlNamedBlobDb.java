@@ -18,6 +18,9 @@ package com.github.ambry.named;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.RetryExecutor;
+import com.github.ambry.commons.RetryPolicies;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlUtils;
@@ -25,6 +28,7 @@ import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
+import java.io.Closeable;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -36,6 +40,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.apache.commons.codec.binary.Base64;
@@ -113,9 +118,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS, DELETED_TS, PK_MATCH);
 
   private final AccountService accountService;
-  private final Map<String, DataSource> dcToDataSource;
   private final String localDatacenter;
-  private final ExecutorService executorService;
+  private final RetryExecutor retryExecutor;
+  private final Map<String, TransactionExecutor> transactionExecutors;
   private final MySqlNamedBlobDbConfig config;
 
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
@@ -123,14 +128,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     this.accountService = accountService;
     this.config = config;
     this.localDatacenter = localDatacenter;
-    this.dcToDataSource = MySqlUtils.getDbEndpointsPerDC(config.dbInfo)
+    this.retryExecutor = new RetryExecutor(null); // TODO pass in SES.
+    this.transactionExecutors = MySqlUtils.getDbEndpointsPerDC(config.dbInfo)
         .values()
         .stream()
         .flatMap(List::stream)
         .filter(DbEndpoint::isWriteable)
-        .collect(Collectors.toMap(DbEndpoint::getDatacenter, dataSourceFactory::getDataSource));
-    // size this to match the connection pool
-    executorService = Executors.newFixedThreadPool(config.poolSize);
+        .collect(Collectors.toMap(DbEndpoint::getDatacenter,
+            dbEndpoint -> new TransactionExecutor(dbEndpoint.getDatacenter(),
+                dataSourceFactory.getDataSource(dbEndpoint),
+                localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
   }
 
   @Override
@@ -303,6 +310,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private <T> CompletableFuture<T> executeTransactionAsync(String accountName, String containerName, boolean autoCommit,
       Transaction<T> transaction) {
+    // TODO pass in a TransactionStateTracker to describe the retry strategy (i.e. what error code to retry on)
+    TransactionStateTracker transactionStateTracker = new TransactionStateTracker();
     CompletableFuture<T> future = new CompletableFuture<>();
 
     // Look up account and container IDs. This is common logic needed for all types of transactions.
@@ -319,31 +328,89 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       return future;
     }
 
-    executorService.submit(() -> {
-      // TODO introduce failover handling (retry on remote datacenters, handle SQL exceptions)
-      try (Connection connection = dcToDataSource.get(localDatacenter).getConnection()) {
-        T result;
-        if (autoCommit) {
-          result = transaction.run(account.getId(), container.getId(), connection);
-        } else {
-          // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
-          connection.setAutoCommit(false);
-          try {
-            result = transaction.run(account.getId(), container.getId(), connection);
-            connection.commit();
-          } catch (Exception e) {
-            connection.rollback();
-            throw e;
-          } finally {
-            connection.setAutoCommit(true);
-          }
-        }
+    Callback<T> finalCallback = (result, exception) -> {
+      if (exception != null) {
+        future.completeExceptionally(exception);
+      } else {
         future.complete(result);
-      } catch (Exception e) {
-        future.completeExceptionally(e);
       }
-    });
+    };
+    // TODO consider introducing CompletableFuture support in RetryExecutor so that we can use only futures, no callback
+    retryExecutor.runWithRetries(RetryPolicies.fixedBackoffPolicy(transactionExecutors.size(), 0), callback -> {
+      String datacenter = transactionStateTracker.getNextDatacenter();
+      transactionExecutors.get(datacenter).executeTransaction(container, autoCommit, transaction, callback);
+    }, transactionStateTracker::processFailure, finalCallback);
+
     return future;
+  }
+
+  // maybe interface? or just class with way to configure
+  private class TransactionStateTracker {
+
+    /**
+     * @param t
+     * @return true if the error can be retried, false if the error is terminal
+     */
+    boolean processFailure(Throwable t) {
+      // method should also set state such that getNextDatacenter will return correct DC next call.
+      return true; // if its something like a not found, maybe handling of delete in tthe future
+    }
+
+    String getNextDatacenter() {
+      // return datacenter to try on, probably start from local datacenter
+      return localDatacenter;
+    }
+  }
+
+  /**
+   * Execute transaction on datacenter.
+   */
+  private static class TransactionExecutor implements Closeable {
+    private final String datacenter;
+    private final DataSource dataSource;
+    private final ExecutorService executor;
+
+    TransactionExecutor(String datacenter, DataSource dataSource, int numThreads) {
+      this.datacenter = datacenter;
+      this.dataSource = dataSource;
+      executor = Executors.newFixedThreadPool(numThreads); // todo, assign useful thread names based on datacenter
+    }
+
+    <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
+        Callback<T> callback) {
+      executor.submit(() -> {
+        try (Connection connection = dataSource.getConnection()) {
+          T result;
+          if (autoCommit) {
+            result = transaction.run(container.getParentAccountId(), container.getId(), connection);
+          } else {
+            // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
+            connection.setAutoCommit(false);
+            try {
+              result = transaction.run(container.getParentAccountId(), container.getId(), connection);
+              connection.commit();
+            } catch (Exception e) {
+              connection.rollback();
+              throw e;
+            } finally {
+              connection.setAutoCommit(true);
+            }
+          }
+          callback.onCompletion(result, null);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
+      });
+    }
+
+    public DataSource getDataSource() {
+      return dataSource;
+    }
+
+    @Override
+    public void close() {
+      Utils.shutDownExecutorService(executor, 1, TimeUnit.MINUTES);
+    }
   }
 
   /**
@@ -351,7 +418,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * @return a map from datacenter name to {@link DataSource}.
    */
   Map<String, DataSource> getDataSources() {
-    return dcToDataSource;
+    return transactionExecutors.entrySet()
+        .stream()
+        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getDataSource()));
   }
 
   /**

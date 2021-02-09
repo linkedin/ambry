@@ -18,7 +18,6 @@ package com.github.ambry.utils;
 import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -94,8 +93,7 @@ public class BatchBlockingQueue<E> {
       return;
     }
     // Filter out any wakeup markers that may be in the queue. These are only there to stop a timed poll early.
-    FilteredInserter<E> filteredInserter =
-        new BatchBlockingQueue.FilteredInserter<>(returnList, e -> e != wakeupMarker);
+    FilteredInserter<E> filteredInserter = new FilteredInserter<>(returnList, e -> e != wakeupMarker);
     filteredInserter.add(first);
     queue.drainTo(filteredInserter);
   }
@@ -122,7 +120,8 @@ public class BatchBlockingQueue<E> {
 
   /**
    * An implementation of {@link AbstractCollection} to be used to insert items that match a predicate into a
-   * collection. This can be useful when methods add items to a {@link Collections}, but
+   * collection. This can be useful to avoid extra iteration/copying when methods can only add items to a
+   * {@link Collection} instance.
    */
   private static class FilteredInserter<T> extends AbstractCollection<T> {
     private final Collection<T> data;
