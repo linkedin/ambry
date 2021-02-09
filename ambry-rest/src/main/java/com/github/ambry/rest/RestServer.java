@@ -33,6 +33,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
@@ -88,7 +89,6 @@ public class RestServer {
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final NettyInternalMetrics nettyInternalMetrics;
-
   /**
    * {@link RestServer} specific metrics tracking.
    */
@@ -218,13 +218,15 @@ public class RestServer {
 
     // setup Quota
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
-    QuotaManagerFactory quotaManagerFactory =
-        Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, Collections.emptyList(), new MaxThrottlePolicy());
+    QuotaManager quotaManager =
+        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, Collections.emptyList(),
+            new MaxThrottlePolicy())).getQuotaManager();
+    quotaManager.init();
 
     // setup restRequestService
     RestRequestServiceFactory restRequestServiceFactory =
         Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap, router,
-            accountService, quotaManagerFactory.getQuotaManager());
+            accountService, quotaManager);
     restRequestService = restRequestServiceFactory.getRestRequestService();
     if (restRequestService == null) {
       throw new InstantiationException("RestRequestService is null");
