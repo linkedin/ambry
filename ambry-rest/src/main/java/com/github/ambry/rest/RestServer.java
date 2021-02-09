@@ -216,7 +216,7 @@ public class RestServer {
       ((HelixAccountService) accountService).setupRouter(router);
     }
 
-    // setup Quota
+    // setup quota management
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
     QuotaManager quotaManager =
         ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, Collections.emptyList(),
