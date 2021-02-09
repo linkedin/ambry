@@ -20,9 +20,16 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
+import java.util.Collections;
 import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -34,6 +41,17 @@ import static org.junit.Assert.*;
  * Unit tests for {@link FrontendRestRequestServiceFactory}.
  */
 public class FrontendRestRequestServiceFactoryTest {
+  private final static QuotaManager QUOTA_MANAGER;
+
+  static {
+    try {
+      QUOTA_MANAGER =
+          new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
+              Collections.emptyList(), new MaxThrottlePolicy());
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   /**
    * Tests the instantiation of an {@link FrontendRestRequestService} instance through the
@@ -55,7 +73,8 @@ public class FrontendRestRequestServiceFactoryTest {
 
     FrontendRestRequestServiceFactory frontendRestRequestServiceFactory =
         new FrontendRestRequestServiceFactory(verifiableProperties, new MockClusterMap(),
-            new InMemoryRouter(verifiableProperties, new MockClusterMap()), new InMemAccountService(false, true));
+            new InMemoryRouter(verifiableProperties, new MockClusterMap()), new InMemAccountService(false, true),
+            QUOTA_MANAGER);
     RestRequestService ambryRestRequestService = frontendRestRequestServiceFactory.getRestRequestService();
     assertNotNull("No RestRequestService returned", ambryRestRequestService);
     assertEquals("Did not receive an FrontendRestRequestService instance",
@@ -77,7 +96,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // VerifiableProperties null.
     try {
-      new FrontendRestRequestServiceFactory(null, clusterMap, router, accountService);
+      new FrontendRestRequestServiceFactory(null, clusterMap, router, accountService, QUOTA_MANAGER);
       fail("Instantiation should have failed because VerifiableProperties was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -85,7 +104,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // ClusterMap null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, null, router, accountService);
+      new FrontendRestRequestServiceFactory(verifiableProperties, null, router, accountService, QUOTA_MANAGER);
       fail("Instantiation should have failed because ClusterMap was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -93,7 +112,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // Router null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, null, accountService);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, null, accountService, QUOTA_MANAGER);
       fail("Instantiation should have failed because Router was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -101,7 +120,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // AccountService null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, router, null);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, router, null, QUOTA_MANAGER);
       fail("Instantiation should have failed because AccountService was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.

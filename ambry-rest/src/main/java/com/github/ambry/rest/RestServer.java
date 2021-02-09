@@ -26,16 +26,21 @@ import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelHandler;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
@@ -71,8 +76,8 @@ import org.slf4j.LoggerFactory;
  * {@link RestResponseHandler}.
  */
 public class RestServer {
-  private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private static final Logger logger = LoggerFactory.getLogger(RestServer.class);
+  private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final RestServerMetrics restServerMetrics;
   private final JmxReporter reporter;
   private final AccountService accountService;
@@ -84,7 +89,6 @@ public class RestServer {
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final NettyInternalMetrics nettyInternalMetrics;
-
   /**
    * {@link RestServer} specific metrics tracking.
    */
@@ -212,10 +216,17 @@ public class RestServer {
       ((HelixAccountService) accountService).setupRouter(router);
     }
 
+    // setup quota management
+    QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
+    QuotaManager quotaManager =
+        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, Collections.emptyList(),
+            new MaxThrottlePolicy())).getQuotaManager();
+    quotaManager.init();
+
     // setup restRequestService
     RestRequestServiceFactory restRequestServiceFactory =
         Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap, router,
-            accountService);
+            accountService, quotaManager);
     restRequestService = restRequestServiceFactory.getRestRequestService();
     if (restRequestService == null) {
       throw new InstantiationException("RestRequestService is null");
