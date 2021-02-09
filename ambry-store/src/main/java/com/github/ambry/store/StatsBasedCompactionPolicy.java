@@ -54,7 +54,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
-        logger.info("Valid data size from BlobStoreStats {} ", validDataSizeByLogSegment);
+        logger.info("Valid data size for {} from BlobStoreStats {} ", dataDir, validDataSizeByLogSegment);
         NavigableMap<LogSegmentName, Long> potentialLogSegmentValidSizeMap = validDataSizeByLogSegment.getSecond()
             .subMap(logSegmentsNotInJournal.get(0), true,
                 logSegmentsNotInJournal.get(logSegmentsNotInJournal.size() - 1), true);

@@ -18,6 +18,7 @@ import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -551,9 +552,11 @@ class BlobStoreCompactor {
   private boolean copyDataByLogSegment(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan)
       throws IOException, StoreException {
     logger.info("Copying data from {}", logSegmentToCopy);
+    long logSegmentStartTime = SystemTime.getInstance().milliseconds();
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
       logger.info("Processing index segment {}", indexSegmentToCopy.getFile());
+      long startTime = SystemTime.getInstance().milliseconds();
       if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyDataByIndexSegment(logSegmentToCopy,
           indexSegmentToCopy, duplicateSearchSpan)) {
         // there is a shutdown in progress or there was no space to copy all entries.
@@ -561,7 +564,11 @@ class BlobStoreCompactor {
             indexSegmentToCopy.getFile());
         return false;
       }
+      srcMetrics.compactionCopyDataByIndexSegmentTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime,
+          TimeUnit.MILLISECONDS);
     }
+    srcMetrics.compactionCopyDataByLogSegmentTimeInMs.update(
+        SystemTime.getInstance().milliseconds() - logSegmentStartTime, TimeUnit.MILLISECONDS);
     return true;
   }
 
@@ -592,7 +599,10 @@ class BlobStoreCompactor {
       return true;
     }
     // Copy these over
+    long startTime = SystemTime.getInstance().milliseconds();
     boolean copiedAll = copyRecords(logSegmentToCopy, indexEntriesToCopy, indexSegmentToCopy.getLastModifiedTimeSecs());
+    srcMetrics.compactionCopyRecordTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime,
+        TimeUnit.MILLISECONDS);
     // persist
     tgtIndex.persistIndex();
     return copiedAll;

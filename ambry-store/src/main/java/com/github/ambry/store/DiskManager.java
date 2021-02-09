@@ -494,7 +494,9 @@ class DiskManager {
   private Map<String, Throttler> getThrottlers(StoreConfig config, Time time) {
     Map<String, Throttler> throttlers = new HashMap<>();
     // compaction ops
-    Throttler compactionOpsThrottler = new Throttler(config.storeCompactionOperationsBytesPerSec, -1, true, time);
+    Throttler compactionOpsThrottler =
+        new Throttler(config.storeCompactionOperationsBytesPerSec, config.storeCompactionThrottlerCheckIntervalMs, true,
+            time);
     throttlers.put(BlobStoreCompactor.COMPACTION_CLEANUP_JOB_NAME, compactionOpsThrottler);
     // hard delete ops
     Throttler hardDeleteOpsThrottler = new Throttler(config.storeHardDeleteOperationsBytesPerSec, -1, true, time);

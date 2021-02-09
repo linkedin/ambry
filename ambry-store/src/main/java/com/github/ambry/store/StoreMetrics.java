@@ -88,6 +88,9 @@ public class StoreMetrics {
   public final Counter compactionBundleReadBufferUsed;
   public final Counter compactionBundleReadBufferIoCount;
   public final Counter compactionTargetIndexDuplicateOnNonRecoveryCount;
+  public final Timer compactionCopyRecordTimeInMs;
+  public final Timer compactionCopyDataByIndexSegmentTimeInMs;
+  public final Timer compactionCopyDataByLogSegmentTimeInMs;
 
   // BlobStoreStats metrics
   public final Counter blobStoreStatsIndexScannerErrorCount;
@@ -191,6 +194,12 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferIoCount"));
     compactionTargetIndexDuplicateOnNonRecoveryCount = registry.counter(
         MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionTargetIndexDuplicateOnNonRecoveryCount"));
+    compactionCopyRecordTimeInMs =
+        registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyRecordTimeInMs"));
+    compactionCopyDataByIndexSegmentTimeInMs = registry.timer(
+        MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyDataByIndexSegmentTimeInMs"));
+    compactionCopyDataByLogSegmentTimeInMs =
+        registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyDataByLogSegmentTimeInMs"));
     blobStoreStatsIndexScannerErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
     blobStoreRecoverCompactionPolicySwitchInfoErrorCount = registry.counter(
