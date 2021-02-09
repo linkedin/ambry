@@ -149,6 +149,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
         }
       } catch (Exception e) {
         throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
+      } finally {
+        accountStatsStore.closeConnection();
       }
     }
     metrics.mysqlRefresherInitTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -187,6 +189,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     } catch (Exception e) {
       logger.error("Failed to refresh monthly storage usage", e);
       shouldRetry = true;
+    } finally {
+      accountStatsStore.closeConnection();
     }
 
     if (shouldRetry) {
@@ -263,6 +267,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
         logger.error("Failed to retrieve the container usage from mysql", e);
         // If we already have a container usage map in memory, then don't replace it with empty map.
         containerStorageUsageForCurrentMonthRef.compareAndSet(null, Collections.EMPTY_MAP);
+      } finally {
+        accountStatsStore.closeConnection();
       }
     };
     updater.run();

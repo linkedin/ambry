@@ -109,6 +109,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       exception = e;
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
     } finally {
+      accountStatsStore.closeConnection();
       if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null && results != null
           && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
         callback.onCompletion(results.getFirst(), exception);

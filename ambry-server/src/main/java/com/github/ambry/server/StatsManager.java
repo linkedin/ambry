@@ -480,6 +480,10 @@ class StatsManager {
         metrics.statsAggregationFailureCount.inc();
         logger.error("Exception while aggregating stats for local report. Stats output file path - {}",
             statsOutputFile.getAbsolutePath(), e);
+      } finally {
+        if (accountStatsMySqlStore != null) {
+          accountStatsMySqlStore.closeConnection();
+        }
       }
     }
 

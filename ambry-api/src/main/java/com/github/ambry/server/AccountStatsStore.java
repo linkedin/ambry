@@ -174,4 +174,10 @@ public interface AccountStatsStore {
    * @throws Exception
    */
   StatsSnapshot queryAggregatedPartitionClassStatsOf() throws Exception;
+
+  /**
+   * Helper method to close the active connection, if there is one. Connection should be closed when there is no
+   * action to be performed for a while.
+   */
+  void closeConnection();
 }

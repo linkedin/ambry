@@ -510,4 +510,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public MySqlDataAccessor getMySqlDataAccessor() {
     return mySqlDataAccessor;
   }
+
+  /**
+   * Helper method to close the active connection, if there is one.
+   */
+  @Override
+  public void closeConnection() {
+    if (mySqlDataAccessor != null) {
+      mySqlDataAccessor.closeActiveConnection();
+    }
+  }
 }
