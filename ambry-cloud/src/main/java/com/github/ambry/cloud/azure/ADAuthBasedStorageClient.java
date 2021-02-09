@@ -46,9 +46,8 @@ import reactor.core.publisher.Mono;
  */
 public class ADAuthBasedStorageClient extends StorageClient {
   private static final String AD_AUTH_TOKEN_REFRESHER_PREFIX = "AdAuthTokenRefresher";
-  private ScheduledExecutorService tokenRefreshScheduler =
-      Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
-  private AtomicReference<ScheduledFuture<?>> scheduledFutureRef = new AtomicReference<>(null);
+  private ScheduledExecutorService tokenRefreshScheduler;
+  private AtomicReference<ScheduledFuture<?>> scheduledFutureRef;
   private AtomicReference<AccessToken> accessTokenRef;
 
   /**
