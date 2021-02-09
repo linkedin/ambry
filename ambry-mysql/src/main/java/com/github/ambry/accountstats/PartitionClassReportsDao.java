@@ -51,7 +51,7 @@ public class PartitionClassReportsDao {
           NAME_COLUMN);
 
   private static final String queryPartitionClassNamesSql =
-      String.format("SELECT %s, %s FROM %S WHERE %s = ?", ID_COLUMN, NAME_COLUMN, PARTITION_CLASS_NAMES_TABLE,
+      String.format("SELECT %s, %s FROM %s WHERE %s = ?", ID_COLUMN, NAME_COLUMN, PARTITION_CLASS_NAMES_TABLE,
           CLUSTER_NAME_COLUMN);
 
   private static final String insertPartitionIdSql = String.format("INSERT INTO %s VALUES (?, ?, ?)", PARTITIONS_TABLE);
