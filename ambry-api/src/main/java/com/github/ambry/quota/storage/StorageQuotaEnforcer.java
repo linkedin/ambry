@@ -60,6 +60,8 @@ public interface StorageQuotaEnforcer {
    */
   void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher);
 
+  boolean shouldThrottle(short accountId, short containerId, QuotaOperation operation, long size);
+
   /**
    * Return true if the given {@link RestRequest} should be throttled. Since the {@link StorageQuotaEnforcer} decide to
    * throttle a request based on the account id and container id, the {@code restRequest} has to carry {@link Account}

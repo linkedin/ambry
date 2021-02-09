@@ -203,7 +203,7 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback) {
+      PutBlobOptions options, Callback<String> callback, PutBlobDataChunkListener listener) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
@@ -219,7 +219,8 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback);
+      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback,
+          listener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -695,11 +696,13 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
      */
     protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback) {
+        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
+        PutBlobDataChunkListener listener) {
       if (!putManager.isOpen()) {
         handlePutManagerClosed(blobProperties, false, futureResult, callback);
       } else {
-        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback);
+        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback,
+            listener);
         routerCallback.onPollReady();
       }
     }
@@ -1070,7 +1073,8 @@ class NonBlockingRouter implements Router {
      */
     @Override
     protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback) {
+        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
+        PutBlobDataChunkListener listener) {
       RouterException routerException = new RouterException("Illegal attempt to put blob through BackgroundDeleter",
           RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationDequeuingRate.mark();

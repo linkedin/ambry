@@ -102,7 +102,8 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
     storageUsageRefresher.registerListener(getUsageRefresherListener());
   }
 
-  boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
+  @Override
+  public boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size) {
     if (op != QuotaOperation.Post) {
       return false;
     }

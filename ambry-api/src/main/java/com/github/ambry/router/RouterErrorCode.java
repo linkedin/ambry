@@ -124,4 +124,9 @@ public enum RouterErrorCode {
    * Blob is not yet deleted. For undelete, a blob needs to be deleted first.
    */
   BlobNotDeleted,
+
+  /**
+   * Too many requests to router
+   */
+  TooManyRequests,
 }

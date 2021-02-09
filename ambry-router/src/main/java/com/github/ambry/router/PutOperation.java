@@ -102,6 +102,7 @@ class PutOperation {
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
+  private final Router.PutBlobDataChunkListener listener;
   private final RouterCallback routerCallback;
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
@@ -187,10 +188,10 @@ class PutOperation {
       Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass) {
+      String partitionClass, Router.PutBlobDataChunkListener listener) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
-        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass);
+        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, listener);
   }
 
   /**
@@ -224,7 +225,7 @@ class PutOperation {
       CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         null, chunksToStitch, PutBlobOptions.DEFAULT, futureResult, callback, routerCallback, null, kms, cryptoService,
-        cryptoJobHandler, time, blobProperties, partitionClass);
+        cryptoJobHandler, time, blobProperties, partitionClass, null);
   }
 
   /**
@@ -256,7 +257,7 @@ class PutOperation {
       FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass) {
+      String partitionClass, Router.PutBlobDataChunkListener listener) {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -271,6 +272,7 @@ class PutOperation {
     this.chunksToStitch = chunksToStitch;
     this.futureResult = futureResult;
     this.callback = callback;
+    this.listener = listener;
     this.routerCallback = routerCallback;
     this.kms = kms;
     this.cryptoService = cryptoService;
@@ -595,10 +597,13 @@ class PutOperation {
             lastChunk.releaseBlobContent();
             lastChunk.state = ChunkState.Free;
           } else {
+            if (listener != null) {
+              listener.onChunkConsumedFromChannel(lastChunk.chunkIndex, lastChunk.buf.readableBytes());
+            }
             lastChunk.onFillComplete(true);
             updateChunkFillerWaitTimeMetrics();
           }
-          if (lastChunk.isReady()) {
+          if (lastChunk.isReady() && !lastChunk.chunkBlobProperties.isEncrypted()) {
             routerCallback.onPollReady();
           }
         }
@@ -1237,7 +1242,7 @@ class PutOperation {
      * @param channelReadBuf the {@link ByteBuf} from which to read data.
      * @return the number of bytes transferred in this operation.
      */
-    int fillFrom(ByteBuf channelReadBuf) {
+    int fillFrom(ByteBuf channelReadBuf) throws Exception {
       int toWrite;
       if (buf == null) {
         // If current buf is null, then only read the up to routerMaxPutChunkSizeBytes.
@@ -1260,6 +1265,9 @@ class PutOperation {
         }
       }
       if (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes) {
+        if (listener != null) {
+          listener.onChunkConsumedFromChannel(chunkIndex, buf.readableBytes());
+        }
         onFillComplete(true);
         updateChunkFillerWaitTimeMetrics();
       }

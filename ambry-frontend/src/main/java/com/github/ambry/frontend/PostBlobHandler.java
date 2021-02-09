@@ -13,12 +13,15 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.storage.QuotaOperation;
+import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -30,6 +33,8 @@ import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -70,6 +75,7 @@ class PostBlobHandler {
   private final SecurityService securityService;
   private final IdConverter idConverter;
   private final IdSigningService idSigningService;
+  private final StorageQuotaService storageQuotaService;
   private final Router router;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final Time time;
@@ -90,13 +96,14 @@ class PostBlobHandler {
    * @param clusterName the name of the storage cluster that the router communicates with
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
-      Router router, AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics, String clusterName) {
+      Router router, AccountAndContainerInjector accountAndContainerInjector, StorageQuotaService storageQuotaService,
+      Time time, FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, String clusterName) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
     this.router = router;
     this.accountAndContainerInjector = accountAndContainerInjector;
+    this.storageQuotaService = storageQuotaService;
     this.time = time;
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
@@ -180,7 +187,7 @@ class PostBlobHandler {
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo));
+              routerPutBlobCallback(blobInfo), routerPutBlobDataChunkListener(restRequest));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -222,6 +229,19 @@ class PostBlobHandler {
         setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
         idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo));
       }, uri, LOGGER, finalCallback);
+    }
+
+    private Router.PutBlobDataChunkListener routerPutBlobDataChunkListener(RestRequest restRequest) {
+      if (storageQuotaService == null) {
+        return null;
+      }
+      return (index, size) -> {
+        Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
+        Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+        if (storageQuotaService.shouldThrottle(account.getId(), container.getId(), QuotaOperation.Post, size)) {
+          throw new RouterException("StorageQuotaExceeded", RouterErrorCode.TooManyRequests);
+        }
+      };
     }
 
     /**

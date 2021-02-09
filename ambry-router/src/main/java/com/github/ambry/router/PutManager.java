@@ -138,12 +138,13 @@ class PutManager {
    * @param callback the {@link Callback} object to be called on completion of the operation.
    */
   void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
-      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback) {
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
+      Router.PutBlobDataChunkListener listener) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
         PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
             userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
-            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass);
+            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, listener);
     // TODO: netty send this request
     putOperations.add(putOperation);
     putOperation.startOperation();

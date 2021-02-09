@@ -110,7 +110,7 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      PutBlobOptions options, final Callback<String> callback) {
+      PutBlobOptions options, final Callback<String> callback, PutBlobDataChunkListener listener) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {

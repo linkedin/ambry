@@ -41,6 +41,8 @@ public interface StorageQuotaService {
    */
   void shutdown();
 
+  boolean shouldThrottle(short accountId, short containerId, QuotaOperation op, long size);
+
   /**
    * Return true if the given {@link RestRequest} should be throttled. Since the {@link StorageQuotaService} decide to
    * throttle a request based on the account id and container id, the {@code restRequest} has to carry {@link Account}

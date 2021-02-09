@@ -49,8 +49,24 @@ public interface Router extends Closeable {
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @return A future that would contain the BlobId eventually.
    */
+  default Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+      PutBlobOptions options, Callback<String> callback) {
+    return putBlob(blobProperties, userMetadata, channel, options, callback, null);
+  }
+
+  /**
+   * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
+   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   * @param listener The {@link PutBlobDataChunkListener} which will be invoked whenever a new chunk is consumed from channel
+   * @return A future that would contain the BlobId eventually.
+   */
   Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback);
+      PutBlobOptions options, Callback<String> callback, PutBlobDataChunkListener listener);
 
   /**
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
@@ -187,5 +203,9 @@ public interface Router extends Closeable {
    */
   default Future<Void> undeleteBlob(String blobId, String serviceId) {
     return undeleteBlob(blobId, serviceId, null);
+  }
+
+  interface PutBlobDataChunkListener {
+    void onChunkConsumedFromChannel(int index, int size) throws Exception;
   }
 }

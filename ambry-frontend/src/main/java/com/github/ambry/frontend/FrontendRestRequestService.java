@@ -178,7 +178,7 @@ class FrontendRestRequestService implements RestRequestService {
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName);
+            storageQuotaService, SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName);
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             frontendConfig, frontendMetrics, clusterName);

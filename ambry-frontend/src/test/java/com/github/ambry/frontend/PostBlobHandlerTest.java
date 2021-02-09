@@ -271,7 +271,7 @@ public class PostBlobHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     postBlobHandler =
         new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            idSigningService, router, injector, time, frontendConfig, metrics, CLUSTER_NAME);
+            idSigningService, router, injector, null, time, frontendConfig, metrics, CLUSTER_NAME);
   }
 
   // ttlRequiredEnforcementTest() helpers
