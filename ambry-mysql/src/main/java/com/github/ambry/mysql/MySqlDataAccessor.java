@@ -173,10 +173,10 @@ public class MySqlDataAccessor {
    * @throws SQLException
    */
   public synchronized void rollback() throws SQLException {
-    if (activeConnection == null) {
-      throw new IllegalStateException("No active connection available");
+    // Note: could be called due to not obtaining connection
+    if (activeConnection != null) {
+      activeConnection.rollback();
     }
-    activeConnection.rollback();
   }
 
   /**

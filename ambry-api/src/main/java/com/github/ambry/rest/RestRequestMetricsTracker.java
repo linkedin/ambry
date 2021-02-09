@@ -238,6 +238,11 @@ public class RestRequestMetricsTracker {
     this.containerMetrics = containerMetrics;
   }
 
+  // Exposed for test
+  public ContainerMetrics getContainerMetrics() {
+    return containerMetrics;
+  }
+
   /**
    * Records the metrics.
    * </p>

@@ -41,6 +41,7 @@ public class FrontendConfig {
   public static final String ENABLE_STORAGE_QUOTA_SERVICE = PREFIX + "enable.storage.quota.service";
   public static final String STORAGE_QUOTA_SERVICE_FACTORY = PREFIX + "storage.quota.service.factory";
   public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
+  public static final String CONTAINER_METRICS_EXCLUDED_ACCOUNTS = PREFIX + "container.metrics.excluded.accounts";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -234,6 +235,14 @@ public class FrontendConfig {
   @Default("null")
   public final String namedBlobDbFactory;
 
+  /**
+   * The comma separated list of account names for which container metrics should not be generated.
+   */
+  @Config(CONTAINER_METRICS_EXCLUDED_ACCOUNTS)
+  @Default("")
+  public final List<String> containerMetricsExcludedAccounts;
+
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -286,6 +295,8 @@ public class FrontendConfig {
     storageQuotaServiceFactory =
         verifiableProperties.getString(STORAGE_QUOTA_SERVICE_FACTORY, DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY);
     namedBlobDbFactory = verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
+    containerMetricsExcludedAccounts =
+        Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_EXCLUDED_ACCOUNTS, ""), ",");
   }
 
   /**
