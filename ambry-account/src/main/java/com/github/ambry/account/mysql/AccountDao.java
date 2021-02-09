@@ -286,6 +286,9 @@ public class AccountDao {
       dataAccessor.rollback();
       dataAccessor.onException(e, Write);
       throw e;
+    } finally {
+      // Close the connection to ensure subsequent queries are made in a new transaction and return the latest data
+      dataAccessor.closeActiveConnection();
     }
   }
 
