@@ -252,8 +252,10 @@ class AmbrySecurityService implements SecurityService {
       }
     }
     if (quotaManager != null) {
-      quotaManager.charge(restRequest, blobInfo);
-      // TODO Use ThrottlingRecommendation returned from charge() to set appropriate response headers.
+      ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, blobInfo);
+      if (throttlingRecommendation != null) {
+        setRequestCostHeader(throttlingRecommendation.getRequestCost(), responseChannel);
+      }
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

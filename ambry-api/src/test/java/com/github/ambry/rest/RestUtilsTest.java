@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
@@ -56,6 +57,41 @@ import static org.mockito.Mockito.*;
 public class RestUtilsTest {
   private static final Random RANDOM = new Random();
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+
+  /**
+   * Method to easily create {@link RestRequest} objects containing a specific request.
+   * @param restMethod the {@link RestMethod} desired.
+   * @param uri string representation of the desired URI.
+   * @param headers any associated headers as a {@link org.json.JSONObject}.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    JSONObject request = new JSONObject();
+    request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
+    request.put(MockRestRequest.URI_KEY, uri);
+    if (headers != null) {
+      request.put(MockRestRequest.HEADERS_KEY, headers);
+    }
+    return new MockRestRequest(request, null);
+  }
+
+  /**
+   * Sets entries from the passed in HashMap to the @{link JSONObject} headers
+   * @param headers  {@link JSONObject} to which the new headers are to be added
+   * @param userMetadata {@link Map} which has the new entries that has to be added
+   * @throws org.json.JSONException
+   */
+  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata) throws JSONException {
+    if (userMetadata != null) {
+      for (String key : userMetadata.keySet()) {
+        headers.put(key, userMetadata.get(key));
+      }
+    }
+  }
 
   /**
    * Tests building of {@link BlobProperties} given good input (all arguments in the number and format expected).
@@ -768,29 +804,65 @@ public class RestUtilsTest {
         URLDecoder.decode((String) encodedValue, StandardCharsets.UTF_8.name()));
   }
 
-  // helpers.
-  // general.
+  /**
+   * Tests for {@link RestUtils#setRequestCostHeader} method.
+   */
+  @Test
+  public void setRequestCostHeaderTest() {
+    Map<QuotaName, Double> costMap = new HashMap<>();
+
+    // test for valid cost map
+    costMap.put(QuotaName.READ_CAPACITY_UNIT, 1.9);
+    costMap.put(QuotaName.STORAGE_IN_GB, 3.0);
+    String expectedQuotaHeaderValue = "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0; ";
+    MockRestResponseChannel responseChannel = new MockRestResponseChannel();
+    RestUtils.setRequestCostHeader(costMap, responseChannel);
+    Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
+    assertEquals("Expected one header", 1, responseHeaders.size());
+    assertEquals("Unexpected quota header value", expectedQuotaHeaderValue,
+        responseHeaders.get(RestUtils.QuotaHeaders.REQUEST_COST));
+
+    // test for null cost map
+    try {
+      RestUtils.setRequestCostHeader(null, responseChannel);
+      fail("Null costMap should throw error");
+    } catch (NullPointerException npEx) {
+      assertEquals("Expected one header", 1, responseHeaders.size());
+    }
+
+    // test for empty cost map
+    costMap = new HashMap<>();
+    RestUtils.setRequestCostHeader(costMap, responseChannel);
+    responseHeaders = responseChannel.getResponseHeaders();
+    assertEquals("Expected one header", 1, responseHeaders.size());
+    assertEquals("Unexpected quota header value", "", responseHeaders.get(RestUtils.QuotaHeaders.REQUEST_COST));
+  }
 
   /**
-   * Method to easily create {@link RestRequest} objects containing a specific request.
-   * @param restMethod the {@link RestMethod} desired.
-   * @param uri string representation of the desired URI.
-   * @param headers any associated headers as a {@link org.json.JSONObject}.
-   * @return A {@link RestRequest} object that defines the request required by the input.
-   * @throws JSONException
-   * @throws UnsupportedEncodingException
-   * @throws URISyntaxException
+   * Tests for {@link RestUtils#encodeKVHeaderValue(Map)}.
    */
-  static RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers)
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    JSONObject request = new JSONObject();
-    request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
-    request.put(MockRestRequest.URI_KEY, uri);
-    if (headers != null) {
-      request.put(MockRestRequest.HEADERS_KEY, headers);
+  @Test
+  public void encodeKVHeaderValueTest() {
+    // test for empty map
+    Map<String, String> headerValue = new HashMap<>();
+    assertEquals("Invalid encoded value", "", RestUtils.encodeKVHeaderValue(headerValue));
+
+    // test for null map
+    try {
+      RestUtils.encodeKVHeaderValue(null);
+      fail("Null value should throw error");
+    } catch (NullPointerException npEx) {
     }
-    return new MockRestRequest(request, null);
+
+    // test for valid map
+    headerValue.put(QuotaName.READ_CAPACITY_UNIT.name(), String.valueOf(1.9));
+    headerValue.put(QuotaName.STORAGE_IN_GB.name(), String.valueOf(3.0));
+    assertEquals("Invalid encoded value", "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0; ",
+        RestUtils.encodeKVHeaderValue(headerValue));
   }
+
+  // helpers.
+  // general.
 
   /**
    * Generates a string of size {@code length} with random characters from {@link #ALPHABET}.
@@ -878,6 +950,8 @@ public class RestUtilsTest {
     assertEquals("Target container id does not match", container.getId(), blobProperties.getContainerId());
   }
 
+  // getBlobPropertiesVariedInputTest() helpers.
+
   /**
    * Verifies that a request with headers defined by {@code headers} builds UserMetadata successfully and
    * matches the values with those in {@code headers}.
@@ -899,8 +973,6 @@ public class RestUtilsTest {
           userMetadataMap.get(keyInOutputMap));
     }
   }
-
-  // getBlobPropertiesVariedInputTest() helpers.
 
   /**
    * Verifies that {@link RestUtils#buildBlobProperties(Map<String,Object>)} fails if given a request with bad
@@ -1058,20 +1130,6 @@ public class RestUtilsTest {
         fail("Should have encountered exception when building Content-Range");
       } catch (RestServiceException e) {
         assertEquals("Unexpected error code.", RestServiceErrorCode.RangeNotSatisfiable, e.getErrorCode());
-      }
-    }
-  }
-
-  /**
-   * Sets entries from the passed in HashMap to the @{link JSONObject} headers
-   * @param headers  {@link JSONObject} to which the new headers are to be added
-   * @param userMetadata {@link Map} which has the new entries that has to be added
-   * @throws org.json.JSONException
-   */
-  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata) throws JSONException {
-    if (userMetadata != null) {
-      for (String key : userMetadata.keySet()) {
-        headers.put(key, userMetadata.get(key));
       }
     }
   }

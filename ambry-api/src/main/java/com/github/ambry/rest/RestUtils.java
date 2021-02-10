@@ -17,6 +17,8 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
@@ -40,6 +42,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -279,6 +282,14 @@ public class RestUtils {
         throw new IllegalStateException("Could not get values of the tracking headers", e);
       }
     }
+  }
+
+  public static final class QuotaHeaders {
+
+    /**
+     * Response header indicating cost incurred by the request against capacity unit and storage quotas.
+     */
+    public static final String REQUEST_COST = "x-ambry-request-cost";
   }
 
   /**
@@ -934,6 +945,17 @@ public class RestUtils {
   }
 
   /**
+   * Sets the request cost header in response.
+   * @param costMap {@link Map} of cost for each quota.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   */
+  public static void setRequestCostHeader(Map<QuotaName, Double> costMap, RestResponseChannel restResponseChannel) {
+    Objects.requireNonNull(costMap, "cost map cannot contain be null");
+    restResponseChannel.setHeader(QuotaHeaders.REQUEST_COST, encodeKVHeaderValue(costMap.entrySet().stream().collect(
+        Collectors.toMap(e -> e.getKey().name(), e-> String.valueOf(e.getValue())))));
+  }
+
+  /**
    * Verify that the session ID in the chunk metadata matches the expected session.
    * @param chunkMetadata the metadata map parsed from a signed chunk ID.
    * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
@@ -1009,6 +1031,20 @@ public class RestUtils {
     } catch (Exception e) {
       logger.error("Unable to set response header {} to value {}", headerName, headerValue, e);
     }
+  }
+
+  /**
+   * Encode a map of {@link String}s as http header value.
+   * @param map {@link Map} of {@link String}s to encode.
+   * @return encoded http header value.
+   */
+  static String encodeKVHeaderValue(Map<String, String> map) {
+    Objects.requireNonNull(map);
+    String value = "";
+    for(Map.Entry<String, String> entry : map.entrySet()) {
+      value += entry.getKey() + "=" + entry.getValue() + "; ";
+    }
+    return value;
   }
 
   /**
