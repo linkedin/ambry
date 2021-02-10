@@ -255,12 +255,12 @@ class CompactionLog implements Closeable {
    * {@link CompactionLog}
    * @param nextCycleStartSegment the segment to split the current cycle at.
    */
-  void splitCurrentCycle(String nextCycleStartSegment) {
+  void splitCurrentCycle(LogSegmentName nextCycleStartSegment) {
     CompactionDetails currentDetails = getCurrentCycleLog().compactionDetails;
-    List<String> updatedList = new ArrayList<>();
-    List<String> newList = new ArrayList<>();
+    List<LogSegmentName> updatedList = new ArrayList<>();
+    List<LogSegmentName> newList = new ArrayList<>();
     boolean encounteredSplitPoint = false;
-    for (String segmentUnderCompaction : currentDetails.getLogSegmentsUnderCompaction()) {
+    for (LogSegmentName segmentUnderCompaction : currentDetails.getLogSegmentsUnderCompaction()) {
       if (!encounteredSplitPoint && !segmentUnderCompaction.equals(nextCycleStartSegment)) {
         updatedList.add(segmentUnderCompaction);
       } else {

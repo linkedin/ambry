@@ -60,7 +60,7 @@ public class HardDeleterTest {
     private long sizeOfEntry;
     private MockIndex index;
     private Log log;
-    private String logSegmentName;
+    private LogSegmentName logSegmentName;
     HashMap<Long, MessageInfo> offsetMap;
     IOException exception;
 

@@ -158,8 +158,9 @@ public class DumpDataTool {
         if (!checkEndOffset) {
           // check end offset if the log segment represented by this index segment is different from the one represented
           // by the next one
-          String currLogSegmentRef = IndexSegment.getIndexSegmentStartOffset(indexFiles[i].getName()).getName();
-          String nextLogSegmentRef = IndexSegment.getIndexSegmentStartOffset(indexFiles[i + 1].getName()).getName();
+          LogSegmentName currLogSegmentRef = IndexSegment.getIndexSegmentStartOffset(indexFiles[i].getName()).getName();
+          LogSegmentName nextLogSegmentRef =
+              IndexSegment.getIndexSegmentStartOffset(indexFiles[i + 1].getName()).getName();
           checkEndOffset = !currLogSegmentRef.equals(nextLogSegmentRef);
         }
         compareIndexEntriesToLogContent(indexFiles[i], checkEndOffset);
@@ -217,7 +218,7 @@ public class DumpDataTool {
           new Journal(indexFile.getParent(), 0, 0), time);
       Offset startOffset = segment.getStartOffset();
       TreeMap<Long, Long> coveredRanges = new TreeMap<>();
-      String logFileName = LogSegmentNameHelper.nameToFilename(segment.getLogSegmentName());
+      String logFileName = segment.getLogSegmentName().toFilename();
       File logFile = new File(indexFile.getParent(), logFileName);
       if (!logFile.exists()) {
         throw new IllegalStateException("Log file does not exist " + logFile);

@@ -71,10 +71,10 @@ public class StatsBasedCompactionPolicyTest {
     for (int k = 0; k < 5; k++) {
       for (int i = 0; i < logSegmentCount; i++) {
         for (int j = i; j < logSegmentCount; j++) {
-          List<String> bestCandidates = blobStore.logSegmentsNotInJournal.subList(i, j + 1);
+          List<LogSegmentName> bestCandidates = blobStore.logSegmentsNotInJournal.subList(i, j + 1);
           long bestCost = maxLogSegmentCapacity / bestCandidates.size();
           // this best cost is to ensure that no of segments reclaimed will be "bestCandidates" count - 1
-          NavigableMap<String, Long> validDataSize =
+          NavigableMap<LogSegmentName, Long> validDataSize =
               CompactionPolicyTest.generateValidDataSize(blobStore.logSegmentsNotInJournal, bestCandidates, bestCost,
                   maxLogSegmentCapacity);
           mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
@@ -90,7 +90,7 @@ public class StatsBasedCompactionPolicyTest {
               CompactionPolicyTest.updateValidDataSize(validDataSize,
                   blobStore.logSegmentsNotInJournal.subList(secondBestCandidateIndexes.getFirst(),
                       secondBestCandidateIndexes.getSecond() + 1), bestCost + 1);
-              List<String> secondBestCandidate =
+              List<LogSegmentName> secondBestCandidate =
                   blobStore.logSegmentsNotInJournal.subList(secondBestCandidateIndexes.getFirst(),
                       secondBestCandidateIndexes.getSecond() + 1);
               mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
@@ -128,8 +128,8 @@ public class StatsBasedCompactionPolicyTest {
     blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
     for (int i = 0; i < logSegmentCount; i++) {
       for (int j = i; j < logSegmentCount; j++) {
-        List<String> bestCandidates = blobStore.logSegmentsNotInJournal.subList(i, j + 1);
-        NavigableMap<String, Long> validDataSize =
+        List<LogSegmentName> bestCandidates = blobStore.logSegmentsNotInJournal.subList(i, j + 1);
+        NavigableMap<LogSegmentName, Long> validDataSize =
             CompactionPolicyTest.generateValidDataSize(blobStore.logSegmentsNotInJournal, bestCandidates, 0,
                 maxLogSegmentCapacity);
         mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
@@ -151,10 +151,10 @@ public class StatsBasedCompactionPolicyTest {
     blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
 
     // case 1: 1st best(index_0 to index_3) is in journal, 2nd not in journal
-    List<String> bestCandidates = blobStore.logSegmentsNotInJournal.subList(0, 4);
+    List<LogSegmentName> bestCandidates = blobStore.logSegmentsNotInJournal.subList(0, 4);
     long bestCost = maxLogSegmentCapacity / bestCandidates.size();
     // this best cost is to ensure that no of segments reclaimed will be "bestCandidates" count - 1
-    NavigableMap<String, Long> validDataSize =
+    NavigableMap<LogSegmentName, Long> validDataSize =
         CompactionPolicyTest.generateValidDataSize(blobStore.logSegmentsNotInJournal, bestCandidates, bestCost,
             maxLogSegmentCapacity);
     mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;

@@ -203,7 +203,7 @@ public class CompactionPolicyTest {
    */
   @Test
   public void testDifferentUsedCapacities() throws StoreException {
-    List<String> bestCandidates = null;
+    List<LogSegmentName> bestCandidates = null;
     if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
       bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
     } else if (compactionPolicy instanceof CompactAllPolicy) {
@@ -238,7 +238,7 @@ public class CompactionPolicyTest {
     int[] minLogSizeToTriggerCompactionInPercentages = new int[]{10, 20, 35, 40, 50, 59, 60, 61, 65, 70, 80, 95};
     // when used capacity(60%) is <= (minLogSize) % of total capacity, compactionDetails is expected to be null.
     // If not, logSegmentsNotInJournal needs to be returned
-    List<String> bestCandidates = null;
+    List<LogSegmentName> bestCandidates = null;
     for (int minLogSize : minLogSizeToTriggerCompactionInPercentages) {
       initializeBlobStore(properties, time, minLogSize, -1, DEFAULT_MAX_BLOB_SIZE);
       if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
@@ -263,7 +263,7 @@ public class CompactionPolicyTest {
    */
   @Test
   public void testDifferentMessageRetentionDays() throws StoreException, InterruptedException {
-    List<String> bestCandidates = null;
+    List<LogSegmentName> bestCandidates = null;
     int[] messageRetentionHoursValues = new int[]{1, 2, 3, 6, 9};
     for (int messageRetentionHours : messageRetentionHoursValues) {
       time = new MockTime();
@@ -356,7 +356,7 @@ public class CompactionPolicyTest {
    * {@link StatsBasedCompactionPolicy}
    * @return a {@link List} of log segment names referring to the best candidate to compact
    */
-  private List<String> setUpStateForStatsBasedCompactionPolicy(MockBlobStore blobStore,
+  private List<LogSegmentName> setUpStateForStatsBasedCompactionPolicy(MockBlobStore blobStore,
       MockBlobStoreStats mockBlobStoreStats) {
     long maxLogSegmentCapacity =
         blobStore.segmentCapacity - blobStore.segmentHeaderSize - mockBlobStoreStats.getMaxBlobSize();
@@ -367,11 +367,11 @@ public class CompactionPolicyTest {
     int bestCandidateStartIndex = TestUtils.RANDOM.nextInt((int) logSegmentCount - bestCandidateRange + 1);
     int bestCandidateEndIndex = bestCandidateStartIndex + bestCandidateRange - 1;
 
-    List<String> bestCandidates =
+    List<LogSegmentName> bestCandidates =
         blobStore.logSegmentsNotInJournal.subList(bestCandidateStartIndex, bestCandidateEndIndex + 1);
     long bestCost = maxLogSegmentCapacity / bestCandidates.size();
     // this best cost is to ensure that no of segments reclaimed will be "bestCandidates" count - 1
-    NavigableMap<String, Long> validDataSize =
+    NavigableMap<LogSegmentName, Long> validDataSize =
         generateValidDataSize(blobStore.logSegmentsNotInJournal, bestCandidates, bestCost, maxLogSegmentCapacity);
     mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
     return bestCandidates;
@@ -382,16 +382,13 @@ public class CompactionPolicyTest {
    * @param count the total number of random log segment names that needs to be generated
    * @return a {@link List} of random log segment name of size {@code count}
    */
-  static List<String> generateRandomLogSegmentName(int count) {
-    List<String> randomLogSegmentNames = new ArrayList<>();
+  static List<LogSegmentName> generateRandomLogSegmentName(int count) {
+    List<LogSegmentName> randomLogSegmentNames = new ArrayList<>();
     while (randomLogSegmentNames.size() < count) {
-      String logSegmentName =
-          LogSegmentNameHelper.getName(TestUtils.RANDOM.nextInt(count * 1000), TestUtils.RANDOM.nextInt(count * 1000));
-      if (!randomLogSegmentNames.contains(logSegmentName)) {
-        randomLogSegmentNames.add(logSegmentName);
-      }
+      LogSegmentName logSegmentName = StoreTestUtils.getRandomLogSegmentName(randomLogSegmentNames);
+      randomLogSegmentNames.add(logSegmentName);
     }
-    Collections.sort(randomLogSegmentNames, LogSegmentNameHelper.COMPARATOR);
+    Collections.sort(randomLogSegmentNames);
     return randomLogSegmentNames;
   }
 
@@ -402,10 +399,11 @@ public class CompactionPolicyTest {
    * @param validDataSizeForBest valid data size to be set for best candidate
    * @return a {@link NavigableMap} of log segment name to valid data size
    */
-  static NavigableMap<String, Long> generateValidDataSize(List<String> logSegmentNames, List<String> bestCandidates,
+  static NavigableMap<LogSegmentName, Long> generateValidDataSize(
+      List<LogSegmentName> logSegmentNames, List<LogSegmentName> bestCandidates,
       long validDataSizeForBest, long maxLogSegmentCapacity) {
-    NavigableMap<String, Long> validDataSize = new TreeMap<>(LogSegmentNameHelper.COMPARATOR);
-    for (String logSegmentName : logSegmentNames) {
+    NavigableMap<LogSegmentName, Long> validDataSize = new TreeMap<>();
+    for (LogSegmentName logSegmentName : logSegmentNames) {
       if (bestCandidates.contains(logSegmentName)) {
         validDataSize.put(logSegmentName, validDataSizeForBest);
       } else {
@@ -421,9 +419,9 @@ public class CompactionPolicyTest {
    * @param logSegmentsToUpdate log segments to be updated
    * @param newValidDataSize new valid data size that needs to be updated
    */
-  static void updateValidDataSize(NavigableMap<String, Long> validDataSizePerLogSegment,
-      List<String> logSegmentsToUpdate, long newValidDataSize) {
-    for (String logSegmentName : logSegmentsToUpdate) {
+  static void updateValidDataSize(NavigableMap<LogSegmentName, Long> validDataSizePerLogSegment,
+      List<LogSegmentName> logSegmentsToUpdate, long newValidDataSize) {
+    for (LogSegmentName logSegmentName : logSegmentsToUpdate) {
       validDataSizePerLogSegment.put(logSegmentName, newValidDataSize);
     }
   }
@@ -456,7 +454,7 @@ class MockBlobStore extends BlobStore {
   long segmentCapacity;
   long segmentHeaderSize;
   long capacityInBytes;
-  List<String> logSegmentsNotInJournal = null;
+  List<LogSegmentName> logSegmentsNotInJournal = null;
   MockBlobStoreStats mockBlobStoreStats;
 
   MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, long capacityInBytes, long segmentCapacity,
@@ -487,7 +485,7 @@ class MockBlobStore extends BlobStore {
  */
 class MockBlobStoreStats extends BlobStoreStats {
 
-  NavigableMap<String, Long> validDataSizeByLogSegments;
+  NavigableMap<LogSegmentName, Long> validDataSizeByLogSegments;
   private long maxBlobSize;
   private String storeId = "";
 
@@ -503,10 +501,10 @@ class MockBlobStoreStats extends BlobStoreStats {
   }
 
   @Override
-  Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException {
+  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) {
     long deleteReferenceTimeInMs = timeRange.getEndTimeInMs();
     if (validDataSizeByLogSegments != null) {
-      return new Pair<>(deleteReferenceTimeInMs, validDataSizeByLogSegments);
+      return new Pair<Long, NavigableMap<LogSegmentName, Long>>(deleteReferenceTimeInMs, validDataSizeByLogSegments);
     } else {
       return null;
     }

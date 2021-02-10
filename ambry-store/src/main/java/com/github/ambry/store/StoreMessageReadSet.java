@@ -68,7 +68,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     logger.trace("BlobReadOption offset {} size {} MessageInfo {} ", offset, info.getSize(), info);
   }
 
-  String getLogSegmentName() {
+  LogSegmentName getLogSegmentName() {
     return offset.getName();
   }
 

@@ -21,6 +21,8 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.github.ambry.store.StatsUtils.*;
+
 
 /**
  * Hold the data structures needed by {@link BlobStoreStats} to serve requests. The class also exposes helper methods
@@ -97,9 +99,11 @@ class ScanResults {
   // When a blob is deleted, we have to wait for a retention duration(7 days in prod) to invalidate it. But when a blob
   // is expired, it's invalidated right aways. So when calculating valid size for log segment, we have to pass two time
   // stamps, a delete reference time, usually is now - 7 days, and a expiry time, usually is now.
-  private final NavigableMap<String, Long> logSegmentBaseBucket = new TreeMap<>();
-  private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentDeltaBucketsForDeleted = new TreeMap<>();
-  private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentDeltaBucketsForExpired = new TreeMap<>();
+  private final NavigableMap<LogSegmentName, Long> logSegmentBaseBucket = new TreeMap<>();
+  private final NavigableMap<Long, NavigableMap<LogSegmentName, Long>> logSegmentDeltaBucketsForDeleted =
+      new TreeMap<>();
+  private final NavigableMap<Long, NavigableMap<LogSegmentName, Long>> logSegmentDeltaBucketsForExpired =
+      new TreeMap<>();
 
   final long logSegmentForecastStartTimeMsForDeleted;
   final long logSegmentLastBucketTimeMsForDeleted;
@@ -128,7 +132,7 @@ class ScanResults {
     logSegmentForecastStartTimeMsForExpired = startTimeInMs;
     long bucketTimeMs = logSegmentForecastStartTimeMsForExpired + bucketSpanInMs;
     for (int i = 1; i < bucketCount; i++) {
-      logSegmentDeltaBucketsForExpired.put(bucketTimeMs, new TreeMap<>(LogSegmentNameHelper.COMPARATOR));
+      logSegmentDeltaBucketsForExpired.put(bucketTimeMs, new TreeMap<>());
       bucketTimeMs += bucketSpanInMs;
     }
     logSegmentLastBucketTimeMsForExpired =
@@ -139,7 +143,7 @@ class ScanResults {
     logSegmentForecastStartTimeMsForDeleted = startTimeInMs - logSegmentForecastOffsetMs;
     bucketTimeMs = logSegmentForecastStartTimeMsForDeleted + bucketSpanInMs;
     for (int i = 1; i < bucketCount; i++) {
-      logSegmentDeltaBucketsForDeleted.put(bucketTimeMs, new TreeMap<>(LogSegmentNameHelper.COMPARATOR));
+      logSegmentDeltaBucketsForDeleted.put(bucketTimeMs, new TreeMap<>());
       bucketTimeMs += bucketSpanInMs;
     }
     logSegmentLastBucketTimeMsForDeleted =
@@ -196,7 +200,7 @@ class ScanResults {
    * @param logSegmentName the log segment name of the map entry to be updated
    * @param value the value to be added
    */
-  void updateLogSegmentBaseBucket(String logSegmentName, long value) {
+  void updateLogSegmentBaseBucket(LogSegmentName logSegmentName, long value) {
     updateMapHelper(logSegmentBaseBucket, logSegmentName, value);
   }
 
@@ -220,9 +224,9 @@ class ScanResults {
    * @param logSegmentName the log segment name of the map entry to be updated
    * @param value the value to be added
    */
-  void updateLogSegmentDeletedBucket(Long bucketKey, String logSegmentName, long value) {
+  void updateLogSegmentDeletedBucket(Long bucketKey, LogSegmentName logSegmentName, long value) {
     if (bucketKey != null && logSegmentDeltaBucketsForDeleted.containsKey(bucketKey)) {
-      Map<String, Long> existingBucketEntry = logSegmentDeltaBucketsForDeleted.get(bucketKey);
+      Map<LogSegmentName, Long> existingBucketEntry = logSegmentDeltaBucketsForDeleted.get(bucketKey);
       updateMapHelper(existingBucketEntry, logSegmentName, value);
     }
   }
@@ -233,9 +237,9 @@ class ScanResults {
    * @param logSegmentName the log segment name of the map entry to be updated
    * @param value the value to be added
    */
-  void updateLogSegmentExpiredBucket(Long bucketKey, String logSegmentName, long value) {
+  void updateLogSegmentExpiredBucket(Long bucketKey, LogSegmentName logSegmentName, long value) {
     if (bucketKey != null && logSegmentDeltaBucketsForExpired.containsKey(bucketKey)) {
-      Map<String, Long> existingBucketEntry = logSegmentDeltaBucketsForExpired.get(bucketKey);
+      Map<LogSegmentName, Long> existingBucketEntry = logSegmentDeltaBucketsForExpired.get(bucketKey);
       updateMapHelper(existingBucketEntry, logSegmentName, value);
     }
   }
@@ -248,13 +252,13 @@ class ScanResults {
    * @return a {@link Pair} whose first element is the end time of the last deleted bucket that was aggregated and whose
    * second element is the requested valid data size per log segment {@link NavigableMap}.
    */
-  Pair<Long, NavigableMap<String, Long>> getValidSizePerLogSegment(Long deleteReferenceTimeInMS,
+  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidSizePerLogSegment(Long deleteReferenceTimeInMS,
       long expiryReferenceTimeInMs) {
-    NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>(logSegmentBaseBucket);
-    NavigableMap<Long, NavigableMap<String, Long>> subMap =
+    NavigableMap<LogSegmentName, Long> validSizePerLogSegment = new TreeMap<>(logSegmentBaseBucket);
+    NavigableMap<Long, NavigableMap<LogSegmentName, Long>> subMap =
         logSegmentDeltaBucketsForDeleted.headMap(deleteReferenceTimeInMS, true);
-    for (Map.Entry<Long, NavigableMap<String, Long>> bucket : subMap.entrySet()) {
-      for (Map.Entry<String, Long> bucketEntry : bucket.getValue().entrySet()) {
+    for (Map.Entry<Long, NavigableMap<LogSegmentName, Long>> bucket : subMap.entrySet()) {
+      for (Map.Entry<LogSegmentName, Long> bucketEntry : bucket.getValue().entrySet()) {
         updateMapHelper(validSizePerLogSegment, bucketEntry.getKey(), bucketEntry.getValue());
       }
     }
@@ -262,8 +266,8 @@ class ScanResults {
         subMap.isEmpty() ? logSegmentForecastStartTimeMsForDeleted : subMap.lastKey();
 
     subMap = logSegmentDeltaBucketsForExpired.headMap(expiryReferenceTimeInMs, true);
-    for (Map.Entry<Long, NavigableMap<String, Long>> bucket : subMap.entrySet()) {
-      for (Map.Entry<String, Long> bucketEntry : bucket.getValue().entrySet()) {
+    for (Map.Entry<Long, NavigableMap<LogSegmentName, Long>> bucket : subMap.entrySet()) {
+      for (Map.Entry<LogSegmentName, Long> bucketEntry : bucket.getValue().entrySet()) {
         updateMapHelper(validSizePerLogSegment, bucketEntry.getKey(), bucketEntry.getValue());
       }
     }
@@ -292,31 +296,5 @@ class ScanResults {
       }
     }
     return validSizePerContainer;
-  }
-
-  /**
-   * Helper function to update nested map data structure.
-   * @param nestedMap nested {@link Map} to be updated
-   * @param firstKey of the nested map
-   * @param secondKey of the nested map
-   * @param value the value to be added at the corresponding entry
-   */
-  private void updateNestedMapHelper(Map<String, Map<String, Long>> nestedMap, String firstKey, String secondKey,
-      Long value) {
-    if (!nestedMap.containsKey(firstKey)) {
-      nestedMap.put(firstKey, new HashMap<String, Long>());
-    }
-    updateMapHelper(nestedMap.get(firstKey), secondKey, value);
-  }
-
-  /**
-   * Helper function to update map data structure.
-   * @param map {@link Map} to be updated
-   * @param key of the map
-   * @param value the value to be added at the corresponding entry
-   */
-  private void updateMapHelper(Map<String, Long> map, String key, Long value) {
-    Long newValue = map.containsKey(key) ? map.get(key) + value : value;
-    map.put(key, newValue);
   }
 }

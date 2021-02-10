@@ -32,7 +32,7 @@ class CompactionDetails {
   private static final int SEGMENT_NAME_LENGTH_SIZE = 4;
 
   private final long referenceTimeMs;
-  private final List<String> logSegmentsUnderCompaction;
+  private final List<LogSegmentName> logSegmentsUnderCompaction;
 
   /**
    * Construct a representation of all the details required for a compaction cycle.
@@ -42,7 +42,7 @@ class CompactionDetails {
    * @throws IllegalArgumentException if {@code referenceTimeMs} < 0 or if {@code logSegmentsUnderCompaction} has no
    * elements.
    */
-  CompactionDetails(long referenceTimeMs, List<String> logSegmentsUnderCompaction) {
+  CompactionDetails(long referenceTimeMs, List<LogSegmentName> logSegmentsUnderCompaction) {
     if (referenceTimeMs < 0 || logSegmentsUnderCompaction.size() == 0) {
       throw new IllegalArgumentException(
           "Illegal arguments provided. Ref time: [" + referenceTimeMs + "]. " + "Segments under compaction size: ["
@@ -65,9 +65,9 @@ class CompactionDetails {
       case VERSION_0:
         long referenceTime = stream.readLong();
         int segmentCount = stream.readInt();
-        List<String> logSegmentsUnderCompaction = new ArrayList<>();
+        List<LogSegmentName> logSegmentsUnderCompaction = new ArrayList<>();
         for (int i = 0; i < segmentCount; i++) {
-          logSegmentsUnderCompaction.add(Utils.readIntString(stream));
+          logSegmentsUnderCompaction.add(LogSegmentName.fromString(Utils.readIntString(stream)));
         }
         details = new CompactionDetails(referenceTime, logSegmentsUnderCompaction);
         break;
@@ -88,7 +88,7 @@ class CompactionDetails {
   /**
    * @return the names of the segments under compaction. Guaranteed to contain at least one element.
    */
-  List<String> getLogSegmentsUnderCompaction() {
+  List<LogSegmentName> getLogSegmentsUnderCompaction() {
     return logSegmentsUnderCompaction;
   }
 
@@ -109,8 +109,8 @@ class CompactionDetails {
 
     List<byte[]> segmentNameBytesList = new ArrayList<>();
     int size = VERSION_SIZE + REFERENCE_TIME_SIZE + SEGMENT_COUNT_SIZE;
-    for (String segmentName : logSegmentsUnderCompaction) {
-      byte[] segmentNameBytes = segmentName.getBytes();
+    for (LogSegmentName segmentName : logSegmentsUnderCompaction) {
+      byte[] segmentNameBytes = segmentName.toString().getBytes();
       segmentNameBytesList.add(segmentNameBytes);
       size += SEGMENT_NAME_LENGTH_SIZE + segmentNameBytes.length;
     }

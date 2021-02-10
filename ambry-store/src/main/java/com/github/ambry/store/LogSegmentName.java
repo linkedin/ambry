@@ -15,13 +15,32 @@
 
 package com.github.ambry.store;
 
+import java.io.FilenameFilter;
 import java.util.Objects;
 
 
+/**
+ * Helper for working with log segment names.
+ * <p/>
+ * Log segments will have a name "pos_gen" where pos represents their relative position and "gen" represents the
+ * generation number of the log segment at "pos".
+ * <p/>
+ * The file name is a combination of the segment name and a suffix "_log"
+ * <p/>
+ * If the file name format changes, the version of {@link LogSegment} has to be updated and this class updated to
+ * handle the new and old versions.
+ */
 class LogSegmentName implements Comparable<LogSegmentName> {
   static final String SUFFIX = BlobStore.SEPARATOR + "log";
-  // for backwards compatibility, if the log contains only a single segment, the segment will have a special name.
+  /**
+   * For backwards compatibility, if the log contains only a single segment, the segment will have a special name.
+   */
   static final String SINGLE_SEGMENT_LOG_FILE_NAME = "log_current";
+  /**
+   * Filter for getting all log files from a particular directory.
+   */
+  static final FilenameFilter LOG_FILE_FILTER =
+      (dir, name) -> name.endsWith(SUFFIX) || name.equals(SINGLE_SEGMENT_LOG_FILE_NAME);
   private static final LogSegmentName SINGLE_SEGMENT_LOG_NAME = new LogSegmentName(-1, -1);
 
   private String name = null;
@@ -98,6 +117,23 @@ class LogSegmentName implements Comparable<LogSegmentName> {
     this.name = name;
   }
 
+  long getPosition() {
+    checkSegmented();
+    return position;
+  }
+
+  long getGeneration() {
+    checkSegmented();
+    return generation;
+  }
+
+  /**
+   * @return {@code true} if this is a single segment log.
+   */
+  boolean isSingleSegment() {
+    return this == SINGLE_SEGMENT_LOG_NAME;
+  }
+
   /**
    * @return what should be the name of the log segment that is exactly one position higher than this one. The
    * generation of the returned name will start from the lowest generation number.
@@ -155,19 +191,14 @@ class LogSegmentName implements Comparable<LogSegmentName> {
     // special case for log_current (one segment logs)
     if (isSingleSegment() && o.isSingleSegment()) {
       return 0;
+    } else if (isSingleSegment() || o.isSingleSegment()) {
+      throw new IllegalArgumentException("Cannot compare single file log name against segmented log name");
     }
     int compare = Long.compare(position, o.position);
     if (compare == 0) {
       compare = Long.compare(generation, o.generation);
     }
     return compare;
-  }
-
-  /**
-   * @return {@code true} if this is a single segment log.
-   */
-  private boolean isSingleSegment() {
-    return this == SINGLE_SEGMENT_LOG_NAME;
   }
 
   /**

@@ -226,7 +226,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   /**
    * @return the name of the log segment that this index segment refers to;
    */
-  String getLogSegmentName() {
+  LogSegmentName getLogSegmentName() {
     return startOffset.getName();
   }
 
@@ -1219,9 +1219,9 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return the prefix for the index segment file name (also used for bloom filter file name).
    */
   static String generateIndexSegmentFilenamePrefix(Offset startOffset) {
-    String logSegmentName = startOffset.getName();
-    StringBuilder filenamePrefix = new StringBuilder(logSegmentName);
-    if (!logSegmentName.isEmpty()) {
+    LogSegmentName logSegmentName = startOffset.getName();
+    StringBuilder filenamePrefix = new StringBuilder(logSegmentName.toString());
+    if (!logSegmentName.isSingleSegment()) {
       filenamePrefix.append(BlobStore.SEPARATOR);
     }
     return filenamePrefix.append(startOffset.getOffset()).append(BlobStore.SEPARATOR).toString();
@@ -1249,7 +1249,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       logSegmentName = filename.substring(0, lastButOneSepIdx);
       startOffsetValue = filename.substring(lastButOneSepIdx + 1, lastSepIdx);
     }
-    return new Offset(logSegmentName, Long.parseLong(startOffsetValue));
+    return new Offset(LogSegmentName.fromString(logSegmentName), Long.parseLong(startOffsetValue));
   }
 
   /**

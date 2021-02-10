@@ -61,7 +61,7 @@ public class HybridCompactionPolicy implements CompactionPolicy {
    */
   @Override
   public CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, String dataDir)
+      long segmentHeaderSize, List<LogSegmentName> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, String dataDir)
       throws StoreException {
     String storeId = blobStoreStats.getStoreId();
     CompactionPolicySwitchInfo compactionPolicySwitchInfo = getCompactionPolicySwitchInfo(storeId, dataDir, blobStoreStats);

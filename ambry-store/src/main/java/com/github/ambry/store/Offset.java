@@ -38,11 +38,11 @@ public class Offset implements Comparable<Offset> {
    * @param offset the offset within the segment.
    * @throws IllegalArgumentException if {@code name} is {@code null} or {@code offset} < 0.
    */
-  Offset(String name, long offset) {
+  Offset(LogSegmentName name, long offset) {
     if (name == null || offset < 0) {
       throw new IllegalArgumentException("Name [" + name + "] is null or offset [" + offset + "] < 0");
     }
-    this.name = LogSegmentName.fromString(name);
+    this.name = name;
     this.offset = offset;
   }
 
@@ -65,15 +65,15 @@ public class Offset implements Comparable<Offset> {
       default:
         throw new IllegalArgumentException("Unrecognized version [" + version + "] of Offset");
     }
-    return new Offset(name, offset);
+    return new Offset(LogSegmentName.fromString(name), offset);
   }
 
   /**
    * @return the name of the log segment for which the offset provided by {@link #getOffset()} is valid. Guaranteed to
    * be non-null and non-empty.
    */
-  public String getName() {
-    return name.toString();
+  public LogSegmentName getName() {
+    return name;
   }
 
   /**

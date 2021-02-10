@@ -23,9 +23,12 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import org.json.JSONObject;
@@ -51,6 +54,21 @@ class StoreTestUtils {
     File tempDir = Files.createTempDirectory(prefix).toFile();
     tempDir.deleteOnExit();
     return tempDir;
+  }
+
+  /**
+   * Get a random log segment name that does not conflict with the names in {@code excludedNames}
+   * @param excludedNames names that are already reserved for other segments, or null if there are no excluded names.
+   * @return the name.
+   */
+  static LogSegmentName getRandomLogSegmentName(Collection<LogSegmentName> excludedNames) {
+    LogSegmentName segmentName;
+    do {
+      long pos = Utils.getRandomLong(TestUtils.RANDOM, 10000);
+      long gen = Utils.getRandomLong(TestUtils.RANDOM, 10000);
+      segmentName = LogSegmentName.fromPositionAndGeneration(pos, gen);
+    } while (excludedNames != null && excludedNames.contains(segmentName));
+    return segmentName;
   }
 
   /**

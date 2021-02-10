@@ -23,9 +23,9 @@ class CostBenefitInfo implements Comparable<CostBenefitInfo> {
   private final long cost;
   private final int benefit;
   private final Double costBenefitRatio;
-  private final List<String> segmentsToCompact;
+  private final List<LogSegmentName> segmentsToCompact;
 
-  CostBenefitInfo(List<String> segmentsToCompact, long cost, int benefit) {
+  CostBenefitInfo(List<LogSegmentName> segmentsToCompact, long cost, int benefit) {
     this.segmentsToCompact = segmentsToCompact;
     this.cost = cost;
     this.benefit = benefit;
@@ -65,7 +65,7 @@ class CostBenefitInfo implements Comparable<CostBenefitInfo> {
   /**
    * @return the {@link List} of log segment names to compact
    */
-  List<String> getSegmentsToCompact() {
+  List<LogSegmentName> getSegmentsToCompact() {
     return segmentsToCompact;
   }
 

@@ -1451,10 +1451,10 @@ class PersistentIndex {
    * @return a {@link List<String>} of {@link LogSegment} names whose entries don't overlap with {@link Journal}.
    * {@code null} if there aren't any
    */
-  List<String> getLogSegmentsNotInJournal() {
+  List<LogSegmentName> getLogSegmentsNotInJournal() {
     LogSegment logSegment = log.getFirstSegment();
     Offset firstOffsetInJournal = journal.getFirstOffset();
-    List<String> logSegmentNamesToReturn = new ArrayList<>();
+    List<LogSegmentName> logSegmentNamesToReturn = new ArrayList<>();
     while (firstOffsetInJournal != null && logSegment != null) {
       if (!logSegment.getName().equals(firstOffsetInJournal.getName())) {
         logSegmentNamesToReturn.add(logSegment.getName());
@@ -1470,12 +1470,12 @@ class PersistentIndex {
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
    * @return mapping from log segment names to {@link IndexSegment} instances that refer to them.
    */
-  private TreeMap<String, List<IndexSegment>> getLogSegmentToIndexSegmentMapping(
+  private TreeMap<LogSegmentName, List<IndexSegment>> getLogSegmentToIndexSegmentMapping(
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
-    TreeMap<String, List<IndexSegment>> mapping = new TreeMap<>(LogSegmentNameHelper.COMPARATOR);
+    TreeMap<LogSegmentName, List<IndexSegment>> mapping = new TreeMap<>();
     for (Map.Entry<Offset, IndexSegment> indexSegmentEntry : indexSegments.entrySet()) {
       IndexSegment indexSegment = indexSegmentEntry.getValue();
-      String logSegmentName = indexSegment.getLogSegmentName();
+      LogSegmentName logSegmentName = indexSegment.getLogSegmentName();
       if (!mapping.containsKey(logSegmentName)) {
         mapping.put(logSegmentName, new ArrayList<IndexSegment>());
       }
@@ -1992,11 +1992,11 @@ class PersistentIndex {
    * @param logSegmentName the name of the log segment whose index segment files are required.
    * @return the list of {@link IndexSegment} files that refer to the log segment with name {@code logSegmentName}.
    */
-  static File[] getIndexSegmentFilesForLogSegment(String dataDir, final String logSegmentName) {
+  static File[] getIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName) {
     return new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
-        return name.startsWith(logSegmentName) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+        return name.startsWith(logSegmentName.toString()) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
       }
     });
   }
@@ -2007,11 +2007,12 @@ class PersistentIndex {
    * @param logSegmentName the name of the log segment whose index segment related files need to be deleteds.
    * @throws StoreException if {@code dataDir} could not be read or if a file could not be deleted.
    */
-  static void cleanupIndexSegmentFilesForLogSegment(String dataDir, final String logSegmentName) throws StoreException {
+  static void cleanupIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName)
+      throws StoreException {
     File[] filesToCleanup = new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
-        return name.startsWith(logSegmentName) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
+        return name.startsWith(logSegmentName.toString()) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
             || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
       }
     });

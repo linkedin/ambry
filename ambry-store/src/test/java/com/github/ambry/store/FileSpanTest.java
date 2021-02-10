@@ -28,10 +28,10 @@ public class FileSpanTest {
    */
   @Test
   public void inSpanTest() {
-    String firstLogSegmentName = LogSegmentNameHelper.generateFirstSegmentName(true);
-    String startLogSegmentName = LogSegmentNameHelper.getNextPositionName(firstLogSegmentName);
-    String interveningLogSegmentName = LogSegmentNameHelper.getNextPositionName(startLogSegmentName);
-    String endLogSegmentName = LogSegmentNameHelper.getNextPositionName(interveningLogSegmentName);
+    LogSegmentName firstLogSegmentName = LogSegmentName.generateFirstSegmentName(true);
+    LogSegmentName startLogSegmentName = firstLogSegmentName.getNextPositionName();
+    LogSegmentName interveningLogSegmentName = startLogSegmentName.getNextPositionName();
+    LogSegmentName endLogSegmentName = interveningLogSegmentName.getNextPositionName();
     long startOffsetInStartLogSegment = 100;
     long endOffsetInEndLogSegment = 100;
     FileSpan span = new FileSpan(new Offset(startLogSegmentName, startOffsetInStartLogSegment),
@@ -39,7 +39,7 @@ public class FileSpanTest {
     long testOffsetStart = 0;
     long testOffsetEnd = 200;
 
-    for (String segmentName : new String[]{firstLogSegmentName, startLogSegmentName, interveningLogSegmentName, endLogSegmentName}) {
+    for (LogSegmentName segmentName : new LogSegmentName[]{firstLogSegmentName, startLogSegmentName, interveningLogSegmentName, endLogSegmentName}) {
       for (long offsetInSegment = testOffsetStart; offsetInSegment <= testOffsetEnd; offsetInSegment++) {
         Offset offset = new Offset(segmentName, offsetInSegment);
         boolean inSpan = segmentName.equals(interveningLogSegmentName) || (segmentName.equals(startLogSegmentName)

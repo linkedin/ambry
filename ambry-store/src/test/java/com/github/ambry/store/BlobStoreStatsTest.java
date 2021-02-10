@@ -1218,7 +1218,7 @@ public class BlobStoreStatsTest {
   private long verifyAndGetLogSegmentValidSize(BlobStoreStats blobStoreStats, TimeRange timeRange)
       throws StoreException {
     long expiryReferenceTime = state.time.milliseconds();
-    Pair<Long, NavigableMap<String, Long>> actualLogSegmentValidSizeMap =
+    Pair<Long, NavigableMap<LogSegmentName, Long>> actualLogSegmentValidSizeMap =
         blobStoreStats.getValidDataSizeByLogSegment(timeRange, expiryReferenceTime);
     assertTrue("Valid data size collection time should be in the range",
         timeRange.getStartTimeInMs() <= actualLogSegmentValidSizeMap.getFirst()
@@ -1230,7 +1230,7 @@ public class BlobStoreStatsTest {
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     while (logSegment != null) {
-      String logSegmentName = logSegment.getName();
+      LogSegmentName logSegmentName = logSegment.getName();
       assertTrue("Log segment: " + logSegmentName + " not found in TimeRange " + timeRange,
           actualLogSegmentValidSizeMap.getSecond().containsKey(logSegmentName));
 

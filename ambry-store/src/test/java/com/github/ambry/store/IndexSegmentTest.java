@@ -78,6 +78,7 @@ public class IndexSegmentTest {
   private final short formatVersion;
   private final Properties properties = new Properties();
   private StoreConfig config;
+
   /**
    * Creates a temporary directory and sets up metrics.
    * @param formatVersion the format version of the index
@@ -143,8 +144,8 @@ public class IndexSegmentTest {
    */
   @Test
   public void partialWriteTest() throws IOException, StoreException {
-    String prevLogSegmentName = LogSegmentNameHelper.getName(0, 0);
-    String logSegmentName = LogSegmentNameHelper.getNextPositionName(prevLogSegmentName);
+    LogSegmentName prevLogSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
+    LogSegmentName logSegmentName = prevLogSegmentName.getNextPositionName();
     Offset startOffset = new Offset(logSegmentName, 0);
     MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
@@ -244,7 +245,7 @@ public class IndexSegmentTest {
    */
   @Test
   public void getIndexEntriesCornerCasesTest() throws IOException, StoreException {
-    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    LogSegmentName logSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
     MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
@@ -362,7 +363,7 @@ public class IndexSegmentTest {
   public void memoryMapFailureTest() throws IOException, StoreException {
     assumeTrue(formatVersion == PersistentIndex.VERSION_1
         && config.storeIndexMemState == IndexMemState.MMAP_WITHOUT_FORCE_LOAD);
-    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    LogSegmentName logSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
     // verify that StoreErrorCodes.File_Not_Found can be captured when performing memory map
@@ -405,7 +406,7 @@ public class IndexSegmentTest {
    */
   @Test
   public void readFromFileFailureTest() throws StoreException, IOException {
-    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    LogSegmentName logSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
     IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), mockStoreKeyFactory);
@@ -434,7 +435,7 @@ public class IndexSegmentTest {
   public void populateBloomFilterWithUuidTest() throws Exception {
     assumeTrue(formatVersion > PersistentIndex.VERSION_1);
     // with default config, bloom filter will be populated by whole blob id bytes array
-    String logSegmentName1 = LogSegmentNameHelper.getName(0, 0);
+    LogSegmentName logSegmentName1 = LogSegmentName.fromPositionAndGeneration(0, 0);
     int indexValueSize =
         PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3
             : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
@@ -474,7 +475,7 @@ public class IndexSegmentTest {
     Properties properties = new Properties();
     properties.setProperty("store.uuid.based.bloom.filter.enabled", Boolean.toString(true));
     StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
-    String logSegmentName2 = LogSegmentNameHelper.getName(1, 0);
+    LogSegmentName logSegmentName2 = LogSegmentName.fromPositionAndGeneration(1, 0);
     IndexSegment indexSegment2 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName2, 0), STORE_KEY_FACTORY,
             KEY_SIZE + indexValueSize, indexValueSize, storeConfig, metrics, time);
@@ -534,7 +535,7 @@ public class IndexSegmentTest {
    */
   @Test
   public void iteratorTest() throws Exception {
-    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    LogSegmentName logSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
     MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
     MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
@@ -696,7 +697,7 @@ public class IndexSegmentTest {
   @Test
   public void dataIntegrityCheckTest() throws Exception {
     long writeStartOffset = 0L;
-    String logSegmentName = generateRandomLogSegmentName();
+    LogSegmentName logSegmentName = StoreTestUtils.getRandomLogSegmentName(null);
     Offset startOffset = new Offset(logSegmentName, writeStartOffset);
     IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
 
@@ -770,7 +771,8 @@ public class IndexSegmentTest {
    */
   private void doComprehensiveTest(short version, boolean includeSmallKeys, boolean includeLargeKeys)
       throws IOException, StoreException {
-    String[] logSegmentNames = {LogSegmentNameHelper.generateFirstSegmentName(false), generateRandomLogSegmentName()};
+    LogSegmentName[] logSegmentNames =
+        {LogSegmentName.generateFirstSegmentName(false), StoreTestUtils.getRandomLogSegmentName(null)};
     int valueSize;
     switch (version) {
       case PersistentIndex.VERSION_0:
@@ -787,7 +789,7 @@ public class IndexSegmentTest {
         fail("Unknown PersistentIndex formatVersion");
         valueSize = -1;
     }
-    for (String logSegmentName : logSegmentNames) {
+    for (LogSegmentName logSegmentName : logSegmentNames) {
       long writeStartOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       Offset startOffset = new Offset(logSegmentName, writeStartOffset);
       NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex = new TreeMap<>();
@@ -906,15 +908,6 @@ public class IndexSegmentTest {
   // comprehensiveTest() helpers
 
   /**
-   * @return a random log segment name.
-   */
-  private String generateRandomLogSegmentName() {
-    long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    return LogSegmentNameHelper.getName(pos, gen);
-  }
-
-  /**
    * Generates an {@link IndexSegment} for entries from {@code startOffset}.
    * @param startOffset the start {@link Offset} of the {@link IndexSegment}.
    * @param storeKeyFactory the {@link StoreKeyFactory} to use when generating index segment
@@ -1010,7 +1003,7 @@ public class IndexSegmentTest {
   private void verifyIndexSegmentDetails(IndexSegment indexSegment, Offset startOffset, int numItems, int sizeWritten,
       boolean sealed, long endOffset, long lastModifiedTimeInMs,
       Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) {
-    String logSegmentName = startOffset.getName();
+    LogSegmentName logSegmentName = startOffset.getName();
     int valueSize;
     switch (formatVersion) {
       case PersistentIndex.VERSION_0:
@@ -1047,7 +1040,7 @@ public class IndexSegmentTest {
 
     String expectedFilename =
         startOffset.getOffset() + BlobStore.SEPARATOR + IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX;
-    if (!logSegmentName.isEmpty()) {
+    if (!logSegmentName.isSingleSegment()) {
       expectedFilename = logSegmentName + BlobStore.SEPARATOR + expectedFilename;
     }
     String path = tempDir.getAbsolutePath() + File.separator + expectedFilename;
@@ -1307,8 +1300,8 @@ public class IndexSegmentTest {
       IndexValue value;
       if (values == null) {
         // create an index value with a random log segment name
-        value = IndexValueTest.getIndexValue(1, new Offset(generateRandomLogSegmentName(), 0), Utils.Infinite_Time,
-            time.milliseconds(), id.getAccountId(), id.getContainerId(), (short) 1, formatVersion);
+        value = IndexValueTest.getIndexValue(1, new Offset(StoreTestUtils.getRandomLogSegmentName(null), 0),
+            Utils.Infinite_Time, time.milliseconds(), id.getAccountId(), id.getContainerId(), (short) 1, formatVersion);
       } else if (values.last().isDelete()) {
         throw new IllegalArgumentException(id + " is deleted");
       } else if (values.last().isTtlUpdate()) {
@@ -1343,9 +1336,9 @@ public class IndexSegmentTest {
       IndexValue value;
       if (values == null) {
         // create an index value with a random log segment name
-        value = IndexValueTest.getIndexValue(1, new Offset(generateRandomLogSegmentName(), 0), Utils.Infinite_Time,
-            time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-            (short) 0, formatVersion);
+        value = IndexValueTest.getIndexValue(1, new Offset(StoreTestUtils.getRandomLogSegmentName(null), 0),
+            Utils.Infinite_Time, time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), (short) 0, formatVersion);
       } else if (values.last().isDelete()) {
         throw new IllegalArgumentException(id + " is already deleted");
       } else {

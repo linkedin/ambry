@@ -58,7 +58,7 @@ class CompactAllPolicy implements CompactionPolicy {
 
   @Override
   public CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, String dataDir) {
+      long segmentHeaderSize, List<LogSegmentName> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, String dataDir) {
     CompactionDetails details = null;
     logger.trace("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {

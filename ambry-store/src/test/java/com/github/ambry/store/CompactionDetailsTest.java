@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -39,10 +40,10 @@ public class CompactionDetailsTest {
   @Test
   public void serDeTest() throws IOException {
     int segmentCount = TestUtils.RANDOM.nextInt(10) + 1;
-    List<String> segmentsUnderCompaction = new ArrayList<>();
+    List<LogSegmentName> segmentsUnderCompaction = new ArrayList<>();
     for (int i = 0; i < segmentCount; i++) {
-      int stringSize = TestUtils.RANDOM.nextInt(10) + 1;
-      segmentsUnderCompaction.add(TestUtils.getRandomString(stringSize));
+      LogSegmentName segmentName = StoreTestUtils.getRandomLogSegmentName(segmentsUnderCompaction);
+      segmentsUnderCompaction.add(segmentName);
     }
     long referenceTime = SystemTime.getInstance().milliseconds();
     CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction);
@@ -56,11 +57,12 @@ public class CompactionDetailsTest {
    */
   @Test
   public void badInputTest() throws Exception {
-    List<String> segmentsUnderCompaction = Collections.singletonList(TestUtils.getRandomString(10));
+    List<LogSegmentName> segmentsUnderCompaction =
+        Collections.singletonList(LogSegmentName.generateFirstSegmentName(true));
 
     // details contains no segments
     try {
-      new CompactionDetails(1, Collections.EMPTY_LIST);
+      new CompactionDetails(1, Collections.emptyList());
       fail("Should have failed because there were no log segments to compact");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
