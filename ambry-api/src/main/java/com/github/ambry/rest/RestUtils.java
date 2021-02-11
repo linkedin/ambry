@@ -1050,7 +1050,7 @@ public class RestUtils {
   /**
    * Class to encode decode kv header values.
    */
-  static class KVHeaderValueEncoderDecoder {
+  public static class KVHeaderValueEncoderDecoder {
     private static String DELIM = "; ";
     private static String KV_SEPERATOR = "=";
 
@@ -1059,7 +1059,7 @@ public class RestUtils {
      * @param map {@link Map} of {@link String}s to encode.
      * @return encoded http header value.
      */
-    static String encodeKVHeaderValue(Map<String, String> map) {
+    public static String encodeKVHeaderValue(Map<String, String> map) {
       Objects.requireNonNull(map);
       String value = "";
       for (Map.Entry<String, String> entry : map.entrySet()) {
@@ -1073,7 +1073,7 @@ public class RestUtils {
      * @param value {@link String} containing the encoded kv values.
      * @return decoded kv {@link Map}.
      */
-    static Map<String, String> decodeKVHeaderValue(String value) {
+    public static Map<String, String> decodeKVHeaderValue(String value) {
       Objects.requireNonNull(value);
       Map<String, String> valueMap = new HashMap<>();
       if (value.isEmpty()) {
