@@ -839,17 +839,17 @@ public class RestUtilsTest {
   }
 
   /**
-   * Tests for {@link RestUtils#encodeKVHeaderValue(Map)}.
+   * Tests for {@link RestUtils.KVHeaderValueEncoderDecoder#encodeKVHeaderValue(Map)}.
    */
   @Test
   public void encodeKVHeaderValueTest() {
     // test for empty map
     Map<String, String> headerValue = new HashMap<>();
-    assertEquals("Invalid encoded value", "", RestUtils.encodeKVHeaderValue(headerValue));
+    assertEquals("Invalid encoded value", "", RestUtils.KVHeaderValueEncoderDecoder.encodeKVHeaderValue(headerValue));
 
     // test for null map
     try {
-      RestUtils.encodeKVHeaderValue(null);
+      RestUtils.KVHeaderValueEncoderDecoder.encodeKVHeaderValue(null);
       fail("Null value should throw error");
     } catch (NullPointerException npEx) {
     }
@@ -858,7 +858,41 @@ public class RestUtilsTest {
     headerValue.put(QuotaName.READ_CAPACITY_UNIT.name(), String.valueOf(1.9));
     headerValue.put(QuotaName.STORAGE_IN_GB.name(), String.valueOf(3.0));
     assertEquals("Invalid encoded value", "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0; ",
-        RestUtils.encodeKVHeaderValue(headerValue));
+        RestUtils.KVHeaderValueEncoderDecoder.encodeKVHeaderValue(headerValue));
+  }
+
+  /**
+   * Tests for {@link RestUtils.KVHeaderValueEncoderDecoder#decodeKVHeaderValue(String)}.
+   */
+  @Test
+  public void decodeKVHeaderValueTest() {
+    // test for empty string
+    assertTrue("Invalid encoded value", RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue("").isEmpty());
+
+    // test for null string
+    try {
+      RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(null);
+      fail("Null value should throw error");
+    } catch (NullPointerException npEx) {
+    }
+
+    // test for valid string
+    String validEncodedHeader = "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0; ";
+    Map<String, String> decodedMap = new HashMap<>();
+    decodedMap.put("READ_CAPACITY_UNIT", "1.9");
+    decodedMap.put("STORAGE_IN_GB", "3.0");
+    assertTrue("Invalid encoded value",
+        RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(validEncodedHeader).equals(decodedMap));
+
+    // test for invalid strings.
+    String[] invalidEncodedHeaders = new String[]{"invalid", "badkvkey=badkvval", "; ", "bad; bad; ", ";", "="};
+    for (String invalidEncodedHeader : invalidEncodedHeaders) {
+      try {
+        RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(invalidEncodedHeader);
+        fail("Decode of invalid encoded header " + invalidEncodedHeader + " should fail.");
+      } catch (IllegalArgumentException iaEx) {
+      }
+    }
   }
 
   // helpers.

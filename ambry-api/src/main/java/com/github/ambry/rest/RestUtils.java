@@ -951,8 +951,10 @@ public class RestUtils {
    */
   public static void setRequestCostHeader(Map<QuotaName, Double> costMap, RestResponseChannel restResponseChannel) {
     Objects.requireNonNull(costMap, "cost map cannot contain be null");
-    restResponseChannel.setHeader(QuotaHeaders.REQUEST_COST, encodeKVHeaderValue(costMap.entrySet().stream().collect(
-        Collectors.toMap(e -> e.getKey().name(), e-> String.valueOf(e.getValue())))));
+    restResponseChannel.setHeader(QuotaHeaders.REQUEST_COST, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
+        costMap.entrySet()
+            .stream()
+            .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
   }
 
   /**
@@ -1034,20 +1036,6 @@ public class RestUtils {
   }
 
   /**
-   * Encode a map of {@link String}s as http header value.
-   * @param map {@link Map} of {@link String}s to encode.
-   * @return encoded http header value.
-   */
-  static String encodeKVHeaderValue(Map<String, String> map) {
-    Objects.requireNonNull(map);
-    String value = "";
-    for(Map.Entry<String, String> entry : map.entrySet()) {
-      value += entry.getKey() + "=" + entry.getValue() + "; ";
-    }
-    return value;
-  }
-
-  /**
    * Drops the leading slash and extension (if any) in the blob ID.
    * @param blobIdWithExtension the blob ID possibly with an extension.
    * @return {@code blobIdWithExtension} without an extension if there was one.
@@ -1057,5 +1045,54 @@ public class RestUtils {
     int startIndex = blobIdWithExtension.startsWith("/") ? 1 : 0;
     int endIndex = extensionIndex != -1 ? extensionIndex : blobIdWithExtension.length();
     return blobIdWithExtension.substring(startIndex, endIndex);
+  }
+
+  /**
+   * Class to encode decode kv header values.
+   */
+  static class KVHeaderValueEncoderDecoder {
+    private static String DELIM = "; ";
+    private static String KV_SEPERATOR = "=";
+
+    /**
+     * Encode a map of {@link String}s as http header value.
+     * @param map {@link Map} of {@link String}s to encode.
+     * @return encoded http header value.
+     */
+    static String encodeKVHeaderValue(Map<String, String> map) {
+      Objects.requireNonNull(map);
+      String value = "";
+      for (Map.Entry<String, String> entry : map.entrySet()) {
+        value += entry.getKey() + KV_SEPERATOR + entry.getValue() + DELIM;
+      }
+      return value;
+    }
+
+    /**
+     * Decode a kv header value.
+     * @param value {@link String} containing the encoded kv values.
+     * @return decoded kv {@link Map}.
+     */
+    static Map<String, String> decodeKVHeaderValue(String value) {
+      Objects.requireNonNull(value);
+      Map<String, String> valueMap = new HashMap<>();
+      if (value.isEmpty()) {
+        return valueMap;
+      }
+      if (!value.contains(DELIM)) {
+        throw new IllegalArgumentException("Invalid kv header value: " + value);
+      }
+      for (String kvStr : value.split(DELIM)) {
+        if (!kvStr.contains(KV_SEPERATOR)) {
+          throw new IllegalArgumentException("Invalid kv header value: " + value);
+        }
+        String[] kv = kvStr.split(KV_SEPERATOR);
+        valueMap.put(kv[0], kv[1]);
+      }
+      if (valueMap.isEmpty()) {
+        throw new IllegalArgumentException("Invalid kv header value: " + value);
+      }
+      return valueMap;
+    }
   }
 }
