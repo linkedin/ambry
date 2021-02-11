@@ -33,6 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import joptsimple.internal.Strings;
@@ -200,7 +201,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       StatsSnapshot prevAccountStatsSnapshot =
           prevPartitionMap.getOrDefault(partitionIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
       short partitionId = Utils.partitionIdFromStatsPartitionKey(partitionIdKey);
-      Map<String, StatsSnapshot> currAccountMap = currAccountStatsSnapshot.getSubMap();
+      Map<String, StatsSnapshot> currAccountMap =
+          Optional.ofNullable(currAccountStatsSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
       Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
       for (Map.Entry<String, StatsSnapshot> currAccountMapEntry : currAccountMap.entrySet()) {
         String accountIdKey = currAccountMapEntry.getKey();
@@ -208,7 +210,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         StatsSnapshot prevContainerStatsSnapshot =
             prevAccountMap.getOrDefault(accountIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
         short accountId = Utils.accountIdFromStatsAccountKey(accountIdKey);
-        Map<String, StatsSnapshot> currContainerMap = currContainerStatsSnapshot.getSubMap();
+        Map<String, StatsSnapshot> currContainerMap =
+            Optional.ofNullable(currContainerStatsSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
         Map<String, StatsSnapshot> prevContainerMap = prevContainerStatsSnapshot.getSubMap();
         for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : currContainerMap.entrySet()) {
           String containerIdKey = currContainerMapEntry.getKey();
