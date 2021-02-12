@@ -207,9 +207,13 @@ class AccountInfoMap {
    * @return true if there is any container under given parent account with same name but different id.
    */
   boolean hasConflictingContainer(Collection<Container> containersToSet, short parentAccountId, boolean ignoreVersion) {
+    Account account = idToAccountMap.get(parentAccountId);
+    if (account == null) {
+      return false;
+    }
     for (Container container : containersToSet) {
       // if the container already exists, check that the snapshot version matches the expected value.
-      Container containerInMap = getContainerByNameForAccount(container.getParentAccountId(), container.getName());
+      Container containerInMap = account.getContainerByName(container.getName());
       if (!ignoreVersion && containerInMap != null
           && container.getSnapshotVersion() != containerInMap.getSnapshotVersion()) {
         logger.error(
@@ -271,38 +275,14 @@ class AccountInfoMap {
    * @throws IllegalArgumentException if {@link Account} with provided id doesn't exist.
    */
   void addOrUpdateContainer(short accountId, Container container) {
-    Account parentAccount = idToAccountMap.get(accountId);
-    if (parentAccount == null) {
+    Account account = idToAccountMap.get(accountId);
+    if (account == null) {
       throw new IllegalArgumentException("Account with ID " + accountId + "doesn't exist");
     }
-    AccountBuilder accountBuilder = new AccountBuilder(parentAccount).addOrUpdateContainer(container);
-    parentAccount = accountBuilder.build();
-    idToAccountMap.put(parentAccount.getId(), parentAccount);
-    nameToAccountMap.put(parentAccount.getName(), parentAccount);
-  }
-
-  /**
-   * Gets {@link Container} by its Parent Account id and id.
-   * @param accountId The id of the parent {@link Account} for this {@link Container}.
-   * @param id The id to get the {@link Container}.
-   * @return The {@link Container} with the given id within the parent Account Id, or {@code null} if
-   * such a parent {@link Account} or {@link Container} does not exist.
-   */
-  Container getContainerByIdForAccount(Short accountId, short id) {
-    Account parentAccount = idToAccountMap.get(accountId);
-    return parentAccount == null ? null : parentAccount.getContainerById(id);
-  }
-
-  /**
-   * Gets {@link Container} by its name and Parent Account id.
-   * @param accountId The id of the parent {@link Account} for this {@link Container}.
-   * @param name The name of the {@link Container} to get.
-   * @return The {@link Container} with the given name within the parent Account Id, or {@code null} if
-   * such a parent {@link Account} or {@link Container} does not exist.
-   */
-  Container getContainerByNameForAccount(Short accountId, String name) {
-    Account parentAccount = idToAccountMap.get(accountId);
-    return parentAccount == null ? null : parentAccount.getContainerByName(name);
+    AccountBuilder accountBuilder = new AccountBuilder(account).addOrUpdateContainer(container);
+    account = accountBuilder.build();
+    idToAccountMap.put(account.getId(), account);
+    nameToAccountMap.put(account.getName(), account);
   }
 
   /**

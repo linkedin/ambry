@@ -41,7 +41,6 @@ import org.slf4j.LoggerFactory;
 abstract class AbstractAccountService implements AccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(AbstractAccountService.class);
-
   protected final AtomicReference<AccountInfoMap> accountInfoMapRef;
   protected final ReentrantLock lock = new ReentrantLock();
   protected final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers =
@@ -52,7 +51,6 @@ abstract class AbstractAccountService implements AccountService {
   public AbstractAccountService(AccountServiceConfig config, AccountServiceMetrics accountServiceMetrics) {
     this.config = config;
     this.accountServiceMetrics = accountServiceMetrics;
-
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
   }
 

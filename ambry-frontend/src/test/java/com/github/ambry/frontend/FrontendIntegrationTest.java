@@ -1518,7 +1518,7 @@ public class FrontendIntegrationTest {
 
     for (Container container : outputContainers) {
       assertEquals("Update not reflected in AccountService", container,
-          ACCOUNT_SERVICE.getContainer(accountName, container.getName()));
+          ACCOUNT_SERVICE.getContainerByName(accountName, container.getName()));
     }
   }
 
