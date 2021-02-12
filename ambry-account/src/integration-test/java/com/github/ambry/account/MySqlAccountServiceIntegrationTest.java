@@ -406,7 +406,7 @@ public class MySqlAccountServiceIntegrationTest {
     MySqlAccountService consumerAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
 
-    // Add new account on producer account service
+    // Add new account "a1" on producer account service
     short accountId = 101;
     String accountName = "a1";
     int onDemandContainerFetchCount = 0;
