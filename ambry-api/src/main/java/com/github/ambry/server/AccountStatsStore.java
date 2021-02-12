@@ -43,7 +43,7 @@ public interface AccountStatsStore {
    * @return {@link StatsWrapper} of given {@code hostname}.
    * @throws Exception
    */
-  StatsWrapper queryAccountStatsOf(String hostname) throws Exception;
+  StatsWrapper queryAccountStatsByHost(String hostname) throws Exception;
 
   /**
    * Return the aggregated stats. This is the stats stored by method {@link #storeAggregatedAccountStats}.

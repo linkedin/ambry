@@ -13,6 +13,7 @@
  */
 package com.github.ambry.accountstats;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,7 @@ import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.sql.SQLException;
@@ -35,6 +37,8 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import joptsimple.internal.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -44,6 +48,7 @@ import joptsimple.internal.Strings;
  * the previous {@link StatsWrapper} from crashing or restarting.
  */
 public class AccountStatsMySqlStore implements AccountStatsStore {
+  private static final Logger logger = LoggerFactory.getLogger(AccountStatsMySqlStore.class);
 
   public static final String[] TABLES =
       {AccountReportsDao.ACCOUNT_REPORTS_TABLE, AggregatedAccountReportsDao.AGGREGATED_ACCOUNT_REPORTS_TABLE,
@@ -83,6 +88,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public final Histogram storeAggregatedPartitionClassStatsTimeMs;
     public final Histogram queryAggregatedPartitionClassStatsTimeMs;
 
+    public final Counter missingPartitionClassNameErrorCount;
+
     /**
      * Constructor to create the Metrics.
      * @param registry The {@link MetricRegistry}.
@@ -111,6 +118,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           MetricRegistry.name(AccountStatsMySqlStore.class, "StoreAggregatedPartitionClassStatsTimeMs"));
       queryAggregatedPartitionClassStatsTimeMs = registry.histogram(
           MetricRegistry.name(AccountStatsMySqlStore.class, "QueryAggregatedPartitionClassStatsTimeMs"));
+
+      missingPartitionClassNameErrorCount =
+          registry.counter(MetricRegistry.name(AccountStatsMySqlStore.class, "MissingPartitionClassNameErrorCount"));
     }
   }
 
@@ -228,7 +238,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @throws SQLException
    */
   @Override
-  public synchronized StatsWrapper queryAccountStatsOf(String queryHostname) throws SQLException {
+  public synchronized StatsWrapper queryAccountStatsByHost(String queryHostname) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     queryHostname = hostnameHelper.simplifyHostname(queryHostname);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
@@ -336,21 +346,29 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   @Override
   public synchronized void storePartitionClassStats(StatsWrapper statsWrapper) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    // 1. Get all the partition class names in this statswrapper
     Map<String, StatsSnapshot> partitionClassSubMap = statsWrapper.getSnapshot().getSubMap();
+    // 1. Get all the partition class names in this statswrapper and the partition class names in DB
     Set<String> partitionClassNames = new HashSet<>(partitionClassSubMap.keySet());
     Map<String, Short> partitionClassNamesInDB = partitionClassReportsDao.queryPartitionClassNames(clusterName);
-    // 2. Add partition class names not in db
+
+    // 2. Add partition class names not in DB
     partitionClassNames.removeAll(partitionClassNamesInDB.keySet());
     if (!partitionClassNames.isEmpty()) {
       for (String partitionClassName : partitionClassNames) {
         partitionClassReportsDao.insertPartitionClassName(clusterName, partitionClassName);
       }
-      // Fresh the partition class names
+      // Refresh the partition class names
       partitionClassNamesInDB = partitionClassReportsDao.queryPartitionClassNames(clusterName);
     }
 
     // 3. Get partition ids under each partition class name
+    // The result looks like
+    //  {
+    //    "default": [1, 2, 3],
+    //    "new": [4, 5, 6]
+    //  }
+    // The "default" and "new" are the partition class names and the numbers are partition ids. Same partition
+    // can't belong to different partition class names.
     Map<String, List<Short>> partitionIdsUnderClassNames = partitionClassSubMap.entrySet()
         .stream()
         .collect(Collectors.toMap(Map.Entry::getKey, ent -> ent.getValue()
@@ -360,7 +378,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
             .map(pk -> Short.valueOf(pk.substring("Partition[".length(), pk.length() - 1)))
             .collect(Collectors.toList())));
 
-    // 4. Add partition ids not in db
+    // 4. Add partition ids not in DB
     Set<Short> partitionIdsInDB = partitionClassReportsDao.queryPartitionIds(clusterName);
     for (String partitionClassName : partitionIdsUnderClassNames.keySet()) {
       short partitionClassId = partitionClassNamesInDB.get(partitionClassName);
@@ -378,16 +396,35 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     long startTimeMs = System.currentTimeMillis();
     PartitionClassReportsDao.StorageBatchUpdater batch =
         partitionClassReportsDao.new StorageBatchUpdater(config.updateBatchSize);
+    // Aggregated partition class stats has two levels. The first level is the partion class name, the second level is the
+    // accountId___containerId. It looks like this
+    // {
+    //  "default": {
+    //    "A[1]___C[1]": { "v" : 1000 },
+    //    "A[1]___C[2]": { "v" : 3000 },
+    //    "A[2]___C[2]": { "v" : 3000 }
+    //  },
+    //  "new": {
+    //    "A[1]___C[1]": { "v" : 1000 },
+    //    "A[1]___C[2]": { "v" : 3000 },
+    //    "A[2]___C[2]": { "v" : 3000 }
+    //  }
+    // }
     for (Map.Entry<String, StatsSnapshot> partitionClassMapEntry : statsSnapshot.getSubMap().entrySet()) {
+      // Here, we have partition class names as the key of this entry and the StatsSnapshot containing the
+      // accountId___ContiainerId in the subMap.
       String partitionClassName = partitionClassMapEntry.getKey();
       for (Map.Entry<String, StatsSnapshot> accountContainerMapEntry : partitionClassMapEntry.getValue()
           .getSubMap()
           .entrySet()) {
+        // Here, we have the accountId___containerId as the key of this entry and the StatsSnapshot containing
+        // the storage usage as the value.
         String accountContainer = accountContainerMapEntry.getKey();
-        long usage = accountContainerMapEntry.getValue().getValue();
         String[] parts = accountContainer.split(Utils.ACCOUNT_CONTAINER_SEPARATOR);
         short accountId = Short.valueOf(parts[0].substring(2, parts[0].length() - 1));
         short containerId = Short.valueOf(parts[1].substring(2, parts[1].length() - 1));
+
+        long usage = accountContainerMapEntry.getValue().getValue();
         batch.addUpdateToBatch(clusterName, partitionClassName, accountId, containerId, usage);
       }
     }
@@ -407,6 +444,13 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
               .put(containerId, storageUsage);
           timestamp.set(Math.max(timestamp.get(), updatedAt));
         });
+    // Here, partitionClassNameAccountContainerUsages map has partition class name, account id, container id as
+    // keys of map at each level, the value is the storage usage.
+
+    // Here we will construct a StatsSnapshot from partitionClassNameAccountContainerUsages.
+    // The constructed StatsSnapshot would have two level of StatsSnapshot maps.
+    // The first level is grouped by the partitionClassName.
+    // The second level is grouped by the accounId___containerId.
     Map<String, StatsSnapshot> partitionClassNameSubMap = new HashMap<>();
     for (String partitionClassName : partitionClassNameAccountContainerUsages.keySet()) {
       Map<String, StatsSnapshot> accountContainerSubMap = new HashMap<>();
@@ -452,7 +496,19 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
               .put(containerId, storageUsage);
           timestamp.set(Math.max(timestamp.get(), updatedAtMs));
         });
-    // Get all the partition ids;
+    // Here partitionAccountContainerUsage has partition id, account id and container id as keys of map at each level,
+    // the value is the storage usage.
+
+    // We have to construct a StatsSnapshot for the given host. Host-level StatsSnapshot is different than aggregated
+    // StatsSnapshot. Aggregated StatsSnapshot only have two levels of map, but host-level StatsSnapshot has three levels
+    // of map.
+    // The first level is grouped by the partition class name just like aggregated StatsSnapshot.
+    // The second level is grouped by the partition id that belongs to this partition class name.
+    // The last level is grouped by the accountId___containerId.
+
+    // As indicated by the comments above, we have to know the partition class name for each partition id before we
+    // construct the StatsSnapshot. Luckily, we have all the partition ids and we have a map partitionNameAndIds whose
+    // key is the partition class name and the value is the list of all partition ids belong to the partition class name.
     Set<Short> partitionIds = partitionAccountContainerUsage.keySet();
     Map<String, Set<Short>> partitionNameAndIdsForHost = new HashMap<>();
     for (Short partitionId : partitionIds) {
@@ -463,6 +519,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           found = true;
           break;
         }
+      }
+      if (!found) {
+        storeMetrics.missingPartitionClassNameErrorCount.inc();
+        logger.error("Can't find partition class name for partition id {}", partitionId);
       }
     }
     Map<String, StatsSnapshot> partitionClassSubMap = new HashMap<>();

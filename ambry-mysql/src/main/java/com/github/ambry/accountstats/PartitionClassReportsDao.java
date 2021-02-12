@@ -34,6 +34,8 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  * PartitionClassNames, Partitions, AggregatedPartitionClassReports Data Access Object.
  */
 public class PartitionClassReportsDao {
+  private static final Logger logger = LoggerFactory.getLogger(PartitionClassReportsDao.class);
+
   public static final String PARTITION_CLASS_NAMES_TABLE = "PartitionClassNames";
   public static final String PARTITIONS_TABLE = "Partitions";
   public static final String AGGREGATED_PARTITION_CLASS_REPORTS_TABLE = "AggregatedPartitionClassReports";
@@ -46,36 +48,69 @@ public class PartitionClassReportsDao {
   private static final String STORAGE_USAGE_COLUMN = "storageUsage";
   private static final String UPDATED_AT_COLUMN = "updatedAt";
 
+  /**
+   * eg: INSERT INTO PartitionClassNames(clusterName, name) VALUES ("ambry-test", "default");
+   */
   private static final String insertPartitionClassNamesSql =
       String.format("INSERT INTO %s (%s, %s) VALUES (?, ?)", PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN,
           NAME_COLUMN);
 
+  /**
+   * eg: SELECT id, name FROM PartitionClassNames WHERE clusterName = "ambry-test";
+   */
   private static final String queryPartitionClassNamesSql =
       String.format("SELECT %s, %s FROM %s WHERE %s = ?", ID_COLUMN, NAME_COLUMN, PARTITION_CLASS_NAMES_TABLE,
           CLUSTER_NAME_COLUMN);
 
+  /**
+   * eg: INSERT INTO Partitions VALUES("ambry-test", 12, 1);
+   * 12 is the partition id and 1 is the partition class id from PartitionClassNames.id.
+   */
   private static final String insertPartitionIdSql = String.format("INSERT INTO %s VALUES (?, ?, ?)", PARTITIONS_TABLE);
 
+  /**
+   * eg: SELECT id FROM Partitions WHERE clusterName = "ambry-test";
+   */
   private static final String queryPartitionIdsSql =
       String.format("SELECT %s FROM %s WHERE %s = ?", ID_COLUMN, PARTITIONS_TABLE, CLUSTER_NAME_COLUMN);
 
+  /**
+   * eg: SELECT Partitions.id, PartitionClassNames.name
+   *     FROM Partitions INNER JOIN PartitiionClassNames
+   *     ON Partitions.partitionClassId = PartitionClassNames.id
+   *     AND Partitions.clusterName = PartitionClassName.clusterName
+   *     WHERE Partitions.clusterName = "ambry-test";
+   */
   private static final String queryPartitionIdAndNamesSql = String.format(
       "SELECT %1$s.%2$s, %3$s.%4$s FROM %1$s INNER JOIN %3$s ON %1$s.%5$s = %3$s.%2$s AND %1$s.%6$s = %3$s.%6$s "
           + "WHERE %1$s.%6$s = ?", PARTITIONS_TABLE, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE, NAME_COLUMN,
       PARTITION_CLASS_ID_COLUMN, CLUSTER_NAME_COLUMN);
 
+  /**
+   * eg: INSERT INTO AggregatedPartitionClassReports
+   *     SELECT id, 101, 201, 12345, NOW()
+   *     FROM PartitionClassNames WHERE clusterName = "ambry-test" AND name = "default"
+   *     ON DUPLICATE KEY UPDATE storageUsage=12345, updatedAt=NOW();
+   *  101 is the account id, 201 is the container id, 12345 is the storage usage.
+   */
   private static final String insertAggregatedSql = String.format(
       "INSERT INTO %s SELECT %s, ?, ?, ?, NOW() FROM %s WHERE %s=? AND %s=? ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
       AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN,
       NAME_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
 
+  /**
+   * eg: SELECT TableA.name, accountId, containerId, storageUsage, updatedAt
+   *     FROM AggregatedPartitionClassReport INNER JOIN (
+   *         SELECT * FROM PartitionClassNames WHERE clusterName="ambry-test"
+   *     ) TableA
+   *     WHERE TableA.id = AggregatedPartitionClassReports.partitionClassId;
+   */
   private static final String queryAggregatedSql = String.format(
       "SELECT TableA.%s, %s, %s, %s, %s FROM %s " + "INNER JOIN (SELECT * FROM %s WHERE %s = ?) TableA"
           + " WHERE TableA.%s = %s.%s;", NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN,
       UPDATED_AT_COLUMN, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN,
       ID_COLUMN, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN);
 
-  private static final Logger logger = LoggerFactory.getLogger(PartitionClassReportsDao.class);
   private final MySqlDataAccessor dataAccessor;
 
   /**
@@ -102,8 +137,8 @@ public class PartitionClassReportsDao {
       try (ResultSet rs = queryStatement.executeQuery()) {
         while (rs.next()) {
           short partitionClassId = rs.getShort(1);
-          String className = rs.getString(2);
-          result.put(className, partitionClassId);
+          String partitionClassName = rs.getString(2);
+          result.put(partitionClassName, partitionClassId);
         }
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
@@ -174,7 +209,7 @@ public class PartitionClassReportsDao {
    * Query the partition ids belonging to the given {@code clusterName}. An empty set will be returned if there is no
    * partitions for the given {@code clusterName}.
    * @param clusterName The clusterName.
-   * @return
+   * @return A set of partition ids of the given {@code clusterName}.
    * @throws SQLException
    */
   Set<Short> queryPartitionIds(String clusterName) throws SQLException {
@@ -240,12 +275,12 @@ public class PartitionClassReportsDao {
       queryStatement.setString(1, clusterName);
       try (ResultSet rs = queryStatement.executeQuery()) {
         while (rs.next()) {
-          String className = rs.getString(1);
+          String partitionClassName = rs.getString(1);
           int accountId = rs.getInt(2);
           int containerId = rs.getInt(3);
           long usage = rs.getLong(4);
           long updatedAt = rs.getTimestamp(5).getTime();
-          func.apply(className, (short) accountId, (short) containerId, usage, updatedAt);
+          func.apply(partitionClassName, (short) accountId, (short) containerId, usage, updatedAt);
         }
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);

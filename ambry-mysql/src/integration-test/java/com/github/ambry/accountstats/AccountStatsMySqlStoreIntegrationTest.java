@@ -101,9 +101,9 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
     assertTableSize(mySqlStore1.getMySqlDataAccessor(), 3 * 10 * 10);
 
-    StatsWrapper obtainedStats1 = mySqlStore1.queryAccountStatsOf(hostname1);
-    StatsWrapper obtainedStats2 = mySqlStore2.queryAccountStatsOf(hostname2);
-    StatsWrapper obtainedStats3 = mySqlStore3.queryAccountStatsOf(hostname3);
+    StatsWrapper obtainedStats1 = mySqlStore1.queryAccountStatsByHost(hostname1);
+    StatsWrapper obtainedStats2 = mySqlStore2.queryAccountStatsByHost(hostname2);
+    StatsWrapper obtainedStats3 = mySqlStore3.queryAccountStatsByHost(hostname3);
     assertTwoStatsSnapshots(obtainedStats1.getSnapshot(), stats1.getSnapshot());
     assertTwoStatsSnapshots(obtainedStats2.getSnapshot(), stats2.getSnapshot());
     assertTwoStatsSnapshots(obtainedStats3.getSnapshot(), stats3.getSnapshot());
@@ -124,7 +124,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     stats2.getSnapshot().getSubMap().get("Partition[0]").getSubMap().get("A[0]").getSubMap().get("C[0]").setValue(1);
     stats2.getSnapshot().updateValue();
     mySqlStore.storeAccountStats(stats2);
-    StatsWrapper obtainedStats = mySqlStore.queryAccountStatsOf(hostname1);
+    StatsWrapper obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1);
     assertTwoStatsSnapshots(obtainedStats.getSnapshot(), stats2.getSnapshot());
   }
 
@@ -180,10 +180,10 @@ public class AccountStatsMySqlStoreIntegrationTest {
   public void testHostPartitionClassStats() throws Exception {
     // First write some stats to account reports
     testMultiStoreStats();
-    StatsWrapper accountStats1 = mySqlStore.queryAccountStatsOf(hostname1);
-    StatsWrapper accountStats2 = mySqlStore.queryAccountStatsOf(hostname2);
+    StatsWrapper accountStats1 = mySqlStore.queryAccountStatsByHost(hostname1);
+    StatsWrapper accountStats2 = mySqlStore.queryAccountStatsByHost(hostname2);
     AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, false);
-    StatsWrapper accountStats3 = mySqlStore3.queryAccountStatsOf(hostname3);
+    StatsWrapper accountStats3 = mySqlStore3.queryAccountStatsByHost(hostname3);
 
     // From this account stats, create partition class stats;
     Set<String> allPartitionKeys = new HashSet<String>() {

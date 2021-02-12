@@ -84,7 +84,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       for (String instanceName : instanceNames) {
         // Helix instance name would suffix port number, here let's take port number out.
         instanceName = stripPortNumber(instanceName);
-        statsWrappers.put(instanceName, accountStatsStore.queryAccountStatsOf(instanceName));
+        statsWrappers.put(instanceName, accountStatsStore.queryAccountStatsByHost(instanceName));
       }
       logger.info("Aggregating stats from " + statsWrappers.size() + " hosts");
       results = clusterAggregator.doWorkOnStatsWrapperMap(statsWrappers, statsReportType);
