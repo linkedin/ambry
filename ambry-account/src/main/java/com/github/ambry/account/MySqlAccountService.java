@@ -54,7 +54,8 @@ import static com.github.ambry.utils.Utils.*;
 public class MySqlAccountService extends AbstractAccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountService.class);
-  private static final String SEPARATOR = "_";
+  public static final String SEPARATOR = ":";
+  // Cache parameters (initial capacity, load factor and max limit) for recentNotFoundContainersCache
   private static final int cacheInitialCapacity = 100;
   private static final float cacheLoadFactor = 0.75f;
   private static final int cacheMaxLimit = 1000;
@@ -398,7 +399,6 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
-    Container container = null;
 
     if (recentNotFoundContainersCache.contains(accountName + SEPARATOR + containerName)) {
       // If container was not found in recent get attempts, avoid another query to db and return null.
@@ -406,26 +406,27 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     Account account = getAccountByName(accountName);
-    if (account != null) {
-      container = account.getContainerByName(containerName);
-      if (container == null) {
-        // If container is not present in the cache, query from mysql db
-        try {
-          container = mySqlAccountStore.getContainerByName(account.getId(), containerName);
-          if (container != null) {
-            // write container to in-memory cache
-            updateContainersInCache(Collections.singletonList(container));
-            logger.info("Container {} in Account {} is not found locally; Fetched from mysql db", containerName,
-                accountName);
-            accountServiceMetrics.onDemandContainerFetchCount.inc();
-          } else {
-            // Add account_container to not-found LRU cache
-            recentNotFoundContainersCache.add(accountName + SEPARATOR + containerName);
-            logger.error("Container {} is not found in Account {}", containerName, accountName);
-          }
-        } catch (SQLException e) {
-          throw translateSQLException(e);
+    if (account == null) {
+      return null;
+    }
+    Container container = account.getContainerByName(containerName);
+    if (container == null) {
+      // If container is not present in the cache, query from mysql db
+      try {
+        container = mySqlAccountStore.getContainerByName(account.getId(), containerName);
+        if (container != null) {
+          // write container to in-memory cache
+          updateContainersInCache(Collections.singletonList(container));
+          logger.info("Container {} in Account {} is not found locally; Fetched from mysql db", containerName,
+              accountName);
+          accountServiceMetrics.onDemandContainerFetchCount.inc();
+        } else {
+          // Add account_container to not-found LRU cache
+          recentNotFoundContainersCache.add(accountName + SEPARATOR + containerName);
+          logger.error("Container {} is not found in Account {}", containerName, accountName);
         }
+      } catch (SQLException e) {
+        throw translateSQLException(e);
       }
     }
     return container;
@@ -441,28 +442,28 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
-    Container container = null;
     Account account = getAccountById(accountId);
-    if (account != null) {
-      container = account.getContainerById(containerId);
-      if (container == null) {
-        // If container is not present in the cache, query from mysql db
-        try {
-          container = mySqlAccountStore.getContainerById(accountId, containerId);
-          if (container != null) {
-            // write container to in-memory cache
-            updateContainersInCache(Collections.singletonList(container));
-            logger.info("Container Id {} in Account {} is not found locally, fetched from mysql db", containerId,
-                account.getName());
-            accountServiceMetrics.onDemandContainerFetchCount.inc();
-          } else {
-            logger.error("Container Id {} is not found in Account {}", containerId, account.getName());
-            // Note: We are not using LRU cache for storing recent unsuccessful get attempts by container Ids since this
-            // will be called in getBlob() path which should have valid account-container in most cases.
-          }
-        } catch (SQLException e) {
-          throw translateSQLException(e);
+    if (account == null) {
+      return null;
+    }
+    Container container = account.getContainerById(containerId);
+    if (container == null) {
+      // If container is not present in the cache, query from mysql db
+      try {
+        container = mySqlAccountStore.getContainerById(accountId, containerId);
+        if (container != null) {
+          // write container to in-memory cache
+          updateContainersInCache(Collections.singletonList(container));
+          logger.info("Container Id {} in Account {} is not found locally, fetched from mysql db", containerId,
+              account.getName());
+          accountServiceMetrics.onDemandContainerFetchCount.inc();
+        } else {
+          logger.error("Container Id {} is not found in Account {}", containerId, account.getName());
+          // Note: We are not using LRU cache for storing recent unsuccessful get attempts by container Ids since this
+          // will be called in getBlob() path which should have valid account-container in most cases.
         }
+      } catch (SQLException e) {
+        throw translateSQLException(e);
       }
     }
     return container;

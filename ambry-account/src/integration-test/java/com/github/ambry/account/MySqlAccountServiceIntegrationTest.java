@@ -477,9 +477,9 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountService.getContainerByName(accountName, "c2"));
     // verify call to query container from mysql db
     verify(mySqlAccountStore).getContainerByName(eq((int) accountId), eq("c2"));
-    // verify container name "a1_c2" is added to LRU cache
-    assertTrue("container a1_c2 must be present in LRU cache",
-        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1_c2"));
+    // verify container name "a1:c2" is added to LRU cache
+    assertTrue("container a1:c2 must be present in LRU cache",
+        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1" + MySqlAccountService.SEPARATOR + "c2"));
 
     // Look up container "c2" again in account service
     assertNull("Container must not be present in account service",
@@ -492,8 +492,8 @@ public class MySqlAccountServiceIntegrationTest {
         new ContainerBuilder((short) -1, "c2", ContainerStatus.ACTIVE, DESCRIPTION, accountId).build()));
 
     // verify container "c2" is removed from not-found LRU cache
-    assertFalse("Added container a1_c2 must no longer be present in LRU cache",
-        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1_c2"));
+    assertFalse("Added container a1:c2 must no longer be present in LRU cache",
+        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1" + MySqlAccountService.SEPARATOR + "c2"));
   }
 
   /**
