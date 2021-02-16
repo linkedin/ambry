@@ -14,7 +14,6 @@
 package com.github.ambry.quota.storage;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaMode;
@@ -43,8 +42,8 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
     this.metrics = new StorageQuotaServiceMetrics(metricRegistry);
     this.scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
     this.config = new StorageQuotaConfig(verifiableProperties);
-    this.storageUsageRefresher = new MySqlStorageUsageRefresher(accountStatsStore, this.scheduler, this.config,
-        new ClusterMapConfig(verifiableProperties), metrics);
+    this.storageUsageRefresher =
+        new MySqlStorageUsageRefresher(accountStatsStore, this.scheduler, this.config, metrics);
     this.storageQuotaSource =
         Utils.<StorageQuotaSourceFactory>getObj(config.sourceFactory, scheduler, config).getStorageQuotaSource();
     this.storageQuotaEnforcer = new AmbryStorageQuotaEnforcer(null, this.metrics);

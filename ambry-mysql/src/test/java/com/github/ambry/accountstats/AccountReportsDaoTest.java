@@ -80,7 +80,7 @@ public class AccountReportsDaoTest {
 
     metrics = new MySqlMetrics(AccountReportsDao.class, new MetricRegistry());
     dataAccessor = getDataAccessor(mockConnection, metrics);
-    accountReportsDao = new AccountReportsDao(dataAccessor, clusterName, hostname);
+    accountReportsDao = new AccountReportsDao(dataAccessor);
   }
 
   /**
@@ -104,11 +104,11 @@ public class AccountReportsDaoTest {
     short accountId = 100;
     short containerId = 8;
     long storageUsage = 100000;
-    accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, storageUsage);
+    accountReportsDao.updateStorageUsage(clusterName, hostname, partitionId, accountId, containerId, storageUsage);
     verify(mockConnection).prepareStatement(anyString());
     assertEquals("Write success count should be 1", 1, metrics.writeSuccessCount.getCount());
     // Run second time to reuse statement
-    accountReportsDao.updateStorageUsage(partitionId, accountId, containerId, storageUsage);
+    accountReportsDao.updateStorageUsage(clusterName, hostname, partitionId, accountId, containerId, storageUsage);
     verify(mockConnection).prepareStatement(anyString());
     assertEquals("Write success count should be 2", 2, metrics.writeSuccessCount.getCount());
   }
@@ -117,7 +117,8 @@ public class AccountReportsDaoTest {
   public void testUpdateStorageUsageWithException() throws Exception {
     when(mockInsertStatement.executeUpdate()).thenThrow(new SQLTransientConnectionException());
     TestUtils.assertException(SQLTransientConnectionException.class,
-        () -> accountReportsDao.updateStorageUsage((short) 1, (short) 1000, (short) 8, 100000), null);
+        () -> accountReportsDao.updateStorageUsage(clusterName, hostname, (short) 1, (short) 1000, (short) 8, 100000),
+        null);
     assertEquals("Write failure count should be 1", 1, metrics.writeFailureCount.getCount());
   }
 

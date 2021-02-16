@@ -84,12 +84,11 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       for (String instanceName : instanceNames) {
         // Helix instance name would suffix port number, here let's take port number out.
         instanceName = stripPortNumber(instanceName);
-        statsWrappers.put(instanceName,
-            accountStatsStore.queryStatsOf(clusterMapConfig.clusterMapClusterName, instanceName));
+        statsWrappers.put(instanceName, accountStatsStore.queryAccountStatsByHost(instanceName));
       }
       logger.info("Aggregating stats from " + statsWrappers.size() + " hosts");
       results = clusterAggregator.doWorkOnStatsWrapperMap(statsWrappers, statsReportType);
-      accountStatsStore.storeAggregatedStats(results.getSecond());
+      accountStatsStore.storeAggregatedAccountStats(results.getSecond());
       // Create a base report at the beginning of each month.
       // Check if there is a base report for this month or not.
       if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
@@ -97,12 +96,11 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         // Get the month, if not the same month, then copy the aggregated stats and update the month
         String currentMonthValue =
             LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET).format(TIMESTAMP_FORMATTER);
-        String recordedMonthValue = accountStatsStore.queryRecordedMonth(clusterMapConfig.clusterMapClusterName);
+        String recordedMonthValue = accountStatsStore.queryRecordedMonth();
         if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
             recordedMonthValue)) {
           logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
-          accountStatsStore.takeSnapshotOfAggregatedStatsAndUpdateMonth(clusterMapConfig.clusterMapClusterName,
-              currentMonthValue);
+          accountStatsStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonthValue);
         }
       }
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
@@ -111,6 +109,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       exception = e;
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
     } finally {
+      accountStatsStore.closeConnection();
       if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null && results != null
           && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
         callback.onCompletion(results.getFirst(), exception);

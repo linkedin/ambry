@@ -65,7 +65,7 @@ public class AccountStatsMySqlConfig {
    * Negative numbers means disable batch. 0 means unlimited batch size. Any positive number means the size of each batch.
    */
   @Config(UPDATE_BATCH_SIZE)
-  @Default("-1")
+  @Default("0")
   public final int updateBatchSize;
 
   /**
@@ -79,7 +79,7 @@ public class AccountStatsMySqlConfig {
   public AccountStatsMySqlConfig(VerifiableProperties verifiableProperties) {
     dbInfo = verifiableProperties.getString(DB_INFO, "");
     domainNamesToRemove = verifiableProperties.getString(DOMAIN_NAMES_TO_REMOVE, "");
-    updateBatchSize = verifiableProperties.getInt(UPDATE_BATCH_SIZE, -1);
+    updateBatchSize = verifiableProperties.getInt(UPDATE_BATCH_SIZE, 0);
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
   }
 }

@@ -79,10 +79,11 @@ public class BatchUpdater {
     }
     this.maxBatchSize = maxBatchSize;
     try {
-      autoCommit = dataAccessor.getAutoCommmit();
-      dataAccessor.setAutoCommit(false);
+      // Calling getPreparedStatement first, since it will setup connection if there is none
       statement = dataAccessor.getPreparedStatement(sql, true);
       statement.clearBatch();
+      autoCommit = dataAccessor.getAutoCommmit();
+      dataAccessor.setAutoCommit(false);
     } catch (SQLException e) {
       dataAccessor.onException(e, BatchUpdate);
       logger.error("Failed to prepare for batch insert on {}", tableName, e);

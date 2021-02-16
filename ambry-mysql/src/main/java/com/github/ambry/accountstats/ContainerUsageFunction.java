@@ -21,10 +21,11 @@ public interface ContainerUsageFunction {
 
   /**
    * Process container storage usage.
-   * @param partitionId
-   * @param accountId
-   * @param containerId
-   * @param storageUsage
+   * @param partitionId The partition id.
+   * @param accountId The account id.
+   * @param containerId The container id.
+   * @param storageUsage The storage usage in bytes for this container.
+   * @param updatedAtMs The timestamp in milliseconds when this data is updated.
    */
   void apply(short partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs);
 }
