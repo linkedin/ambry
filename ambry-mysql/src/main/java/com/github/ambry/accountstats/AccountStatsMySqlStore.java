@@ -25,7 +25,6 @@ import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.sql.SQLException;
@@ -59,7 +58,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
 
   private final MySqlDataAccessor mySqlDataAccessor;
   private final AccountReportsDao accountReportsDao;
-  private final AggregatedAccountReportsDao aggregatedaccountReportsDao;
+  private final AggregatedAccountReportsDao aggregatedAccountReportsDao;
   private final PartitionClassReportsDao partitionClassReportsDao;
   private final HostnameHelper hostnameHelper;
   private final String clusterName;
@@ -160,7 +159,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     this.hostname = hostname;
     mySqlDataAccessor = dataAccessor;
     accountReportsDao = new AccountReportsDao(dataAccessor);
-    aggregatedaccountReportsDao = new AggregatedAccountReportsDao(dataAccessor);
+    aggregatedAccountReportsDao = new AggregatedAccountReportsDao(dataAccessor);
     partitionClassReportsDao = new PartitionClassReportsDao(dataAccessor);
     this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
@@ -200,7 +199,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       StatsSnapshot currAccountStatsSnapshot = currPartitionMapEntry.getValue();
       StatsSnapshot prevAccountStatsSnapshot =
           prevPartitionMap.getOrDefault(partitionIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
-      short partitionId = Short.valueOf(partitionIdKey.substring("Partition[".length(), partitionIdKey.length() - 1));
+      short partitionId = Utils.partitionIdFromStatsPartitionKey(partitionIdKey);
       Map<String, StatsSnapshot> currAccountMap = currAccountStatsSnapshot.getSubMap();
       Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
       for (Map.Entry<String, StatsSnapshot> currAccountMapEntry : currAccountMap.entrySet()) {
@@ -208,12 +207,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         StatsSnapshot currContainerStatsSnapshot = currAccountMapEntry.getValue();
         StatsSnapshot prevContainerStatsSnapshot =
             prevAccountMap.getOrDefault(accountIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
-        short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
+        short accountId = Utils.accountIdFromStatsAccountKey(accountIdKey);
         Map<String, StatsSnapshot> currContainerMap = currContainerStatsSnapshot.getSubMap();
         Map<String, StatsSnapshot> prevContainerMap = prevContainerStatsSnapshot.getSubMap();
         for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : currContainerMap.entrySet()) {
           String containerIdKey = currContainerMapEntry.getKey();
-          short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
+          short containerId = Utils.containerIdFromStatsContainerKey(containerIdKey);
           long currStorageUsage = currContainerMapEntry.getValue().getValue();
           long prevStorageUsage =
               prevContainerMap.getOrDefault(containerIdKey, new StatsSnapshot((long) -1, null)).getValue();
@@ -247,10 +246,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     accountReportsDao.queryStorageUsageForHost(clusterName, queryHostname,
         (partitionId, accountId, containerId, storageUsage, updatedAtMs) -> {
           StatsSnapshot partitionSnapshot = hostSnapshot.getSubMap()
-              .computeIfAbsent("Partition[" + partitionId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));
+              .computeIfAbsent(Utils.statsPartitionKey(partitionId), k -> new StatsSnapshot((long) 0, new HashMap<>()));
           StatsSnapshot accountSnapshot = partitionSnapshot.getSubMap()
-              .computeIfAbsent("A[" + accountId + "]", k -> new StatsSnapshot((long) 0, new HashMap<>()));
-          accountSnapshot.getSubMap().put("C[" + containerId + "]", new StatsSnapshot(storageUsage, null));
+              .computeIfAbsent(Utils.statsAccountKey(accountId), k -> new StatsSnapshot((long) 0, new HashMap<>()));
+          accountSnapshot.getSubMap().put(Utils.statsContainerKey(containerId), new StatsSnapshot(storageUsage, null));
           timestamp.set(Math.max(timestamp.get(), updatedAtMs));
         });
 
@@ -270,14 +269,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
     AggregatedAccountReportsDao.AggregatedStorageBatchUpdater batch =
-        aggregatedaccountReportsDao.new AggregatedStorageBatchUpdater(config.updateBatchSize);
+        aggregatedAccountReportsDao.new AggregatedStorageBatchUpdater(config.updateBatchSize);
     for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
       String accountIdKey = accountMapEntry.getKey();
-      short accountId = Short.valueOf(accountIdKey.substring(2, accountIdKey.length() - 1));
+      short accountId = Utils.accountIdFromStatsAccountKey(accountIdKey);
       StatsSnapshot containerStatsSnapshot = accountMapEntry.getValue();
       for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : containerStatsSnapshot.getSubMap().entrySet()) {
         String containerIdKey = currContainerMapEntry.getKey();
-        short containerId = Short.valueOf(containerIdKey.substring(2, containerIdKey.length() - 1));
+        short containerId = Utils.containerIdFromStatsContainerKey(containerIdKey);
         long currStorageUsage = currContainerMapEntry.getValue().getValue();
         batch.addUpdateToBatch(clusterName, accountId, containerId, currStorageUsage);
         batchSize++;
@@ -300,7 +299,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public synchronized Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
-    aggregatedaccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
+    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
       result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
           .put(String.valueOf(containerId), storageUsage);
     });
@@ -312,7 +311,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public synchronized Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
-    aggregatedaccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
+    aggregatedAccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
         (accountId, containerId, storageUsage) -> {
           result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
               .put(String.valueOf(containerId), storageUsage);
@@ -324,7 +323,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   @Override
   public synchronized String queryRecordedMonth() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    String result = aggregatedaccountReportsDao.queryMonthForCluster(clusterName);
+    String result = aggregatedAccountReportsDao.queryMonthForCluster(clusterName);
     storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
   }
@@ -338,8 +337,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   @Override
   public synchronized void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception {
     long startTimeMs = System.currentTimeMillis();
-    aggregatedaccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
-    aggregatedaccountReportsDao.updateMonth(clusterName, monthValue);
+    aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
+    aggregatedAccountReportsDao.updateMonth(clusterName, monthValue);
     storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
@@ -375,7 +374,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
             .getSubMap()
             .keySet()
             .stream()
-            .map(pk -> Short.valueOf(pk.substring("Partition[".length(), pk.length() - 1)))
+            .map(pk -> Utils.partitionIdFromStatsPartitionKey(pk))
             .collect(Collectors.toList())));
 
     // 4. Add partition ids not in DB
@@ -420,12 +419,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         // Here, we have the accountId___containerId as the key of this entry and the StatsSnapshot containing
         // the storage usage as the value.
         String accountContainer = accountContainerMapEntry.getKey();
-        String[] parts = accountContainer.split(Utils.ACCOUNT_CONTAINER_SEPARATOR);
-        short accountId = Short.valueOf(parts[0].substring(2, parts[0].length() - 1));
-        short containerId = Short.valueOf(parts[1].substring(2, parts[1].length() - 1));
-
+        short[] accountContainerId = Utils.accountContainerIdFromPartitionClassStatsKey(accountContainer);
         long usage = accountContainerMapEntry.getValue().getValue();
-        batch.addUpdateToBatch(clusterName, partitionClassName, accountId, containerId, usage);
+        batch.addUpdateToBatch(clusterName, partitionClassName, accountContainerId[0], accountContainerId[1], usage);
       }
     }
     batch.flush();
@@ -460,8 +456,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
             .entrySet()) {
           short containerId = usageEntry.getKey();
           long usage = usageEntry.getValue();
-          accountContainerSubMap.put(
-              "A[" + accountId + "]" + Utils.ACCOUNT_CONTAINER_SEPARATOR + "C[" + containerId + "]",
+          accountContainerSubMap.put(Utils.partitionClassStatsAccountContainerKey(accountId, containerId),
               new StatsSnapshot(usage, null));
         }
       }
@@ -536,12 +531,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           Map<Short, Long> containerUsage = accountContainerUsage.get(accountId);
           containerUsage.entrySet()
               .forEach(ent -> accountContainerSubMap.put(
-                  "A[" + accountId + "]" + Utils.ACCOUNT_CONTAINER_SEPARATOR + "C[" + ent.getKey() + "]",
+                  Utils.partitionClassStatsAccountContainerKey(accountId, ent.getKey()),
                   new StatsSnapshot(ent.getValue(), null)));
         }
         long partitionValue = accountContainerSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
         StatsSnapshot partitionStats = new StatsSnapshot(partitionValue, accountContainerSubMap);
-        partitionSubMap.put("Partition[" + partitionId + "]", partitionStats);
+        partitionSubMap.put(Utils.statsPartitionKey(partitionId), partitionStats);
       }
       long partitionClassValue = partitionSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
       StatsSnapshot partitionClassStats = new StatsSnapshot(partitionClassValue, partitionSubMap);

@@ -133,6 +133,85 @@ public class Utils {
   }
 
   /**
+   * Return PartitionClassReport stats account container entry key of given {@code accountId} and {@code containerId}.
+   * For now, it's A[accountId]___C[containerId].
+   * @param accountId the account id.
+   * @param containerId the container id.
+   * @return the account container entry key in PartitionClassReport stats.
+   */
+  public static String partitionClassStatsAccountContainerKey(short accountId, short containerId) {
+    return "A[" + accountId + "]" + ACCOUNT_CONTAINER_SEPARATOR + "C[" + containerId + "]";
+  }
+
+  /**
+   * Return account id and container id from PartitionClassReport stats account container entry key. It's the opposite
+   * of {@link #partitionClassStatsAccountContainerKey}. It returns an array of short with exactly two elements. The first
+   * is the account id and the second is the container id.
+   * @param accountContainerKey The account container entry key in PartitionClassReport stats.
+   * @return An array of shorts with account id being the first element and container id being the second element.
+   */
+  public static short[] accountContainerIdFromPartitionClassStatsKey(String accountContainerKey) {
+    String[] parts = accountContainerKey.split(Utils.ACCOUNT_CONTAINER_SEPARATOR);
+    short accountId = Short.valueOf(parts[0].substring(2, parts[0].length() - 1));
+    short containerId = Short.valueOf(parts[1].substring(2, parts[1].length() - 1));
+    return new short[]{accountId, containerId};
+  }
+
+  /**
+   * Return partition key for stats report. For now, it's Partition[partitionId].
+   * @param partitionId the partition id.
+   * @return The partition key for stats report.
+   */
+  public static String statsPartitionKey(short partitionId) {
+    return "Partition[" + partitionId + "]";
+  }
+
+  /**
+   * Return account key for stats report. For now, it's A[accountId].
+   * @param accountId the account id.
+   * @return The account key for stats report.
+   */
+  public static String statsAccountKey(short accountId) {
+    return "A[" + accountId + "]";
+  }
+
+  /**
+   * Return container key for stats report. For now, it's C[containerId].
+   * @param containerId the container id.
+   * @return The container key for stats report.
+   */
+  public static String statsContainerKey(short containerId) {
+    return "C[" + containerId + "]";
+  }
+
+  /**
+   * Return partition id from partition key of stats report. It's the opposite of {@link #statsPartitionKey}.
+   * @param partitionKey the partition key of stats report.
+   * @return The partition id.
+   */
+  public static short partitionIdFromStatsPartitionKey(String partitionKey) {
+    return Short.valueOf(partitionKey.substring("Partition[".length(), partitionKey.length() - 1));
+  }
+
+  /**
+   * Return account id from account key of stats report. It's the opposite of {@link #statsAccountKey}.
+   * @param accountKey the account key of stats report.
+   * @return The account id.
+   */
+  public static short accountIdFromStatsAccountKey(String accountKey) {
+    return Short.valueOf(accountKey.substring(2, accountKey.length() - 1));
+  }
+
+  /**
+   * Return container is from container key of stats report. It's the opposite of {@link #statsContainerKey}.
+   * @param containerKey the container key of stats report.
+   * @return The container id.
+   */
+  public static short containerIdFromStatsContainerKey(String containerKey) {
+    return Short.valueOf(containerKey.substring(2, containerKey.length() - 1));
+  }
+
+  /**
    * Gets the size of the string in serialized form
    * @param value the string of interest to be serialized
    * @return the size of the string in serialized form

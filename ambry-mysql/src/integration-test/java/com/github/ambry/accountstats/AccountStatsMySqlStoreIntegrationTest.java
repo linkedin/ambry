@@ -372,7 +372,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
       finalStats.getSubMap().put(className, classNameStats);
       for (int ia = 0; ia < numAccount; ia++) {
         for (int ic = 0; ic < numContainer; ic++) {
-          String key = "A[" + ia + "]" + Utils.ACCOUNT_CONTAINER_SEPARATOR + "C[" + ic + "]";
+          String key = Utils.partitionClassStatsAccountContainerKey((short)ia, (short)ic);
           classNameStats.getSubMap().put(key, new StatsSnapshot(random.nextLong() % maxValue, null));
         }
       }
