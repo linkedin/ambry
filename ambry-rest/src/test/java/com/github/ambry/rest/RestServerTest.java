@@ -72,7 +72,7 @@ public class RestServerTest {
         reporter -> JmxReporter.forRegistry(reporter).createsObjectNamesWith(spyObjectNameFactory).build();
     RestServer server =
         new RestServer(verifiableProperties, clusterMap, notificationSystem, SSL_FACTORY, Collections.emptyList(),
-            reporterFactory);
+            Collections.emptyList(), reporterFactory);
     server.start();
     // check that the custom ObjectNameFactory specified in reporterFactory was used.
     verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());
