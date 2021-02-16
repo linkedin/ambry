@@ -49,7 +49,10 @@ public class AmbryQuotaManager implements QuotaManager {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap = buildQuotaSources(quotaEnforcerSourceMap.values(), quotaConfig);
-    requestQuotaEnforcers = new HashSet<>(addedRequestQuotaEnforcers);
+    requestQuotaEnforcers = new HashSet<>();
+    if (addedRequestQuotaEnforcers != null) {
+      requestQuotaEnforcers.addAll(addedRequestQuotaEnforcers);
+    }
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)))).getRequestQuotaEnforcer());
