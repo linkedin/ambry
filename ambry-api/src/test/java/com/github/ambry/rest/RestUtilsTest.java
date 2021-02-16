@@ -814,7 +814,7 @@ public class RestUtilsTest {
     // test for valid cost map
     costMap.put(QuotaName.READ_CAPACITY_UNIT, 1.9);
     costMap.put(QuotaName.STORAGE_IN_GB, 3.0);
-    String expectedQuotaHeaderValue = "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0; ";
+    String expectedQuotaHeaderValue = "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0";
     MockRestResponseChannel responseChannel = new MockRestResponseChannel();
     RestUtils.setRequestCostHeader(costMap, responseChannel);
     Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
@@ -857,7 +857,7 @@ public class RestUtilsTest {
     // test for valid map
     headerValue.put(QuotaName.READ_CAPACITY_UNIT.name(), String.valueOf(1.9));
     headerValue.put(QuotaName.STORAGE_IN_GB.name(), String.valueOf(3.0));
-    assertEquals("Invalid encoded value", "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0; ",
+    assertEquals("Invalid encoded value", "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0",
         RestUtils.KVHeaderValueEncoderDecoder.encodeKVHeaderValue(headerValue));
   }
 
@@ -881,8 +881,8 @@ public class RestUtilsTest {
     Map<String, String> decodedMap = new HashMap<>();
     decodedMap.put("READ_CAPACITY_UNIT", "1.9");
     decodedMap.put("STORAGE_IN_GB", "3.0");
-    assertTrue("Invalid encoded value",
-        RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(validEncodedHeader).equals(decodedMap));
+    assertEquals("Invalid encoded value", RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(validEncodedHeader),
+        decodedMap);
 
     // test for invalid strings.
     String[] invalidEncodedHeaders = new String[]{"invalid", "badkvkey=badkvval", "; ", "bad; bad; ", ";", "="};

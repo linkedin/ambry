@@ -950,7 +950,7 @@ public class RestUtils {
    * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
    */
   public static void setRequestCostHeader(Map<QuotaName, Double> costMap, RestResponseChannel restResponseChannel) {
-    Objects.requireNonNull(costMap, "cost map cannot contain be null");
+    Objects.requireNonNull(costMap, "cost map cannot be null");
     restResponseChannel.setHeader(QuotaHeaders.REQUEST_COST, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
         costMap.entrySet()
             .stream()
@@ -1061,10 +1061,8 @@ public class RestUtils {
      */
     public static String encodeKVHeaderValue(Map<String, String> map) {
       Objects.requireNonNull(map);
-      String value = "";
-      for (Map.Entry<String, String> entry : map.entrySet()) {
-        value += entry.getKey() + KV_SEPERATOR + entry.getValue() + DELIM;
-      }
+      String value =
+          map.entrySet().stream().map(e -> e.getKey() + KV_SEPERATOR + e.getValue()).collect(Collectors.joining(DELIM));
       return value;
     }
 
