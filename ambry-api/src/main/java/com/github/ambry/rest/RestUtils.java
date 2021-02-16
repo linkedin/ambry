@@ -17,6 +17,8 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
@@ -40,6 +42,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -279,6 +282,14 @@ public class RestUtils {
         throw new IllegalStateException("Could not get values of the tracking headers", e);
       }
     }
+  }
+
+  public static final class QuotaHeaders {
+
+    /**
+     * Response header indicating cost incurred by the request against capacity unit and storage quotas.
+     */
+    public static final String REQUEST_COST = "x-ambry-request-cost";
   }
 
   /**
@@ -934,6 +945,19 @@ public class RestUtils {
   }
 
   /**
+   * Sets the request cost header in response.
+   * @param costMap {@link Map} of cost for each quota.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   */
+  public static void setRequestCostHeader(Map<QuotaName, Double> costMap, RestResponseChannel restResponseChannel) {
+    Objects.requireNonNull(costMap, "cost map cannot be null");
+    restResponseChannel.setHeader(QuotaHeaders.REQUEST_COST, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
+        costMap.entrySet()
+            .stream()
+            .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
+  }
+
+  /**
    * Verify that the session ID in the chunk metadata matches the expected session.
    * @param chunkMetadata the metadata map parsed from a signed chunk ID.
    * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
@@ -1021,5 +1045,52 @@ public class RestUtils {
     int startIndex = blobIdWithExtension.startsWith("/") ? 1 : 0;
     int endIndex = extensionIndex != -1 ? extensionIndex : blobIdWithExtension.length();
     return blobIdWithExtension.substring(startIndex, endIndex);
+  }
+
+  /**
+   * Class to encode decode kv header values.
+   */
+  public static class KVHeaderValueEncoderDecoder {
+    private static String DELIM = "; ";
+    private static String KV_SEPERATOR = "=";
+
+    /**
+     * Encode a map of {@link String}s as http header value.
+     * @param map {@link Map} of {@link String}s to encode.
+     * @return encoded http header value.
+     */
+    public static String encodeKVHeaderValue(Map<String, String> map) {
+      Objects.requireNonNull(map);
+      String value =
+          map.entrySet().stream().map(e -> e.getKey() + KV_SEPERATOR + e.getValue()).collect(Collectors.joining(DELIM));
+      return value;
+    }
+
+    /**
+     * Decode a kv header value.
+     * @param value {@link String} containing the encoded kv values.
+     * @return decoded kv {@link Map}.
+     */
+    public static Map<String, String> decodeKVHeaderValue(String value) {
+      Objects.requireNonNull(value);
+      Map<String, String> valueMap = new HashMap<>();
+      if (value.isEmpty()) {
+        return valueMap;
+      }
+      if (!value.contains(DELIM)) {
+        throw new IllegalArgumentException("Invalid kv header value: " + value);
+      }
+      for (String kvStr : value.split(DELIM)) {
+        if (!kvStr.contains(KV_SEPERATOR)) {
+          throw new IllegalArgumentException("Invalid kv header value: " + value);
+        }
+        String[] kv = kvStr.split(KV_SEPERATOR);
+        valueMap.put(kv[0], kv[1]);
+      }
+      if (valueMap.isEmpty()) {
+        throw new IllegalArgumentException("Invalid kv header value: " + value);
+      }
+      return valueMap;
+    }
   }
 }
