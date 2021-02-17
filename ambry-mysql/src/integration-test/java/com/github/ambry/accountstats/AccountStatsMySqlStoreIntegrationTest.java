@@ -251,7 +251,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storePartitionClassStats(partitionClassStats2);
     mySqlStore3.storePartitionClassStats(partitionClassStats3);
 
-    Map<String, Set<Short>> partitionNameAndIds = mySqlStore.queryPartitionNameAndIds();
+    Map<String, Set<Integer>> partitionNameAndIds = mySqlStore.queryPartitionNameAndIds();
     assertEquals(new HashSet<>(partitionClassNames), partitionNameAndIds.keySet());
     Map<String, String> dbPartitionKeyToClassName = partitionNameAndIds.entrySet()
         .stream()
@@ -271,7 +271,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
   @Test
   public void testAggregatedPartitionClassStats() throws Exception {
     testHostPartitionClassStats();
-    Map<String, Set<Short>> partitionNameAndIds = mySqlStore.queryPartitionNameAndIds();
+    Map<String, Set<Integer>> partitionNameAndIds = mySqlStore.queryPartitionNameAndIds();
     AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, false);
 
     // Now we should have partition class names and partition ids in database

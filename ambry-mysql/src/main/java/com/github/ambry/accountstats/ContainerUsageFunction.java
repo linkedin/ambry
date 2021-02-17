@@ -27,5 +27,5 @@ public interface ContainerUsageFunction {
    * @param storageUsage The storage usage in bytes for this container.
    * @param updatedAtMs The timestamp in milliseconds when this data is updated.
    */
-  void apply(short partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs);
+  void apply(int partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs);
 }

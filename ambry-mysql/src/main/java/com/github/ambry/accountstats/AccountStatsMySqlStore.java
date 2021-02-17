@@ -193,7 +193,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     // 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
     // 2. If a container storage usage only exists in first StatsSnapshot.
     // If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
-    // TODO: should delete rows in datbase when the previous statsSnapshot has more data than current one.
+    // TODO: should delete rows in database when the previous statsSnapshot has more data than current one.
     Map<String, StatsSnapshot> currPartitionMap = statsWrapper.getSnapshot().getSubMap();
     Map<String, StatsSnapshot> prevPartitionMap = prevSnapshot.getSubMap();
     for (Map.Entry<String, StatsSnapshot> currPartitionMapEntry : currPartitionMap.entrySet()) {
@@ -201,8 +201,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       StatsSnapshot currAccountStatsSnapshot = currPartitionMapEntry.getValue();
       StatsSnapshot prevAccountStatsSnapshot =
           prevPartitionMap.getOrDefault(partitionIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
-      short partitionId = Utils.partitionIdFromStatsPartitionKey(partitionIdKey);
-      // It's possible that this accountStatsSnapshort has empty submap, if all stats snapshots in the submap have 0
+      int partitionId = Utils.partitionIdFromStatsPartitionKey(partitionIdKey);
+      // It's possible that this accountStatsSnapshot has empty submap, if all stats snapshots in the submap have 0
       // as its value.
       Map<String, StatsSnapshot> currAccountMap =
           Optional.ofNullable(currAccountStatsSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
@@ -376,7 +376,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     //  }
     // The "default" and "new" are the partition class names and the numbers are partition ids. Same partition
     // can't belong to different partition class names.
-    Map<String, List<Short>> partitionIdsUnderClassNames = partitionClassSubMap.entrySet()
+    Map<String, List<Integer>> partitionIdsUnderClassNames = partitionClassSubMap.entrySet()
         .stream()
         .collect(Collectors.toMap(Map.Entry::getKey, ent -> ent.getValue()
             .getSubMap()
@@ -386,10 +386,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
             .collect(Collectors.toList())));
 
     // 4. Add partition ids not in DB
-    Set<Short> partitionIdsInDB = partitionClassReportsDao.queryPartitionIds(clusterName);
+    Set<Integer> partitionIdsInDB = partitionClassReportsDao.queryPartitionIds(clusterName);
     for (String partitionClassName : partitionIdsUnderClassNames.keySet()) {
       short partitionClassId = partitionClassNamesInDB.get(partitionClassName);
-      for (Short pid : partitionIdsUnderClassNames.get(partitionClassName)) {
+      for (int pid : partitionIdsUnderClassNames.get(partitionClassName)) {
         if (!partitionIdsInDB.contains(pid)) {
           partitionClassReportsDao.insertPartitionId(clusterName, pid, partitionClassId);
         }
@@ -478,19 +478,19 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized Map<String, Set<Short>> queryPartitionNameAndIds() throws SQLException {
+  public synchronized Map<String, Set<Integer>> queryPartitionNameAndIds() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    Map<String, Set<Short>> result = partitionClassReportsDao.queryPartitionNameAndIds(clusterName);
+    Map<String, Set<Integer>> result = partitionClassReportsDao.queryPartitionNameAndIds(clusterName);
     storeMetrics.queryPartitionNameAndIdTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
   }
 
   @Override
   public synchronized StatsWrapper queryPartitionClassStatsOf(String hostname,
-      Map<String, Set<Short>> partitionNameAndIds) throws SQLException {
+      Map<String, Set<Integer>> partitionNameAndIds) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     hostname = hostnameHelper.simplifyHostname(hostname);
-    Map<Short, Map<Short, Map<Short, Long>>> partitionAccountContainerUsage = new HashMap<>();
+    Map<Integer, Map<Short, Map<Short, Long>>> partitionAccountContainerUsage = new HashMap<>();
     AtomicLong timestamp = new AtomicLong(0);
     accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
         (partitionId, accountId, containerId, storageUsage, updatedAtMs) -> {
@@ -512,11 +512,11 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     // As indicated by the comments above, we have to know the partition class name for each partition id before we
     // construct the StatsSnapshot. Luckily, we have all the partition ids and we have a map partitionNameAndIds whose
     // key is the partition class name and the value is the list of all partition ids belong to the partition class name.
-    Set<Short> partitionIds = partitionAccountContainerUsage.keySet();
-    Map<String, Set<Short>> partitionNameAndIdsForHost = new HashMap<>();
-    for (Short partitionId : partitionIds) {
+    Set<Integer> partitionIds = partitionAccountContainerUsage.keySet();
+    Map<String, Set<Integer>> partitionNameAndIdsForHost = new HashMap<>();
+    for (int partitionId : partitionIds) {
       boolean found = false;
-      for (Map.Entry<String, Set<Short>> namesAndIdsEntry : partitionNameAndIds.entrySet()) {
+      for (Map.Entry<String, Set<Integer>> namesAndIdsEntry : partitionNameAndIds.entrySet()) {
         if (namesAndIdsEntry.getValue().contains(partitionId)) {
           partitionNameAndIdsForHost.computeIfAbsent(namesAndIdsEntry.getKey(), k -> new HashSet<>()).add(partitionId);
           found = true;
@@ -529,10 +529,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       }
     }
     Map<String, StatsSnapshot> partitionClassSubMap = new HashMap<>();
-    for (Map.Entry<String, Set<Short>> nameAndIdsEntry : partitionNameAndIdsForHost.entrySet()) {
+    for (Map.Entry<String, Set<Integer>> nameAndIdsEntry : partitionNameAndIdsForHost.entrySet()) {
       String partitionClassName = nameAndIdsEntry.getKey();
       Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
-      for (short partitionId : nameAndIdsEntry.getValue()) {
+      for (int partitionId : nameAndIdsEntry.getValue()) {
         Map<Short, Map<Short, Long>> accountContainerUsage = partitionAccountContainerUsage.get(partitionId);
         Map<String, StatsSnapshot> accountContainerSubMap = new HashMap<>();
         for (short accountId : accountContainerUsage.keySet()) {
