@@ -160,8 +160,8 @@ public class StoreFindToken implements FindToken {
    * @param resetKey The {@link StoreKey} used to find closest valid starting point in case the index segment the token
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
    */
-   StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive, short version, StoreKey resetKey,
-       PersistentIndex.IndexEntryType resetKeyType) {
+  StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive,
+      short version, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType) {
     if (!type.equals(FindTokenType.Uninitialized)) {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
@@ -486,7 +486,7 @@ public class StoreFindToken implements FindToken {
     return sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
   }
 
-  byte [] getIncarnationIdInBytes() {
+  byte[] getIncarnationIdInBytes() {
     return incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
   }
 
@@ -526,22 +526,11 @@ public class StoreFindToken implements FindToken {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-
     StoreFindToken that = (StoreFindToken) o;
 
-    if (type != that.type) {
-      return false;
-    }
-    if (!Objects.equals(offset, that.offset)) {
-      return false;
-    }
-    if (inclusive != that.inclusive) {
-      return false;
-    }
-    if (!Objects.equals(storeKey, that.storeKey)) {
-      return false;
-    }
-    return Objects.equals(resetKey, that.resetKey) && Objects.equals(resetKeyType, that.resetKeyType);
+    return type == that.type && Objects.equals(offset, that.offset) && inclusive == that.inclusive && Objects.equals(
+        storeKey, that.storeKey) && Objects.equals(resetKey, that.resetKey) && Objects.equals(resetKeyType,
+        that.resetKeyType);
   }
 
   @Override
