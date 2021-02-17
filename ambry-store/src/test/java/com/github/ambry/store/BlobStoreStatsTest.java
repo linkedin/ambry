@@ -903,25 +903,25 @@ public class BlobStoreStatsTest {
   @Test
   public void testConvertStoreUsageToStatsSnapshot() {
     Random random = new Random();
-    Map<String, Map<String, Long>> utilizationMap = new HashMap<>();
+    Map<Short, Map<Short, Long>> utilizationMap = new HashMap<>();
     Map<String, StatsSnapshot> accountSubMap = new HashMap<>();
     Map<String, StatsSnapshot> accountContainerPairSubMap = new HashMap<>();
 
     long total = 0;
     for (int i = 0; i < 10; i++) {
       Map<String, StatsSnapshot> containerSubMap = new HashMap<>();
-      Map<String, Long> innerUtilizationMap = new HashMap<>();
+      Map<Short, Long> innerUtilizationMap = new HashMap<>();
       long subTotal = 0;
       for (int j = 0; j < 3; j++) {
         long randValue = random.nextInt(10000);
         subTotal += randValue;
-        innerUtilizationMap.put(String.valueOf(j), randValue);
+        innerUtilizationMap.put((short) j, randValue);
         containerSubMap.put(String.valueOf(j), new StatsSnapshot(randValue, null));
-        accountContainerPairSubMap.put(String.valueOf(i) + Utils.ACCOUNT_CONTAINER_SEPARATOR + String.valueOf(j),
+        accountContainerPairSubMap.put(Utils.partitionClassStatsAccountContainerKey((short) i, (short) j),
             new StatsSnapshot(randValue, null));
       }
       total += subTotal;
-      utilizationMap.put(String.valueOf(i), innerUtilizationMap);
+      utilizationMap.put((short) i, innerUtilizationMap);
       accountSubMap.put(String.valueOf(i), new StatsSnapshot(subTotal, containerSubMap));
     }
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(total, accountSubMap);
@@ -950,10 +950,10 @@ public class BlobStoreStatsTest {
 
     while (true) {
       long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
-      Map<String, Map<String, Long>> utilizationMap =
+      Map<Short, Map<Short, Long>> utilizationMap =
           blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
       Optional.ofNullable(accountIdToExclude).orElse(Collections.EMPTY_LIST).
-          forEach(id -> utilizationMap.remove("A[" + id + "]"));
+          forEach(id -> utilizationMap.remove(id));
 
       // Verify account stats snapshot
       Map<StatsReportType, StatsSnapshot> snapshotsByType =
@@ -984,7 +984,7 @@ public class BlobStoreStatsTest {
    * @param snapshotsByType the map of {@link StatsReportType} to {@link StatsSnapshot} to be verified
    * @param typesToVerify the {@link StatsReportType} to be verified
    */
-  private void verifyStatsSnapshots(Map<String, Map<String, Long>> accountContainerUtilizationMap,
+  private void verifyStatsSnapshots(Map<Short, Map<Short, Long>> accountContainerUtilizationMap,
       Map<StatsReportType, StatsSnapshot> snapshotsByType, EnumSet<StatsReportType> typesToVerify) {
     for (StatsReportType type : typesToVerify) {
       switch (type) {
@@ -993,31 +993,32 @@ public class BlobStoreStatsTest {
               snapshotsByType.get(StatsReportType.ACCOUNT_REPORT).getSubMap();
           assertEquals("Mismatch on number of accounts for " + StatsReportType.ACCOUNT_REPORT,
               accountContainerUtilizationMap.size(), accountToSnapshot.size());
-          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerUtilizationMap.entrySet()) {
-            Map<String, Long> containerUtilizationMap = accountToContainerEntry.getValue();
+          for (Map.Entry<Short, Map<Short, Long>> accountToContainerEntry : accountContainerUtilizationMap.entrySet()) {
+            Map<Short, Long> containerUtilizationMap = accountToContainerEntry.getValue();
             Map<String, StatsSnapshot> containerToSnapshot =
-                accountToSnapshot.get(accountToContainerEntry.getKey()).getSubMap();
+                accountToSnapshot.get(Utils.statsAccountKey(accountToContainerEntry.getKey())).getSubMap();
             assertEquals("Mismatch on number of containers", containerUtilizationMap.size(),
                 containerToSnapshot.size());
-            for (Map.Entry<String, Long> containerEntry : containerUtilizationMap.entrySet()) {
+            for (Map.Entry<Short, Long> containerEntry : containerUtilizationMap.entrySet()) {
 
               // Ensure container value and name in ACCOUNT_SNAPSHOT match that in UtilizationMap
               assertNotNull("Expected container: " + containerEntry.getKey() + " doesn't exist",
-                  containerToSnapshot.get(containerEntry.getKey()));
+                  containerToSnapshot.get(Utils.statsContainerKey(containerEntry.getKey())));
               assertEquals("Mismatch on value of container in account snapshot", containerEntry.getValue().longValue(),
-                  containerToSnapshot.get(containerEntry.getKey()).getValue());
+                  containerToSnapshot.get(Utils.statsContainerKey(containerEntry.getKey())).getValue());
             }
           }
           break;
         case PARTITION_CLASS_REPORT:
           Map<String, StatsSnapshot> acctContPairToSnapshot =
               snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT).getSubMap();
-          for (Map.Entry<String, Map<String, Long>> accountToContainerEntry : accountContainerUtilizationMap.entrySet()) {
-            Map<String, Long> containerUtilizationMap = accountToContainerEntry.getValue();
-            for (Map.Entry<String, Long> containerEntry : containerUtilizationMap.entrySet()) {
+          for (Map.Entry<Short, Map<Short, Long>> accountToContainerEntry : accountContainerUtilizationMap.entrySet()) {
+            Map<Short, Long> containerUtilizationMap = accountToContainerEntry.getValue();
+            for (Map.Entry<Short, Long> containerEntry : containerUtilizationMap.entrySet()) {
               // Ensure account_container value and name in CONTAINER_SNAPSHOT match that in UtilizationMap
               String accountContainerName =
-                  accountToContainerEntry.getKey() + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerEntry.getKey();
+                  Utils.partitionClassStatsAccountContainerKey(accountToContainerEntry.getKey(),
+                      containerEntry.getKey());
               assertNotNull("Expected account_container pair: " + accountContainerName + " doesn't exist",
                   acctContPairToSnapshot.get(accountContainerName));
               assertEquals("Mismatch on value of container in container snapshot",
@@ -1162,41 +1163,41 @@ public class BlobStoreStatsTest {
   private long verifyAndGetContainerValidSize(BlobStoreStats blobStoreStats, long referenceTimeInMs)
       throws StoreException {
     Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
-    Map<String, Map<String, Long>> actualContainerValidSizeMap =
+    Map<Short, Map<Short, Long>> actualContainerValidSizeMap =
         blobStoreStats.getValidDataSizeByContainer(referenceTimeInMs);
-    Map<String, Map<String, Long>> expectedContainerValidSizeMap =
+    Map<Short, Map<Short, Long>> expectedContainerValidSizeMap =
         getValidSizeByContainer(referenceTimeInMs, state.time.milliseconds(), deleteTombstoneStats);
     long totalValidSize = 0L;
 
-    for (Map.Entry<String, Map<String, Long>> expectedContainerValidSizeEntry : expectedContainerValidSizeMap.entrySet()) {
-      String serviceId = expectedContainerValidSizeEntry.getKey();
-      assertTrue("Expected serviceId: " + serviceId + " not found", actualContainerValidSizeMap.containsKey(serviceId));
-      Map<String, Long> innerMap = expectedContainerValidSizeEntry.getValue();
-      for (Map.Entry<String, Long> innerEntry : innerMap.entrySet()) {
-        String containerId = innerEntry.getKey();
-        assertTrue("Expected containerId: " + containerId + " not found in serviceId: " + serviceId,
+    for (Map.Entry<Short, Map<Short, Long>> expectedContainerValidSizeEntry : expectedContainerValidSizeMap.entrySet()) {
+      short accountId = expectedContainerValidSizeEntry.getKey();
+      assertTrue("Expected accountId: " + accountId + " not found", actualContainerValidSizeMap.containsKey(accountId));
+      Map<Short, Long> innerMap = expectedContainerValidSizeEntry.getValue();
+      for (Map.Entry<Short, Long> innerEntry : innerMap.entrySet()) {
+        short containerId = innerEntry.getKey();
+        assertTrue("Expected containerId: " + containerId + " not found in accountId: " + accountId,
             innerMap.containsKey(containerId));
         long expectedContainerValidSize = innerEntry.getValue();
-        long actualContainerValidSize = actualContainerValidSizeMap.get(serviceId).get(containerId);
-        assertEquals("Valid data size mismatch for serviceId: " + serviceId + " containerId: " + containerId,
+        long actualContainerValidSize = actualContainerValidSizeMap.get(accountId).get(containerId);
+        assertEquals("Valid data size mismatch for accountId: " + accountId + " containerId: " + containerId,
             expectedContainerValidSize, actualContainerValidSize);
         totalValidSize += expectedContainerValidSize;
       }
-      if (innerMap.size() != actualContainerValidSizeMap.get(serviceId).size()) {
+      if (innerMap.size() != actualContainerValidSizeMap.get(accountId).size()) {
         // make sure all the new items have value 0
-        for (Map.Entry<String, Long> actualContainerEntry : actualContainerValidSizeMap.get(serviceId).entrySet()) {
+        for (Map.Entry<Short, Long> actualContainerEntry : actualContainerValidSizeMap.get(accountId).entrySet()) {
           if (!innerMap.containsKey(actualContainerEntry.getKey())) {
             assertEquals(
-                "Expecting 0 value for service id " + serviceId + " and container " + actualContainerEntry.getKey(), 0,
+                "Expecting 0 value for account id " + accountId + " and container " + actualContainerEntry.getKey(), 0,
                 actualContainerEntry.getValue().longValue());
           }
         }
       }
-      actualContainerValidSizeMap.remove(serviceId);
+      actualContainerValidSizeMap.remove(accountId);
     }
-    for (Map.Entry<String, Map<String, Long>> actualContainerValidSizeEntry : actualContainerValidSizeMap.entrySet()) {
+    for (Map.Entry<Short, Map<Short, Long>> actualContainerValidSizeEntry : actualContainerValidSizeMap.entrySet()) {
       if (actualContainerValidSizeEntry.getValue().size() != 0) {
-        for (Map.Entry<String, Long> mapEntry : actualContainerValidSizeEntry.getValue().entrySet()) {
+        for (Map.Entry<Short, Long> mapEntry : actualContainerValidSizeEntry.getValue().entrySet()) {
           assertEquals("Additional values found in actual container valid size map for service "
               + actualContainerValidSizeEntry.getKey(), 0, mapEntry.getValue().longValue());
         }
@@ -1267,9 +1268,9 @@ public class BlobStoreStatsTest {
    * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
-  private Map<String, Map<String, Long>> getValidSizeByContainer(long deleteReferenceTimeInMs,
+  private Map<Short, Map<Short, Long>> getValidSizeByContainer(long deleteReferenceTimeInMs,
       long expiryReferenceTimeInMs, Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
-    Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
+    Map<Short, Map<Short, Long>> containerValidSizeMap = new HashMap<>();
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     for (Offset indSegStartOffset : state.referenceIndex.keySet()) {
       List<IndexEntry> validEntries =
@@ -1278,8 +1279,8 @@ public class BlobStoreStatsTest {
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
         if (indexValue.isPut()) {
-          updateNestedMapHelper(containerValidSizeMap, "A[" + indexValue.getAccountId() + "]",
-              "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
+          StatsUtils.updateNestedMapHelper(containerValidSizeMap, indexValue.getAccountId(),
+              indexValue.getContainerId(), indexValue.getSize());
         }
       }
     }
@@ -1299,23 +1300,6 @@ public class BlobStoreStatsTest {
         deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().get(), (long) expiredDeletes.getFirst());
     assertEquals("Mismatch in expired delete total size",
         deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().get(), (long) expiredDeletes.getSecond());
-  }
-
-  /**
-   * Helper function to update nested map data structure.
-   * @param nestedMap nested {@link Map} to be updated
-   * @param firstKey of the nested map
-   * @param secondKey of the nested map
-   * @param value the value to be added at the corresponding entry
-   */
-  private void updateNestedMapHelper(Map<String, Map<String, Long>> nestedMap, String firstKey, String secondKey,
-      Long value) {
-    if (!nestedMap.containsKey(firstKey)) {
-      nestedMap.put(firstKey, new HashMap<String, Long>());
-    }
-    Map<String, Long> innerMap = nestedMap.get(firstKey);
-    Long newValue = innerMap.containsKey(secondKey) ? innerMap.get(secondKey) + value : value;
-    innerMap.put(secondKey, newValue);
   }
 
   /**

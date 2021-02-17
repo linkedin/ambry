@@ -98,18 +98,20 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param utilizationMap the nested {@link Map} to be converted
    * @return the corresponding {@link StatsSnapshot} object.
    */
-  static StatsSnapshot convertStoreUsageToAccountStatsSnapshot(Map<String, Map<String, Long>> utilizationMap) {
+  static StatsSnapshot convertStoreUsageToAccountStatsSnapshot(Map<Short, Map<Short, Long>> utilizationMap) {
     Map<String, StatsSnapshot> accountValidSizeMap = new HashMap<>();
     long totalSize = 0;
-    for (Map.Entry<String, Map<String, Long>> accountEntry : utilizationMap.entrySet()) {
+    for (Map.Entry<Short, Map<Short, Long>> accountEntry : utilizationMap.entrySet()) {
       long subTotalSize = 0;
       Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
-      for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+      for (Map.Entry<Short, Long> containerEntry : accountEntry.getValue().entrySet()) {
         subTotalSize += containerEntry.getValue();
-        containerValidSizeMap.put(containerEntry.getKey(), new StatsSnapshot(containerEntry.getValue(), null));
+        containerValidSizeMap.put(Utils.statsContainerKey(containerEntry.getKey()),
+            new StatsSnapshot(containerEntry.getValue(), null));
       }
       totalSize += subTotalSize;
-      accountValidSizeMap.put(accountEntry.getKey(), new StatsSnapshot(subTotalSize, containerValidSizeMap));
+      accountValidSizeMap.put(Utils.statsAccountKey(accountEntry.getKey()),
+          new StatsSnapshot(subTotalSize, containerValidSizeMap));
     }
     return new StatsSnapshot(totalSize, accountValidSizeMap);
   }
@@ -121,13 +123,14 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param utilizationMap the nested {@link Map} to be converted
    * @return the corresponding {@link StatsSnapshot} object.
    */
-  static StatsSnapshot convertStoreUsageToContainerStatsSnapshot(Map<String, Map<String, Long>> utilizationMap) {
+  static StatsSnapshot convertStoreUsageToContainerStatsSnapshot(Map<Short, Map<Short, Long>> utilizationMap) {
     Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
     long totalSize = 0;
-    for (Map.Entry<String, Map<String, Long>> accountEntry : utilizationMap.entrySet()) {
-      for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+    for (Map.Entry<Short, Map<Short, Long>> accountEntry : utilizationMap.entrySet()) {
+      for (Map.Entry<Short, Long> containerEntry : accountEntry.getValue().entrySet()) {
         totalSize += containerEntry.getValue();
-        containerValidSizeMap.put(accountEntry.getKey() + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerEntry.getKey(),
+        containerValidSizeMap.put(
+            Utils.partitionClassStatsAccountContainerKey(accountEntry.getKey(), containerEntry.getKey()),
             new StatsSnapshot(containerEntry.getValue(), null));
       }
     }
@@ -204,9 +207,9 @@ class BlobStoreStats implements StoreStats, Closeable {
   public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
       long referenceTimeInMs, List<Short> accountIdsToExclude) throws StoreException {
     Map<StatsReportType, StatsSnapshot> statsSnapshotsByType = new HashMap<>();
-    Map<String, Map<String, Long>> utilizationMap = getValidDataSizeByContainer(referenceTimeInMs);
+    Map<Short, Map<Short, Long>> utilizationMap = getValidDataSizeByContainer(referenceTimeInMs);
     if (accountIdsToExclude != null && !accountIdsToExclude.isEmpty()) {
-      accountIdsToExclude.forEach(id -> utilizationMap.remove("A[" + id + "]"));
+      accountIdsToExclude.forEach(id -> utilizationMap.remove(id));
     }
     for (StatsReportType reportType : statsReportTypes) {
       switch (reportType) {
@@ -346,12 +349,12 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @return the valid data size for each container in the form of a nested {@link Map} of serviceIds to another map of
    * containerIds to valid data size.
    */
-  Map<String, Map<String, Long>> getValidDataSizeByContainer(long referenceTimeInMs) throws StoreException {
+  Map<Short, Map<Short, Long>> getValidDataSizeByContainer(long referenceTimeInMs) throws StoreException {
     if (!enabled.get()) {
       throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
           StoreErrorCodes.Store_Shutting_Down);
     }
-    Map<String, Map<String, Long>> retValue = null;
+    Map<Short, Map<Short, Long>> retValue = null;
     ScanResults currentScanResults = scanResults.get();
     if (currentScanResults != null && isWithinRange(currentScanResults.containerForecastStartTimeMs,
         currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
@@ -472,12 +475,12 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
-  private Map<String, Map<String, Long>> collectValidDataSizeByContainer(long referenceTimeInMs) throws StoreException {
+  private Map<Short, Map<Short, Long>> collectValidDataSizeByContainer(long referenceTimeInMs) throws StoreException {
     logger.trace("On demand index scanning to collect container valid data sizes for store {} wrt ref time {}", storeId,
         referenceTimeInMs);
     long startTimeMs = time.milliseconds();
     Map<StoreKey, IndexFinalState> keyFinalStates = new HashMap<>();
-    Map<String, Map<String, Long>> validDataSizePerContainer = new HashMap<>();
+    Map<Short, Map<Short, Long>> validDataSizePerContainer = new HashMap<>();
     int indexSegmentCount = 0;
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       if (!enabled.get()) {
@@ -491,8 +494,8 @@ class BlobStoreStats implements StoreStats, Closeable {
         IndexValue indexValue = entry.getValue();
         if (indexValue.isPut()) {
           // delete and TTL update records does not count towards valid data size for usage (containers)
-          updateNestedMapHelper(validDataSizePerContainer, "A[" + indexValue.getAccountId() + "]",
-              "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
+          updateNestedMapHelper(validDataSizePerContainer, indexValue.getAccountId(), indexValue.getContainerId(),
+              indexValue.getSize());
         }
       });
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
@@ -741,9 +744,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       int operator) {
     // If the expiration time is Infinite_Time, then nothing will be updated
     if (isWithinRange(results.containerForecastStartTimeMs, results.containerLastBucketTimeMs, expOrDelTimeInMs)) {
-      results.updateContainerBucket(results.getContainerBucketKey(expOrDelTimeInMs),
-          "A[" + indexValue.getAccountId() + "]", "C[" + indexValue.getContainerId() + "]",
-          indexValue.getSize() * operator);
+      results.updateContainerBucket(results.getContainerBucketKey(expOrDelTimeInMs), indexValue.getAccountId(),
+          indexValue.getContainerId(), indexValue.getSize() * operator);
     }
   }
 
@@ -787,8 +789,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   private void processNewPut(ScanResults results, IndexValue putValue) {
     long expiresAtMs = putValue.getExpiresAtMs();
     if (!isExpired(expiresAtMs, results.containerForecastStartTimeMs)) {
-      results.updateContainerBaseBucket("A[" + putValue.getAccountId() + "]", "C[" + putValue.getContainerId() + "]",
-          putValue.getSize());
+      results.updateContainerBaseBucket(putValue.getAccountId(), putValue.getContainerId(), putValue.getSize());
       if (expiresAtMs != Utils.Infinite_Time) {
         handleContainerBucketUpdate(results, putValue, expiresAtMs, SUBTRACT);
       }
@@ -961,8 +962,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     IndexValue indexValue = indexEntry.getValue();
     if (indexValue.isPut()) {
       // delete and TTL update records does not count towards valid data size for usage (containers)
-      results.updateContainerBaseBucket("A[" + indexValue.getAccountId() + "]",
-          "C[" + indexValue.getContainerId() + "]", indexValue.getSize());
+      results.updateContainerBaseBucket(indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getSize());
       long expOrDelTimeInMs = indexValue.getExpiresAtMs();
       IndexFinalState finalState = keyFinalStates.get(indexEntry.getKey());
       if (finalState != null && finalState.isDelete()) {
