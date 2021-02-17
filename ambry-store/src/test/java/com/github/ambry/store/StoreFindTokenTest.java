@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -77,23 +78,29 @@ public class StoreFindTokenTest {
     MockId key = new MockId(TestUtils.getRandomString(10));
     MockId otherKey = new MockId(TestUtils.getRandomString(10));
     MockId resetKey = new MockId(TestUtils.getRandomString(10));
+    PersistentIndex.IndexEntryType resetKeyType =
+        PersistentIndex.IndexEntryType.values()[(new Random()).nextInt(PersistentIndex.IndexEntryType.values().length)];
 
     StoreFindToken initToken = new StoreFindToken();
     StoreFindToken otherInitToken = new StoreFindToken();
-    StoreFindToken indexToken = new StoreFindToken(key, offset, sessionId, incarnationId, null);
-    StoreFindToken otherIndexToken = new StoreFindToken(key, offset, sessionId, incarnationId, null);
-    StoreFindToken journalToken = new StoreFindToken(offset, sessionId, incarnationId, false, null);
-    StoreFindToken otherJournalToken = new StoreFindToken(offset, sessionId, incarnationId, false, null);
-    StoreFindToken inclusiveJournalToken = new StoreFindToken(offset, sessionId, incarnationId, true, null);
-    StoreFindToken otherInclusiveJournalToken = new StoreFindToken(offset, sessionId, incarnationId, true, null);
-    StoreFindToken v3JournalToken = new StoreFindToken(FindTokenType.JournalBased, offset, key, sessionId, incarnationId,
-    true, VERSION_3, resetKey);
-    StoreFindToken otherV3JournalToken = new StoreFindToken(FindTokenType.JournalBased, offset, key, sessionId, incarnationId,
-        true, VERSION_3, resetKey);
+    StoreFindToken indexToken = new StoreFindToken(key, offset, sessionId, incarnationId, null, null);
+    StoreFindToken otherIndexToken = new StoreFindToken(key, offset, sessionId, incarnationId, null, null);
+    StoreFindToken journalToken = new StoreFindToken(offset, sessionId, incarnationId, false, null, null);
+    StoreFindToken otherJournalToken = new StoreFindToken(offset, sessionId, incarnationId, false, null, null);
+    StoreFindToken inclusiveJournalToken = new StoreFindToken(offset, sessionId, incarnationId, true, null, null);
+    StoreFindToken otherInclusiveJournalToken = new StoreFindToken(offset, sessionId, incarnationId, true, null, null);
+    StoreFindToken v3JournalToken =
+        new StoreFindToken(FindTokenType.JournalBased, offset, key, sessionId, incarnationId, true, VERSION_3, resetKey,
+            resetKeyType);
+    StoreFindToken otherV3JournalToken =
+        new StoreFindToken(FindTokenType.JournalBased, offset, key, sessionId, incarnationId, true, VERSION_3, resetKey,
+            resetKeyType);
     StoreFindToken v3IndexToken =
-        new StoreFindToken(FindTokenType.IndexBased, offset, key, sessionId, incarnationId, true, VERSION_3, resetKey);
+        new StoreFindToken(FindTokenType.IndexBased, offset, key, sessionId, incarnationId, true, VERSION_3, resetKey,
+            resetKeyType);
     StoreFindToken otherV3IndexToken =
-        new StoreFindToken(FindTokenType.IndexBased, offset, key, sessionId, incarnationId, true, VERSION_3, resetKey);
+        new StoreFindToken(FindTokenType.IndexBased, offset, key, sessionId, incarnationId, true, VERSION_3, resetKey,
+            resetKeyType);
 
     // equality
     compareTokens(initToken, initToken);
@@ -112,22 +119,24 @@ public class StoreFindTokenTest {
     UUID newIncarnationId = getRandomUUID(incarnationId);
 
     // equality even if session IDs are different
-    compareTokens(indexToken, new StoreFindToken(key, offset, newSessionId, incarnationId, null));
-    compareTokens(journalToken, new StoreFindToken(offset, newSessionId, incarnationId, false, null));
-    compareTokens(v3JournalToken, new StoreFindToken(FindTokenType.JournalBased, offset, key, newSessionId, incarnationId,
-        true, VERSION_3, resetKey));
-    compareTokens(v3IndexToken, new StoreFindToken(FindTokenType.IndexBased, offset, key, newSessionId, incarnationId,
-        true, VERSION_3, resetKey));
+    compareTokens(indexToken, new StoreFindToken(key, offset, newSessionId, incarnationId, null, null));
+    compareTokens(journalToken, new StoreFindToken(offset, newSessionId, incarnationId, false, null, null));
+    compareTokens(v3JournalToken,
+        new StoreFindToken(FindTokenType.JournalBased, offset, key, newSessionId, incarnationId, true, VERSION_3,
+            resetKey, resetKeyType));
+    compareTokens(v3IndexToken,
+        new StoreFindToken(FindTokenType.IndexBased, offset, key, newSessionId, incarnationId, true, VERSION_3,
+            resetKey, resetKeyType));
 
     // equality even if incarnation IDs are different
-    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, newIncarnationId, null));
-    compareTokens(journalToken, new StoreFindToken(offset, sessionId, newIncarnationId, false, null));
+    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, newIncarnationId, null, null));
+    compareTokens(journalToken, new StoreFindToken(offset, sessionId, newIncarnationId, false, null, null));
     compareTokens(v3JournalToken,
         new StoreFindToken(FindTokenType.JournalBased, offset, key, sessionId, newIncarnationId, true, VERSION_3,
-            resetKey));
+            resetKey, resetKeyType));
     compareTokens(v3IndexToken,
         new StoreFindToken(FindTokenType.IndexBased, offset, key, sessionId, newIncarnationId, true, VERSION_3,
-            resetKey));
+            resetKey, resetKeyType));
 
     // inequality if some fields differ
     List<Pair<StoreFindToken, StoreFindToken>> unequalPairs = new ArrayList<>();
@@ -136,11 +145,15 @@ public class StoreFindTokenTest {
     unequalPairs.add(new Pair<>(initToken, inclusiveJournalToken));
     unequalPairs.add(new Pair<>(indexToken, journalToken));
     unequalPairs.add(new Pair<>(indexToken, inclusiveJournalToken));
-    unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(key, otherOffset, sessionId, incarnationId, null)));
-    unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(otherKey, offset, sessionId, incarnationId, null)));
-    unequalPairs.add(new Pair<>(journalToken, new StoreFindToken(otherOffset, sessionId, incarnationId, false, null)));
+    unequalPairs.add(
+        new Pair<>(indexToken, new StoreFindToken(key, otherOffset, sessionId, incarnationId, null, null)));
+    unequalPairs.add(
+        new Pair<>(indexToken, new StoreFindToken(otherKey, offset, sessionId, incarnationId, null, null)));
+    unequalPairs.add(
+        new Pair<>(journalToken, new StoreFindToken(otherOffset, sessionId, incarnationId, false, null, null)));
     unequalPairs.add(new Pair<>(inclusiveJournalToken, journalToken));
-    unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(key, offset, sessionId, incarnationId, resetKey)));
+    unequalPairs.add(
+        new Pair<>(indexToken, new StoreFindToken(key, offset, sessionId, incarnationId, resetKey, resetKeyType)));
 
     for (Pair<StoreFindToken, StoreFindToken> unequalPair : unequalPairs) {
       StoreFindToken first = unequalPair.getFirst();
@@ -162,37 +175,41 @@ public class StoreFindTokenTest {
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(TestUtils.getRandomString(10));
     MockId resetKey = new MockId(TestUtils.getRandomString(10));
+    PersistentIndex.IndexEntryType resetKeyType =
+        PersistentIndex.IndexEntryType.values()[(new Random()).nextInt(PersistentIndex.IndexEntryType.values().length)];
     if (!isLogSegmented) {
       // UnInitialized
       doSerDeTest(new StoreFindToken(), VERSION_0, VERSION_1, VERSION_2, VERSION_3);
 
       // Journal based token
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, null), VERSION_0, VERSION_1, VERSION_2);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, null, null), VERSION_0, VERSION_1,
+          VERSION_2);
       // Journal based token (VERSION_3)
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, resetKey), VERSION_3);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, resetKey, resetKeyType), VERSION_3);
 
       // inclusiveness is present only in {VERSION_2, VERSION_3}
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, null), VERSION_2);
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, resetKey), VERSION_3);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, null, null), VERSION_2);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, resetKey, resetKeyType), VERSION_3);
 
       // Index based
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, null), VERSION_0, VERSION_1, VERSION_2);
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, resetKey), VERSION_3);
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, null, null), VERSION_0, VERSION_1,
+          VERSION_2);
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, resetKey, resetKeyType), VERSION_3);
     } else {
       // UnInitialized
       doSerDeTest(new StoreFindToken(), VERSION_1, VERSION_2);
 
       // Journal based token
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, null), VERSION_1, VERSION_2);
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, resetKey), VERSION_3);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, null, null), VERSION_1, VERSION_2);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, resetKey, resetKeyType), VERSION_3);
 
       // inclusiveness is present only in VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, null), VERSION_2);
-      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, resetKey), VERSION_3);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, null, null), VERSION_2);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, resetKey, resetKeyType), VERSION_3);
 
       // Index based
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, null), VERSION_1, VERSION_2);
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, resetKey), VERSION_3);
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, null, null), VERSION_1, VERSION_2);
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, resetKey, resetKeyType), VERSION_3);
     }
   }
 
@@ -206,6 +223,9 @@ public class StoreFindTokenTest {
     LogSegmentName logSegmentName = LogSegmentName.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(TestUtils.getRandomString(10));
+    MockId resetKey = new MockId(TestUtils.getRandomString(10));
+    PersistentIndex.IndexEntryType resetKeyType =
+        PersistentIndex.IndexEntryType.values()[(new Random()).nextInt(PersistentIndex.IndexEntryType.values().length)];
 
     // no offset
     testConstructionFailure(key, sessionId, incarnationId, null);
@@ -216,20 +236,25 @@ public class StoreFindTokenTest {
 
     // no key in IndexBased
     try {
-      new StoreFindToken(null, offset, sessionId, null, null);
+      new StoreFindToken(null, offset, sessionId, null, null, null);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
-    // version 3 token without reset key
+    // version 3 token without reset key or reset key type
     for (FindTokenType type : EnumSet.of(FindTokenType.JournalBased, FindTokenType.IndexBased)) {
-      try {
-        new StoreFindToken(type, offset, key, sessionId, incarnationId, type == FindTokenType.JournalBased, VERSION_3,
-            null);
-        fail("Construction of StoreFindToken should have failed because rest key is null.");
-      } catch (IllegalArgumentException e) {
-        // expected
+      for (Pair<MockId, PersistentIndex.IndexEntryType> pair : Arrays.asList(
+          new Pair<MockId, PersistentIndex.IndexEntryType>(resetKey, null),
+          new Pair<MockId, PersistentIndex.IndexEntryType>(null, resetKeyType),
+          new Pair<MockId, PersistentIndex.IndexEntryType>(null, null))) {
+        try {
+          new StoreFindToken(type, offset, key, sessionId, incarnationId, type == FindTokenType.JournalBased, VERSION_3,
+              pair.getFirst(), pair.getSecond());
+          fail("Construction of StoreFindToken should have failed because rest key or its type is null.");
+        } catch (IllegalArgumentException e) {
+          // expected
+        }
       }
     }
   }
@@ -269,6 +294,7 @@ public class StoreFindTokenTest {
       }
       if (version == VERSION_3) {
         assertEquals("Reset key mismatch ", token.getResetKey(), deSerToken.getResetKey());
+        assertEquals("Reset key type mismatch", token.getResetKeyType(), deSerToken.getResetKeyType());
       }
       // TODO remove this "if" condition when StoreFindToken's serialize method supports VERSION 3.
       if (version < VERSION_3) {
@@ -384,6 +410,7 @@ public class StoreFindTokenTest {
       case StoreFindToken.VERSION_3:
         offsetBytes = token.getOffsetInBytes();
         StoreKey resetKey = token.getResetKey();
+        PersistentIndex.IndexEntryType resetKeyType = token.getResetKeyType();
         incarnationIdBytes = token.getIncarnationIdInBytes();
         byte[] resetKeyInBytes = resetKey != null ? resetKey.toBytes() : new byte[0];
         size = VERSION_SIZE + TYPE_SIZE;
@@ -397,6 +424,7 @@ public class StoreFindTokenTest {
             size += storeKeyInBytes.length;
           }
           size += resetKeyInBytes.length;
+          size += RESET_KEY_TYPE_SIZE;
         }
         bytes = new byte[size];
         bufWrap = ByteBuffer.wrap(bytes);
@@ -420,6 +448,7 @@ public class StoreFindTokenTest {
           }
           // both journal and index based tokens have reset key
           bufWrap.put(resetKeyInBytes);
+          bufWrap.putShort((short) resetKeyType.ordinal());
         }
         break;
       default:
@@ -440,7 +469,7 @@ public class StoreFindTokenTest {
   private void testConstructionFailure(StoreKey key, UUID sessionId, UUID incarnationId, Offset offset) {
     // journal based
     try {
-      new StoreFindToken(offset, sessionId, incarnationId, true, null);
+      new StoreFindToken(offset, sessionId, incarnationId, true, null, null);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -448,7 +477,7 @@ public class StoreFindTokenTest {
 
     // index based
     try {
-      new StoreFindToken(key, offset, sessionId, incarnationId, null);
+      new StoreFindToken(key, offset, sessionId, incarnationId, null, null);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

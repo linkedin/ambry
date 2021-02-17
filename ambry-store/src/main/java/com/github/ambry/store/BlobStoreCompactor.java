@@ -1145,7 +1145,7 @@ class BlobStoreCompactor {
       // save a token for restart (the key gets ignored but is required to be non null for construction)
       StoreFindToken safeToken =
           new StoreFindToken(allIndexEntries.get(0).getKey(), indexSegment.getStartOffset(), sessionId, incarnationId,
-              null);
+              null, null);
       compactionLog.setSafeToken(safeToken);
       logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
 
@@ -1458,7 +1458,7 @@ class BlobStoreCompactor {
         if (previousKey == null) {
           // save a token for restart (the key gets ignored but is required to be non null for construction)
           StoreFindToken safeToken =
-              new StoreFindToken(currentKey, indexSegment.getStartOffset(), sessionId, incarnationId, null);
+              new StoreFindToken(currentKey, indexSegment.getStartOffset(), sessionId, incarnationId, null, null);
           compactionLog.setSafeToken(safeToken);
           logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
         }
