@@ -193,6 +193,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     // 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
     // 2. If a container storage usage only exists in first StatsSnapshot.
     // If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
+    // TODO: should delete rows in datbase when the previous statsSnapshot has more data than current one.
     Map<String, StatsSnapshot> currPartitionMap = statsWrapper.getSnapshot().getSubMap();
     Map<String, StatsSnapshot> prevPartitionMap = prevSnapshot.getSubMap();
     for (Map.Entry<String, StatsSnapshot> currPartitionMapEntry : currPartitionMap.entrySet()) {
@@ -201,9 +202,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       StatsSnapshot prevAccountStatsSnapshot =
           prevPartitionMap.getOrDefault(partitionIdKey, new StatsSnapshot((long) 0, new HashMap<>()));
       short partitionId = Utils.partitionIdFromStatsPartitionKey(partitionIdKey);
+      // It's possible that this accountStatsSnapshort has empty submap, if all stats snapshots in the submap have 0
+      // as its value.
       Map<String, StatsSnapshot> currAccountMap =
           Optional.ofNullable(currAccountStatsSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
-      Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
+      Map<String, StatsSnapshot> prevAccountMap =
+          Optional.ofNullable(prevAccountStatsSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
       for (Map.Entry<String, StatsSnapshot> currAccountMapEntry : currAccountMap.entrySet()) {
         String accountIdKey = currAccountMapEntry.getKey();
         StatsSnapshot currContainerStatsSnapshot = currAccountMapEntry.getValue();
@@ -212,7 +216,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         short accountId = Utils.accountIdFromStatsAccountKey(accountIdKey);
         Map<String, StatsSnapshot> currContainerMap =
             Optional.ofNullable(currContainerStatsSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
-        Map<String, StatsSnapshot> prevContainerMap = prevContainerStatsSnapshot.getSubMap();
+        Map<String, StatsSnapshot> prevContainerMap =
+            Optional.ofNullable(prevContainerStatsSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
         for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : currContainerMap.entrySet()) {
           String containerIdKey = currContainerMapEntry.getKey();
           short containerId = Utils.containerIdFromStatsContainerKey(containerIdKey);

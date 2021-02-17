@@ -109,6 +109,36 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertTwoStatsSnapshots(obtainedStats3.getSnapshot(), stats3.getSnapshot());
   }
 
+  @Test
+  public void testEmptyStats() throws Exception {
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, false);
+    StatsWrapper stats = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    stats.getSnapshot().getSubMap().put(Utils.statsPartitionKey((short) 10), new StatsSnapshot(0L, null));
+    mySqlStore.storeAccountStats(stats);
+
+    StatsWrapper obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1);
+    assertFalse(obtainedStats.getSnapshot().getSubMap().containsKey(Utils.statsPartitionKey((short) 10)));
+
+    // Write a new stats with partition 10 still empty
+    StatsWrapper stats2 = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    stats2.getSnapshot().getSubMap().put(Utils.statsPartitionKey((short) 10), new StatsSnapshot(0L, null));
+    mySqlStore.storeAccountStats(stats2);
+
+    StatsWrapper obtainedStats2 = mySqlStore.queryAccountStatsByHost(hostname1);
+    assertFalse(obtainedStats2.getSnapshot().getSubMap().containsKey(Utils.statsPartitionKey((short) 10)));
+
+    // Write a new stats with partition 10 not empty
+    StatsWrapper stats3 = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    stats3.getSnapshot()
+        .getSubMap()
+        .put(Utils.statsPartitionKey((short) 10),
+            stats.getSnapshot().getSubMap().get(Utils.statsPartitionKey((short) 1)));
+    mySqlStore.storeAccountStats(stats3);
+
+    StatsWrapper obtainedStats3 = mySqlStore.queryAccountStatsByHost(hostname1);
+    assertTrue(obtainedStats3.getSnapshot().getSubMap().containsKey(Utils.statsPartitionKey((short) 10)));
+  }
+
   /**
    * Tests to store multiple stats for one hosts and recover stats from database.
    * @throws Exception
@@ -121,7 +151,14 @@ public class AccountStatsMySqlStoreIntegrationTest {
     StatsWrapper stats2 =
         new StatsWrapper(new StatsHeader(stats1.getHeader()), new StatsSnapshot(stats1.getSnapshot()));
     // change one value, and store it to mysql database again
-    stats2.getSnapshot().getSubMap().get("Partition[0]").getSubMap().get("A[0]").getSubMap().get("C[0]").setValue(1);
+    stats2.getSnapshot()
+        .getSubMap()
+        .get(Utils.statsPartitionKey((short) 0))
+        .getSubMap()
+        .get(Utils.statsAccountKey((short) 0))
+        .getSubMap()
+        .get(Utils.statsContainerKey((short) 0))
+        .setValue(1);
     stats2.getSnapshot().updateValue();
     mySqlStore.storeAccountStats(stats2);
     StatsWrapper obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1);
@@ -138,7 +175,11 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
     // Change one value and store it to mysql database again
     StatsSnapshot newSnapshot = new StatsSnapshot(snapshot);
-    newSnapshot.getSubMap().get("A[1]").getSubMap().get("C[1]").setValue(1);
+    newSnapshot.getSubMap()
+        .get(Utils.statsAccountKey((short) 1))
+        .getSubMap()
+        .get(Utils.statsContainerKey((short) 1))
+        .setValue(1);
     newSnapshot.updateValue();
     containerStorageUsages.get("1").put("1", 1L);
     mySqlStore.storeAggregatedAccountStats(newSnapshot);
@@ -252,7 +293,11 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
     // Change one value and store it to mysql database again
     StatsSnapshot newSnapshot = new StatsSnapshot(aggregated);
-    newSnapshot.getSubMap().get("default").getSubMap().get("A[1]___C[1]").setValue(1);
+    newSnapshot.getSubMap()
+        .get("default")
+        .getSubMap()
+        .get(Utils.partitionClassStatsAccountContainerKey((short) 1, (short) 1))
+        .setValue(1);
     newSnapshot.updateValue();
     mySqlStore.storeAggregatedPartitionClassStats(aggregated);
     obtained = mySqlStore.queryAggregatedPartitionClassStatsOf();
@@ -372,7 +417,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
       finalStats.getSubMap().put(className, classNameStats);
       for (int ia = 0; ia < numAccount; ia++) {
         for (int ic = 0; ic < numContainer; ic++) {
-          String key = Utils.partitionClassStatsAccountContainerKey((short)ia, (short)ic);
+          String key = Utils.partitionClassStatsAccountContainerKey((short) ia, (short) ic);
           classNameStats.getSubMap().put(key, new StatsSnapshot(random.nextLong() % maxValue, null));
         }
       }
