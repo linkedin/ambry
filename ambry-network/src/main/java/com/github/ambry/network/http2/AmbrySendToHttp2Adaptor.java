@@ -42,7 +42,7 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
   /**
    * @param forServer if true, the handler is used as server side outbound handler. Otherwise, it's use as client side
    *                  outbound handler.
-   * @param maxFrameSize
+   * @param maxFrameSize the max size of a http2 frame.
    */
   public AmbrySendToHttp2Adaptor(boolean forServer, int maxFrameSize) {
     this.forServer = forServer;
@@ -87,7 +87,7 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
       ByteBuf slice = send.content().readSlice(send.content().readableBytes());
       slice.retain();
       DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, true);
-      ctx.writeAndFlush(dataFrame, promise);
+      ctx.write(dataFrame, promise);
     } catch (Exception e) {
       logger.error("Error while processing frames. Channel: {}", ctx.channel(), e);
     } finally {

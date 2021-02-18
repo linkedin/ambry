@@ -17,7 +17,7 @@ import com.github.ambry.network.Send;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
@@ -60,7 +60,7 @@ public class AmbrySendToHttp2AdaptorTest {
     int contentSize = 7000;
     byte[] byteArray = new byte[contentSize];
     new Random().nextBytes(byteArray);
-    ByteBuf content = UnpooledByteBufAllocator.DEFAULT.heapBuffer(contentSize).writeBytes(byteArray);
+    ByteBuf content = PooledByteBufAllocator.DEFAULT.heapBuffer(contentSize).writeBytes(byteArray);
     // Retain the ByteBuf for data comparison
     content.retain();
     Send send = new MockSend(content);
