@@ -96,7 +96,7 @@ public interface AccountStatsStore {
    * @return A map whose key is the partition class name and the value is a set of a partition ids.
    * @throws Exception
    */
-  Map<String, Set<Short>> queryPartitionNameAndIds() throws Exception;
+  Map<String, Set<Integer>> queryPartitionNameAndIds() throws Exception;
 
   /**
    * Store partition class stats in {@link StatsWrapper}. This stats are per host stats. The stats is first grouped
@@ -142,7 +142,7 @@ public interface AccountStatsStore {
    * @return A {@link StatsWrapper} represents the per host partition class stats.
    * @throws Exception
    */
-  StatsWrapper queryPartitionClassStatsOf(String hostname, Map<String, Set<Short>> partitionNameAndIds)
+  StatsWrapper queryPartitionClassStatsOf(String hostname, Map<String, Set<Integer>> partitionNameAndIds)
       throws Exception;
 
   /**

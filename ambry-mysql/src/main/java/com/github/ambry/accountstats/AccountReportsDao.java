@@ -66,7 +66,7 @@ public class AccountReportsDao {
    * @param containerId The container id.
    * @param storageUsage The storage usage in bytes.
    */
-  void updateStorageUsage(String clusterName, String hostname, short partitionId, short accountId, short containerId,
+  void updateStorageUsage(String clusterName, String hostname, int partitionId, short accountId, short containerId,
       long storageUsage) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -111,7 +111,7 @@ public class AccountReportsDao {
         int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
         long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
         long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
-        func.apply((short) partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
+        func.apply(partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
@@ -147,7 +147,7 @@ public class AccountReportsDao {
      * @param storageUsage The storage usage in bytes.
      * @throws SQLException
      */
-    public void addUpdateToBatch(String clusterName, String hostname, short partitionId, short accountId,
+    public void addUpdateToBatch(String clusterName, String hostname, int partitionId, short accountId,
         short containerId, long storageUsage) throws SQLException {
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);

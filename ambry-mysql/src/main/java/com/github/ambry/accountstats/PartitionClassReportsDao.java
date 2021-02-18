@@ -183,8 +183,8 @@ public class PartitionClassReportsDao {
    * @return A map whose key is the partition class name and the value is a set of partition ids.
    * @throws SQLException
    */
-  Map<String, Set<Short>> queryPartitionNameAndIds(String clusterName) throws SQLException {
-    Map<String, Set<Short>> nameAndIds = new HashMap<>();
+  Map<String, Set<Integer>> queryPartitionNameAndIds(String clusterName) throws SQLException {
+    Map<String, Set<Integer>> nameAndIds = new HashMap<>();
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement queryStatement = dataAccessor.getPreparedStatement(queryPartitionIdAndNamesSql, false);
@@ -193,7 +193,7 @@ public class PartitionClassReportsDao {
         while (resultSet.next()) {
           int partitionId = resultSet.getInt(1);
           String partitionClassName = resultSet.getString(2);
-          nameAndIds.computeIfAbsent(partitionClassName, k -> new HashSet<>()).add((short) partitionId);
+          nameAndIds.computeIfAbsent(partitionClassName, k -> new HashSet<>()).add(partitionId);
         }
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
@@ -212,15 +212,15 @@ public class PartitionClassReportsDao {
    * @return A set of partition ids of the given {@code clusterName}.
    * @throws SQLException
    */
-  Set<Short> queryPartitionIds(String clusterName) throws SQLException {
-    Set<Short> partitionIds = new HashSet<>();
+  Set<Integer> queryPartitionIds(String clusterName) throws SQLException {
+    Set<Integer> partitionIds = new HashSet<>();
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement queryStatement = dataAccessor.getPreparedStatement(queryPartitionIdsSql, false);
       queryStatement.setString(1, clusterName);
       try (ResultSet rs = queryStatement.executeQuery()) {
         while (rs.next()) {
-          partitionIds.add((short) rs.getInt(1));
+          partitionIds.add(rs.getInt(1));
         }
       }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
@@ -240,7 +240,7 @@ public class PartitionClassReportsDao {
    * @param partitionClassId The id of the partition class name
    * @throws SQLException
    */
-  void insertPartitionId(String clusterName, short partitionId, short partitionClassId) throws SQLException {
+  void insertPartitionId(String clusterName, int partitionId, short partitionClassId) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
       PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertPartitionIdSql, true);

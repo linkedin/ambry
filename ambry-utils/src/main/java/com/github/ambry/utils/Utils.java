@@ -162,7 +162,9 @@ public class Utils {
    * @param partitionId the partition id.
    * @return The partition key for stats report.
    */
-  public static String statsPartitionKey(short partitionId) {
+  public static String statsPartitionKey(int partitionId) {
+    // This is the same value as AmbryPartition.toString. However, in AmbryPartition, the partition id is long type.
+    // Here it's an integer.
     return "Partition[" + partitionId + "]";
   }
 
@@ -189,8 +191,8 @@ public class Utils {
    * @param partitionKey the partition key of stats report.
    * @return The partition id.
    */
-  public static short partitionIdFromStatsPartitionKey(String partitionKey) {
-    return Short.valueOf(partitionKey.substring("Partition[".length(), partitionKey.length() - 1));
+  public static int partitionIdFromStatsPartitionKey(String partitionKey) {
+    return Integer.valueOf(partitionKey.substring("Partition[".length(), partitionKey.length() - 1));
   }
 
   /**

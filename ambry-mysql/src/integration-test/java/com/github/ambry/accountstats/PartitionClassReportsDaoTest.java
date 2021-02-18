@@ -101,9 +101,9 @@ public class PartitionClassReportsDaoTest {
   public void testPartitionId() throws Exception {
     String clusterName = "ambry-test";
     // Before adding any partition ids, query should return empty result
-    Set<Short> partitionIds = dao.queryPartitionIds(clusterName);
+    Set<Integer> partitionIds = dao.queryPartitionIds(clusterName);
     assertTrue(partitionIds.isEmpty());
-    Map<String, Set<Short>> partitionNameAndIds = dao.queryPartitionNameAndIds(clusterName);
+    Map<String, Set<Integer>> partitionNameAndIds = dao.queryPartitionNameAndIds(clusterName);
     assertTrue(partitionNameAndIds.isEmpty());
 
     String partitionClassName1 = "default";
@@ -115,14 +115,14 @@ public class PartitionClassReportsDaoTest {
     short partitionClassId2 = partitionClassNames.get(partitionClassName2);
 
     // insert some partition ids and query them later
-    Map<String, Set<Short>> expectedPartitionIds = new HashMap<>();
+    Map<String, Set<Integer>> expectedPartitionIds = new HashMap<>();
     for (int i = 0; i < 100; i++) {
       short classId = i % 2 == 0 ? partitionClassId1 : partitionClassId2;
       String className = i % 2 == 0 ? partitionClassName1 : partitionClassName2;
-      dao.insertPartitionId(clusterName, (short) i, classId);
+      dao.insertPartitionId(clusterName, i, classId);
       // reinsert the same partition id should result in conflict, but conflict is handled by method
-      dao.insertPartitionId(clusterName, (short) i, classId);
-      expectedPartitionIds.computeIfAbsent(className, k -> new HashSet<Short>()).add((short) i);
+      dao.insertPartitionId(clusterName, i, classId);
+      expectedPartitionIds.computeIfAbsent(className, k -> new HashSet<Integer>()).add(i);
     }
 
     // Add partition ids for other clusters
@@ -130,14 +130,14 @@ public class PartitionClassReportsDaoTest {
     partitionClassNames = dao.queryPartitionClassNames("other-cluster");
     short partitionClassIdForOtherCluster = partitionClassNames.get(partitionClassName1);
     for (int i = 0; i < 100; i++) {
-      dao.insertPartitionId(clusterName, (short) i, partitionClassIdForOtherCluster);
+      dao.insertPartitionId(clusterName, i, partitionClassIdForOtherCluster);
     }
 
     // Get all partition ids for cluster
     partitionIds = dao.queryPartitionIds(clusterName);
     assertEquals(100, partitionIds.size());
     for (int i = 0; i < 100; i++) {
-      assertTrue(partitionIds.contains((short) i));
+      assertTrue(partitionIds.contains(i));
     }
 
     // Get all partition ids under corresponding class name
