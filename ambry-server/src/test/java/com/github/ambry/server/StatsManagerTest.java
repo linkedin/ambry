@@ -659,7 +659,7 @@ public class StatsManagerTest {
       for (int j = 0; j < random.nextInt(MAX_CONTAINER_COUNT - MIN_CONTAINER_COUNT + 1) + MIN_CONTAINER_COUNT; j++) {
         long validSize = random.nextInt(2501) + 500;
         subTotalSize += validSize;
-        containerMap.put(Utils.statsContainerKey(j), new StatsSnapshot(validSize, null));
+        containerMap.put(Utils.statsContainerKey((short) j), new StatsSnapshot(validSize, null));
         accountContainerPairMap.put(Utils.partitionClassStatsAccountContainerKey((short) i, (short) j),
             new StatsSnapshot(validSize, null));
       }
