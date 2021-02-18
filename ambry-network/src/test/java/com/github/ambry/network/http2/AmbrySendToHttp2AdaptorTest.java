@@ -82,6 +82,7 @@ public class AmbrySendToHttp2AdaptorTest {
     data.content().readBytes(resultArray, i * maxFrameSize, data.content().readableBytes());
     data.content().release();
     Assert.assertArrayEquals(byteArray, resultArray);
+    content.release();
   }
 
   /**
