@@ -210,7 +210,7 @@ public class StatsManagerTest {
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     List<PartitionId> unreachablePartitions = Collections.emptyList();
     for (PartitionId partitionId : storeMap.keySet()) {
-      statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
+      statsManager.collectAndAggregateAccountStats(actualSnapshot, partitionId, unreachablePartitions);
     }
     statsManager.updateAggregatedDeleteTombstoneStats();
     List<String> unreachableStores = statsManager.examineUnreachablePartitions(unreachablePartitions);
@@ -262,7 +262,7 @@ public class StatsManagerTest {
     List<PartitionId> unreachablePartitions = new ArrayList<>();
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
-      testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
+      testStatsManager.collectAndAggregateAccountStats(actualSnapshot, partitionId, unreachablePartitions);
     }
     assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue());
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
@@ -285,7 +285,7 @@ public class StatsManagerTest {
         statsManagerConfig, new MockTime(), null, null, inMemoryAccountService);
     actualSnapshot = new StatsSnapshot(0L, new HashMap<>());
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
-      testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachablePartitions);
+      testStatsManager.collectAndAggregateAccountStats(actualSnapshot, partitionId, unreachablePartitions);
     }
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
     // test fetchSnapshot method in StatsManager
@@ -649,9 +649,10 @@ public class StatsManagerTest {
    * Generate a random, two levels of nesting (accountId, containerId) {@link StatsSnapshot} for testing aggregation
    * @return a map of all types of {@link StatsSnapshot} whose key is the type name and value is corresponding snapshot
    */
-  private Map<StatsReportType, StatsSnapshot> generateRandomSnapshot() {
+  static Map<StatsReportType, StatsSnapshot> generateRandomSnapshot() {
     Map<String, StatsSnapshot> accountMap = new HashMap<>();
     Map<String, StatsSnapshot> accountContainerPairMap = new HashMap<>();
+    Random random = new Random();
     long totalSize = 0;
     for (int i = 0; i < random.nextInt(MAX_ACCOUNT_COUNT - MIN_ACCOUNT_COUNT + 1) + MIN_ACCOUNT_COUNT; i++) {
       Map<String, StatsSnapshot> containerMap = new HashMap<>();
@@ -718,7 +719,7 @@ public class StatsManagerTest {
   /**
    * Mocked {@link Store} that is intended to return a predefined {@link StoreStats} when getStoreStats is called.
    */
-  private class MockStore implements Store {
+  static class MockStore implements Store {
     private final StoreStats storeStats;
     CountDownLatch getStatsCountdown;
     boolean isCollected;
@@ -850,7 +851,7 @@ public class StatsManagerTest {
   /**
    * Mocked {@link StoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
    */
-  private static class MockStoreStats implements StoreStats {
+  static class MockStoreStats implements StoreStats {
     private final Map<StatsReportType, StatsSnapshot> snapshotsByType;
     private final boolean throwStoreException;
     private final Map<String, Pair<Long, Long>> deleteTombstoneStats;

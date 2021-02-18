@@ -175,7 +175,7 @@ public class MockPartitionId implements PartitionId {
 
   @Override
   public String toString() {
-    return partition.toString();
+    return "Partition[" + partition.toString() + "]";
   }
 
   @Override

@@ -142,7 +142,7 @@ public interface AccountStatsStore {
    * @return A {@link StatsWrapper} represents the per host partition class stats.
    * @throws Exception
    */
-  StatsWrapper queryPartitionClassStatsOf(String hostname, Map<String, Set<Integer>> partitionNameAndIds)
+  StatsWrapper queryPartitionClassStatsByHost(String hostname, Map<String, Set<Integer>> partitionNameAndIds)
       throws Exception;
 
   /**

@@ -486,7 +486,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized StatsWrapper queryPartitionClassStatsOf(String hostname,
+  public synchronized StatsWrapper queryPartitionClassStatsByHost(String hostname,
       Map<String, Set<Integer>> partitionNameAndIds) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     hostname = hostnameHelper.simplifyHostname(hostname);
