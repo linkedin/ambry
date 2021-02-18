@@ -21,7 +21,6 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.AmbryQuotaManagerFactory;
 import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
@@ -47,7 +46,7 @@ public class FrontendRestRequestServiceFactoryTest {
     try {
       QUOTA_MANAGER =
           new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              Collections.emptyList(), new MaxThrottlePolicy());
+              Collections.emptyList(), new MaxThrottlePolicy(), null);
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }

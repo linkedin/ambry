@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
@@ -26,8 +27,9 @@ public class UnlimitedQuotaSourceFactory implements QuotaSourceFactory {
   /**
    * Constructor for {@link UnlimitedQuotaSourceFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
+   * @param accountService {@link AccountService} object.
    */
-  public UnlimitedQuotaSourceFactory(QuotaConfig quotaConfig) {
+  public UnlimitedQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) {
 
   }
 

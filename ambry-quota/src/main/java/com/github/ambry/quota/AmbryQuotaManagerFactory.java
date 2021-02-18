@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
 import java.util.List;
 
@@ -30,8 +31,8 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
    * @throws ReflectiveOperationException
    */
   public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, List<QuotaEnforcer> addedQuotaEnforcers,
-      ThrottlePolicy throttlePolicy) throws ReflectiveOperationException {
-    quotaManager = new AmbryQuotaManager(quotaConfig, addedQuotaEnforcers, throttlePolicy);
+      ThrottlePolicy throttlePolicy, AccountService accountService) throws ReflectiveOperationException {
+    quotaManager = new AmbryQuotaManager(quotaConfig, addedQuotaEnforcers, throttlePolicy, accountService);
   }
 
   @Override

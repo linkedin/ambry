@@ -89,6 +89,7 @@ public class RestServer {
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final NettyInternalMetrics nettyInternalMetrics;
+
   /**
    * {@link RestServer} specific metrics tracking.
    */
@@ -221,7 +222,7 @@ public class RestServer {
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
     QuotaManager quotaManager =
         ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, addedQuotaEnforcers,
-            new MaxThrottlePolicy())).getQuotaManager();
+            new MaxThrottlePolicy(), accountServiceFactory)).getQuotaManager();
     quotaManager.init();
 
     // setup restRequestService

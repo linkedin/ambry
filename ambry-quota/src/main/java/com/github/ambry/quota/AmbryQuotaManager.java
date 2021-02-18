@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
@@ -45,10 +46,11 @@ public class AmbryQuotaManager implements QuotaManager {
    * @throws ReflectiveOperationException in case of any exception.
    */
   public AmbryQuotaManager(QuotaConfig quotaConfig, List<QuotaEnforcer> addedRequestQuotaEnforcers,
-      ThrottlePolicy throttlePolicy) throws ReflectiveOperationException {
+      ThrottlePolicy throttlePolicy, AccountService accountService) throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
-    Map<String, QuotaSource> quotaSourceObjectMap = buildQuotaSources(quotaEnforcerSourceMap.values(), quotaConfig);
+    Map<String, QuotaSource> quotaSourceObjectMap =
+        buildQuotaSources(quotaEnforcerSourceMap.values(), quotaConfig, accountService);
     requestQuotaEnforcers = new HashSet<>();
     if (addedRequestQuotaEnforcers != null) {
       requestQuotaEnforcers.addAll(addedRequestQuotaEnforcers);
@@ -116,13 +118,13 @@ public class AmbryQuotaManager implements QuotaManager {
     return quotaEnforcerSourceMap;
   }
 
-  private Map<String, QuotaSource> buildQuotaSources(Collection<String> quotaSourceClasses, QuotaConfig quotaConfig)
-      throws ReflectiveOperationException {
+  private Map<String, QuotaSource> buildQuotaSources(Collection<String> quotaSourceFactoryClasses,
+      QuotaConfig quotaConfig, AccountService accountService) throws ReflectiveOperationException {
     Map<String, QuotaSource> quotaSourceObjectMap = new HashMap<>();
-    for (String quotaSourceClass : quotaSourceClasses) {
-      if (!quotaSourceObjectMap.containsKey(quotaSourceClass)) {
-        quotaSourceObjectMap.put(quotaSourceClass,
-            ((QuotaSourceFactory) Utils.getObj(quotaSourceClass, quotaConfig)).getQuotaSource());
+    for (String quotaSourceFactoryClass : quotaSourceFactoryClasses) {
+      if (!quotaSourceObjectMap.containsKey(quotaSourceFactoryClass)) {
+        quotaSourceObjectMap.put(quotaSourceFactoryClass,
+            ((QuotaSourceFactory) Utils.getObj(quotaSourceFactoryClass, quotaConfig, accountService)).getQuotaSource());
       }
     }
     return quotaSourceObjectMap;
