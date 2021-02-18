@@ -156,7 +156,20 @@ public class MySqlAccountServiceTest {
     assertEquals("Mismatch in account retrieved by name", testAccount,
         mySqlAccountService.getAccountByName(testAccount.getName()));
 
-    // 2. Update existing account by adding new container. Verify account is updated in cache and written to mysql store.
+    // 2. Update existing account by changing aclInheritedByContainer to true. Verify account is updated in cache and written to mysql store.
+    testAccount = new AccountBuilder(testAccount).aclInheritedByContainer(true).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
+    Account finalTestAccount0 = testAccount;
+    verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(argThat(accountsInfo -> {
+      AccountUtils.AccountUpdateInfo accountUpdateInfo = accountsInfo.get(0);
+      return accountUpdateInfo.getAccount().equals(finalTestAccount0) && !accountUpdateInfo.isAdded()
+          && accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers()
+          .isEmpty() && accountUpdateInfo.getUpdatedContainers().isEmpty();
+    }));
+    assertEquals("Mismatch in account retrieved by ID", testAccount,
+        mySqlAccountService.getAccountById(testAccount.getId()));
+
+    // 3. Update existing account by adding new container. Verify account is updated in cache and written to mysql store.
     Container testContainer2 =
         new ContainerBuilder((short) 2, "testContainer2", Container.ContainerStatus.ACTIVE, "testContainer2", (short) 1)
             .build();
@@ -172,7 +185,7 @@ public class MySqlAccountServiceTest {
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
-    // 3. Update existing container. Verify container is updated in cache and written to mysql store.
+    // 4. Update existing container. Verify container is updated in cache and written to mysql store.
     testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));

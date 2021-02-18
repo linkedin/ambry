@@ -249,7 +249,8 @@ class AccountInfoMap {
         AccountBuilder accountBuilder = new AccountBuilder(accountToUpdate).name(account.getName())
             .status(account.getStatus())
             .snapshotVersion(account.getSnapshotVersion())
-            .lastModifiedTime(account.getLastModifiedTime());
+            .lastModifiedTime(account.getLastModifiedTime())
+            .aclInheritedByContainer(account.isAclInheritedByContainer());
         account.getAllContainers().forEach(accountBuilder::addOrUpdateContainer);
         accountToUpdate = accountBuilder.build();
       }
