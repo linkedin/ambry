@@ -916,13 +916,13 @@ public class BlobStoreStatsTest {
         long randValue = random.nextInt(10000);
         subTotal += randValue;
         innerUtilizationMap.put((short) j, randValue);
-        containerSubMap.put(String.valueOf(j), new StatsSnapshot(randValue, null));
+        containerSubMap.put(Utils.statsContainerKey((short) j), new StatsSnapshot(randValue, null));
         accountContainerPairSubMap.put(Utils.partitionClassStatsAccountContainerKey((short) i, (short) j),
             new StatsSnapshot(randValue, null));
       }
       total += subTotal;
       utilizationMap.put((short) i, innerUtilizationMap);
-      accountSubMap.put(String.valueOf(i), new StatsSnapshot(subTotal, containerSubMap));
+      accountSubMap.put(Utils.statsAccountKey((short) i), new StatsSnapshot(subTotal, containerSubMap));
     }
     StatsSnapshot expectAccountSnapshot = new StatsSnapshot(total, accountSubMap);
     StatsSnapshot convertedAccountStatsSnapshot =
