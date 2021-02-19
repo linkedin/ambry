@@ -246,7 +246,7 @@ public class StorageManagerTest {
     List<String> mountPaths = localNode.getMountPaths();
     String diskToFail = mountPaths.get(0);
     File reservePoolDir = new File(diskToFail, diskManagerConfig.diskManagerReserveFileDirName);
-    File storeReserveDir = new File(reservePoolDir, DiskSpaceAllocator.STORE_DIR_PREFIX + newPartition2.toString());
+    File storeReserveDir = new File(reservePoolDir, DiskSpaceAllocator.STORE_DIR_PREFIX + newPartition2.toPathString());
     StorageManager storageManager2 = createStorageManager(localNode, new MetricRegistry(), null);
     storageManager2.start();
     Utils.deleteFileOrDirectory(storeReserveDir);
