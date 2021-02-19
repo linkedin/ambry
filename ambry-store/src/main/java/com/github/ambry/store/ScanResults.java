@@ -81,8 +81,8 @@ class ScanResults {
   // whose key is the ContainerId and the value is the valid size of this container.
   // So {@code containerBaseBucket} is base value for all containers and the {@code containerBuckets} is the delta values
   // on each time bucket.
-  private final Map<String, Map<String, Long>> containerBaseBucket = new ConcurrentHashMap<>();
-  private final NavigableMap<Long, Map<String, Map<String, Long>>> containerDeltaBuckets = new TreeMap<>();
+  private final Map<Short, Map<Short, Long>> containerBaseBucket = new ConcurrentHashMap<>();
+  private final NavigableMap<Long, Map<Short, Map<Short, Long>>> containerDeltaBuckets = new TreeMap<>();
   final long containerForecastStartTimeMs;
   final long containerLastBucketTimeMs;
   final long containerForecastEndTimeMs;
@@ -187,12 +187,12 @@ class ScanResults {
 
   /**
    * Update the container base value bucket with the given value.
-   * @param serviceId the serviceId of the map entry to be updated
+   * @param accountId the accountId of the map entry to be updated
    * @param containerId the containerId of the map entry to be updated
    * @param value the value to be added
    */
-  void updateContainerBaseBucket(String serviceId, String containerId, long value) {
-    updateNestedMapHelper(containerBaseBucket, serviceId, containerId, value);
+  void updateContainerBaseBucket(short accountId, short containerId, long value) {
+    updateNestedMapHelper(containerBaseBucket, accountId, containerId, value);
   }
 
   /**
@@ -207,14 +207,14 @@ class ScanResults {
   /**
    * Helper function to update a container bucket with the given value.
    * @param bucketKey the bucket key to specify which bucket will be updated
-   * @param serviceId the serviceId of the map entry to be updated
+   * @param accountId the accountId of the map entry to be updated
    * @param containerId the containerId of the map entry to be updated
    * @param value the value to be added
    */
-  void updateContainerBucket(Long bucketKey, String serviceId, String containerId, long value) {
+  void updateContainerBucket(Long bucketKey, short accountId, short containerId, long value) {
     if (bucketKey != null && containerDeltaBuckets.containsKey(bucketKey)) {
-      Map<String, Map<String, Long>> existingBucketEntry = containerDeltaBuckets.get(bucketKey);
-      updateNestedMapHelper(existingBucketEntry, serviceId, containerId, value);
+      Map<Short, Map<Short, Long>> existingBucketEntry = containerDeltaBuckets.get(bucketKey);
+      updateNestedMapHelper(existingBucketEntry, accountId, containerId, value);
     }
   }
 
@@ -281,15 +281,15 @@ class ScanResults {
    * @return a {@link Pair} whose first element is the end time of the last bucket that was aggregated and whose second
    * element is the requested valid data size per container {@link Map}.
    */
-  Map<String, Map<String, Long>> getValidSizePerContainer(Long referenceTimeInMs) {
-    Map<String, Map<String, Long>> validSizePerContainer = new HashMap<>();
-    for (Map.Entry<String, Map<String, Long>> accountEntry : containerBaseBucket.entrySet()) {
+  Map<Short, Map<Short, Long>> getValidSizePerContainer(Long referenceTimeInMs) {
+    Map<Short, Map<Short, Long>> validSizePerContainer = new HashMap<>();
+    for (Map.Entry<Short, Map<Short, Long>> accountEntry : containerBaseBucket.entrySet()) {
       validSizePerContainer.put(accountEntry.getKey(), new HashMap<>(accountEntry.getValue()));
     }
-    NavigableMap<Long, Map<String, Map<String, Long>>> subMap = containerDeltaBuckets.headMap(referenceTimeInMs, true);
-    for (Map.Entry<Long, Map<String, Map<String, Long>>> bucket : subMap.entrySet()) {
-      for (Map.Entry<String, Map<String, Long>> accountEntry : bucket.getValue().entrySet()) {
-        for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+    NavigableMap<Long, Map<Short, Map<Short, Long>>> subMap = containerDeltaBuckets.headMap(referenceTimeInMs, true);
+    for (Map.Entry<Long, Map<Short, Map<Short, Long>>> bucket : subMap.entrySet()) {
+      for (Map.Entry<Short, Map<Short, Long>> accountEntry : bucket.getValue().entrySet()) {
+        for (Map.Entry<Short, Long> containerEntry : accountEntry.getValue().entrySet()) {
           updateNestedMapHelper(validSizePerContainer, accountEntry.getKey(), containerEntry.getKey(),
               containerEntry.getValue());
         }

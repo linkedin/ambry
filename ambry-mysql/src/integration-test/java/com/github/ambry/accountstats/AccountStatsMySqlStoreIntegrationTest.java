@@ -395,7 +395,10 @@ public class AccountStatsMySqlStoreIntegrationTest {
             .entrySet()) {
           String containerKey = containerEntry.getKey();
           StatsSnapshot containerStats = new StatsSnapshot(containerEntry.getValue());
-          accountContainerSubMap.put(accountKey + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerKey, containerStats);
+          String accountContainerKey =
+              Utils.partitionClassStatsAccountContainerKey(Utils.accountIdFromStatsAccountKey(accountKey),
+                  Utils.containerIdFromStatsContainerKey(containerKey));
+          accountContainerSubMap.put(accountContainerKey, containerStats);
         }
       }
       long accountContainerValue = accountContainerSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();

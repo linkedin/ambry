@@ -654,19 +654,17 @@ public class StatsManagerTest {
     Map<String, StatsSnapshot> accountContainerPairMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < random.nextInt(MAX_ACCOUNT_COUNT - MIN_ACCOUNT_COUNT + 1) + MIN_ACCOUNT_COUNT; i++) {
-      String accountIdStr = "A[".concat(String.valueOf(i)).concat("]");
       Map<String, StatsSnapshot> containerMap = new HashMap<>();
       long subTotalSize = 0;
       for (int j = 0; j < random.nextInt(MAX_CONTAINER_COUNT - MIN_CONTAINER_COUNT + 1) + MIN_CONTAINER_COUNT; j++) {
-        String containerIdStr = "C[".concat(String.valueOf(j)).concat("]");
         long validSize = random.nextInt(2501) + 500;
         subTotalSize += validSize;
-        containerMap.put(containerIdStr, new StatsSnapshot(validSize, null));
-        accountContainerPairMap.put(accountIdStr + Utils.ACCOUNT_CONTAINER_SEPARATOR + containerIdStr,
+        containerMap.put(Utils.statsContainerKey((short) j), new StatsSnapshot(validSize, null));
+        accountContainerPairMap.put(Utils.partitionClassStatsAccountContainerKey((short) i, (short) j),
             new StatsSnapshot(validSize, null));
       }
       totalSize += subTotalSize;
-      accountMap.put(accountIdStr, new StatsSnapshot(subTotalSize, containerMap));
+      accountMap.put(Utils.statsAccountKey((short) i), new StatsSnapshot(subTotalSize, containerMap));
     }
     Map<StatsReportType, StatsSnapshot> allSnapshots = new HashMap<>();
     allSnapshots.put(StatsReportType.PARTITION_CLASS_REPORT, new StatsSnapshot(totalSize, accountContainerPairMap));
