@@ -481,7 +481,7 @@ class StatsManager {
   }
 
   /**
-   * Runnable class that collects, publish stats via methods in StatsManager.
+   * Runnable class that collects, publish account stats to mysql database and local backup file.
    */
   class AccountStatsPublisher implements Runnable {
     private volatile boolean cancelled = false;
@@ -540,6 +540,9 @@ class StatsManager {
     }
   }
 
+  /**
+   * Runnable calss that collects, publishes partition class stats to mysql database.
+   */
   class PartitionClassStatsPublisher implements Runnable {
     private volatile boolean cancelled = false;
     private final AccountStatsMySqlStore accountStatsMySqlStore;

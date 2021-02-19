@@ -109,6 +109,10 @@ public class StatsManagerIntegrationTest {
     }
   }
 
+  /**
+   * Test account stats publisher
+   * @throws Exception
+   */
   @Test
   public void testAccountStatsPublisher() throws Exception {
     StatsManager.AccountStatsPublisher publisher = statsManager.new AccountStatsPublisher(accountStatsMySqlStore);
@@ -118,6 +122,10 @@ public class StatsManagerIntegrationTest {
     assertEquals(aggregatedAccountStatsSnapshot, statsWrapper.getSnapshot());
   }
 
+  /**
+   * Test partition class stats publisher
+   * @throws Exception
+   */
   @Test
   public void testPartitionClassStatsPublisher() throws Exception {
     // Before publishing partition class stats, we have to publish account stats since they use the same data
