@@ -335,23 +335,23 @@ public class StatsManagerTest {
     String statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
     StatsWrapper statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
     assertFalse("Partition3 should not present in stats report",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toPathString()));
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toString()));
     // verify that after adding into statsManager, PartitionId3 is in stats report
     testStatsManager.addReplica(partitionId3.getReplicaIds().get(0));
     statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
     statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
     assertTrue("Partition3 should present in stats report",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toPathString()));
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toString()));
     // verify that after removing PartitionId0 (corresponding to the first replica in replicas list), PartitionId0 is not in the stats report
     PartitionId partitionId0 = testReplicas.get(0).getPartitionId();
     assertTrue("Partition0 should present in stats report before removal",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toPathString()));
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toString()));
     testStoreMap.remove(testReplicas.get(0).getPartitionId());
     testStatsManager.removeReplica(testReplicas.get(0));
     statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
     statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
     assertFalse("Partition0 should not present in stats report after removal",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toPathString()));
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toString()));
     // verify that removing the PartitionId0 should fail because it no longer exists in StatsManager
     assertFalse(testStatsManager.removeReplica(testReplicas.get(0)));
 
@@ -428,12 +428,12 @@ public class StatsManagerTest {
     statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
     // verify that new added PartitionId4 is not in report for this round of aggregation
     assertFalse("Partition4 should not present in stats report",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toPathString()));
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toString()));
     // verify that new added PartitionId4 will be collected for next round of aggregation
     statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
     statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
     assertTrue("Partition4 should present in stats report",
-        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toPathString()));
+        statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toString()));
   }
 
   /**
@@ -533,11 +533,10 @@ public class StatsManagerTest {
       Map<String, StatsSnapshot> partitionToAccountSnapshot = new HashMap<>();
       Map<String, StatsSnapshot> partitionToPartitionClassSnapshot = new HashMap<>();
       Map<String, StatsSnapshot> partitionClassSnapshotMap = new HashMap<>();
-      String partitionIdStr = String.valueOf(i);
       String partitionClassStr =
           i % 2 == 0 ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS;
-      partitionToAccountSnapshot.put(partitionIdStr, accountSnapshots.get(i));
-      partitionToPartitionClassSnapshot.put(partitionIdStr, partitionClassSnapshots.get(i));
+      partitionToAccountSnapshot.put(Utils.statsPartitionKey((short) i), accountSnapshots.get(i));
+      partitionToPartitionClassSnapshot.put(Utils.statsPartitionKey((short) i), partitionClassSnapshots.get(i));
       partitionClassSnapshotMap.put(partitionClassStr,
           new StatsSnapshot(partitionClassSnapshots.get(i).getValue(), partitionToPartitionClassSnapshot));
       //aggregate two types of snapshots respectively
