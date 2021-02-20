@@ -35,6 +35,7 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -269,6 +270,11 @@ public class VcrReplicationManager extends ReplicationEngine {
   public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
     // TODO get replica lag from cosmos?
     return -1;
+  }
+
+  @Override
+  protected String getReplicaThreadName(String datacenterToReplicateFrom, int threadIndexWithinPool) {
+    return "Vcr" + super.getReplicaThreadName(datacenterToReplicateFrom, threadIndexWithinPool);
   }
 
   /**
