@@ -107,7 +107,7 @@ public class CompactionLogTest {
           cLog.getStartOffsetOfLastIndexSegmentForDeleteCheck());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentName.generateFirstSegmentName(true), 0),
-              new UUID(1, 1), new UUID(1, 1));
+              new UUID(1, 1), new UUID(1, 1), null, null);
       cLog.setSafeToken(safeToken);
       assertEquals("Returned token not the same as the one that was set", safeToken, cLog.getSafeToken());
       CompactionDetails nextDetails = detailsIterator.hasNext() ? detailsIterator.next() : null;
@@ -170,7 +170,7 @@ public class CompactionLogTest {
           cLog.getStartOffsetOfLastIndexSegmentForDeleteCheck());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentName.generateFirstSegmentName(true), 0),
-              new UUID(1, 1), new UUID(1, 1));
+              new UUID(1, 1), new UUID(1, 1), null, null);
       cLog.setSafeToken(safeToken);
 
       cLog.close();
@@ -412,7 +412,7 @@ public class CompactionLogTest {
     if (!cLog.getCompactionPhase().equals(CompactionLog.Phase.COPY)) {
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentName.generateFirstSegmentName(true), 0),
-              new UUID(1, 1), new UUID(1, 1));
+              new UUID(1, 1), new UUID(1, 1), null, null);
       try {
         cLog.setSafeToken(safeToken);
         fail("Setting safe token should have failed");

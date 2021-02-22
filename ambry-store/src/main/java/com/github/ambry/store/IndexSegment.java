@@ -1105,7 +1105,7 @@ class IndexSegment implements Iterable<IndexEntry> {
    * Gets all the index entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
    * till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
-   *            If the key is null, all entries are retrieved upto maxentries
+   *            If the key is null, all entries are retrieved up to max entries
    * @param findEntriesCondition The condition that determines when to stop fetching entries.
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
