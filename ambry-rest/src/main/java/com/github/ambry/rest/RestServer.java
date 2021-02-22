@@ -222,7 +222,7 @@ public class RestServer {
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
     QuotaManager quotaManager =
         ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, addedQuotaEnforcers,
-            new MaxThrottlePolicy(), accountServiceFactory)).getQuotaManager();
+            new MaxThrottlePolicy(), accountService)).getQuotaManager();
     quotaManager.init();
 
     // setup restRequestService
