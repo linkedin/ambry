@@ -29,7 +29,6 @@ public class StatsManagerConfig {
   public static final String STATS_ENABLE_MYSQL_REPORT = "stats.enable.mysql.report";
   public static final String STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES = "stats.health.report.exclude.account.names";
   public static final String STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES = "stats.publish.exclude.account.names";
-  public static final String STATS_ENABLE_PARTITION_CLASS_MYSQL_REPORT = "stats.enable.partition.class.mysql.report";
   public static final String STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS =
       "stats.publish.partition.class.report.period.in.secs";
 
@@ -78,18 +77,11 @@ public class StatsManagerConfig {
   public final List<String> publishExcludeAccountNames;
 
   /**
-   * True to enable publishing partition class report stats to mysql. You have to enable mysql report before you enble
-   * this configuration.
-   */
-  @Config(STATS_ENABLE_PARTITION_CLASS_MYSQL_REPORT)
-  @Default("false")
-  public final boolean enablePartitionClassMysqlReport;
-
-  /**
-   * The time period in seconds that configures how often partition class stats are published to mysql.
+   * The time period in seconds that configures how often partition class stats are published to mysql. Set it to 0 to
+   * disable publishing partition class reports to mysql database.
    */
   @Config(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS)
-  @Default("518400")
+  @Default("0")
   public final long publishPartitionClassReportPeriodInSecs;
 
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
@@ -104,13 +96,11 @@ public class StatsManagerConfig {
     excludeNames = verifiableProperties.getString(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, "").trim();
     publishExcludeAccountNames =
         excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
-    enablePartitionClassMysqlReport = verifiableProperties.getBoolean(STATS_ENABLE_PARTITION_CLASS_MYSQL_REPORT, false);
     publishPartitionClassReportPeriodInSecs =
-        verifiableProperties.getLongInRange(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS, 60 * 60 * 24 * 6, 0,
-            Long.MAX_VALUE);
-    if (enablePartitionClassMysqlReport && !enableMysqlReport) {
+        verifiableProperties.getLongInRange(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS, 0, 0, Long.MAX_VALUE);
+    if (publishPartitionClassReportPeriodInSecs != 0 && !enableMysqlReport) {
       throw new IllegalStateException(
-          "Bad configuration, you have to enableMysqlReport if you enablePartitionClassMysqlReport");
+          "Bad configuration, you have to enableMysqlReport if you set a non-zero value for publishPartitionClassReportPeriodInSecs");
     }
   }
 }

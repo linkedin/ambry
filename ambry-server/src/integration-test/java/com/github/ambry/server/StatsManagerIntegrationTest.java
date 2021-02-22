@@ -152,7 +152,6 @@ public class StatsManagerIntegrationTest {
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(BATCH_SIZE));
     configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, accountStatsOutputFileString);
     configProps.setProperty(StatsManagerConfig.STATS_ENABLE_MYSQL_REPORT, Boolean.TRUE.toString());
-    configProps.setProperty(StatsManagerConfig.STATS_ENABLE_PARTITION_CLASS_MYSQL_REPORT, Boolean.TRUE.toString());
     return configProps;
   }
 

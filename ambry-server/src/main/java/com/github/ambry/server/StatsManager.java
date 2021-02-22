@@ -137,12 +137,12 @@ class StatsManager {
     logger.info("Scheduling account stats publishing job with an initial delay of {} secs", actualDelay);
     scheduler.scheduleAtFixedRate(accountsStatsPublisher, actualDelay, config.publishPeriodInSecs, TimeUnit.SECONDS);
 
-    if (config.enablePartitionClassMysqlReport) {
+    if (config.publishPartitionClassReportPeriodInSecs != 0) {
       partitionClassStatsPublisher = new PartitionClassStatsPublisher(accountStatsMySqlStore);
-      long initalDelay = ThreadLocalRandom.current().nextLong(config.publishPartitionClassReportPeriodInSecs / 2)
+      long initialDelay = ThreadLocalRandom.current().nextLong(config.publishPartitionClassReportPeriodInSecs / 2)
           + config.publishPartitionClassReportPeriodInSecs / 2;
-      logger.info("Scheduling partition class stats publishing job with an initial delay of {} secs", initalDelay);
-      scheduler.scheduleAtFixedRate(partitionClassStatsPublisher, initalDelay,
+      logger.info("Scheduling partition class stats publishing job with an initial delay of {} secs", initialDelay);
+      scheduler.scheduleAtFixedRate(partitionClassStatsPublisher, initialDelay,
           config.publishPartitionClassReportPeriodInSecs, TimeUnit.SECONDS);
     }
   }
@@ -541,7 +541,7 @@ class StatsManager {
   }
 
   /**
-   * Runnable calss that collects, publishes partition class stats to mysql database.
+   * Runnable class that collects, publishes partition class stats to mysql database.
    */
   class PartitionClassStatsPublisher implements Runnable {
     private volatile boolean cancelled = false;
