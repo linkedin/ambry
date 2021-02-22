@@ -105,7 +105,9 @@ public class StoreFindToken implements FindToken {
    * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
    * @param sessionId the sessionId of the store
    * @param incarnationId the incarnationId of the store
-   * @param resetKey The {@link StoreKey} used to find closest valid starting point in case the index segment the token
+   * @param resetKey The {@link StoreKey} at start offset of current index segment. When log segment on source node is
+   *                 compacted (and token becomes invalid), this key is used to find current valid log segment where
+   *                 {@link PersistentIndex#findEntriesSince(FindToken, long)} can start from.
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
    */
   StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId, StoreKey resetKey,
@@ -138,7 +140,9 @@ public class StoreFindToken implements FindToken {
    * @param incarnationId the incarnationId of the store
    * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
    *                  {@code false} otherwise
-   * @param resetKey The {@link StoreKey} used to find closest valid starting point in case the index segment the token
+   * @param resetKey The {@link StoreKey} at start offset of current index segment. When log segment on source node is
+   *                 compacted (and token becomes invalid), this key is used to find current valid log segment where
+   *                 {@link PersistentIndex#findEntriesSince(FindToken, long)} can start from.
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
    */
   StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive, StoreKey resetKey,
@@ -157,7 +161,9 @@ public class StoreFindToken implements FindToken {
    * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
    *                  {@code false} otherwise
    * @param version refers to the version of the token
-   * @param resetKey The {@link StoreKey} used to find closest valid starting point in case the index segment the token
+   * @param resetKey The {@link StoreKey} at start offset of current index segment. When log segment on source node is
+   *                 compacted (and token becomes invalid), this key is used to find current valid log segment where
+   *                 {@link PersistentIndex#findEntriesSince(FindToken, long)} can start from.
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
    */
   StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive,
