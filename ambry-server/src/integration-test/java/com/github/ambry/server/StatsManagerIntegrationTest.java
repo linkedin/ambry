@@ -100,6 +100,10 @@ public class StatsManagerIntegrationTest {
         new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), null, null, null);
   }
 
+  /**
+   * Clean up the database by removing all the data in all tables.
+   * @throws Exception
+   */
   @Before
   public void before() throws Exception {
     Connection dbConnection = accountStatsMySqlStore.getMySqlDataAccessor().getDatabaseConnection(true);
