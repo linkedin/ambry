@@ -13,10 +13,6 @@
  */
 package com.github.ambry.rest;
 
-import java.util.Collections;
-import java.util.Map;
-
-
 /**
  * Exceptions thrown by different layers of the RESTful frontend. All exceptions are accompanied by a
  * {@link RestServiceErrorCode}.
@@ -24,15 +20,13 @@ import java.util.Map;
 public class RestServiceException extends Exception {
   private final RestServiceErrorCode error;
   private final boolean includeExceptionMessageInResponse;
-  private final boolean includeExceptionInfoInHeader;
-  private final Map<String, String> exceptionInfoMap;
 
   /**
    * @param message the exception message.
    * @param error the {@link RestServiceErrorCode}.
    */
   public RestServiceException(String message, RestServiceErrorCode error) {
-    this(message, error, false, false, null);
+    this(message, error, false);
   }
 
   /**
@@ -44,8 +38,6 @@ public class RestServiceException extends Exception {
     super(message, e);
     this.error = error;
     includeExceptionMessageInResponse = false;
-    includeExceptionInfoInHeader = false;
-    exceptionInfoMap = null;
   }
 
   /**
@@ -56,8 +48,6 @@ public class RestServiceException extends Exception {
     super(e);
     this.error = error;
     includeExceptionMessageInResponse = false;
-    includeExceptionInfoInHeader = false;
-    exceptionInfoMap = null;
   }
 
   /**
@@ -66,13 +56,10 @@ public class RestServiceException extends Exception {
    * @param includeExceptionMessageInResponse {@code true} to hint that the exception message should be returned to the
    *                                          client as a response header.
    */
-  public RestServiceException(String message, RestServiceErrorCode error, boolean includeExceptionMessageInResponse,
-      boolean includeExceptionInfoInHeader, Map<String, String> exceptionInfoMap) {
+  public RestServiceException(String message, RestServiceErrorCode error, boolean includeExceptionMessageInResponse) {
     super(message);
     this.error = error;
     this.includeExceptionMessageInResponse = includeExceptionMessageInResponse;
-    this.includeExceptionInfoInHeader = includeExceptionInfoInHeader;
-    this.exceptionInfoMap = (exceptionInfoMap == null) ? null : Collections.unmodifiableMap(exceptionInfoMap);
   }
 
   public RestServiceErrorCode getErrorCode() {
@@ -81,16 +68,5 @@ public class RestServiceException extends Exception {
 
   public boolean shouldIncludeExceptionMessageInResponse() {
     return includeExceptionMessageInResponse;
-  }
-
-  public boolean isIncludeExceptionInfoInHeader() {
-    return includeExceptionInfoInHeader;
-  }
-
-  public Map<String, String> getExceptionInfoMap() {
-    if (!includeExceptionInfoInHeader) {
-      return Collections.emptyMap();
-    }
-    return exceptionInfoMap;
   }
 }
