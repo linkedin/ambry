@@ -410,6 +410,7 @@ project(':ambry-frontend') {
                 project(':ambry-quota')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-test-utils')
+        testCompile project(':ambry-quota')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')
         testCompile project(path: ':ambry-rest', configuration: 'testArchives')
     }
