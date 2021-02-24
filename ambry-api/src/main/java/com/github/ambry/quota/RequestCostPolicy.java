@@ -23,6 +23,7 @@ import java.util.Map;
  * This can be used for quota enforcement or cost to serve type calculations.
  */
 public interface RequestCostPolicy {
+  
   /**
    * Calculates the cost incurred to serve the specified {@link RestRequest} for blob specified by {@link BlobInfo}
    * @param restRequest {@link RestRequest} served.
