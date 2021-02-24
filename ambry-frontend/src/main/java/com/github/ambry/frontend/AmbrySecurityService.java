@@ -255,7 +255,7 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
-    Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestCost(restRequest, blobInfo)
+    Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestCost(restRequest, responseChannel, blobInfo)
         .entrySet()
         .stream()
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));

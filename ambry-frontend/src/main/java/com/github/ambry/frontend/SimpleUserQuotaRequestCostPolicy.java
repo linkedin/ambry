@@ -18,22 +18,29 @@ import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestUtils;
 import java.util.HashMap;
 import java.util.Map;
 
 
+/**
+ * {@link RequestCostPolicy} implementation that calculates request cost in terms of metrics tracked by user quota - capacity unit and storage.
+ * Capacity unit cost is defined as the number of 4MB chunks. Storage cost is defined as number of GB of storage used.
+ */
 public class SimpleUserQuotaRequestCostPolicy implements RequestCostPolicy {
-  final static long CU_COST_UNIT = 4 * 1024 * 1024; //4 MB
-  final static long BYTES_IN_GB = 1024 * 1024 * 1024;
+  final static double CU_COST_UNIT = 4 * 1024 * 1024; //4 MB
+  final static double BYTES_IN_GB = 1024 * 1024 * 1024;
   final static double DEFAULT_COST_FOR_HEAD_DELETE_TTL = 1;
 
   @Override
-  public Map<String, Double> calculateRequestCost(RestRequest restRequest, BlobInfo blobInfo) {
+  public Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      BlobInfo blobInfo) {
     Map<String, Double> costMap = new HashMap<>();
     if (blobInfo != null) {
       costMap.put(restMethodToCostMetric(restRequest.getRestMethod()),
-          calculateCapacityUnitCost(restRequest.getRestMethod(), blobInfo));
-      costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest.getRestMethod(), blobInfo));
+          calculateCapacityUnitCost(restRequest, blobInfo));
+      costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, restResponseChannel, blobInfo));
     }
     return costMap;
   }
@@ -58,18 +65,25 @@ public class SimpleUserQuotaRequestCostPolicy implements RequestCostPolicy {
    * Calculate the storage cost incurred to serve a request.
    * For post requests this is the number bytes in GB of the blob data. For all other write requests the default is DEFAULT_COST_FOR_HEAD_DELETE_TTL.
    * For read requests there is no storage cost incurred.
-   * @param restMethod {@link RestMethod} to find type of request.
+   * @param restRequest {@link RestRequest} to find type of request.
+   * @param restResponseChannel {@link RestResponseChannel} object.
    * @param blobInfo {@link BlobInfo} with information about the blob.
    * @return storage cost.
    */
-  private double calculateStorageCost(RestMethod restMethod, BlobInfo blobInfo) {
-    switch (restMethod) {
+  private double calculateStorageCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      BlobInfo blobInfo) {
+    switch (restRequest.getRestMethod()) {
       case POST:
-        return blobInfo.getBlobProperties().getBlobSize() / (double) BYTES_IN_GB;
+        long contentSize = 0;
+        if (restRequest.getUri().contains(Operations.STITCH)) {
+          contentSize = Long.parseLong((String) restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+        } else {
+          contentSize = restRequest.getBytesReceived();
+        }
+        return contentSize / BYTES_IN_GB;
       case DELETE:
       case PUT:
-        return CU_COST_UNIT
-            / (double) BYTES_IN_GB; // Assuming 1 chunk worth of storage cost for deletes and ttl updates.
+        return CU_COST_UNIT / BYTES_IN_GB; // Assuming 1 chunk worth of storage cost for deletes and ttl updates.
       default:
         return 0;
     }
@@ -79,15 +93,17 @@ public class SimpleUserQuotaRequestCostPolicy implements RequestCostPolicy {
    * Calculate the cost incurred in terms of capacity unit to serve a request.
    * For post and get requests it is the number of CU_COST_UNITs determined by blob size.
    * For all other requests, the default cost is DEFAULT_COST_FOR_HEAD_DELETE_TTL.
-   * @param restMethod {@link RestMethod} to find type of request.
+   * @param restRequest {@link RestRequest} to find type of request.
    * @param blobInfo {@link BlobInfo} object representing the blob being served.
    * @return cost in terms of capacity units.
    */
-  private double calculateCapacityUnitCost(RestMethod restMethod, BlobInfo blobInfo) {
-    switch (restMethod) {
+  private double calculateCapacityUnitCost(RestRequest restRequest, BlobInfo blobInfo) {
+    switch (restRequest.getRestMethod()) {
       case POST:
+        double cost = Math.ceil(restRequest.getBytesReceived() / CU_COST_UNIT);
+        return (cost > 0) ? cost : 1;
       case GET:
-        double cost = Math.ceil(blobInfo.getBlobProperties().getBlobSize() / (double) CU_COST_UNIT);
+        cost = Math.ceil(blobInfo.getBlobProperties().getBlobSize() / CU_COST_UNIT);
         return (cost > 0) ? cost : 1;
       default:
         return DEFAULT_COST_FOR_HEAD_DELETE_TTL; // Assuming 1 unit of capacity unit cost for all requests that don't fetch or store a blob's data.

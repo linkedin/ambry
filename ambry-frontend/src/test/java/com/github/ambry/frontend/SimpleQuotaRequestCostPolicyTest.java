@@ -16,18 +16,21 @@ package com.github.ambry.frontend;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaName;
-import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.util.Map;
-import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
+/**
+ * Test for {@link SimpleUserQuotaRequestCostPolicy}.
+ */
 public class SimpleQuotaRequestCostPolicyTest {
   private final static String TEST_SERVICE_ID = "test-service-id";
   private final static short TEST_ACCOUNT_ID = 1;
@@ -39,95 +42,117 @@ public class SimpleQuotaRequestCostPolicyTest {
   public void testCalculateRequestCost() throws UnsupportedEncodingException, URISyntaxException {
     SimpleUserQuotaRequestCostPolicy quotaRequestCostPolicy = new SimpleUserQuotaRequestCostPolicy();
 
+    RestResponseChannel restResponseChannel = mock(RestResponseChannel.class);
+    when(restResponseChannel.getHeader(anyString())).thenReturn(0);
     // test for a 4 MB GET request.
     BlobInfo blobInfo = new BlobInfo(
         new BlobProperties(4 * 1024 * 1024, TEST_SERVICE_ID, TEST_ACCOUNT_ID, TEST_CONTAINER_ID,
             DEFAULT_ENCRYPTED_FLAG), null, DEFAULT_LIFE_VERSION);
-    RestRequest restRequest = createMockRequestWithMethod(RestMethod.GET);
-    Map<String, Double> costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
+    RestRequest restRequest = createMockRequestWithMethod(RestMethod.GET, -1);
+    Map<String, Double> costMap =
+        quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
 
     // test for a small GET request (fractional CU).
     blobInfo = new BlobInfo(new BlobProperties(6 * 1024 * 1024, TEST_SERVICE_ID, TEST_ACCOUNT_ID, TEST_CONTAINER_ID,
         DEFAULT_ENCRYPTED_FLAG), null, DEFAULT_LIFE_VERSION);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 2, 0);
 
     // test for a GET request of blob of size 0.
     blobInfo =
         new BlobInfo(new BlobProperties(0, TEST_SERVICE_ID, TEST_ACCOUNT_ID, TEST_CONTAINER_ID, DEFAULT_ENCRYPTED_FLAG),
             null, DEFAULT_LIFE_VERSION);
-    restRequest = createMockRequestWithMethod(RestMethod.GET);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
+    restRequest = createMockRequestWithMethod(RestMethod.GET, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
 
     // test for a small POST request (fractional storage cost).
     blobInfo = new BlobInfo(new BlobProperties(8 * 1024 * 1024, TEST_SERVICE_ID, TEST_ACCOUNT_ID, TEST_CONTAINER_ID,
         DEFAULT_ENCRYPTED_FLAG), null, DEFAULT_LIFE_VERSION);
-    restRequest = createMockRequestWithMethod(RestMethod.POST);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
-    verifyWriteCost(costMap, 2, .0078);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, 8 * 1024 * 1024);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyWriteCost(costMap, 2, .0078125);
 
     // test for a large POST request.
     blobInfo = new BlobInfo(
         new BlobProperties(4 * 1024 * 1024 * 1024L, TEST_SERVICE_ID, TEST_ACCOUNT_ID, TEST_CONTAINER_ID,
             DEFAULT_ENCRYPTED_FLAG), null, DEFAULT_LIFE_VERSION);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, 4 * 1024 * 1024 * 1024L);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1024, 4);
 
     // test for a POST request of blob of size 0.
     blobInfo =
         new BlobInfo(new BlobProperties(0, TEST_SERVICE_ID, TEST_ACCOUNT_ID, TEST_CONTAINER_ID, DEFAULT_ENCRYPTED_FLAG),
             null, DEFAULT_LIFE_VERSION);
-    restRequest = createMockRequestWithMethod(RestMethod.POST);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, 0);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0);
 
     // test for a HEAD request.
-    restRequest = createMockRequestWithMethod(RestMethod.HEAD);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
+    restRequest = createMockRequestWithMethod(RestMethod.HEAD, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
 
     // test for a DELETE request.
-    restRequest = createMockRequestWithMethod(RestMethod.DELETE);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
-    verifyWriteCost(costMap, 1, 0.0039);
+    restRequest = createMockRequestWithMethod(RestMethod.DELETE, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyWriteCost(costMap, 1, 0.00390625);
 
     // test for a PUT request.
-    restRequest = createMockRequestWithMethod(RestMethod.PUT);
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, blobInfo);
-    verifyWriteCost(costMap, 1, 0.0039);
+    restRequest = createMockRequestWithMethod(RestMethod.PUT, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyWriteCost(costMap, 1, 0.00390625);
 
     // test for null blob info.
-    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, null);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, null);
     assertTrue("cost map should be empty if blob info is null", costMap.isEmpty());
   }
 
-  private void verifyReadCost(Map<String, Double> costMap, double readCUCost, double storageCost) {
+  /**
+   * Verify cost for read requests.
+   * @param costMap {@link Map} of the costs to verify.
+   * @param cUCost expected capacity unit cost.
+   * @param storageCost expected storage cost.
+   */
+  private void verifyReadCost(Map<String, Double> costMap, double cUCost, double storageCost) {
     assertEquals("incorrect number of entries in cost map", 2, costMap.size());
     assertTrue("cost for " + QuotaName.READ_CAPACITY_UNIT.name() + " should be present",
         costMap.containsKey(QuotaName.READ_CAPACITY_UNIT.name()));
     assertTrue("cost for " + QuotaName.STORAGE_IN_GB.name() + " should be present",
         costMap.containsKey(QuotaName.STORAGE_IN_GB.name()));
-    assertEquals(readCUCost, costMap.get(QuotaName.READ_CAPACITY_UNIT.name()), 0.0001);
-    assertEquals(storageCost, costMap.get(QuotaName.STORAGE_IN_GB.name()), 0.0001);
+    assertEquals(cUCost, costMap.get(QuotaName.READ_CAPACITY_UNIT.name()), 0.000001);
+    assertEquals(storageCost, costMap.get(QuotaName.STORAGE_IN_GB.name()), 0.000001);
   }
 
-  private void verifyWriteCost(Map<String, Double> costMap, double readCUCost, double storageCost) {
+  /**
+   * Verify cost for read requests.
+   * @param costMap {@link Map} of the costs to verify.
+   * @param cUCost expected capacity unit cost.
+   * @param storageCost expected storage cost.
+   */
+  private void verifyWriteCost(Map<String, Double> costMap, double cUCost, double storageCost) {
     assertEquals("incorrect number of entries in cost map", 2, costMap.size());
     assertTrue("cost for " + QuotaName.WRITE_CAPACITY_UNIT.name() + " should be present",
         costMap.containsKey(QuotaName.WRITE_CAPACITY_UNIT.name()));
     assertTrue("cost for " + QuotaName.STORAGE_IN_GB.name() + " should be present",
         costMap.containsKey(QuotaName.STORAGE_IN_GB.name()));
-    assertEquals(readCUCost, costMap.get(QuotaName.WRITE_CAPACITY_UNIT.name()), 0.0001);
-    assertEquals(storageCost, costMap.get(QuotaName.STORAGE_IN_GB.name()), 0.0001);
+    assertEquals(cUCost, costMap.get(QuotaName.WRITE_CAPACITY_UNIT.name()), 0.000001);
+    assertEquals(storageCost, costMap.get(QuotaName.STORAGE_IN_GB.name()), 0.000001);
   }
 
-  private RestRequest createMockRequestWithMethod(RestMethod restMethod)
-      throws UnsupportedEncodingException, URISyntaxException {
-    JSONObject request = new JSONObject();
-    request.put(MockRestRequest.REST_METHOD_KEY, restMethod.name());
-    request.put(MockRestRequest.URI_KEY, "/");
-    return new MockRestRequest(request, null);
+  /**
+   * Creates a mock {@link RestRequest} object for test.
+   * @param restMethod {@link RestMethod} of the RestRequest.
+   * @param bytesReceived number of bytes received in the request.
+   * @return RestRequest object.
+   */
+  private RestRequest createMockRequestWithMethod(RestMethod restMethod, long bytesReceived) {
+    RestRequest restRequest = mock(RestRequest.class);
+    when(restRequest.getRestMethod()).thenReturn(restMethod);
+    when(restRequest.getBytesReceived()).thenReturn(bytesReceived);
+    when(restRequest.getUri()).thenReturn("/");
+    return restRequest;
   }
 }

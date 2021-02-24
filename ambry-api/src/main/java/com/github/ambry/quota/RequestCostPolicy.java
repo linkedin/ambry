@@ -15,6 +15,7 @@ package com.github.ambry.quota;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
 import java.util.Map;
 
 
@@ -23,12 +24,13 @@ import java.util.Map;
  * This can be used for quota enforcement or cost to serve type calculations.
  */
 public interface RequestCostPolicy {
-  
+
   /**
    * Calculates the cost incurred to serve the specified {@link RestRequest} for blob specified by {@link BlobInfo}
    * @param restRequest {@link RestRequest} served.
+   * @param responseChannel {@link RestResponseChannel} object.
    * @param blobInfo {@link BlobInfo} of the blob in request.
    * @return Map of cost metrics and actual cost value.
    */
-  Map<String, Double> calculateRequestCost(RestRequest restRequest, BlobInfo blobInfo);
+  Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo);
 }
