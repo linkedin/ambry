@@ -25,7 +25,6 @@ public class ThrottlingRecommendation {
   private final boolean throttle;
   private final Map<QuotaName, Float> quotaUsagePercentage;
   private final int recommendedHttpStatus;
-  private final Map<QuotaName, Double> requestCost;
   private final long retryAfterMs;
 
   /**
@@ -33,15 +32,13 @@ public class ThrottlingRecommendation {
    * @param throttle flag indicating if request should be throttled.
    * @param quotaUsagePercentage A {@link Map} of {@link QuotaName} to usage percentage.
    * @param recommendedHttpStatus overall recommended http status.
-   * @param requestCost A {@link Map} of cost for all {@link QuotaName}s for this request.
    * @param retryAfterMs time in ms after which request should be retried. -1 if request is not throttled.
    */
   public ThrottlingRecommendation(boolean throttle, Map<QuotaName, Float> quotaUsagePercentage,
-      int recommendedHttpStatus, Map<QuotaName, Double> requestCost, long retryAfterMs) {
+      int recommendedHttpStatus, long retryAfterMs) {
     this.throttle = throttle;
     this.quotaUsagePercentage = new HashMap<>(quotaUsagePercentage);
     this.recommendedHttpStatus = recommendedHttpStatus;
-    this.requestCost = new HashMap<>(requestCost);
     this.retryAfterMs = retryAfterMs;
   }
 
@@ -64,13 +61,6 @@ public class ThrottlingRecommendation {
    */
   public int getRecommendedHttpStatus() {
     return this.recommendedHttpStatus;
-  }
-
-  /**
-   * @return A {@link Map} of quota name and cost value for serving the request.
-   */
-  public Map<QuotaName, Double> getRequestCost() {
-    return Collections.unmodifiableMap(this.requestCost);
   }
 
   /**

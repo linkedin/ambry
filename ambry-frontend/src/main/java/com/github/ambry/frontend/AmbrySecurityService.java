@@ -22,6 +22,8 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
@@ -39,6 +41,7 @@ import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -61,6 +64,7 @@ class AmbrySecurityService implements SecurityService {
   private final HostLevelThrottler hostLevelThrottler;
   private final StorageQuotaService storageQuotaService;
   private final QuotaManager quotaManager;
+  private final RequestCostPolicy requestCostPolicy;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
@@ -72,6 +76,7 @@ class AmbrySecurityService implements SecurityService {
     this.hostLevelThrottler = hostLevelThrottler;
     this.storageQuotaService = storageQuotaService;
     this.quotaManager = quotaManager;
+    this.requestCostPolicy = new SimpleUserQuotaRequestCostPolicy();
     isOpen = true;
   }
 
@@ -133,7 +138,6 @@ class AmbrySecurityService implements SecurityService {
         if (quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()) {
-            // TODO Use ThrottlingRecommendation to set response headers about quota usage.
             throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests);
           }
         }
@@ -251,11 +255,13 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
+    Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestCost(restRequest, blobInfo)
+        .entrySet()
+        .stream()
+        .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
+    setRequestCostHeader(requestCost, responseChannel);
     if (quotaManager != null) {
-      ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, blobInfo);
-      if (throttlingRecommendation != null) {
-        setRequestCostHeader(throttlingRecommendation.getRequestCost(), responseChannel);
-      }
+      quotaManager.charge(restRequest, blobInfo, requestCost);
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

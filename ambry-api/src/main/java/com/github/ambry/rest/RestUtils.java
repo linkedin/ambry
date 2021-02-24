@@ -18,7 +18,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
-import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
@@ -284,7 +283,7 @@ public class RestUtils {
     }
   }
 
-  public static final class QuotaHeaders {
+  public static final class RequestCostHeaders {
 
     /**
      * Response header indicating cost incurred by the request against capacity unit and storage quotas.
@@ -951,7 +950,7 @@ public class RestUtils {
    */
   public static void setRequestCostHeader(Map<QuotaName, Double> costMap, RestResponseChannel restResponseChannel) {
     Objects.requireNonNull(costMap, "cost map cannot be null");
-    restResponseChannel.setHeader(QuotaHeaders.REQUEST_COST, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
+    restResponseChannel.setHeader(RequestCostHeaders.REQUEST_COST, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
         costMap.entrySet()
             .stream()
             .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));

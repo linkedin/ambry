@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
@@ -146,6 +147,7 @@ public class FrontendIntegrationTestBase {
     assertTrue("There should have been an end marker", endMarkerFound);
   }
 
+// postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
   /**
    * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
    * @param contentSize the size of the blob to be tested
@@ -216,7 +218,6 @@ public class FrontendIntegrationTestBase {
     headers.add(RestUtils.Headers.LIFE_VERSION, "1");
     undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
-  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
@@ -292,6 +293,7 @@ public class FrontendIntegrationTestBase {
     assertEquals("Correct blob size should be returned in response", Long.toString(contentSize),
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     verifyTrackingHeaders(response);
+    verifyPostRequestCostHeaders(response, contentSize);
     return blobId;
   }
 
@@ -379,6 +381,7 @@ public class FrontendIntegrationTestBase {
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     verifyUserMetadata(expectedHeaders, response, null, null);
+    verifyGetRequestCostHeaders(response, Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)));
   }
 
   /**
@@ -474,6 +477,8 @@ public class FrontendIntegrationTestBase {
         buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
+    verifyGetBlobInfoResponse(response, expectedHeaders, isPrivate, accountName, containerName, usermetadata,
+        responseParts);
   }
 
   void verifyGetBlobInfoResponse(HttpResponse response, HttpHeaders expectedHeaders, boolean isPrivate,
@@ -548,6 +553,7 @@ public class FrontendIntegrationTestBase {
     assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     verifyTrackingHeaders(response);
+    verifyHeadRequestCostHeaders(response);
   }
 
   /**
@@ -703,6 +709,10 @@ public class FrontendIntegrationTestBase {
         usermetadata);
   }
 
+  /**
+   * Verifies right response headers for undelete blob.
+   * @param responseParts {@link com.github.ambry.rest.NettyClient.ResponseParts} object.
+   */
   void verifyUndeleteBlobResponse(NettyClient.ResponseParts responseParts) {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
@@ -867,5 +877,57 @@ public class FrontendIntegrationTestBase {
         response.headers().get(RestUtils.TrackingHeaders.DATACENTER_NAME));
     Assert.assertEquals("Unexpected or missing tracking header for hostname", HOST_NAME,
         response.headers().get(RestUtils.TrackingHeaders.FRONTEND_NAME));
+  }
+
+  /**
+   * Verify the request cost headers were attached to the post response properly.
+   * @param response the {@link HttpResponse} to be verified.
+   * @param contentSize size of the content posted.
+   */
+  private void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
+    double cuCost = contentSize / SimpleUserQuotaRequestCostPolicy.CU_COST_UNIT;
+    cuCost = (cuCost > 1) ? cuCost : 1;
+    double storageCost = contentSize / (double) SimpleUserQuotaRequestCostPolicy.BYTES_IN_GB;
+    verifyCommonRequestCostHeaders(response, cuCost, storageCost, false);
+  }
+
+  /**
+   * Verify the request cost headers were attached to the get response properly.
+   * @param response the {@link HttpResponse} to be verified.
+   * @param contentSize size of the blob.
+   */
+  private void verifyGetRequestCostHeaders(HttpResponse response, long contentSize) {
+    double cuCost = contentSize / SimpleUserQuotaRequestCostPolicy.CU_COST_UNIT;
+    cuCost = (cuCost > 1) ? cuCost : 1;
+    verifyCommonRequestCostHeaders(response, cuCost, 0, true);
+  }
+
+  /**
+   * Verify the request cost headers were attached to the HEAD response properly.
+   * @param response the {@link HttpResponse} to be verified.
+   */
+  private void verifyHeadRequestCostHeaders(HttpResponse response) {
+    verifyCommonRequestCostHeaders(response, 1, 0, true);
+  }
+
+  /**
+   * Verify the request cost headers were attached to the response properly.
+   * @param response the {@link HttpResponse} to be verified.
+   */
+  private void verifyCommonRequestCostHeaders(HttpResponse response, double expectedCuCost, double expectedStorageCost,
+      boolean isRead) {
+    String cuUnitName = isRead ? QuotaName.READ_CAPACITY_UNIT.name() : QuotaName.WRITE_CAPACITY_UNIT.name();
+    Assert.assertTrue("Request cost header should be present",
+        response.headers().contains(RestUtils.RequestCostHeaders.REQUEST_COST));
+    Map<String, String> costMap = RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(
+        response.headers().get(RestUtils.RequestCostHeaders.REQUEST_COST));
+    Assert.assertEquals("There should be two entries in request cost map", 2, costMap.size());
+    Assert.assertTrue(cuUnitName + " should be present in cost map", costMap.containsKey(cuUnitName));
+    Assert.assertTrue(QuotaName.STORAGE_IN_GB.name() + " should be present in cost map",
+        costMap.containsKey(QuotaName.STORAGE_IN_GB.name()));
+    Assert.assertEquals("Invalid " + QuotaName.STORAGE_IN_GB.name() + " cost.", expectedStorageCost,
+        Double.parseDouble(costMap.get(QuotaName.STORAGE_IN_GB.name())), 0.0001);
+    Assert.assertEquals("Invalid " + cuUnitName + " cost.", expectedCuCost, Double.parseDouble(costMap.get(cuUnitName)),
+        0.0001);
   }
 }

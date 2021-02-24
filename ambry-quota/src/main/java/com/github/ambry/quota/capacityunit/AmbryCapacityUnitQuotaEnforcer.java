@@ -14,12 +14,13 @@
 package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import java.util.Map;
 
 
 /**
@@ -46,8 +47,9 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo) {
-    if (isReadRequest(restRequest)) {
+  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
+      Map<QuotaName, Double> requestCostMap) {
+    if (requestCostMap.containsKey(QuotaName.READ_CAPACITY_UNIT)) {
       return allowReadRecommendation;
     } else {
       return allowWriteRecommendation;

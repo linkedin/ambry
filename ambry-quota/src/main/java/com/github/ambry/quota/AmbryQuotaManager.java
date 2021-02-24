@@ -78,12 +78,13 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo) {
+  public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+      Map<QuotaName, Double> requestCostMap) {
     if (!quotaConfig.requestThrottlingEnabled || requestQuotaEnforcers.isEmpty()) {
       return null;
     }
     return throttlePolicy.recommend(requestQuotaEnforcers.stream()
-        .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo))
+        .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
         .collect(Collectors.toList()));
   }
 

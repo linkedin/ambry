@@ -38,7 +38,6 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
       requestCost.put(recommendation.getQuotaName(), recommendation.getRequestCost());
       retryAfterMs = Math.max(recommendation.getRetryAfterMs(), retryAfterMs);
     }
-    return new ThrottlingRecommendation(shouldThrottle, quotaUsagePercentage, recommendedHttpStatus, requestCost,
-        retryAfterMs);
+    return new ThrottlingRecommendation(shouldThrottle, quotaUsagePercentage, recommendedHttpStatus, retryAfterMs);
   }
 }

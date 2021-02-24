@@ -820,7 +820,7 @@ public class RestUtilsTest {
     Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
     assertEquals("Expected one header", 1, responseHeaders.size());
     assertEquals("Unexpected quota header value", expectedQuotaHeaderValue,
-        responseHeaders.get(RestUtils.QuotaHeaders.REQUEST_COST));
+        responseHeaders.get(RestUtils.RequestCostHeaders.REQUEST_COST));
 
     // test for null cost map
     try {
@@ -835,7 +835,7 @@ public class RestUtilsTest {
     RestUtils.setRequestCostHeader(costMap, responseChannel);
     responseHeaders = responseChannel.getResponseHeaders();
     assertEquals("Expected one header", 1, responseHeaders.size());
-    assertEquals("Unexpected quota header value", "", responseHeaders.get(RestUtils.QuotaHeaders.REQUEST_COST));
+    assertEquals("Unexpected quota header value", "", responseHeaders.get(RestUtils.RequestCostHeaders.REQUEST_COST));
   }
 
   /**
