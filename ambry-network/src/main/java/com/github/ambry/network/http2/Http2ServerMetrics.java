@@ -27,6 +27,7 @@ public class Http2ServerMetrics {
   public final Histogram requestEnqueueTime;
   public final Histogram requestQueuingTime;
   public final Histogram requestTotalProcessingTime;
+  public final Histogram responseFlushTime;
 
   public final Counter requestResponseChannelErrorCount;
   public final Counter http2ParentExceptionCount;
@@ -37,6 +38,8 @@ public class Http2ServerMetrics {
     requestQueuingTime = registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "RequestQueuingTime"));
     requestTotalProcessingTime =
         registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "RequestTotalProcessingTime"));
+    responseFlushTime =
+        registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "ResponseFlushTime"));
 
     requestResponseChannelErrorCount =
         registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelErrorCount"));

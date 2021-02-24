@@ -144,4 +144,17 @@ public class NettyServer implements NioServer {
     b.bind(port).sync();
     logger.info("NettyServer now listening on port {}", port);
   }
+
+  /**
+   * Get worker EventLoopGroup.
+   */
+  public EventLoopGroup getWorkerEventLoopGroup() {
+    return workerGroup;
+  }
+  /**
+   * Get boss EventLoopGroup.
+   */
+  public EventLoopGroup getBossEventLoopGroup() {
+    return bossGroup;
+  }
 }

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.network.http2;
 
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
@@ -35,7 +37,6 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
-import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +76,9 @@ public class Http2NetworkClient implements NetworkClient {
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
     correlationIdInFlightToChannelMap = new ConcurrentHashMap<>();
+    Gauge<Long> nettyPendingTasks = () -> Http2Utils.getNumberOfPendingTasks(eventLoopGroup);
+    http2ClientMetrics.registry.register(MetricRegistry.name(Http2NetworkClient.class, "NettyPendingTasks"),
+        nettyPendingTasks);
   }
 
   @Override

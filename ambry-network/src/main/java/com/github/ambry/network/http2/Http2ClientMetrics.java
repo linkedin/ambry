@@ -25,6 +25,7 @@ import com.codahale.metrics.MetricRegistry;
  */
 public class Http2ClientMetrics {
 
+  public final MetricRegistry registry;
   public final Histogram http2ConnectionAcquireTime;
   public final Histogram http2StreamAcquireTime;
   public final Histogram http2FirstStreamAcquireTime;
@@ -56,6 +57,7 @@ public class Http2ClientMetrics {
   public final Counter http2StreamExceptionCount;
 
   public Http2ClientMetrics(MetricRegistry registry) {
+    this.registry = registry;
     http2ConnectionAcquireTime =
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ConnectionAcquireTime"));
     http2StreamAcquireTime =
