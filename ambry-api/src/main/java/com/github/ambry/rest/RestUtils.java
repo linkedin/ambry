@@ -22,6 +22,7 @@ import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -251,6 +252,16 @@ public class RestUtils {
      * (0 byte) blob instead of returning a 416 error.
      */
     public final static String RESOLVE_RANGE_ON_EMPTY_BLOB = "x-ambry-resolve-range-on-empty-blob";
+
+    /**
+     * Request header to carry clusterName for GetStatsReport request.
+     */
+    public final static String GET_STATS_REPORT_CLUSTER = "x-ambry-stats-cluster";
+
+    /**
+     * Request header to carry {@link StatsReportType} for GetStatsReport request.
+     */
+    public final static String GET_STATS_REPORT_TYPE = "x-ambry-stats-type";
   }
 
   public static final class TrackingHeaders {

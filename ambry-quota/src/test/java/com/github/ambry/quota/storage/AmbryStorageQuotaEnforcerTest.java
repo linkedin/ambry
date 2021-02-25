@@ -39,7 +39,7 @@ public class AmbryStorageQuotaEnforcerTest {
   public void testInitEmptyStorageUsage() {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    TestUtils.assertContainerMap(Collections.EMPTY_MAP, enforcer.getStorageUsage());
+    assertEquals(Collections.EMPTY_MAP, enforcer.getStorageUsage());
   }
 
   /**
@@ -50,7 +50,7 @@ public class AmbryStorageQuotaEnforcerTest {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     Map<String, Map<String, Long>> containerUsage = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageUsage(containerUsage);
-    TestUtils.assertContainerMap(containerUsage, enforcer.getStorageUsage());
+    assertEquals(containerUsage, enforcer.getStorageUsage());
   }
 
   /**
@@ -60,7 +60,7 @@ public class AmbryStorageQuotaEnforcerTest {
   public void testInitEmptyStorageQuota() {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     enforcer.initStorageQuota(Collections.EMPTY_MAP);
-    TestUtils.assertContainerMap(Collections.EMPTY_MAP, enforcer.getStorageQuota());
+    assertEquals(Collections.EMPTY_MAP, enforcer.getStorageQuota());
   }
 
   /**
@@ -71,7 +71,7 @@ public class AmbryStorageQuotaEnforcerTest {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     Map<String, Map<String, Long>> containerQuota = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageQuota(containerQuota);
-    TestUtils.assertContainerMap(containerQuota, enforcer.getStorageQuota());
+    assertEquals(containerQuota, enforcer.getStorageQuota());
   }
 
   /**
@@ -83,7 +83,7 @@ public class AmbryStorageQuotaEnforcerTest {
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
-    TestUtils.assertContainerMap(expectedQuota, enforcer.getStorageQuota());
+    assertEquals(expectedQuota, enforcer.getStorageQuota());
 
     StorageQuotaSource.Listener listener = enforcer.getQuotaSourceListener();
     int numUpdates = 10;
@@ -91,7 +91,7 @@ public class AmbryStorageQuotaEnforcerTest {
       Map<String, Map<String, Long>> additionalUsage = TestUtils.makeStorageMap(1, 10, 10000, 1000);
       expectedQuota.put(String.valueOf(initNumAccounts + i), additionalUsage.remove("1"));
       listener.onNewContainerStorageQuota(expectedQuota);
-      TestUtils.assertContainerMap(expectedQuota, enforcer.getStorageQuota());
+      assertEquals(expectedQuota, enforcer.getStorageQuota());
     }
   }
 
@@ -104,7 +104,7 @@ public class AmbryStorageQuotaEnforcerTest {
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedUsage = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageUsage(expectedUsage);
-    TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+    assertEquals(expectedUsage, enforcer.getStorageUsage());
 
     // Adding extra account and container usage
     enforcer.getStorageUsage().put("1000", new ConcurrentHashMap<String, Long>());
@@ -128,7 +128,7 @@ public class AmbryStorageQuotaEnforcerTest {
       listener.onNewContainerStorageUsage(expectedUsage);
       expectedUsage.put("1000", new HashMap<String, Long>());
       expectedUsage.get("1000").put("1", new Long(10000));
-      TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+      assertEquals(expectedUsage, enforcer.getStorageUsage());
       expectedUsage.remove("1000");
     }
   }
@@ -163,7 +163,7 @@ public class AmbryStorageQuotaEnforcerTest {
       assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
     }
 
-    TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+    assertEquals(expectedUsage, enforcer.getStorageUsage());
   }
 
   /**
@@ -213,7 +213,7 @@ public class AmbryStorageQuotaEnforcerTest {
           });
       assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
     }
-    TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+    assertEquals(expectedUsage, enforcer.getStorageUsage());
   }
 
   /**

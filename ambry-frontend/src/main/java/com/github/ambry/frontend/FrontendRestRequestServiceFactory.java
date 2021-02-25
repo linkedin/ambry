@@ -95,10 +95,9 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       StorageQuotaService storageQuotaService = null;
+      AccountStatsMySqlStore mysqlStore = new AccountStatsMySqlStoreFactory(verifiableProperties, clusterMapConfig,
+          new StatsManagerConfig(verifiableProperties), clusterMap.getMetricRegistry()).getAccountStatsMySqlStore();
       if (frontendConfig.enableStorageQuotaService) {
-        // TODO: after enabling StatsReport API, add mysql store to frontend rest request service.
-        AccountStatsMySqlStore mysqlStore = new AccountStatsMySqlStoreFactory(verifiableProperties, clusterMapConfig,
-            new StatsManagerConfig(verifiableProperties), clusterMap.getMetricRegistry()).getAccountStatsMySqlStore();
         storageQuotaService =
             Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
                 mysqlStore, clusterMap.getMetricRegistry()).getStorageQuotaService();
@@ -110,7 +109,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
           securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
           accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
-          clusterMapConfig.clusterMapClusterName, storageQuotaService);
+          clusterMapConfig.clusterMapClusterName, storageQuotaService, mysqlStore);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);
     }

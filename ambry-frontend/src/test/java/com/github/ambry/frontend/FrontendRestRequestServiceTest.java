@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
@@ -70,6 +71,8 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.server.StatsReportType;
+import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -121,6 +124,7 @@ import static org.mockito.Mockito.*;
  */
 public class FrontendRestRequestServiceTest {
   private final static QuotaManager QUOTA_MANAGER;
+  private final static String CLUSTER_NAME = "ambry-test";
 
   static {
     try {
@@ -131,6 +135,7 @@ public class FrontendRestRequestServiceTest {
       throw new IllegalStateException(e);
     }
   }
+
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -140,6 +145,7 @@ public class FrontendRestRequestServiceTest {
   private final FrontendTestResponseHandler responseHandler;
   private final InMemoryRouter router;
   private final MockClusterMap clusterMap;
+  private final MockAccountStatsStore accountStatsStore;
   private final BlobId referenceBlobId;
   private final String referenceBlobIdStr;
   private final short blobIdVersion;
@@ -205,6 +211,7 @@ public class FrontendRestRequestServiceTest {
     }
     blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
+    accountStatsStore = new MockAccountStatsStore(CLUSTER_NAME);
     responseHandler = new FrontendTestResponseHandler();
     frontendRestRequestService = getFrontendRestRequestService();
     referenceBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
@@ -245,7 +252,7 @@ public class FrontendRestRequestServiceTest {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
     try {
       frontendRestRequestService.start();
       fail("Test should fail if ResponseHandler is not setup");
@@ -831,7 +838,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     JSONObject headers = new JSONObject();
@@ -854,7 +861,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     // test good requests
@@ -1008,6 +1015,55 @@ public class FrontendRestRequestServiceTest {
   }
 
   /**
+   * Tests the handling of {@link Operations#GET_STATS_REPORT} get requests.
+   * @throws Exception
+   */
+  @Test
+  public void getStatsReportTest() throws Exception {
+    StatsSnapshot accountStatsSnapshot =
+        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
+    accountStatsStore.storeAggregatedAccountStats(accountStatsSnapshot);
+    StatsSnapshot partitionClassStatsSnapshot =
+        TestUtils.makeAggregatedPartitionClassStats(new String[]{"PartitionClass1", "PartitionClass2"}, 10, 10);
+    accountStatsStore.storeAggregatedPartitionClassStats(partitionClassStatsSnapshot);
+    ObjectMapper mapper = new ObjectMapper();
+
+    // construct a request to get account stats
+    JSONObject headers = new JSONObject();
+    headers.put(RestUtils.Headers.GET_STATS_REPORT_CLUSTER, CLUSTER_NAME);
+    headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.ACCOUNT_REPORT.name());
+    RestRequest request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(request, restResponseChannel);
+    StatsSnapshot accountStatsFromService =
+        mapper.readValue(restResponseChannel.getResponseBody(), StatsSnapshot.class);
+    assertEquals(accountStatsSnapshot, accountStatsFromService);
+
+    // construct a request to get partition class stats
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.GET_STATS_REPORT_CLUSTER, CLUSTER_NAME);
+    headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.PARTITION_CLASS_REPORT.name());
+    request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(request, restResponseChannel);
+    StatsSnapshot partitionClassStatsFromService =
+        mapper.readValue(restResponseChannel.getResponseBody(), StatsSnapshot.class);
+    assertEquals(partitionClassStatsSnapshot, partitionClassStatsFromService);
+
+    // test clustername not found case to ensure that it goes through the exception path
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.GET_STATS_REPORT_CLUSTER, "WRONG_CLUSTER");
+    headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.ACCOUNT_REPORT.name());
+    request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
+    try {
+      doOperation(request, new MockRestResponseChannel());
+      fail("Operation should have failed");
+    } catch (RestServiceException e) {
+      assertEquals("ErrorCode not as expected", RestServiceErrorCode.NotFound, e.getErrorCode());
+    }
+  }
+
+  /**
    * Tests the handling of {@link Operations#GET_SIGNED_URL} requests.
    * @throws Exception
    */
@@ -1118,7 +1174,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
@@ -1501,7 +1557,7 @@ public class FrontendRestRequestServiceTest {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     return frontendRestRequestService;
   }
@@ -2200,7 +2256,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, converterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
@@ -2232,7 +2288,7 @@ public class FrontendRestRequestServiceTest {
       frontendRestRequestService =
           new FrontendRestRequestService(frontendConfig, frontendMetrics, new FrontendTestRouter(), clusterMap,
               idConverterFactory, securityFactory, urlSigningService, idSigningService, null, accountService,
-              accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+              accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
       frontendRestRequestService.setupResponseHandler(responseHandler);
       frontendRestRequestService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
@@ -2291,7 +2347,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     for (RestMethod restMethod : RestMethod.values()) {
@@ -2867,7 +2923,8 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     }
 
     @Override
-    public void processRequestCharges(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo) {}
+    public void processRequestCharges(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo) {
+    }
 
     @Override
     public void close() {

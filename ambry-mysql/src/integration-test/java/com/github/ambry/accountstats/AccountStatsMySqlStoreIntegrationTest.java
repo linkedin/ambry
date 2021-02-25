@@ -77,7 +77,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
   public AccountStatsMySqlStoreIntegrationTest(int batchSize) throws Exception {
     this.batchSize = batchSize;
-    mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1, false);
+    mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
   }
 
   @Before
@@ -91,9 +91,9 @@ public class AccountStatsMySqlStoreIntegrationTest {
    */
   @Test
   public void testMultiStoreStats() throws Exception {
-    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clusterName1, hostname1, port1, false);
-    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clusterName1, hostname2, port2, false);
-    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3, false);
+    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
+    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clusterName1, hostname2, port2);
+    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3);
 
     StatsWrapper stats1 = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
     StatsWrapper stats2 = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
@@ -114,7 +114,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
   @Test
   public void testEmptyStats() throws Exception {
-    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1, false);
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
     StatsWrapper stats = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
     stats.getSnapshot().getSubMap().put(Utils.statsPartitionKey((short) 10), new StatsSnapshot(0L, null));
     mySqlStore.storeAccountStats(stats);
@@ -148,7 +148,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
    */
   @Test
   public void testStoreMulitpleWrites() throws Exception {
-    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1, false);
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
     StatsWrapper stats1 = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
     mySqlStore.storeAccountStats(stats1);
     StatsWrapper stats2 =
@@ -171,10 +171,15 @@ public class AccountStatsMySqlStoreIntegrationTest {
   @Test
   public void testAggregatedStats() throws Exception {
     Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-    StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
+    StatsSnapshot snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages);
     mySqlStore.storeAggregatedAccountStats(snapshot);
     Map<String, Map<String, Long>> obtainedContainerStorageUsages = mySqlStore.queryAggregatedAccountStats();
-    TestUtils.assertContainerMap(containerStorageUsages, obtainedContainerStorageUsages);
+    assertEquals(containerStorageUsages, obtainedContainerStorageUsages);
+    StatsSnapshot obtainedSnapshot = mySqlStore.queryAggregatedAccountStatsByClusterName(clusterName1);
+    assertEquals(snapshot, obtainedSnapshot);
+
+    // Fetching aggregated account stats for clustername2 should result in a null;
+    assertNull(mySqlStore.queryAggregatedAccountStatsByClusterName(clusterName2));
 
     // Change one value and store it to mysql database again
     StatsSnapshot newSnapshot = new StatsSnapshot(snapshot);
@@ -187,7 +192,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     containerStorageUsages.get("1").put("1", 1L);
     mySqlStore.storeAggregatedAccountStats(newSnapshot);
     obtainedContainerStorageUsages = mySqlStore.queryAggregatedAccountStats();
-    TestUtils.assertContainerMap(containerStorageUsages, obtainedContainerStorageUsages);
+    assertEquals(containerStorageUsages, obtainedContainerStorageUsages);
   }
 
   @Test
@@ -196,7 +201,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     Map<String, Map<String, Long>> currentContainerStorageUsages = mySqlStore.queryAggregatedAccountStats();
     if (currentContainerStorageUsages.size() == 0) {
       Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-      StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
+      StatsSnapshot snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages);
       mySqlStore.storeAggregatedAccountStats(snapshot);
       currentContainerStorageUsages = mySqlStore.queryAggregatedAccountStats();
     }
@@ -204,18 +209,18 @@ public class AccountStatsMySqlStoreIntegrationTest {
     Assert.assertEquals("", mySqlStore.queryRecordedMonth());
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
     Map<String, Map<String, Long>> monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedAccountStats();
-    TestUtils.assertContainerMap(currentContainerStorageUsages, monthlyContainerStorageUsages);
+    assertEquals(currentContainerStorageUsages, monthlyContainerStorageUsages);
     String obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 
     // Change the value and store it back to mysql database
     monthValue = "2020-02";
     currentContainerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-    StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(currentContainerStorageUsages);
+    StatsSnapshot snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(currentContainerStorageUsages);
     mySqlStore.storeAggregatedAccountStats(snapshot);
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
     monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedAccountStats();
-    TestUtils.assertContainerMap(currentContainerStorageUsages, monthlyContainerStorageUsages);
+    assertEquals(currentContainerStorageUsages, monthlyContainerStorageUsages);
     obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
   }
@@ -226,7 +231,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     testMultiStoreStats();
     StatsWrapper accountStats1 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
     StatsWrapper accountStats2 = mySqlStore.queryAccountStatsByHost(hostname2, port2);
-    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3, false);
+    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3);
     StatsWrapper accountStats3 = mySqlStore3.queryAccountStatsByHost(hostname3, port3);
 
     // From this account stats, create partition class stats;
@@ -275,23 +280,24 @@ public class AccountStatsMySqlStoreIntegrationTest {
   public void testAggregatedPartitionClassStats() throws Exception {
     testHostPartitionClassStats();
     Map<String, Set<Integer>> partitionNameAndIds = mySqlStore.queryPartitionNameAndIds();
-    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3, false);
+    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3);
 
     // Now we should have partition class names and partition ids in database
     // Construct an aggregated partition class report
     StatsSnapshot aggregated =
-        generateAggregatedPartitionClassStats(partitionNameAndIds.keySet().toArray(new String[0]), 10, 10);
+        TestUtils.makeAggregatedPartitionClassStats(partitionNameAndIds.keySet().toArray(new String[0]), 10, 10);
     mySqlStore.storeAggregatedPartitionClassStats(aggregated);
 
     partitionNameAndIds = mySqlStore3.queryPartitionNameAndIds();
     StatsSnapshot aggregated3 =
-        generateAggregatedPartitionClassStats(partitionNameAndIds.keySet().toArray(new String[0]), 10, 10);
+        TestUtils.makeAggregatedPartitionClassStats(partitionNameAndIds.keySet().toArray(new String[0]), 10, 10);
     mySqlStore3.storeAggregatedPartitionClassStats(aggregated3);
 
-    StatsSnapshot obtained = mySqlStore.queryAggregatedPartitionClassStatsOf();
+    StatsSnapshot obtained = mySqlStore.queryAggregatedPartitionClassStats();
     assertEquals(aggregated, obtained);
+    assertNull(mySqlStore.queryAggregatedPartitionClassStatsByClusterName("random-cluster"));
 
-    StatsSnapshot obtained3 = mySqlStore3.queryAggregatedPartitionClassStatsOf();
+    StatsSnapshot obtained3 = mySqlStore3.queryAggregatedPartitionClassStats();
     assertEquals(aggregated3, obtained3);
 
     // Change one value and store it to mysql database again
@@ -303,13 +309,13 @@ public class AccountStatsMySqlStoreIntegrationTest {
         .setValue(1);
     newSnapshot.updateValue();
     mySqlStore.storeAggregatedPartitionClassStats(aggregated);
-    obtained = mySqlStore.queryAggregatedPartitionClassStatsOf();
+    obtained = mySqlStore.queryAggregatedPartitionClassStats();
     assertEquals(aggregated, obtained);
   }
 
-  private AccountStatsMySqlStore createAccountStatsMySqlStore(String clusterName, String hostname, int port,
-      boolean withLocalbackup) throws Exception {
-    Path localBackupFilePath = withLocalbackup ? createLocalBackup(10, 10, 1) : createTemporaryFile();
+  private AccountStatsMySqlStore createAccountStatsMySqlStore(String clusterName, String hostname, int port)
+      throws Exception {
+    Path localBackupFilePath = createTemporaryFile();
     Properties configProps = Utils.loadPropsFromResource("accountstats_mysql.properties");
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, clusterName);
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, hostname);
@@ -321,14 +327,6 @@ public class AccountStatsMySqlStoreIntegrationTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
         new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsMySqlStore();
-  }
-
-  private static Path createLocalBackup(int numPartitions, int numAccounts, int numContainers) throws IOException {
-    Path localBackupFilePath = createTemporaryFile();
-    ObjectMapper objectMapper = new ObjectMapper();
-    objectMapper.writeValue(localBackupFilePath.toFile(),
-        generateStatsWrapper(numPartitions, numAccounts, numContainers, StatsReportType.ACCOUNT_REPORT));
-    return localBackupFilePath;
   }
 
   private static Path createTemporaryFile() throws IOException {
@@ -373,7 +371,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     if (snapshot1.getSubMap() == null) {
       assertNull(snapshot2.getSubMap());
     } else {
-      assertEquals("Snapshot Submap size mismatch", snapshot1.getSubMap().size(), snapshot2.getSubMap().size());
+      assertEquals("Snapshot submap size mismatch", snapshot1.getSubMap().size(), snapshot2.getSubMap().size());
       for (String key : snapshot1.getSubMap().keySet()) {
         assertTrue(snapshot2.getSubMap().containsKey(key));
         assertTwoStatsSnapshots(snapshot1.getSubMap().get(key), snapshot2.getSubMap().get(key));
@@ -411,26 +409,5 @@ public class AccountStatsMySqlStoreIntegrationTest {
     }
     return new StatsWrapper(new StatsHeader(accountStats.getHeader()),
         new StatsSnapshot(originHostStats.getValue(), partitionClassSubMap));
-  }
-
-  private StatsSnapshot generateAggregatedPartitionClassStats(String[] partitionClassNames, int numAccount,
-      int numContainer) {
-    Random random = new Random();
-    long maxValue = 10000;
-    StatsSnapshot finalStats = new StatsSnapshot(0L, new HashMap<>());
-    for (String className : partitionClassNames) {
-      StatsSnapshot classNameStats = new StatsSnapshot(0L, new HashMap<>());
-      finalStats.getSubMap().put(className, classNameStats);
-      for (int ia = 0; ia < numAccount; ia++) {
-        for (int ic = 0; ic < numContainer; ic++) {
-          String key = Utils.partitionClassStatsAccountContainerKey((short) ia, (short) ic);
-          classNameStats.getSubMap().put(key, new StatsSnapshot(random.nextLong() % maxValue, null));
-        }
-      }
-      long classNameValue = classNameStats.getSubMap().values().stream().mapToLong(StatsSnapshot::getValue).sum();
-      classNameStats.setValue(classNameValue);
-    }
-    finalStats.setValue(finalStats.getSubMap().values().stream().mapToLong(StatsSnapshot::getValue).sum());
-    return finalStats;
   }
 }
