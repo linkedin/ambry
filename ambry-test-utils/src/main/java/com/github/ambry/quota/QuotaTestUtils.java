@@ -49,15 +49,4 @@ public class QuotaTestUtils {
         new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString());
     return new QuotaConfig(new VerifiableProperties(properties));
   }
-
-  public static String createQuotaEnforcerSourceProp(Map<String, String> enforcerSourceMap) {
-    JSONArray jsonArray = new JSONArray();
-    for(Map.Entry enforcerSourceEntry : enforcerSourceMap.entrySet()) {
-      JSONObject jsonObject = new JSONObject();
-      jsonObject.put(QuotaConfig.ENFORCER_STR, enforcerSourceEntry.getKey());
-      jsonObject.put(QuotaConfig.SOURCE_STR, enforcerSourceEntry.getValue());
-      jsonArray.put(jsonObject);
-    }
-    return new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString();
-  }
 }

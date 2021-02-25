@@ -49,7 +49,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -71,9 +71,6 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
-  private static final int PLAINTEXT_SERVER_PORT = 1174;
-  private static final int SSL_SERVER_PORT = 1175;
-  private static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
   private static final String DEFAULT_PARTITION_CLASS = "default-partition-class";
   private static final MockClusterMap CLUSTER_MAP;
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS;
@@ -83,7 +80,6 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static Account ACCOUNT;
   private static Container CONTAINER;
-  private static boolean enableUndeleteTested = false;
   private static RestServer ambryRestServer = null;
   private final boolean throttleRequest;
 
@@ -96,16 +92,11 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   }
 
   /**
-   * Running it many times so that keep-alive bugs are caught.
-   * We also want to test using both the SSL and plaintext ports.
-   * @return a list of arrays that represent the constructor arguments for that run of the test.
+   * @return a list of arrays that represent the constructor argument to make quota manager accept or reject requests.
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    List<Object[]> parameters = new ArrayList<>();
-    parameters.add(new Object[]{true});
-    parameters.add(new Object[]{false});
-    return parameters;
+    return Arrays.asList(new Object[][]{{true}, {false}});
   }
 
   /**

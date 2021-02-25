@@ -20,10 +20,10 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.HostLevelThrottler;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.HostThrottleConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -46,7 +46,6 @@ import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
@@ -1031,13 +1030,13 @@ public class AmbrySecurityServiceTest {
     }
 
     @Override
-    public void setStatus(ResponseStatus status) throws RestServiceException {
-      throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
+    public ResponseStatus getStatus() {
+      throw new IllegalStateException("Not implemented");
     }
 
     @Override
-    public ResponseStatus getStatus() {
-      throw new IllegalStateException("Not implemented");
+    public void setStatus(ResponseStatus status) throws RestServiceException {
+      throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
     }
 
     @Override

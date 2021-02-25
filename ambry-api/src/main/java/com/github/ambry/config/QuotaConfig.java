@@ -92,9 +92,9 @@ public class QuotaConfig {
 
   /**
    * Build the default quota enforcer and source pair json.
-   * @return Json string.
+   * @return JSONObject representing the pair json.
    */
-  public static JSONObject buildDefaultQuotaEnforcerSourceInfoPairJson() {
+  private static JSONObject buildDefaultQuotaEnforcerSourceInfoPairJson() {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put(ENFORCER_STR, "com.github.ambry.quota.capacityunit.AmbryCapacityUnitQuotaEnforcerFactory");
     jsonObject.put(SOURCE_STR, "com.github.ambry.quota.capacityunit.UnlimitedQuotaSourceFactory");

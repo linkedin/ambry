@@ -65,6 +65,9 @@ import static org.junit.Assert.*;
 
 
 public class FrontendIntegrationTestBase {
+  static final int PLAINTEXT_SERVER_PORT = 1174;
+  static final int SSL_SERVER_PORT = 1175;
+  static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
   static final String DATA_CENTER_NAME = "Datacenter-Name";
   static final String HOST_NAME = "localhost";
   static final String CLUSTER_NAME = "Cluster-name";
@@ -322,8 +325,8 @@ public class FrontendIntegrationTestBase {
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate,
-        expectedContent, accountName, containerName);
+    verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate, expectedContent,
+        accountName, containerName);
   }
 
   /**
@@ -339,9 +342,9 @@ public class FrontendIntegrationTestBase {
    * @param containerName the container name that should be in the response
    * @throws RestServiceException
    */
-  void verifyGetBlobResponse(NettyClient.ResponseParts responseParts, ByteRange range,
-      boolean resolveRangeOnEmptyBlob, HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent,
-      String accountName, String containerName) throws RestServiceException {
+  void verifyGetBlobResponse(NettyClient.ResponseParts responseParts, ByteRange range, boolean resolveRangeOnEmptyBlob,
+      HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
+      String containerName) throws RestServiceException {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status",
         range == null ? HttpResponseStatus.OK : HttpResponseStatus.PARTIAL_CONTENT, response.status());

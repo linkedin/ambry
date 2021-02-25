@@ -34,8 +34,6 @@ import org.json.JSONObject;
  * {@link QuotaManager} implementation to handle all the quota and quota enforcement for Ambry.
  */
 public class AmbryQuotaManager implements QuotaManager {
-  private static final ThrottlingRecommendation allowRecommendation =
-      new ThrottlingRecommendation(false, new HashMap<>(), 200, new HashMap<>(), -1);
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
@@ -43,6 +41,9 @@ public class AmbryQuotaManager implements QuotaManager {
   /**
    * Constructor for {@link AmbryQuotaManager}.
    * @param quotaConfig {@link QuotaConfig} object.
+   * @param addedRequestQuotaEnforcers {@link List} of {@link QuotaEnforcer}s that are initialized outside this class.
+   * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
+   * @param accountService {@link AccountService} object to get all the accounts and container information.
    * @throws ReflectiveOperationException in case of any exception.
    */
   public AmbryQuotaManager(QuotaConfig quotaConfig, List<QuotaEnforcer> addedRequestQuotaEnforcers,
@@ -103,6 +104,11 @@ public class AmbryQuotaManager implements QuotaManager {
     return quotaConfig;
   }
 
+  /**
+   * Parse the json config for {@link QuotaEnforcer} and {@link QuotaSource} factory pair and return them in a {@link Map}.
+   * @param quotaEnforcerSourceJson json config string.
+   * @return Map of {@link QuotaEnforcer} and {@link QuotaSource} factory pair.
+   */
   private Map<String, String> parseQuotaEnforcerAndSourceInfo(String quotaEnforcerSourceJson) {
     if (quotaEnforcerSourceJson.isEmpty()) {
       return Collections.emptyMap();
@@ -119,6 +125,14 @@ public class AmbryQuotaManager implements QuotaManager {
     return quotaEnforcerSourceMap;
   }
 
+  /**
+   * Create the specified {@link QuotaSource} objects.
+   * @param quotaSourceFactoryClasses {@link Collection} of {@link QuotaSourceFactory} classes.
+   * @param quotaConfig {@link QuotaConfig} object.
+   * @param accountService {@link AccountService} object.
+   * @return Map of {@link QuotaSourceFactory} class names to {@link QuotaSource} objects.
+   * @throws ReflectiveOperationException
+   */
   private Map<String, QuotaSource> buildQuotaSources(Collection<String> quotaSourceFactoryClasses,
       QuotaConfig quotaConfig, AccountService accountService) throws ReflectiveOperationException {
     Map<String, QuotaSource> quotaSourceObjectMap = new HashMap<>();
