@@ -2867,6 +2867,9 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     }
 
     @Override
+    public void processRequestCharges(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo) {}
+
+    @Override
     public void close() {
       isOpen = false;
     }

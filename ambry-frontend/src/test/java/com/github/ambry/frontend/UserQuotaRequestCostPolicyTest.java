@@ -29,9 +29,9 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Test for {@link SimpleUserQuotaRequestCostPolicy}.
+ * Test for {@link UserQuotaRequestCostPolicy}.
  */
-public class SimpleQuotaRequestCostPolicyTest {
+public class UserQuotaRequestCostPolicyTest {
   private final static String TEST_SERVICE_ID = "test-service-id";
   private final static short TEST_ACCOUNT_ID = 1;
   private final static short TEST_CONTAINER_ID = 1;
@@ -40,7 +40,7 @@ public class SimpleQuotaRequestCostPolicyTest {
 
   @Test
   public void testCalculateRequestCost() throws UnsupportedEncodingException, URISyntaxException {
-    SimpleUserQuotaRequestCostPolicy quotaRequestCostPolicy = new SimpleUserQuotaRequestCostPolicy();
+    UserQuotaRequestCostPolicy quotaRequestCostPolicy = new UserQuotaRequestCostPolicy();
 
     RestResponseChannel restResponseChannel = mock(RestResponseChannel.class);
     when(restResponseChannel.getHeader(anyString())).thenReturn(0);
@@ -105,9 +105,11 @@ public class SimpleQuotaRequestCostPolicyTest {
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0.00390625);
 
-    // test for null blob info.
+    // test for PUT with null blob info.
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, null);
-    assertTrue("cost map should be empty if blob info is null", costMap.isEmpty());
+    verifyWriteCost(costMap, 1, 0.00390625);
+
+    // TODO add a range request case with large range
   }
 
   /**

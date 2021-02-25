@@ -673,6 +673,7 @@ public class FrontendIntegrationTestBase {
     assertNoContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     verifyTrackingHeaders(response);
+    verifyTtlUpdateRequestCostHeaders(response);
   }
 
   /**
@@ -885,9 +886,9 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the content posted.
    */
   private void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / SimpleUserQuotaRequestCostPolicy.CU_COST_UNIT;
+    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
     cuCost = (cuCost > 1) ? cuCost : 1;
-    double storageCost = contentSize / (double) SimpleUserQuotaRequestCostPolicy.BYTES_IN_GB;
+    double storageCost = contentSize / UserQuotaRequestCostPolicy.BYTES_IN_GB;
     verifyCommonRequestCostHeaders(response, cuCost, storageCost, false);
   }
 
@@ -897,7 +898,7 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the blob.
    */
   private void verifyGetRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / SimpleUserQuotaRequestCostPolicy.CU_COST_UNIT;
+    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
     cuCost = (cuCost > 1) ? cuCost : 1;
     verifyCommonRequestCostHeaders(response, cuCost, 0, true);
   }
@@ -908,6 +909,14 @@ public class FrontendIntegrationTestBase {
    */
   private void verifyHeadRequestCostHeaders(HttpResponse response) {
     verifyCommonRequestCostHeaders(response, 1, 0, true);
+  }
+
+  /**
+   * Verify the request cost headers were attached to the HEAD response properly.
+   * @param response the {@link HttpResponse} to be verified.
+   */
+  private void verifyTtlUpdateRequestCostHeaders(HttpResponse response) {
+    verifyCommonRequestCostHeaders(response, 1, 0.00390625, false);
   }
 
   /**
@@ -926,8 +935,8 @@ public class FrontendIntegrationTestBase {
     Assert.assertTrue(QuotaName.STORAGE_IN_GB.name() + " should be present in cost map",
         costMap.containsKey(QuotaName.STORAGE_IN_GB.name()));
     Assert.assertEquals("Invalid " + QuotaName.STORAGE_IN_GB.name() + " cost.", expectedStorageCost,
-        Double.parseDouble(costMap.get(QuotaName.STORAGE_IN_GB.name())), 0.0001);
+        Double.parseDouble(costMap.get(QuotaName.STORAGE_IN_GB.name())), 0.000001);
     Assert.assertEquals("Invalid " + cuUnitName + " cost.", expectedCuCost, Double.parseDouble(costMap.get(cuUnitName)),
-        0.0001);
+        0.000001);
   }
 }

@@ -76,7 +76,7 @@ class AmbrySecurityService implements SecurityService {
     this.hostLevelThrottler = hostLevelThrottler;
     this.storageQuotaService = storageQuotaService;
     this.quotaManager = quotaManager;
-    this.requestCostPolicy = new SimpleUserQuotaRequestCostPolicy();
+    this.requestCostPolicy = new UserQuotaRequestCostPolicy();
     isOpen = true;
   }
 
@@ -157,6 +157,18 @@ class AmbrySecurityService implements SecurityService {
     } finally {
       frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
       callback.onCompletion(null, exception);
+    }
+  }
+
+  @Override
+  public void processRequestCharges(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo) {
+    Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestCost(restRequest, responseChannel, blobInfo)
+        .entrySet()
+        .stream()
+        .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
+    setRequestCostHeader(requestCost, responseChannel);
+    if (quotaManager != null) {
+      quotaManager.charge(restRequest, blobInfo, requestCost);
     }
   }
 
@@ -255,14 +267,7 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
-    Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestCost(restRequest, responseChannel, blobInfo)
-        .entrySet()
-        .stream()
-        .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
-    setRequestCostHeader(requestCost, responseChannel);
-    if (quotaManager != null) {
-      quotaManager.charge(restRequest, blobInfo, requestCost);
-    }
+    processRequestCharges(restRequest, responseChannel, blobInfo);
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
   }

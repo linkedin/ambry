@@ -988,7 +988,7 @@ public class RestUtils {
    * @throws RestServiceException if no range header was found, or if a valid range could not be parsed from the header
    *                              value,
    */
-  private static ByteRange buildByteRange(String rangeHeaderValue) throws RestServiceException {
+  public static ByteRange buildByteRange(String rangeHeaderValue) throws RestServiceException {
     if (!rangeHeaderValue.startsWith(BYTE_RANGE_PREFIX)) {
       throw new RestServiceException("Invalid byte range syntax; does not start with '" + BYTE_RANGE_PREFIX + "'",
           RestServiceErrorCode.InvalidArgs);

@@ -13,10 +13,10 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.commons.Callback;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import java.io.Closeable;
 import java.util.concurrent.Future;
@@ -54,6 +54,15 @@ public interface SecurityService extends Closeable {
    * @param callback The {@link Callback} which will be invoked on the completion of the request. Cannot be null.
    */
   void postProcessRequest(RestRequest restRequest, Callback<Void> callback);
+
+  /**
+   * Calculates charges incurred in processing the request, accounts for those charges in quota and sets cost and quota
+   * headers if need be.
+   * @param restRequest {@link RestRequest} whose response have to be validated
+   * @param responseChannel the {@link RestResponseChannel} over which the response is sent
+   * @param blobInfo the {@link BlobInfo} pertaining to the rest request made
+   */
+  void processRequestCharges(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo);
 
   /**
    * Performs security validations (if any) on the response for {@link RestRequest} asynchronously, sets headers if need

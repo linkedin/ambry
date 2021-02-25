@@ -932,6 +932,7 @@ class FrontendRestRequestService implements RestRequestService {
         routerException = e;
       } finally {
         if (routerException != null) {
+          securityService.processRequestCharges(restRequest, restResponseChannel, null);
           submitResponse(restRequest, restResponseChannel,
               routerResult != null ? routerResult.getBlobDataChannel() : null, routerException);
         }
@@ -988,6 +989,7 @@ class FrontendRestRequestService implements RestRequestService {
         frontendMetrics.deleteCallbackProcessingError.inc();
         routerException = e;
       } finally {
+        securityService.processRequestCharges(restRequest, restResponseChannel, null);
         submitResponse(restRequest, restResponseChannel, null, routerException);
         callbackTracker.markCallbackProcessingEnd();
       }
