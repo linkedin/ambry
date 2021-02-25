@@ -13,7 +13,6 @@
  */
 package com.github.ambry.server;
 
-import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.jmx.JmxReporter;
 import com.github.ambry.account.AccountService;
@@ -58,7 +57,6 @@ import com.github.ambry.network.SocketServer;
 import com.github.ambry.network.http2.Http2BlockingChannelPool;
 import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2ServerMetrics;
-import com.github.ambry.network.http2.Http2Utils;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
@@ -67,7 +65,6 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
 import com.github.ambry.rest.NettyMetrics;
-import com.github.ambry.rest.NettyServer;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.store.MessageInfo;
@@ -312,14 +309,6 @@ public class AmbryServer {
                 http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
-        Gauge<Long> nettyWorkerPendingTasks =
-            () -> Http2Utils.getNumberOfPendingTasks(((NettyServer) nettyHttp2Server).getWorkerEventLoopGroup());
-        registry.register(MetricRegistry.name(Http2ServerMetrics.class, "NettyWorkerPendingTasks"),
-            nettyWorkerPendingTasks);
-        Gauge<Long> nettyBossPendingTasks =
-            () -> Http2Utils.getNumberOfPendingTasks(((NettyServer) nettyHttp2Server).getBossEventLoopGroup());
-        registry.register(MetricRegistry.name(Http2ServerMetrics.class, "NettyBossPendingTasks"),
-            nettyBossPendingTasks);
       }
 
       // Other code

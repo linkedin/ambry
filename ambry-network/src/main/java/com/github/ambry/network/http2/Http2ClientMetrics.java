@@ -15,6 +15,7 @@
 package com.github.ambry.network.http2;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
@@ -25,7 +26,7 @@ import com.codahale.metrics.MetricRegistry;
  */
 public class Http2ClientMetrics {
 
-  public final MetricRegistry registry;
+  private final MetricRegistry registry;
   public final Histogram http2ConnectionAcquireTime;
   public final Histogram http2StreamAcquireTime;
   public final Histogram http2FirstStreamAcquireTime;
@@ -106,5 +107,9 @@ public class Http2ClientMetrics {
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2ParentExceptionCount"));
     http2StreamExceptionCount =
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamExceptionCount"));
+  }
+
+  void registerNettyPendingTasksGauge(Gauge<Long> pendingTasksGetter) {
+    registry.register(MetricRegistry.name(Http2NetworkClient.class, "NettyPendingTasks"), pendingTasksGetter);
   }
 }

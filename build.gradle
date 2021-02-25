@@ -159,6 +159,7 @@ project(':ambry-utils') {
         compile "org.json:json:$jsonVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
+        compile "io.netty:netty-all:$nettyVersion"
         testCompile project(":ambry-test-utils")
     }
 }

@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.utils.Utils;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -87,6 +88,8 @@ public class NettyServer implements NioServer {
       for (Map.Entry<Integer, ChannelInitializer<SocketChannel>> entry : channelInitializers.entrySet()) {
         bindServer(entry.getKey(), entry.getValue(), bossGroup, workerGroup);
       }
+      nettyMetrics.registerNettyBossPendingTasksGauge(() -> Utils.getNumberOfPendingTasks(bossGroup));
+      nettyMetrics.registerNettyWorkerPendingTasksGauge(() -> Utils.getNumberOfPendingTasks(workerGroup));
     } catch (InterruptedException e) {
       logger.error("NettyServer start await was interrupted", e);
       nettyMetrics.nettyServerStartError.inc();
@@ -143,18 +146,5 @@ public class NettyServer implements NioServer {
         .childHandler(channelInitializer);
     b.bind(port).sync();
     logger.info("NettyServer now listening on port {}", port);
-  }
-
-  /**
-   * Get worker EventLoopGroup.
-   */
-  public EventLoopGroup getWorkerEventLoopGroup() {
-    return workerGroup;
-  }
-  /**
-   * Get boss EventLoopGroup.
-   */
-  public EventLoopGroup getBossEventLoopGroup() {
-    return bossGroup;
   }
 }

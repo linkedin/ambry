@@ -15,9 +15,6 @@ package com.github.ambry.network.http2;
 
 import com.github.ambry.network.RequestInfo;
 import io.netty.channel.Channel;
-import io.netty.channel.EventLoopGroup;
-import io.netty.util.concurrent.EventExecutor;
-import io.netty.util.concurrent.SingleThreadEventExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,25 +37,5 @@ public class Http2Utils {
           .release(streamChannel);
     }
     return requestInfo;
-  }
-
-  /**
-   * Get number of total pending tasks in Netty EventLoopGroup.
-   */
-  public static long getNumberOfPendingTasks(final EventLoopGroup eventLoopGroup) {
-    int index = 0;
-    long totalPendingTasks = 0;
-    for (final EventExecutor eventExecutor : eventLoopGroup) {
-      if (eventExecutor instanceof SingleThreadEventExecutor) {
-        int pendingTasks = ((SingleThreadEventExecutor) eventExecutor).pendingTasks();
-        totalPendingTasks += pendingTasks;
-        logger.debug("EventLoop-{} pending tasks: {}", index, pendingTasks);
-        index++;
-      } else {
-        logger.warn("EventLoop is not SingleThreadEventExecutor");
-        break;
-      }
-    }
-    return totalPendingTasks;
   }
 }

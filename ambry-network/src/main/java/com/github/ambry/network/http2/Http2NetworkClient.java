@@ -13,8 +13,6 @@
  */
 package com.github.ambry.network.http2;
 
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
@@ -23,6 +21,7 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.utils.Utils;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -66,7 +65,6 @@ public class Http2NetworkClient implements NetworkClient {
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,
       SSLFactory sslFactory, EventLoopGroup eventLoopGroup) {
-    logger.info("Http2NetworkClient started");
     this.http2ClientConfig = http2ClientConfig;
     this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
@@ -76,9 +74,8 @@ public class Http2NetworkClient implements NetworkClient {
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
     correlationIdInFlightToChannelMap = new ConcurrentHashMap<>();
-    Gauge<Long> nettyPendingTasks = () -> Http2Utils.getNumberOfPendingTasks(eventLoopGroup);
-    http2ClientMetrics.registry.register(MetricRegistry.name(Http2NetworkClient.class, "NettyPendingTasks"),
-        nettyPendingTasks);
+    http2ClientMetrics.registerNettyPendingTasksGauge(() -> Utils.getNumberOfPendingTasks(eventLoopGroup));
+    logger.info("Http2NetworkClient started");
   }
 
   @Override

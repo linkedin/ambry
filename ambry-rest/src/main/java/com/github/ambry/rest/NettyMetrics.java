@@ -353,4 +353,20 @@ public class NettyMetrics {
     Gauge<Long> openConnections = openConnectionsCount::get;
     metricRegistry.register(MetricRegistry.name(ConnectionStatsHandler.class, "OpenConnections"), openConnections);
   }
+
+  /**
+   * Registers pendingTasks of NettyServer worker's EventLoopGroup to track
+   * @param pendingTasksGetter the pending tasks to tracked
+   */
+  void registerNettyWorkerPendingTasksGauge(Gauge<Long> pendingTasksGetter) {
+    metricRegistry.register(MetricRegistry.name(NettyServer.class, "NettyWorkerPendingTasks"), pendingTasksGetter);
+  }
+
+  /**
+   * Registers pendingTasks of NettyServer boss's EventLoopGroup to track
+   * @param pendingTasksGetter the pending tasks to tracked
+   */
+  void registerNettyBossPendingTasksGauge(Gauge<Long> pendingTasksGetter) {
+    metricRegistry.register(MetricRegistry.name(NettyServer.class, "NettyBossPendingTasks"), pendingTasksGetter);
+  }
 }
