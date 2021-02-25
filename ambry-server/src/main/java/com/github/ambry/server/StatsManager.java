@@ -491,42 +491,57 @@ class StatsManager {
     @Override
     public void run() {
       Object lock = accountStatsMySqlStore != null ? accountStatsMySqlStore : this;
+      // Lock on the accountStatsMySqlStore object so prevent any other thread to use mysql connection from this
+      // object. It's important to know that if the accountStatsMySqlStore is not null, we have to lock on it since
+      // MySqlReportAggregatorTask might use this connection at the same time. Since accountStatsMysqlStore has only
+      // one mysql connection, so we need to synchronize by locking this object.
       synchronized (lock) {
         logger.info("Aggregating account stats for local report");
         try {
+          // Each time we collect account stats from blob stores, we will recalculate the delete tombstone related stats
+          // as well. So before starting collecting account stats, let's reset the delete tombstone stats.
           resetDeleteTombstoneStats();
           long totalFetchAndAggregateStartTimeMs = time.milliseconds();
           StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, new HashMap<>());
           List<PartitionId> unreachablePartitions = new ArrayList<>();
-          Iterator<PartitionId> iterator = (new HashSet<>(partitionToReplicaMap.keySet())).iterator();
+
+          // 1. First, collect account stats from each replicas and aggregate the result to aggregatedSnapshot.
+          Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
           while (!cancelled && iterator.hasNext()) {
             PartitionId partitionId = iterator.next();
             logger.info("Aggregating account stats for local report started for store {}", partitionId);
             collectAndAggregateAccountStats(aggregatedSnapshot, partitionId, unreachablePartitions);
           }
           aggregatedSnapshot.updateValue();
+
+          // 2. Second, filter out the unreachable partitions that are not in the map.
           List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
+
+          // 3. Update the delete tombstone related stats.
           updateAggregatedDeleteTombstoneStats();
           metrics.initDeleteStatsGaugesIfNeeded();
           if (!cancelled) {
             metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
+            // 4. Construct a StatsWrapper.
             StatsHeader statsHeader =
                 new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
                     partitionToReplicaMap.keySet().size(),
                     partitionToReplicaMap.keySet().size() - unreachableStores.size(), unreachableStores);
-            // First write to account stats
             StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
+            // 5. Persist this statsWrapper to mysql database if connection exists.
             if (accountStatsMySqlStore != null) {
               accountStatsMySqlStore.storeAccountStats(statsWrapper);
             }
+            // 6. Persist this statsWrapper to local backup file.
             publish(statsWrapper);
             logger.info("Local account stats snapshot published to {}", statsOutputFile.getAbsolutePath());
           }
-        } catch (Exception | Error e) {
+        } catch (Exception e) {
           metrics.statsAggregationFailureCount.inc();
           logger.error("Exception while aggregating account stats for local report. Stats output file path - {}",
               statsOutputFile.getAbsolutePath(), e);
         } finally {
+          // Finally, close the mysql database connection.
           if (accountStatsMySqlStore != null) {
             accountStatsMySqlStore.closeConnection();
           }
@@ -552,34 +567,42 @@ class StatsManager {
 
     @Override
     public void run() {
+      // Locking accountStatsMysqlStore object so other thread won't be able to use the mysql connection.
       synchronized (accountStatsMySqlStore) {
         logger.info("Aggregating partition class stats for local report");
         try {
           long totalFetchAndAggregateStartTimeMs = time.milliseconds();
           StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, new HashMap<>());
           List<PartitionId> unreachablePartitions = new ArrayList<>();
-          Iterator<PartitionId> iterator = (new HashSet<>(partitionToReplicaMap.keySet())).iterator();
+
+          // 1. First, collect partition class stats from each replicas and aggregate the result to aggregatedSnapshot.
+          Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
           while (!cancelled && iterator.hasNext()) {
             PartitionId partitionId = iterator.next();
             logger.info("Aggregating partition class stats for local report started for store {}", partitionId);
             collectAndAggregatePartitionClassStats(aggregatedSnapshot, partitionId, unreachablePartitions);
           }
           aggregatedSnapshot.updateValue();
+
+          // 2. Second, filter out the unreachable partitions that are not in the map.
           List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
           if (!cancelled) {
             metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
+            // 3. Construct a StatsWrapper.
             StatsHeader statsHeader =
                 new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
                     partitionToReplicaMap.keySet().size(),
                     partitionToReplicaMap.keySet().size() - unreachableStores.size(), unreachableStores);
             StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
+            // 4. Persist this statsWrapper to mysql database.
             accountStatsMySqlStore.storePartitionClassStats(statsWrapper);
             logger.info("Local partition class stats snapshot published to {}", statsOutputFile.getAbsolutePath());
           }
-        } catch (Exception | Error e) {
+        } catch (Exception e) {
           metrics.statsAggregationFailureCount.inc();
           logger.error("Exception while aggregating partition class stats for mysql", e);
         } finally {
+          // Finally, close the mysql database connection
           accountStatsMySqlStore.closeConnection();
         }
       }
