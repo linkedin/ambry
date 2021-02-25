@@ -77,11 +77,11 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
 
     // Referencing counting for derived {@link ByteBuf}: https://netty.io/wiki/reference-counted-objects.html#derived-buffers
     try {
-      while (send.content().readableBytes() > maxFrameSize) {
+      while (send.content().isReadable(maxFrameSize)) {
         ByteBuf slice = send.content().readSlice(maxFrameSize);
         slice.retain();
         DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, false);
-        ctx.write(dataFrame, promise);
+        ctx.write(dataFrame);
       }
       // The last slice
       ByteBuf slice = send.content().readSlice(send.content().readableBytes());

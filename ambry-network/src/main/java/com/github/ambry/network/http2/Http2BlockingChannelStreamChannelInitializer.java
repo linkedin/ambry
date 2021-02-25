@@ -27,17 +27,15 @@ import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
  */
 public class Http2BlockingChannelStreamChannelInitializer extends ChannelInitializer {
   private final Http2ClientConfig http2ClientConfig;
+  private final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor;
   private static final Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec =
       new Http2StreamFrameToHttpObjectCodec(false);
   private static final Http2BlockingChannelResponseHandler http2BlockingChannelResponseHandler =
       new Http2BlockingChannelResponseHandler();
-  private static AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor = null;
 
   Http2BlockingChannelStreamChannelInitializer(Http2ClientConfig http2ClientConfig) {
     this.http2ClientConfig = http2ClientConfig;
-    if (ambrySendToHttp2Adaptor == null) {
-      ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false, http2ClientConfig.http2FrameMaxSize);
-    }
+    this.ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false, http2ClientConfig.http2FrameMaxSize);
   }
 
   @Override
