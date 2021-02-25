@@ -33,7 +33,6 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.quota.MaxThrottlePolicy;
-import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.router.Router;
@@ -89,6 +88,7 @@ public class RestServer {
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final NettyInternalMetrics nettyInternalMetrics;
+
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -166,7 +166,7 @@ public class RestServer {
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
-    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null, null, null);
+    this(verifiableProperties, clusterMap, notificationSystem, sslFactory, null, null);
   }
 
   /**
@@ -177,14 +177,13 @@ public class RestServer {
    * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
    * @param addedChannelHandlers a list of {@link ChannelHandler} to add to the {@link io.netty.channel.ChannelInitializer} before
    *                             the final handler.
-   * @param addedQuotaEnforcers a list of {@link QuotaEnforcer}s to add to the {@link QuotaManagerFactory}.
    * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
    *                        option is null the default settings for the reporter will be used.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory, List<ChannelHandler> addedChannelHandlers,
-      List<QuotaEnforcer> addedQuotaEnforcers, Function<MetricRegistry, JmxReporter> reporterFactory) throws Exception {
+      Function<MetricRegistry, JmxReporter> reporterFactory) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
@@ -221,8 +220,8 @@ public class RestServer {
     // setup quota management
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
     QuotaManager quotaManager =
-        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, addedQuotaEnforcers,
-            new MaxThrottlePolicy(), accountService)).getQuotaManager();
+        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
+            accountService)).getQuotaManager();
     quotaManager.init();
 
     // setup restRequestService

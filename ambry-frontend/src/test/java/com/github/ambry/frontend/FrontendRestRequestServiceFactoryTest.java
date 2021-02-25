@@ -46,7 +46,7 @@ public class FrontendRestRequestServiceFactoryTest {
     try {
       QUOTA_MANAGER =
           new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              Collections.emptyList(), new MaxThrottlePolicy(), null);
+              new MaxThrottlePolicy(), null);
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }

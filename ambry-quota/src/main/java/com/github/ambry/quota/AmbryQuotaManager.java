@@ -22,7 +22,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -41,21 +40,17 @@ public class AmbryQuotaManager implements QuotaManager {
   /**
    * Constructor for {@link AmbryQuotaManager}.
    * @param quotaConfig {@link QuotaConfig} object.
-   * @param addedRequestQuotaEnforcers {@link List} of {@link QuotaEnforcer}s that are initialized outside this class.
    * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
    * @param accountService {@link AccountService} object to get all the accounts and container information.
    * @throws ReflectiveOperationException in case of any exception.
    */
-  public AmbryQuotaManager(QuotaConfig quotaConfig, List<QuotaEnforcer> addedRequestQuotaEnforcers,
-      ThrottlePolicy throttlePolicy, AccountService accountService) throws ReflectiveOperationException {
+  public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService)
+      throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
         buildQuotaSources(quotaEnforcerSourceMap.values(), quotaConfig, accountService);
     requestQuotaEnforcers = new HashSet<>();
-    if (addedRequestQuotaEnforcers != null) {
-      requestQuotaEnforcers.addAll(addedRequestQuotaEnforcers);
-    }
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)))).getRequestQuotaEnforcer());
