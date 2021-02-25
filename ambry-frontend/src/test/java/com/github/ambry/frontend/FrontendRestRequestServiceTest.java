@@ -2969,6 +2969,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
   String translation = null;
   boolean returnInputIfTranslationNull = false;
   volatile String lastInput = null;
+  volatile String lastConvertedId = null;
 
   @Override
   public IdConverter getIdConverter() {
@@ -3007,6 +3008,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if (exceptionToReturn == null) {
         toReturn = translation == null ? returnInputIfTranslationNull ? input : null : translation;
       }
+      lastConvertedId = toReturn;
       futureResult.done(toReturn, exceptionToReturn);
       if (callback != null) {
         callback.onCompletion(toReturn, exceptionToReturn);

@@ -121,6 +121,11 @@ public class AccountAndContainerInjector {
           "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
               + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
     }
+    if (targetContainer.getNamedBlobMode() == Container.NamedBlobMode.DISABLED) {
+      throw new RestServiceException(
+          "Named blob APIs disabled for this container. account=" + accountName + ", container=" + containerName,
+          RestServiceErrorCode.BadRequest);
+    }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
   }
 

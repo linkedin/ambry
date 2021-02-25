@@ -67,7 +67,7 @@ public class Page<T> {
   public JSONObject toJson(Function<T, JSONObject> entrySerializer) {
     JSONArray entriesArray = new JSONArray();
     entries.stream().map(entrySerializer).forEach(entriesArray::put);
-    return new JSONObject().put(ENTRIES_KEY, entries).putOpt(NEXT_PAGE_TOKEN_KEY, nextPageToken);
+    return new JSONObject().put(ENTRIES_KEY, entriesArray).putOpt(NEXT_PAGE_TOKEN_KEY, nextPageToken);
   }
 
   /**

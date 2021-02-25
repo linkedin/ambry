@@ -186,9 +186,13 @@ public class InMemAccountService implements AccountService {
     Account.AccountStatus refAccountStatus = Account.AccountStatus.ACTIVE;
     Container randomContainer = getRandomContainer(refAccountId);
     Container publicContainer =
-        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId).build();
+        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId)
+            .setNamedBlobMode(Container.NamedBlobMode.OPTIONAL)
+            .build();
     Container privateContainer =
-        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId).build();
+        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId)
+            .setNamedBlobMode(Container.NamedBlobMode.OPTIONAL)
+            .build();
     return new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(publicContainer)
         .addOrUpdateContainer(privateContainer)
         .addOrUpdateContainer(randomContainer)
@@ -243,6 +247,7 @@ public class InMemAccountService implements AccountService {
         .setTtlRequired(false)
         .setSecurePathRequired(false)
         .setBackupEnabled(refContainerBackupEnabled)
+        .setNamedBlobMode(Container.NamedBlobMode.OPTIONAL)
         .build();
   }
 }

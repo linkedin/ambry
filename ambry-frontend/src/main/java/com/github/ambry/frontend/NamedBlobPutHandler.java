@@ -38,9 +38,8 @@ import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,8 +84,8 @@ public class NamedBlobPutHandler {
   private final String clusterName;
   private final RetryPolicy retryPolicy = RetryPolicies.defaultPolicy();
   private final RetryExecutor retryExecutor = new RetryExecutor(Executors.newScheduledThreadPool(2));
-  private final Set<RouterErrorCode> retriableRouterError = new HashSet<RouterErrorCode>(
-      Arrays.asList(AmbryUnavailable, ChannelClosed, UnexpectedInternalError, OperationTimedOut));
+  private final Set<RouterErrorCode> retriableRouterError =
+      EnumSet.of(AmbryUnavailable, ChannelClosed, UnexpectedInternalError, OperationTimedOut);
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
@@ -205,7 +204,7 @@ public class NamedBlobPutHandler {
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
-        idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo));
+        idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
       }, uri, LOGGER, finalCallback);
     }
 
@@ -231,7 +230,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)), uri, LOGGER,
+          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo, blobId)), uri, LOGGER,
           finalCallback);
     }
 
@@ -239,16 +238,19 @@ public class NamedBlobPutHandler {
      * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @param blobId the blob ID returned by the router (without decoration or obfuscation by id converter).
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    private Callback<String> idConverterCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putIdConversionMetrics, blobId -> {
+    private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
+      return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
         if (RestUtils.getTtlFromRequestHeader(restRequest.getArgs()) == Utils.Infinite_Time) {
-          // Do ttl update with retryExecutor
+          // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
+          // since the converted ID may be changed by the ID converter.
           String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-          retryExecutor.runWithRetries(retryPolicy, callback -> updateBlobTtl(blobId, serviceId, callback),
-              throwable -> throwable instanceof RouterException && retriableRouterError.contains(
-                  ((RouterException) throwable).getErrorCode()), routerTtlUpdateCallback(blobInfo));
+          retryExecutor.runWithRetries(retryPolicy,
+              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback), this::isRetriable,
+              routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
@@ -256,11 +258,13 @@ public class NamedBlobPutHandler {
       }, uri, LOGGER, finalCallback);
     }
 
-    /*
-     * Wrapper method to call {@link Router#updateBlobTtl}.
+    /**
+     * @param throwable the error to check.
+     * @return true if the router error is retriable.
      */
-    private void updateBlobTtl(String blobId, String serviceId, Callback<Void> callback) {
-      router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback);
+    private boolean isRetriable(Throwable throwable) {
+      return throwable instanceof RouterException && retriableRouterError.contains(
+          ((RouterException) throwable).getErrorCode());
     }
 
     /**

@@ -69,7 +69,10 @@ public class AccountContainerTest {
   private List<Long> refContainerDeleteTriggerTime;
   private List<Boolean> refContainerSignedPathRequiredValues;
   private List<Boolean> refContainerOverrideAccountAcls;
+  private List<NamedBlobMode> refContainerNamedBlobModes;
   private List<Set<String>> refContainerContentTypeWhitelistForFilenamesOnDownloadValues;
+  private List<Long> refContainerLastModifiedTimes;
+  private List<Integer> refContainerSnapshotVersions;
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
 
@@ -409,7 +412,10 @@ public class AccountContainerTest {
               .setContentTypeWhitelistForFilenamesOnDownload(
                   refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i))
               .setOverrideAccountAcl(refContainerOverrideAccountAcls.get(i))
-              .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(i));
+              .setNamedBlobMode(refContainerNamedBlobModes.get(i))
+              .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(i))
+              .setLastModifiedTime(refContainerLastModifiedTimes.get(i))
+              .setSnapshotVersion(refContainerSnapshotVersions.get(i));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -773,9 +779,12 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setSecurePathRequired(refContainerSignedPathRequiredValues.get(0))
             .setOverrideAccountAcl(refContainerOverrideAccountAcls.get(0))
+            .setNamedBlobMode(refContainerNamedBlobModes.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
+            .setLastModifiedTime(refContainerLastModifiedTimes.get(0))
+            .setSnapshotVersion(refContainerSnapshotVersions.get(0))
             .build();
     refContainers.remove(0);
     refContainers.add(updatedContainer);
@@ -885,12 +894,18 @@ public class AccountContainerTest {
             container.isSecurePathRequired());
         assertEquals("Wrong override account acl setting", refContainerOverrideAccountAcls.get(index),
             container.isAccountAclOverridden());
+        assertEquals("Wrong named blob mode setting", refContainerNamedBlobModes.get(index),
+            container.getNamedBlobMode());
         Set<String> expectedContentTypeWhitelistForFilenamesOnDownloadValue =
             refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index) == null ? Collections.emptySet()
                 : refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index);
         assertEquals("Wrong content types whitelisted for filename on download",
             expectedContentTypeWhitelistForFilenamesOnDownloadValue,
             container.getContentTypeWhitelistForFilenamesOnDownload());
+        assertEquals("Wrong last modified time setting", (long) refContainerLastModifiedTimes.get(index),
+            container.getLastModifiedTime());
+        assertEquals("Wrong snapshot version setting", (int) refContainerSnapshotVersions.get(index),
+            container.getSnapshotVersion());
         break;
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -958,7 +973,8 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          false, Collections.emptySet(), false, false, (short) 0, System.currentTimeMillis());
+          false, Collections.emptySet(), false, false, NamedBlobMode.DISABLED, (short) 0, System.currentTimeMillis(),
+          System.currentTimeMillis(), 0);
     }, null);
   }
 
@@ -981,7 +997,10 @@ public class AccountContainerTest {
     refContainerDeleteTriggerTime = new ArrayList<>();
     refContainerSignedPathRequiredValues = new ArrayList<>();
     refContainerOverrideAccountAcls = new ArrayList<>();
+    refContainerNamedBlobModes = new ArrayList<>();
     refContainerContentTypeWhitelistForFilenamesOnDownloadValues = new ArrayList<>();
+    refContainerLastModifiedTimes = new ArrayList<>();
+    refContainerSnapshotVersions = new ArrayList<>();
     containerJsonList = new ArrayList<>();
     refContainers = new ArrayList<>();
     Set<Short> containerIdSet = new HashSet<>();
@@ -1012,6 +1031,7 @@ public class AccountContainerTest {
       refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
       refContainerOverrideAccountAcls.add(random.nextBoolean());
+      refContainerNamedBlobModes.add(random.nextBoolean() ? NamedBlobMode.DISABLED : NamedBlobMode.OPTIONAL);
       refContainerDeleteTriggerTime.add((long) 0);
       if (i == 0) {
         refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
@@ -1021,13 +1041,17 @@ public class AccountContainerTest {
         refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(
             getRandomContentTypeWhitelistForFilenamesOnDownload());
       }
+      refContainerLastModifiedTimes.add(System.currentTimeMillis());
+      refContainerSnapshotVersions.add(random.nextInt());
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
           refContainerTtlRequiredValues.get(i), refContainerSignedPathRequiredValues.get(i),
           refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
-          refContainerOverrideAccountAcls.get(i), refAccountId, refContainerDeleteTriggerTime.get(i)));
+          refContainerOverrideAccountAcls.get(i), refContainerNamedBlobModes.get(i), refAccountId,
+          refContainerDeleteTriggerTime.get(i), refContainerLastModifiedTimes.get(i),
+          refContainerSnapshotVersions.get(i)));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
   }
@@ -1076,6 +1100,7 @@ public class AccountContainerTest {
         containerJson.put(TTL_REQUIRED_KEY, container.isTtlRequired());
         containerJson.put(SECURE_PATH_REQUIRED_KEY, container.isSecurePathRequired());
         containerJson.put(OVERRIDE_ACCOUNT_ACL_KEY, container.isAccountAclOverridden());
+        containerJson.put(NAMED_BLOB_MODE_KEY, container.getNamedBlobMode());
         containerJson.put(Container.LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
         containerJson.put(Container.SNAPSHOT_VERSION_KEY, container.getSnapshotVersion());
         if (container.getContentTypeWhitelistForFilenamesOnDownload() != null
