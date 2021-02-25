@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2Utils {
 
-  private static final Logger logger = LoggerFactory.getLogger(Http2ClientResponseHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(Http2Utils.class);
 
   static RequestInfo releaseAndCloseStreamChannel(Channel streamChannel) {
     logger.debug("Stream channel is being closed. Stream: {}, Parent: {}", streamChannel, streamChannel.parent());
@@ -45,10 +45,10 @@ public class Http2Utils {
   /**
    * Get number of total pending tasks in Netty EventLoopGroup.
    */
-  public static long getNumberOfPendingTasks(final EventLoopGroup EventLoopGroup) {
+  public static long getNumberOfPendingTasks(final EventLoopGroup eventLoopGroup) {
     int index = 0;
     long totalPendingTasks = 0;
-    for (final EventExecutor eventExecutor : EventLoopGroup) {
+    for (final EventExecutor eventExecutor : eventLoopGroup) {
       if (eventExecutor instanceof SingleThreadEventExecutor) {
         int pendingTasks = ((SingleThreadEventExecutor) eventExecutor).pendingTasks();
         totalPendingTasks += pendingTasks;
