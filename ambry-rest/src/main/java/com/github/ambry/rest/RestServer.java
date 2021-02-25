@@ -40,7 +40,6 @@ import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelHandler;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Function;
@@ -89,6 +88,8 @@ public class RestServer {
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final NettyInternalMetrics nettyInternalMetrics;
+
+
   /**
    * {@link RestServer} specific metrics tracking.
    */
@@ -219,8 +220,8 @@ public class RestServer {
     // setup quota management
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
     QuotaManager quotaManager =
-        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, Collections.emptyList(),
-            new MaxThrottlePolicy())).getQuotaManager();
+        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
+            accountService)).getQuotaManager();
     quotaManager.init();
 
     // setup restRequestService

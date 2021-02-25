@@ -13,8 +13,8 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
-import java.util.List;
 
 
 /**
@@ -25,13 +25,11 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
 
   /**
    * @param quotaConfig {@link QuotaConfig} object.
-   * @param addedQuotaEnforcers {@link List} of {@link QuotaEnforcer}s to inject to {@link QuotaManager}. These will be
-   *                                        those {@link QuotaEnforcer} classes that cannot be created by config.
    * @throws ReflectiveOperationException
    */
-  public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, List<QuotaEnforcer> addedQuotaEnforcers,
-      ThrottlePolicy throttlePolicy) throws ReflectiveOperationException {
-    quotaManager = new AmbryQuotaManager(quotaConfig, addedQuotaEnforcers, throttlePolicy);
+  public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService)
+      throws ReflectiveOperationException {
+    quotaManager = new AmbryQuotaManager(quotaConfig, throttlePolicy, accountService);
   }
 
   @Override

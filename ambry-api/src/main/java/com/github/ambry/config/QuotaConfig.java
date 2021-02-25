@@ -92,7 +92,7 @@ public class QuotaConfig {
 
   /**
    * Build the default quota enforcer and source pair json.
-   * @return Json string.
+   * @return JSONObject representing the pair json.
    */
   private static JSONObject buildDefaultQuotaEnforcerSourceInfoPairJson() {
     JSONObject jsonObject = new JSONObject();
