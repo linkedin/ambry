@@ -14,6 +14,7 @@
  */
 package com.github.ambry.network.http2;
 
+import com.github.ambry.config.Http2ClientConfig;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
@@ -25,22 +26,23 @@ import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
  * A ChannelInitializer used to setup stream channel pipeline once stream is created in {@link MultiplexedChannelRecord}.
  */
 public class Http2BlockingChannelStreamChannelInitializer extends ChannelInitializer {
-  private final int http2MaxContentLength;
+  private final Http2ClientConfig http2ClientConfig;
+  private final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor;
   private static final Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec =
       new Http2StreamFrameToHttpObjectCodec(false);
   private static final Http2BlockingChannelResponseHandler http2BlockingChannelResponseHandler =
       new Http2BlockingChannelResponseHandler();
-  private static final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false);
 
-  Http2BlockingChannelStreamChannelInitializer(int http2MaxContentLength) {
-    this.http2MaxContentLength = http2MaxContentLength;
+  Http2BlockingChannelStreamChannelInitializer(Http2ClientConfig http2ClientConfig) {
+    this.http2ClientConfig = http2ClientConfig;
+    this.ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false, http2ClientConfig.http2FrameMaxSize);
   }
 
   @Override
   protected void initChannel(Channel ch) throws Exception {
     ChannelPipeline p = ch.pipeline();
     p.addLast(http2StreamFrameToHttpObjectCodec);
-    p.addLast(new HttpObjectAggregator(http2MaxContentLength));
+    p.addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
     p.addLast(http2BlockingChannelResponseHandler);
     p.addLast(ambrySendToHttp2Adaptor);
   }

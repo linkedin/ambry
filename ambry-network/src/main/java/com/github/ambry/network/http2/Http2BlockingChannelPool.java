@@ -49,7 +49,7 @@ public class Http2BlockingChannelPool implements ConnectionPool {
       this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     }
     http2ChannelPoolMap = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
-        new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig.http2MaxContentLength));
+        new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig));
     this.http2ClientConfig = http2ClientConfig;
   }
 

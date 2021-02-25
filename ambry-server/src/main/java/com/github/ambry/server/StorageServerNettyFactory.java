@@ -83,7 +83,8 @@ public class StorageServerNettyFactory implements NioServerFactory {
     ServerSecurityHandler serverSecurityHandler = new ServerSecurityHandler(serverSecurityService, serverMetrics);
     Http2ServerStreamHandler http2ServerStreamHandler =
         new Http2ServerStreamHandler(new AmbryNetworkRequestHandler(requestResponseChannel, http2ServerMetrics),
-            new Http2StreamFrameToHttpObjectCodec(true), new AmbrySendToHttp2Adaptor(true), http2ClientConfig);
+            new Http2StreamFrameToHttpObjectCodec(true),
+            new AmbrySendToHttp2Adaptor(true, http2ClientConfig.http2FrameMaxSize), http2ClientConfig);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = Collections.singletonMap(http2Port,
         new StorageServerNettyChannelInitializer(http2ClientConfig, http2ServerMetrics, sslFactory,
