@@ -16,6 +16,7 @@ package com.github.ambry.quota;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
+import java.util.Map;
 
 
 /**
@@ -39,14 +40,14 @@ public interface QuotaManager {
   ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
 
   /**
-   * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
-   * This method charges the requestCost against the quota.
+   * Charges the requestCost against the quota for the specified restRequest and blobInfo.
    * @param restRequest {@link RestRequest} object.
    * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
    *                                 determined by enforcers.
+   * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
    * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
-  ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo);
+  ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap);
 
   /**
    * @return QuotaConfig object.

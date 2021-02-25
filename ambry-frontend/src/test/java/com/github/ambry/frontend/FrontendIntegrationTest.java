@@ -36,7 +36,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;

@@ -381,7 +381,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
           response.headers().contains(HttpHeaderNames.LAST_MODIFIED));
       verifyTrackingHeaders(response);
       verifyBlobPropertiesHeadersAbsent(response);
-      verifyAccountAndContainerHeaders(accountName, containerName, response);
+      verifyAccountAndContainerHeaders(null, null, response);
       verifyUserMetadataHeadersAbsent(response);
       if (usermetadata == null) {
         assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
