@@ -49,6 +49,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.StoreFindToken.*;
+
 
 /**
  * A persistent index implementation that is responsible for adding and modifying index entries,
@@ -1232,7 +1234,8 @@ class PersistentIndex {
           logger.trace("Journal based token, Time used to eliminate duplicates: {}",
               (time.milliseconds() - startTimeInMs));
 
-          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false, null, null);
+          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false, null, null,
+              UNINITIALIZED_RESET_KEY_VERSION);
           // use the latest ref of indexSegments
           long bytesRead = getTotalBytesRead(storeFindToken, messageEntries, logEndOffsetBeforeFind, indexSegments);
           storeFindToken.setBytesRead(bytesRead);
@@ -1325,7 +1328,8 @@ class PersistentIndex {
             && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
           logger.info("Index : {} resetting offset after not clean shutdown {} before offset {}", dataDir,
               logEndOffsetOnStartup, storeToken.getOffset());
-          storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true, null, null);
+          storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true, null, null,
+              UNINITIALIZED_RESET_KEY_VERSION);
         }
       } else if (!storeToken.getType().equals(FindTokenType.Uninitialized)
           && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
@@ -1603,7 +1607,8 @@ class PersistentIndex {
       }
     }
     if (newTokenOffsetInJournal != null) {
-      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, null, null);
+      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, null, null,
+          UNINITIALIZED_RESET_KEY_VERSION);
     } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
       // If the condition does not have an end time, then since we have entered a segment, we should return at least one
       // message
@@ -1615,7 +1620,7 @@ class PersistentIndex {
       // uninitialized token
       return newTokenSegmentStartOffset == null ? new StoreFindToken()
           : new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
-              sessionId, incarnationId, null, null);
+              sessionId, incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION);
     }
   }
 
@@ -1899,7 +1904,8 @@ class PersistentIndex {
             break;
           }
         }
-        newToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false, null, null);
+        newToken =
+            new StoreFindToken(offsetEnd, sessionId, incarnationId, false, null, null, UNINITIALIZED_RESET_KEY_VERSION);
       } else {
         // Case 3: offset based, but offset out of journal
         Map.Entry<Offset, IndexSegment> entry = indexSegments.floorEntry(offsetToStart);
