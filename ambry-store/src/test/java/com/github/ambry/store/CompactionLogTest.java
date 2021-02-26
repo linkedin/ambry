@@ -34,6 +34,7 @@ import java.util.UUID;
 import org.junit.After;
 import org.junit.Test;
 
+import static com.github.ambry.store.StoreFindToken.*;
 import static org.junit.Assert.*;
 
 
@@ -57,7 +58,7 @@ public class CompactionLogTest {
   private final StoreConfig config;
   // the time instance that will be used in the index
   private final Time time = new MockTime();
-  private final Set<LogSegmentName> generatedSegmentNames = new HashSet<LogSegmentName>();
+  private final Set<LogSegmentName> generatedSegmentNames = new HashSet<>();
 
   /**
    * Creates a temporary directory for the compaction log file.
@@ -107,7 +108,7 @@ public class CompactionLogTest {
           cLog.getStartOffsetOfLastIndexSegmentForDeleteCheck());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentName.generateFirstSegmentName(true), 0),
-              new UUID(1, 1), new UUID(1, 1), null, null);
+              new UUID(1, 1), new UUID(1, 1), null, null, UNINITIALIZED_RESET_KEY_VERSION);
       cLog.setSafeToken(safeToken);
       assertEquals("Returned token not the same as the one that was set", safeToken, cLog.getSafeToken());
       CompactionDetails nextDetails = detailsIterator.hasNext() ? detailsIterator.next() : null;
@@ -170,7 +171,7 @@ public class CompactionLogTest {
           cLog.getStartOffsetOfLastIndexSegmentForDeleteCheck());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentName.generateFirstSegmentName(true), 0),
-              new UUID(1, 1), new UUID(1, 1), null, null);
+              new UUID(1, 1), new UUID(1, 1), null, null, UNINITIALIZED_RESET_KEY_VERSION);
       cLog.setSafeToken(safeToken);
 
       cLog.close();
@@ -412,7 +413,7 @@ public class CompactionLogTest {
     if (!cLog.getCompactionPhase().equals(CompactionLog.Phase.COPY)) {
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentName.generateFirstSegmentName(true), 0),
-              new UUID(1, 1), new UUID(1, 1), null, null);
+              new UUID(1, 1), new UUID(1, 1), null, null, UNINITIALIZED_RESET_KEY_VERSION);
       try {
         cLog.setSafeToken(safeToken);
         fail("Setting safe token should have failed");

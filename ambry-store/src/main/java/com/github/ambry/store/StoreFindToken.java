@@ -41,6 +41,8 @@ public class StoreFindToken implements FindToken {
   static final short VERSION_3 = 3;
   static final short CURRENT_VERSION = VERSION_2;
 
+  static final short UNINITIALIZED_RESET_KEY_VERSION = -1;
+  static final short RESET_KEY_VERSION_SIZE = 2;
   static final int VERSION_SIZE = 2;
   static final int TYPE_SIZE = 2;
   static final int RESET_KEY_TYPE_SIZE = 2;
@@ -63,6 +65,7 @@ public class StoreFindToken implements FindToken {
   private final StoreKey resetKey;
   // the {@link PersistentIndex.IndexEntryType} associated with this reset key.
   private final PersistentIndex.IndexEntryType resetKeyType;
+  private final short resetKeyVersion;
   // is inclusive or not
   private final byte inclusive;
   // refers to the sessionId of the store. On every restart a new sessionId is created
@@ -78,7 +81,8 @@ public class StoreFindToken implements FindToken {
    * Uninitialized token. Refers to the starting of the log.
    */
   StoreFindToken() {
-    this(FindTokenType.Uninitialized, null, null, null, null, true, CURRENT_VERSION, null, null);
+    this(FindTokenType.Uninitialized, null, null, null, null, true, CURRENT_VERSION, null, null,
+        UNINITIALIZED_RESET_KEY_VERSION);
   }
 
   /**
@@ -97,10 +101,10 @@ public class StoreFindToken implements FindToken {
    * +---------------------------------------------------------------------------------------------+
    *
    * VERSION_3
-   * +--------------------------------------------------------------------------------------------------------------------------+
-   * | version | token type | incarnation id | session id | index segment start offset | store key | reset key | reset key type |
-   * | (short) |  (short)   |  (n bytes)     |  (n bytes) |        (n bytes)           | (n bytes) | (n bytes) |    (short)     |
-   * +--------------------------------------------------------------------------------------------------------------------------+
+   * +----------------------------------------------------------------------------------------------------------------------------------------------+
+   * | version | token type | incarnation id | session id | index segment start offset | store key | reset key | reset key type | reset key version |
+   * | (short) |  (short)   |  (n bytes)     |  (n bytes) |        (n bytes)           | (n bytes) | (n bytes) |    (short)     |     (short)       |
+   * +----------------------------------------------------------------------------------------------------------------------------------------------+
    * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence
    * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
    * @param sessionId the sessionId of the store
@@ -109,11 +113,12 @@ public class StoreFindToken implements FindToken {
    *                 compacted (and token becomes invalid), this key is used to find current valid log segment where
    *                 {@link PersistentIndex#findEntriesSince(FindToken, long)} can start from.
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
+   * @param resetKeyVersion The life version of reset key.
    */
   StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId, StoreKey resetKey,
-      PersistentIndex.IndexEntryType resetKeyType) {
+      PersistentIndex.IndexEntryType resetKeyType, short resetKeyVersion) {
     this(FindTokenType.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, CURRENT_VERSION,
-        resetKey, resetKeyType);
+        resetKey, resetKeyType, resetKeyVersion);
   }
 
   /**
@@ -131,10 +136,10 @@ public class StoreFindToken implements FindToken {
    * +-----------------------------------------------------------------------------+
    *
    * VERSION_3
-   * +----------------------------------------------------------------------------------------------------------+
-   * | version | token type | incarnation id | session id | log offset | inclusive | reset key | reset key type |
-   * | (short) |  (short)   |   (n bytes)    | (n bytes)  | (n bytes)  |  (byte)   | (n bytes) |    (short)     |
-   * +----------------------------------------------------------------------------------------------------------+
+   * +------------------------------------------------------------------------------------------------------------------------------+
+   * | version | token type | incarnation id | session id | log offset | inclusive | reset key | reset key type | reset key version |
+   * | (short) |  (short)   |   (n bytes)    | (n bytes)  | (n bytes)  |  (byte)   | (n bytes) |    (short)     |     (short)       |
+   * +------------------------------------------------------------------------------------------------------------------------------+
    * @param offset the offset that this token refers to in the journal
    * @param sessionId the sessionId of the store
    * @param incarnationId the incarnationId of the store
@@ -144,11 +149,12 @@ public class StoreFindToken implements FindToken {
    *                 compacted (and token becomes invalid), this key is used to find current valid log segment where
    *                 {@link PersistentIndex#findEntriesSince(FindToken, long)} can start from.
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
+   * @param resetKeyVersion The life version of reset key.
    */
   StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive, StoreKey resetKey,
-      PersistentIndex.IndexEntryType resetKeyType) {
+      PersistentIndex.IndexEntryType resetKeyType, short resetKeyVersion) {
     this(FindTokenType.JournalBased, offset, null, sessionId, incarnationId, inclusive, CURRENT_VERSION, resetKey,
-        resetKeyType);
+        resetKeyType, resetKeyVersion);
   }
 
   /**
@@ -165,9 +171,10 @@ public class StoreFindToken implements FindToken {
    *                 compacted (and token becomes invalid), this key is used to find current valid log segment where
    *                 {@link PersistentIndex#findEntriesSince(FindToken, long)} can start from.
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
+   * @param resetKeyVersion The life version of reset key.
    */
   StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive,
-      short version, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType) {
+      short version, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyVersion) {
     if (!type.equals(FindTokenType.Uninitialized)) {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
@@ -191,6 +198,7 @@ public class StoreFindToken implements FindToken {
     this.version = version;
     this.resetKey = resetKey;
     this.resetKeyType = resetKeyType;
+    this.resetKeyVersion = resetKeyVersion;
   }
 
   void setBytesRead(long bytesRead) {
@@ -218,14 +226,16 @@ public class StoreFindToken implements FindToken {
         if (indexStartOffset != UNINITIALIZED_OFFSET) {
           // read store key if needed
           storeFindToken = new StoreFindToken(FindTokenType.IndexBased, new Offset(logSegmentName, indexStartOffset),
-              factory.getStoreKey(stream), sessionIdUUID, null, false, VERSION_0, null, null);
+              factory.getStoreKey(stream), sessionIdUUID, null, false, VERSION_0, null, null,
+              UNINITIALIZED_RESET_KEY_VERSION);
         } else if (offset != UNINITIALIZED_OFFSET) {
           storeFindToken =
               new StoreFindToken(FindTokenType.JournalBased, new Offset(logSegmentName, offset), null, sessionIdUUID,
-                  null, false, VERSION_0, null, null);
+                  null, false, VERSION_0, null, null, UNINITIALIZED_RESET_KEY_VERSION);
         } else {
           storeFindToken =
-              new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_0, null, null);
+              new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_0, null, null,
+                  UNINITIALIZED_RESET_KEY_VERSION);
         }
         break;
       case VERSION_1:
@@ -240,19 +250,20 @@ public class StoreFindToken implements FindToken {
         switch (type) {
           case Uninitialized:
             storeFindToken =
-                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_1, null, null);
+                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_1, null, null,
+                    UNINITIALIZED_RESET_KEY_VERSION);
             break;
           case JournalBased:
             Offset logOffset = Offset.fromBytes(stream);
             storeFindToken =
                 new StoreFindToken(FindTokenType.JournalBased, logOffset, null, sessionIdUUID, null, false, VERSION_1,
-                    null, null);
+                    null, null, UNINITIALIZED_RESET_KEY_VERSION);
             break;
           case IndexBased:
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             storeFindToken =
                 new StoreFindToken(FindTokenType.IndexBased, indexSegmentStartOffset, factory.getStoreKey(stream),
-                    sessionIdUUID, null, false, VERSION_1, null, null);
+                    sessionIdUUID, null, false, VERSION_1, null, null, UNINITIALIZED_RESET_KEY_VERSION);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -275,7 +286,8 @@ public class StoreFindToken implements FindToken {
             Offset logOffset = Offset.fromBytes(stream);
             byte inclusive = stream.readByte();
             storeFindToken =
-                new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1, null, null);
+                new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1, null, null,
+                    UNINITIALIZED_RESET_KEY_VERSION);
             break;
           case IndexBased:
             // read incarnationId
@@ -287,7 +299,8 @@ public class StoreFindToken implements FindToken {
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             StoreKey storeKey = factory.getStoreKey(stream);
             storeFindToken =
-                new StoreFindToken(storeKey, indexSegmentStartOffset, sessionIdUUID, incarnationIdUUID, null, null);
+                new StoreFindToken(storeKey, indexSegmentStartOffset, sessionIdUUID, incarnationIdUUID, null, null,
+                    UNINITIALIZED_RESET_KEY_VERSION);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -300,7 +313,8 @@ public class StoreFindToken implements FindToken {
           // TODO update StoreFindToken method once CURRENT VERSION = VERSION 3.
           case Uninitialized:
             storeFindToken =
-                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_3, null, null);
+                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_3, null, null,
+                    UNINITIALIZED_RESET_KEY_VERSION);
             break;
           case JournalBased:
             // read incarnationId
@@ -316,9 +330,11 @@ public class StoreFindToken implements FindToken {
             // read reset key type
             PersistentIndex.IndexEntryType journalResetKeyType =
                 PersistentIndex.IndexEntryType.values()[stream.readShort()];
+            short journalResetKeyVersion = stream.readShort();
             storeFindToken =
                 new StoreFindToken(FindTokenType.JournalBased, logOffset, null, sessionIdUUID, incarnationIdUUID,
-                    inclusive == (byte) 1, VERSION_3, journalTokenResetKey, journalResetKeyType);
+                    inclusive == (byte) 1, VERSION_3, journalTokenResetKey, journalResetKeyType,
+                    journalResetKeyVersion);
             break;
           case IndexBased:
             // read incarnationId
@@ -334,9 +350,10 @@ public class StoreFindToken implements FindToken {
             // read reset key type
             PersistentIndex.IndexEntryType indexResetKeyType =
                 PersistentIndex.IndexEntryType.values()[stream.readShort()];
+            short indexResetKeyVersion = stream.readShort();
             storeFindToken =
                 new StoreFindToken(FindTokenType.IndexBased, indexSegmentStartOffset, storeKey, sessionIdUUID,
-                    incarnationIdUUID, false, VERSION_3, indexTokenResetKey, indexResetKeyType);
+                    incarnationIdUUID, false, VERSION_3, indexTokenResetKey, indexResetKeyType, indexResetKeyVersion);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -362,6 +379,10 @@ public class StoreFindToken implements FindToken {
 
   public PersistentIndex.IndexEntryType getResetKeyType() {
     return resetKeyType;
+  }
+
+  public short getResetKeyVersion() {
+    return resetKeyVersion;
   }
 
   public Offset getOffset() {
@@ -514,9 +535,8 @@ public class StoreFindToken implements FindToken {
       }
       if (resetKey != null) {
         sb.append(" resetKey ").append(resetKey);
-      }
-      if (resetKeyType != null) {
         sb.append(" resetKeyType ").append(resetKeyType);
+        sb.append(" resetKeyVersion ").append(resetKeyVersion);
       }
       sb.append(" offset ").append(offset);
       sb.append(" bytesRead ").append(bytesRead);
@@ -536,7 +556,7 @@ public class StoreFindToken implements FindToken {
 
     return type == that.type && Objects.equals(offset, that.offset) && inclusive == that.inclusive && Objects.equals(
         storeKey, that.storeKey) && Objects.equals(resetKey, that.resetKey) && Objects.equals(resetKeyType,
-        that.resetKeyType);
+        that.resetKeyType) && Objects.equals(resetKeyVersion, that.resetKeyVersion);
   }
 
   @Override
@@ -547,6 +567,7 @@ public class StoreFindToken implements FindToken {
     result = 31 * result + (storeKey != null ? storeKey.hashCode() : 0);
     result = 31 * result + (resetKey != null ? resetKey.hashCode() : 0);
     result = 31 * result + (resetKeyType != null ? resetKeyType.hashCode() : 0);
+    result = 31 * result + (resetKeyVersion != UNINITIALIZED_RESET_KEY_VERSION ? Short.hashCode(resetKeyVersion) : 0);
     return result;
   }
 }

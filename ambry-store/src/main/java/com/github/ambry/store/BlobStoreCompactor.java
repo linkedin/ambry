@@ -46,6 +46,8 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.StoreFindToken.*;
+
 
 /**
  * Component that removes the "dead" data from the set of provided log segments and reclaims space.
@@ -1145,7 +1147,7 @@ class BlobStoreCompactor {
       // save a token for restart (the key gets ignored but is required to be non null for construction)
       StoreFindToken safeToken =
           new StoreFindToken(allIndexEntries.get(0).getKey(), indexSegment.getStartOffset(), sessionId, incarnationId,
-              null, null);
+              null, null, UNINITIALIZED_RESET_KEY_VERSION);
       compactionLog.setSafeToken(safeToken);
       logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
 
@@ -1458,7 +1460,8 @@ class BlobStoreCompactor {
         if (previousKey == null) {
           // save a token for restart (the key gets ignored but is required to be non null for construction)
           StoreFindToken safeToken =
-              new StoreFindToken(currentKey, indexSegment.getStartOffset(), sessionId, incarnationId, null, null);
+              new StoreFindToken(currentKey, indexSegment.getStartOffset(), sessionId, incarnationId, null, null,
+                  UNINITIALIZED_RESET_KEY_VERSION);
           compactionLog.setSafeToken(safeToken);
           logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
         }
