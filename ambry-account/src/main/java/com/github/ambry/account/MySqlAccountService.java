@@ -96,11 +96,6 @@ public class MySqlAccountService extends AbstractAccountService {
         config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
     // create backup file manager for persisting and retrieving Account metadata on local disk
     backupFileManager = new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
-    // Initialize cache from backup file on disk
-    initCacheFromBackupFile();
-    // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
-    initialFetchAndSchedule();
-
     // A local LRA cache of containers not found in mysql db. This is used to avoid repeated queries to db during getContainerByName() calls.
     recentNotFoundContainersCache = Collections.newSetFromMap(
         Collections.synchronizedMap(new LinkedHashMap<String, Boolean>(cacheInitialCapacity, cacheLoadFactor, true) {
@@ -108,6 +103,10 @@ public class MySqlAccountService extends AbstractAccountService {
             return size() > cacheMaxLimit;
           }
         }));
+    // Initialize cache from backup file on disk
+    initCacheFromBackupFile();
+    // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
+    initialFetchAndSchedule();
   }
 
   /**
