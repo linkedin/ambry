@@ -2054,7 +2054,7 @@ public class ReplicationTest extends ReplicationTestHelper {
           .get(i)
           .getReplicaId()
           .getPartitionId()
-          .isEqual(partitionId.toString()) ? 3 : 0;
+          .isEqual(partitionId.toPathString()) ? 3 : 0;
     }
     currentTimeMs = time.milliseconds();
     replicaThread.replicate();

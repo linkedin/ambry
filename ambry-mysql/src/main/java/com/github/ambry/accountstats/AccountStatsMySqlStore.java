@@ -181,7 +181,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param statsWrapper The {@link StatsWrapper} to publish.
    */
   @Override
-  public synchronized void storeAccountStats(StatsWrapper statsWrapper) throws SQLException {
+  public void storeAccountStats(StatsWrapper statsWrapper) throws SQLException {
     StatsSnapshot prevSnapshot =
         previousStats == null ? new StatsSnapshot((long) -1, new HashMap<>()) : previousStats.getSnapshot();
     AccountReportsDao.StorageBatchUpdater batch = accountReportsDao.new StorageBatchUpdater(config.updateBatchSize);
@@ -245,7 +245,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @throws SQLException
    */
   @Override
-  public synchronized StatsWrapper queryAccountStatsByHost(String queryHostname) throws SQLException {
+  public StatsWrapper queryAccountStatsByHost(String queryHostname) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     queryHostname = hostnameHelper.simplifyHostname(queryHostname);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
@@ -273,7 +273,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param snapshot The aggregated account stats snapshot.
    */
   @Override
-  public synchronized void storeAggregatedAccountStats(StatsSnapshot snapshot) throws SQLException {
+  public void storeAggregatedAccountStats(StatsSnapshot snapshot) throws SQLException {
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
     AggregatedAccountReportsDao.AggregatedStorageBatchUpdater batch =
@@ -304,7 +304,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @throws Exception
    */
   @Override
-  public synchronized Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
+  public Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
     aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
@@ -316,7 +316,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
+  public Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
     aggregatedAccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
@@ -329,7 +329,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized String queryRecordedMonth() throws SQLException {
+  public String queryRecordedMonth() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     String result = aggregatedAccountReportsDao.queryMonthForCluster(clusterName);
     storeMetrics.queryMonthTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -343,7 +343,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @throws Exception
    */
   @Override
-  public synchronized void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception {
+  public void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception {
     long startTimeMs = System.currentTimeMillis();
     aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
     aggregatedAccountReportsDao.updateMonth(clusterName, monthValue);
@@ -351,7 +351,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized void storePartitionClassStats(StatsWrapper statsWrapper) throws SQLException {
+  public void storePartitionClassStats(StatsWrapper statsWrapper) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Map<String, StatsSnapshot> partitionClassSubMap = statsWrapper.getSnapshot().getSubMap();
     // 1. Get all the partition class names in this statswrapper and the partition class names in DB
@@ -399,7 +399,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws SQLException {
+  public void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     PartitionClassReportsDao.StorageBatchUpdater batch =
         partitionClassReportsDao.new StorageBatchUpdater(config.updateBatchSize);
@@ -437,7 +437,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized StatsSnapshot queryAggregatedPartitionClassStatsOf() throws SQLException {
+  public StatsSnapshot queryAggregatedPartitionClassStatsOf() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<Short, Map<Short, Long>>> partitionClassNameAccountContainerUsages = new HashMap<>();
     AtomicLong timestamp = new AtomicLong(0);
@@ -478,7 +478,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized Map<String, Set<Integer>> queryPartitionNameAndIds() throws SQLException {
+  public Map<String, Set<Integer>> queryPartitionNameAndIds() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Set<Integer>> result = partitionClassReportsDao.queryPartitionNameAndIds(clusterName);
     storeMetrics.queryPartitionNameAndIdTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -486,8 +486,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public synchronized StatsWrapper queryPartitionClassStatsOf(String hostname,
-      Map<String, Set<Integer>> partitionNameAndIds) throws SQLException {
+  public StatsWrapper queryPartitionClassStatsByHost(String hostname, Map<String, Set<Integer>> partitionNameAndIds)
+      throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     hostname = hostnameHelper.simplifyHostname(hostname);
     Map<Integer, Map<Short, Map<Short, Long>>> partitionAccountContainerUsage = new HashMap<>();

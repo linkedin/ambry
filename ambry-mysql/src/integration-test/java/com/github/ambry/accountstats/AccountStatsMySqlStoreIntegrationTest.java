@@ -260,11 +260,11 @@ public class AccountStatsMySqlStoreIntegrationTest {
         .collect(Collectors.toMap(Pair::getSecond, Pair::getFirst));
     assertEquals(partitionKeyToClassName, dbPartitionKeyToClassName);
 
-    StatsWrapper obtainedStats1 = mySqlStore.queryPartitionClassStatsOf(hostname1, partitionNameAndIds);
+    StatsWrapper obtainedStats1 = mySqlStore.queryPartitionClassStatsByHost(hostname1, partitionNameAndIds);
     assertEquals(partitionClassStats1.getSnapshot(), obtainedStats1.getSnapshot());
-    StatsWrapper obtainedStats2 = mySqlStore.queryPartitionClassStatsOf(hostname2, partitionNameAndIds);
+    StatsWrapper obtainedStats2 = mySqlStore.queryPartitionClassStatsByHost(hostname2, partitionNameAndIds);
     assertEquals(partitionClassStats2.getSnapshot(), obtainedStats2.getSnapshot());
-    StatsWrapper obtainedStats3 = mySqlStore3.queryPartitionClassStatsOf(hostname3, partitionNameAndIds);
+    StatsWrapper obtainedStats3 = mySqlStore3.queryPartitionClassStatsByHost(hostname3, partitionNameAndIds);
     assertEquals(partitionClassStats3.getSnapshot(), obtainedStats3.getSnapshot());
   }
 

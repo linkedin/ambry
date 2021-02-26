@@ -29,6 +29,8 @@ public class StatsManagerConfig {
   public static final String STATS_ENABLE_MYSQL_REPORT = "stats.enable.mysql.report";
   public static final String STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES = "stats.health.report.exclude.account.names";
   public static final String STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES = "stats.publish.exclude.account.names";
+  public static final String STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS =
+      "stats.publish.partition.class.report.period.in.secs";
 
   /**
    * The file path (including filename) to be used for publishing the stats.
@@ -74,6 +76,14 @@ public class StatsManagerConfig {
   @Default("")
   public final List<String> publishExcludeAccountNames;
 
+  /**
+   * The time period in seconds that configures how often partition class stats are published to mysql. Set it to 0 to
+   * disable publishing partition class reports to mysql database.
+   */
+  @Config(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS)
+  @Default("0")
+  public final long publishPartitionClassReportPeriodInSecs;
+
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
     outputFilePath = verifiableProperties.getString(STATS_OUTPUT_FILE_PATH, "/tmp/stats_output.json");
     publishPeriodInSecs = verifiableProperties.getLongInRange(STATS_PUBLISH_PERIOD_IN_SECS, 7200, 0, Long.MAX_VALUE);
@@ -86,5 +96,11 @@ public class StatsManagerConfig {
     excludeNames = verifiableProperties.getString(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, "").trim();
     publishExcludeAccountNames =
         excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
+    publishPartitionClassReportPeriodInSecs =
+        verifiableProperties.getLongInRange(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS, 0, 0, Long.MAX_VALUE);
+    if (publishPartitionClassReportPeriodInSecs != 0 && !enableMysqlReport) {
+      throw new IllegalStateException(
+          "Bad configuration, you have to enableMysqlReport if you set a non-zero value for publishPartitionClassReportPeriodInSecs");
+    }
   }
 }

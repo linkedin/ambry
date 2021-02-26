@@ -1041,7 +1041,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedAdminRequest.getClientId(), clientId);
     Assert.assertEquals(deserializedAdminRequest.getType(), adminRequestType);
     if (id != null) {
-      Assert.assertTrue(deserializedAdminRequest.getPartitionId().isEqual(id.toString()));
+      Assert.assertTrue(deserializedAdminRequest.getPartitionId().isEqual(id.toPathString()));
     } else {
       Assert.assertNull(deserializedAdminRequest.getPartitionId());
     }
