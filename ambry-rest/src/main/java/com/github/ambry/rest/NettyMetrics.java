@@ -18,6 +18,8 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.utils.Utils;
+import io.netty.channel.EventLoopGroup;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -356,17 +358,12 @@ public class NettyMetrics {
 
   /**
    * Registers pendingTasks of NettyServer worker's EventLoopGroup to track
-   * @param pendingTasksGetter the pending tasks to tracked
+   * @param eventLoopGroup the {@link EventLoopGroup} tracked
+   * @param groupName the eventLoopGroup's name: Worker or Boss
    */
-  void registerNettyWorkerPendingTasksGauge(Gauge<Long> pendingTasksGetter) {
-    metricRegistry.register(MetricRegistry.name(NettyServer.class, "NettyWorkerPendingTasks"), pendingTasksGetter);
-  }
-
-  /**
-   * Registers pendingTasks of NettyServer boss's EventLoopGroup to track
-   * @param pendingTasksGetter the pending tasks to tracked
-   */
-  void registerNettyBossPendingTasksGauge(Gauge<Long> pendingTasksGetter) {
-    metricRegistry.register(MetricRegistry.name(NettyServer.class, "NettyBossPendingTasks"), pendingTasksGetter);
+  void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup, String groupName) {
+    Gauge<Long> pendingTasksGetter = () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
+    metricRegistry.register(MetricRegistry.name(NettyServer.class, "NettyPendingTasks" + groupName),
+        pendingTasksGetter);
   }
 }

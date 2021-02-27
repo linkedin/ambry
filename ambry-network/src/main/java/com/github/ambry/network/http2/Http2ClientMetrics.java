@@ -19,6 +19,8 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.utils.Utils;
+import io.netty.channel.EventLoopGroup;
 
 
 /**
@@ -109,7 +111,8 @@ public class Http2ClientMetrics {
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamExceptionCount"));
   }
 
-  void registerNettyPendingTasksGauge(Gauge<Long> pendingTasksGetter) {
+  void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup) {
+    Gauge<Long> pendingTasksGetter =  () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
     registry.register(MetricRegistry.name(Http2NetworkClient.class, "NettyPendingTasks"), pendingTasksGetter);
   }
 }

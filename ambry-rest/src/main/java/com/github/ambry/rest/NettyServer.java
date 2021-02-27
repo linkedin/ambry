@@ -88,8 +88,8 @@ public class NettyServer implements NioServer {
       for (Map.Entry<Integer, ChannelInitializer<SocketChannel>> entry : channelInitializers.entrySet()) {
         bindServer(entry.getKey(), entry.getValue(), bossGroup, workerGroup);
       }
-      nettyMetrics.registerNettyBossPendingTasksGauge(() -> Utils.getNumberOfPendingTasks(bossGroup));
-      nettyMetrics.registerNettyWorkerPendingTasksGauge(() -> Utils.getNumberOfPendingTasks(workerGroup));
+      nettyMetrics.registerNettyPendingTasksGauge(bossGroup, "Boss");
+      nettyMetrics.registerNettyPendingTasksGauge(workerGroup, "Worker");
     } catch (InterruptedException e) {
       logger.error("NettyServer start await was interrupted", e);
       nettyMetrics.nettyServerStartError.inc();

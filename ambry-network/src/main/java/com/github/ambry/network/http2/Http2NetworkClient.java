@@ -74,7 +74,7 @@ public class Http2NetworkClient implements NetworkClient {
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
     correlationIdInFlightToChannelMap = new ConcurrentHashMap<>();
-    http2ClientMetrics.registerNettyPendingTasksGauge(() -> Utils.getNumberOfPendingTasks(eventLoopGroup));
+    http2ClientMetrics.registerNettyPendingTasksGauge(eventLoopGroup);
     logger.info("Http2NetworkClient started");
   }
 
