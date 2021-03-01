@@ -54,6 +54,7 @@ public class Http2NetworkClientFactory implements NetworkClientFactory {
       logger.info("Create NioEventLoopGroup in Http2NetworkClientFactory.");
       this.eventLoopGroup = new NioEventLoopGroup(http2ClientConfig.http2NettyEventLoopGroupThreads);
     }
+    this.http2ClientMetrics.registerNettyPendingTasksGauge(eventLoopGroup);
   }
 
   /**
