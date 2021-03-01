@@ -363,7 +363,7 @@ public class NettyMetrics {
    */
   void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup, String groupName) {
     Gauge<Long> pendingTasksGetter = () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
-    metricRegistry.register(MetricRegistry.name(NettyServer.class, "NettyPendingTasks" + groupName),
+    metricRegistry.register(MetricRegistry.name(NettyServer.class, "Netty" + groupName + "PendingTasks"),
         pendingTasksGetter);
   }
 }
