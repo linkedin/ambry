@@ -38,8 +38,8 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
    */
   public AmbryCapacityUnitQuotaEnforcer(QuotaSource quotaSource) {
     this.quotaSource = quotaSource;
-    this.allowReadRecommendation = new QuotaRecommendation(false, 0, QuotaName.READ_CAPACITY_UNIT, 200, 0, -1);
-    this.allowWriteRecommendation = new QuotaRecommendation(false, 0, QuotaName.WRITE_CAPACITY_UNIT, 200, 0, -1);
+    this.allowReadRecommendation = new QuotaRecommendation(false, 0, QuotaName.READ_CAPACITY_UNIT, 200, 0);
+    this.allowWriteRecommendation = new QuotaRecommendation(false, 0, QuotaName.WRITE_CAPACITY_UNIT, 200, 0);
   }
 
   @Override
