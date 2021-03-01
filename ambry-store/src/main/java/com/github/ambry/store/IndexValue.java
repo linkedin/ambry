@@ -39,7 +39,7 @@ import static com.github.ambry.account.Container.*;
  * |           |           |         |   ( 4 bytes)    | (8 bytes) |   (4 bytes)   |           |             |
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
- * Version_3
+ * Version_3 Version_4
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  | OperationTime | ServiceId | ContainerId | LifeVersion   |
  * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset    |   in secs     | (2 bytes) | (2 bytes)   | (2 bytes)     |
@@ -77,7 +77,7 @@ class IndexValue implements Comparable<IndexValue> {
           + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
           + CONTAINER_ID_SIZE_IN_BYTES;
 
-  final static int INDEX_VALUE_SIZE_IN_BYTES_V3 = INDEX_VALUE_SIZE_IN_BYTES_V1_V2 + LIFE_VERSION_SIZE_IN_BYTES;
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V3_V4 = INDEX_VALUE_SIZE_IN_BYTES_V1_V2 + LIFE_VERSION_SIZE_IN_BYTES;
 
   private long size;
   private Offset offset;
@@ -133,8 +133,9 @@ class IndexValue implements Comparable<IndexValue> {
         lifeVersion = 0;
         break;
       case PersistentIndex.VERSION_3:
-        if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V3) {
-          throw new IllegalArgumentException("Invalid buffer size for formatVersion 3");
+      case PersistentIndex.VERSION_4:
+        if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V3_V4) {
+          throw new IllegalArgumentException("Invalid buffer size for formatVersion 3/4");
         }
         size = value.getLong();
         offset = new Offset(logSegmentName, value.getLong());
@@ -285,6 +286,21 @@ class IndexValue implements Comparable<IndexValue> {
   }
 
   /**
+   * @return {@link PersistentIndex.IndexEntryType} associated with this {@link IndexValue}.
+   */
+  PersistentIndex.IndexEntryType getIndexValueType() {
+    PersistentIndex.IndexEntryType type = PersistentIndex.IndexEntryType.PUT;
+    if (isDelete()) {
+      type = PersistentIndex.IndexEntryType.DELETE;
+    } else if (isUndelete()) {
+      type = PersistentIndex.IndexEntryType.UNDELETE;
+    } else if (isTtlUpdate()) {
+      type = PersistentIndex.IndexEntryType.TTL_UPDATE;
+    }
+    return type;
+  }
+
+  /**
    * @return the expiration time of the index value in ms
    */
   long getExpiresAtMs() {
@@ -423,7 +439,8 @@ class IndexValue implements Comparable<IndexValue> {
         value.position(0);
         break;
       case PersistentIndex.VERSION_3:
-        value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V3);
+      case PersistentIndex.VERSION_4:
+        value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V3_V4);
         value.putLong(size);
         value.putLong(offset.getOffset());
         value.put(flags);

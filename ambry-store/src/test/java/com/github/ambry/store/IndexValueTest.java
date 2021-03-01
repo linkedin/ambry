@@ -50,7 +50,7 @@ public class IndexValueTest {
   public static List<Object[]> data() {
     return Arrays.asList(
         new Object[][]{{PersistentIndex.VERSION_0}, {PersistentIndex.VERSION_1}, {PersistentIndex.VERSION_2},
-            {PersistentIndex.VERSION_3}});
+            {PersistentIndex.VERSION_3}, {PersistentIndex.VERSION_4}});
   }
 
   /**
@@ -225,6 +225,7 @@ public class IndexValueTest {
       case PersistentIndex.VERSION_1:
       case PersistentIndex.VERSION_2:
       case PersistentIndex.VERSION_3:
+      case PersistentIndex.VERSION_4:
         expiresAtMs = expiresAtMs >= 0 ? Utils.getTimeInMsToTheNearestSec(expiresAtMs) : Utils.Infinite_Time;
         expiresAtMs =
             TimeUnit.MILLISECONDS.toSeconds(expiresAtMs) > Integer.MAX_VALUE ? Utils.Infinite_Time : expiresAtMs;
@@ -362,7 +363,8 @@ public class IndexValueTest {
         indexValue = new IndexValue(offset.getName(), value, persistentIndexVersion);
         break;
       case PersistentIndex.VERSION_3:
-        value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3);
+      case PersistentIndex.VERSION_4:
+        value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4);
         value.putLong(size);
         value.putLong(offset.getOffset());
         value.put(flags);
@@ -374,7 +376,7 @@ public class IndexValueTest {
         value.putShort(containerId);
         value.putShort(lifeVersion);
         value.position(0);
-        indexValue = new IndexValue(offset.getName(), value, PersistentIndex.VERSION_3);
+        indexValue = new IndexValue(offset.getName(), value, persistentIndexVersion);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized version: " + persistentIndexVersion);

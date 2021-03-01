@@ -60,6 +60,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.StoreFindToken.*;
+
 
 /**
  * Represents a segment of an index. The segment is represented by a
@@ -84,6 +86,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   private final int LOG_END_OFFSET_FIELD_LENGTH = 8;
   private final int LAST_MODIFIED_TIME_FIELD_LENGTH = 8;
   private final int RESET_KEY_TYPE_FIELD_LENGTH = 2;
+  private final int RESET_KEY_VERSION_FIELD_LENGTH = 2;
   private final StoreConfig config;
   private final String indexSegmentFilenamePrefix;
   private final Offset startOffset;
@@ -109,6 +112,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   private Offset prevSafeEndPoint = null;
   // reset key refers to the first StoreKey that is added to the index segment
   private Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
+  private short resetKeyVersion = UNINITIALIZED_RESET_KEY_VERSION;
   private NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index = null;
 
   /**
@@ -328,6 +332,13 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   Pair<StoreKey, PersistentIndex.IndexEntryType> getResetKey() {
     return resetKey;
+  }
+
+  /**
+   * @return life version of reset key.
+   */
+  short getResetKeyVersion() {
+    return resetKeyVersion;
   }
 
   /**
@@ -555,15 +566,8 @@ class IndexSegment implements Iterable<IndexEntry> {
         bloomFilter.add(getStoreKeyBytes(entry.getKey()));
       }
       if (resetKey == null) {
-        PersistentIndex.IndexEntryType type = PersistentIndex.IndexEntryType.PUT;
-        if (entry.getValue().isDelete()) {
-          type = PersistentIndex.IndexEntryType.DELETE;
-        } else if (entry.getValue().isUndelete()) {
-          type = PersistentIndex.IndexEntryType.UNDELETE;
-        } else if (entry.getValue().isTtlUpdate()) {
-          type = PersistentIndex.IndexEntryType.TTL_UPDATE;
-        }
-        resetKey = new Pair<>(entry.getKey(), type);
+        resetKey = new Pair<>(entry.getKey(), entry.getValue().getIndexValueType());
+        resetKeyVersion = entry.getValue().getLifeVersion();
       }
       numberOfItems.incrementAndGet();
       sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity());
@@ -628,6 +632,29 @@ class IndexSegment implements Iterable<IndexEntry> {
   /**
    * Writes the index to a persistent file.
    *
+   * Those that are written in version 4 has the following format:
+   *
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * | version | entrysize | valuesize | fileendpointer |  last modified time(in secs) | Reset key | Reset key type | Reset key version ...
+   * |(2 bytes)|(4 bytes)  | (4 bytes) |    (8 bytes)   |     (4 bytes)                | (m bytes) |   ( 2 bytes)   |  (2 bytes)        ...
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *         - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *     ...   key 1    | value 1          | Padding    | ...  | key n     | value n           | Padding    | crc      |
+   *     ...   (m bytes)| (valuesize bytes)| (var size) |      | (p bytes) | (valuesize bytes) | (var size) | (8 bytes)|
+   *         - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *          |<- - - - - (entrysize bytes) - - - - - ->|      |<- - - - - - (entrysize bytes)- - - - - - ->|
+   *
+   *  version            - the index format version
+   *  entrysize          - the total size of an entry (key + value + padding) in this index segment
+   *  valuesize          - the size of the value in this index segment
+   *  fileendpointer     - the log end pointer that pertains to the index being persisted
+   *  last modified time - the last modified time of the index segment in secs
+   *  reset key          - the reset key(StoreKey) of the index segment
+   *  reset key type     - the reset key index entry type(PUT/DELETE/TTLUpdate/UNDELETE)
+   *  reset key version  - the life version of reset key
+   *  key n / value n    - the key and value entries contained in this index segment
+   *  crc                - the crc of the index segment content
+   *
    * Those that are written in version 2 and 3 have the following format:
    *
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -646,7 +673,7 @@ class IndexSegment implements Iterable<IndexEntry> {
    *  fileendpointer     - the log end pointer that pertains to the index being persisted
    *  last modified time - the last modified time of the index segment in secs
    *  reset key          - the reset key(StoreKey) of the index segment
-   *  reset key type     - the reset key index entry type(PUT/DELETE)
+   *  reset key type     - the reset key index entry type(PUT/DELETE/TTLUpdate/UNDELETE)
    *  key n / value n    - the key and value entries contained in this index segment
    *  crc                - the crc of the index segment content
    *
@@ -723,6 +750,10 @@ class IndexSegment implements Iterable<IndexEntry> {
           writer.writeLong(lastModifiedTimeSec.get());
           writer.write(resetKey.getFirst().toBytes());
           writer.writeShort(resetKey.getSecond().ordinal());
+        }
+        if (getVersion() >= PersistentIndex.VERSION_4) {
+          // write reset key life version
+          writer.writeShort(resetKeyVersion);
         }
 
         byte[] maxPaddingBytes = null;
@@ -884,6 +915,20 @@ class IndexSegment implements Iterable<IndexEntry> {
               .sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
+        case PersistentIndex.VERSION_4:
+          persistedEntrySize = serEntries.getInt();
+          valueSize = serEntries.getInt();
+          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+          lastModifiedTimeSec.set(serEntries.getLong());
+          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
+          resetKeyType = serEntries.getShort();
+          resetKeyVersion = serEntries.getShort();
+          resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
+          indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
+              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
+              .sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH + RESET_KEY_VERSION_FIELD_LENGTH;
+          firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
+          break;
         default:
           throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " unknown version in index file",
               StoreErrorCodes.Index_Version_Error);
@@ -923,6 +968,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           break;
         case PersistentIndex.VERSION_2:
         case PersistentIndex.VERSION_3:
+        case PersistentIndex.VERSION_4:
           persistedEntrySize = stream.readInt();
           valueSize = stream.readInt();
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
@@ -942,6 +988,10 @@ class IndexSegment implements Iterable<IndexEntry> {
         resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
         indexSizeExcludingEntries +=
             LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
+        if(getVersion() >= PersistentIndex.VERSION_4){
+          resetKeyVersion = stream.readShort();
+          indexSizeExcludingEntries += RESET_KEY_VERSION_FIELD_LENGTH;
+        }
       }
       firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
       logger.trace("IndexSegment : {} reading log end offset {} from file", indexFile.getAbsolutePath(), logEndOffset);

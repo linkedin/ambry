@@ -984,7 +984,7 @@ class CuratedLogIndexState {
         } else if (value.isUndelete()) {
           Short prevLifeVersion = keyToLifeVersionMap.put(id, value.getLifeVersion());
           short currentLifeVersion = value.getLifeVersion();
-          if (PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 && prevLifeVersion != null) {
+          if (PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3 && prevLifeVersion != null) {
             assertTrue("Undelete's lifeVersion should be greater than previous one, Undelete: " + currentLifeVersion
                 + " Previous: " + prevLifeVersion, prevLifeVersion < currentLifeVersion);
           }

@@ -325,7 +325,8 @@ public class HardDeleteVerifier {
               valueByteSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
               break;
             case PersistentIndex.VERSION_3:
-              valueByteSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3;
+            case PersistentIndex.VERSION_4:
+              valueByteSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4;
               break;
             default:
               throw new IllegalArgumentException("Unknown PersistentIndex Version.");

@@ -85,7 +85,7 @@ public class IndexTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{false, PersistentIndex.VERSION_2}, {true, PersistentIndex.VERSION_2},
-        {true, PersistentIndex.VERSION_3}});
+        {true, PersistentIndex.VERSION_3}, {true, PersistentIndex.VERSION_4}});
   }
 
   /**
@@ -121,50 +121,54 @@ public class IndexTest {
    */
   @Test
   public void compatibilityTest() throws StoreException {
-    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_2);
-    // change the version to 3 and reload the index.
-    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_3;
-    // reloading the index at version 3 to test backward compatibility
+    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_2
+        || PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3);
+    // change the version to newer version and reload the index.
+    PersistentIndex.CURRENT_VERSION = (short) (persistentIndexVersion + 1);
+    // reloading the index at new version to test backward compatibility
     state.reloadIndexAndVerifyState(true, false);
 
     // get some values out to make sure we can read from the old version
     IndexValue value = state.index.findKey(state.liveKeys.iterator().next());
-    assertNotNull("Version 3 should be able to read version 2 live key", value);
-    assertEquals("Version doesn't match", PersistentIndex.VERSION_2, value.getFormatVersion());
+    assertNotNull("New version should be able to read old version live key", value);
+    assertEquals("Version doesn't match", persistentIndexVersion, value.getFormatVersion());
     assertFalse("Not deleted", value.isDelete());
 
     value = state.index.findKey(state.expiredKeys.iterator().next());
-    assertNotNull("Version 3 should be able to read version 2 expired key", value);
-    assertEquals("Version doesn't match", PersistentIndex.VERSION_2, value.getFormatVersion());
+    assertNotNull("New version should be able to old version expired key", value);
+    assertEquals("Version doesn't match", persistentIndexVersion, value.getFormatVersion());
     assertFalse("Not deleted", value.isDelete());
-    assertFalse("Not ttlupdated", value.isTtlUpdate());
+    assertFalse("Not ttlUpdated", value.isTtlUpdate());
 
     value = state.index.findKey(state.deletedKeys.iterator().next());
-    assertNotNull("Version 3 should be able to read version 2 deleted key", value);
-    assertEquals("Version doesn't match", PersistentIndex.VERSION_2, value.getFormatVersion());
+    assertNotNull("New version should be able to old version deleted key", value);
+    assertEquals("Version doesn't match", persistentIndexVersion, value.getFormatVersion());
     assertTrue("Not deleted", value.isDelete());
 
-    // If we are here, then at version 3 we can read all the index entries in version 2.
-    // Now add some index entries at version 3.
+    // If we are here, then at new version we can read all the index entries in old version.
+    // Now add some index entries at new version.
+    int indexSegmentCount = state.index.getIndexSegments().size();
     IndexEntry entry =
         state.addPutEntries(1, PUT_RECORD_SIZE, state.time.milliseconds() + TimeUnit.DAYS.toMillis(2)).get(0);
     MockId key = (MockId) entry.getKey();
     state.makePermanent(key, false);
     state.addDeleteEntry(key);
+    assertEquals("New version entry should roll over to new index segment", indexSegmentCount + 1,
+        state.index.getIndexSegments().size());
 
     value = state.index.findKey(key);
-    assertNotNull("Version 3 should be able to read version 3 expired key", value);
-    assertEquals("Version doesn't match", PersistentIndex.VERSION_3, value.getFormatVersion());
+    assertNotNull("New version should be able to new version expired key", value);
+    assertEquals("Version doesn't match", PersistentIndex.CURRENT_VERSION, value.getFormatVersion());
     assertTrue("Not deleted", value.isDelete());
 
-    // change the version back to 2, so we can test forward compatibility
-    PersistentIndex.CURRENT_VERSION = PersistentIndex.VERSION_2;
+    // change the version back to old version, so we can test forward compatibility
+    PersistentIndex.CURRENT_VERSION = persistentIndexVersion;
     state.reloadIndexAndVerifyState(true, false);
 
-    // get records written in version 3 make sure we can read it out.
+    // get records written in new version make sure we can read it out.
     value = state.index.findKey(key);
-    assertNotNull("Version 2 should be able to read version 3 expired key", value);
-    assertEquals("Version doesn't match", PersistentIndex.VERSION_3, value.getFormatVersion());
+    assertNotNull("Old version should be able to new version expired key", value);
+    assertEquals("Version doesn't match", (short) (persistentIndexVersion + 1), value.getFormatVersion());
     assertTrue("Not deleted", value.isDelete());
   }
 
@@ -219,7 +223,7 @@ public class IndexTest {
    * @throws StoreException
    */
   @Test
-  public void getBlobReadInfoTest() throws StoreException, IOException {
+  public void getBlobReadInfoTest() throws StoreException {
     state.reloadIndex(true, false);
     List<EnumSet<StoreGetOptions>> allCombos = new ArrayList<>();
     allCombos.add(EnumSet.noneOf(StoreGetOptions.class));
@@ -361,7 +365,7 @@ public class IndexTest {
   @Test
   public void undeleteBasicTest() throws StoreException {
     assumeTrue(isLogSegmented);
-    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3);
+    assumeTrue(PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3);
     // Get deleted key that hasn't been TTLUpdated
     StoreKey targetKey = null;
     for (StoreKey key : state.deletedKeys) {
@@ -398,8 +402,7 @@ public class IndexTest {
    */
   @Test
   public void markAsUndeleteLifeVersion() throws Exception {
-    assumeTrue(isLogSegmented);
-    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3);
+    assumeTrue(isLogSegmented && PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3);
     short lifeVersion = 2;
     IndexEntry entry = state.addPutEntries(1, PUT_RECORD_SIZE, 0, lifeVersion).get(0);
     MockId id = (MockId) entry.getKey();
@@ -483,8 +486,7 @@ public class IndexTest {
    */
   @Test
   public void markAsUndeletedBadInputTest() throws StoreException {
-    assumeTrue(isLogSegmented);
-    assumeTrue(PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3);
+    assumeTrue(isLogSegmented && PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3);
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     try {
@@ -894,11 +896,10 @@ public class IndexTest {
    * 2. Multiple segment recovery
    * 3. Recovery after index is completely lost
    * In all cases, the tests also verify that end offsets are set correctly.
-   * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void recoverySuccessTest() throws IOException, StoreException {
+  public void recoverySuccessTest() throws StoreException {
     state.advanceTime(1);
     singleSegmentRecoveryTest();
     if (isLogSegmented) {
@@ -1323,7 +1324,7 @@ public class IndexTest {
     int latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     // add first entry with size under storeIndexPersistedEntryMinBytes.
     int indexValueSize =
-        PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3
+        PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4
             : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
     int keySize = config.storeIndexPersistedEntryMinBytes / 2 - indexValueSize - serOverheadBytes;
     addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
