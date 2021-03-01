@@ -125,7 +125,6 @@ public class IndexSegmentTest {
    */
   @Test
   public void comprehensiveTest() throws IOException, StoreException {
-    assumeTrue(formatVersion == PersistentIndex.VERSION_0);
     if (formatVersion >= PersistentIndex.VERSION_2) {
       for (boolean includeSmall : new boolean[]{false, true}) {
         for (boolean includeLarge : new boolean[]{false, true}) {
