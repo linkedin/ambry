@@ -122,7 +122,7 @@ public class StatsManagerIntegrationTest {
     StatsManager.AccountStatsPublisher publisher = statsManager.new AccountStatsPublisher(accountStatsMySqlStore);
     publisher.run();
 
-    StatsWrapper statsWrapper = accountStatsMySqlStore.queryAccountStatsByHost(HOSTNAME);
+    StatsWrapper statsWrapper = accountStatsMySqlStore.queryAccountStatsByHost(HOSTNAME, PORT);
     assertEquals(aggregatedAccountStatsSnapshot, statsWrapper.getSnapshot());
   }
 
@@ -142,7 +142,7 @@ public class StatsManagerIntegrationTest {
     publisher.run();
 
     Map<String, Set<Integer>> partitionNameAndIds = accountStatsMySqlStore.queryPartitionNameAndIds();
-    StatsWrapper statsWrapper = accountStatsMySqlStore.queryPartitionClassStatsByHost(HOSTNAME, partitionNameAndIds);
+    StatsWrapper statsWrapper = accountStatsMySqlStore.queryPartitionClassStatsByHost(HOSTNAME, PORT, partitionNameAndIds);
     assertEquals(aggregatedPartitionClassStatsSnapshot, statsWrapper.getSnapshot());
   }
 
