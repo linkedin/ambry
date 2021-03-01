@@ -21,7 +21,6 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.AmbryHealthReport;
-import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -71,6 +70,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final DataNodeConfigSource dataNodeConfigSource;
   private final HelixAdmin helixAdmin;
+  private final MetricRegistry metricRegistry;
   private volatile boolean disablePartitionsComplete = false;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
@@ -88,6 +88,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       String zkConnectStr, boolean isSoleParticipant) {
     this.clusterMapConfig = clusterMapConfig;
     this.zkConnectStr = zkConnectStr;
+    this.metricRegistry = metricRegistry;
     participantMetrics =
         new HelixParticipantMetrics(metricRegistry, isSoleParticipant ? null : zkConnectStr, localPartitionAndState);
     clusterName = clusterMapConfig.clusterMapClusterName;
@@ -458,8 +459,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
                     callback, clusterMapConfig);
               }
             });
-        if (healthReport.getStatsReportType() == StatsReportType.ACCOUNT_REPORT
-            && clusterMapConfig.clustermapEnableMySqlAggregationTask && accountStatsStore != null) {
+        if (clusterMapConfig.clustermapEnableMySqlAggregationTask && accountStatsStore != null) {
           taskFactoryMap.put(
               String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
               new TaskFactory() {
@@ -467,7 +467,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
                 public Task createNewTask(TaskCallbackContext context) {
                   return new MySqlReportAggregatorTask(context.getManager(),
                       healthReport.getAggregateIntervalInMinutes(), healthReport.getStatsReportType(),
-                      accountStatsStore, callback, clusterMapConfig);
+                      accountStatsStore, callback, clusterMapConfig, metricRegistry);
                 }
               });
         }

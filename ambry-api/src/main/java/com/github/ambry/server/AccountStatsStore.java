@@ -40,10 +40,11 @@ public interface AccountStatsStore {
   /**
    * Return individual ambry server's stats for the given {@code hostname}. This is the stats stored by method {@link #storeAccountStats}.
    * @param hostname The hostname.
+   * @param port The port number.
    * @return {@link StatsWrapper} of given {@code hostname}.
    * @throws Exception
    */
-  StatsWrapper queryAccountStatsByHost(String hostname) throws Exception;
+  StatsWrapper queryAccountStatsByHost(String hostname, int port) throws Exception;
 
   /**
    * Return the aggregated stats. This is the stats stored by method {@link #storeAggregatedAccountStats}.
@@ -138,11 +139,12 @@ public interface AccountStatsStore {
    * value from {@link #queryPartitionNameAndIds()}. The returned StatsWrapper is constructed in the same way as it's
    * passed to method {@link #storePartitionClassStats}.
    * @param hostname The hostname
+   * @param port The port numbere
    * @param partitionNameAndIds the return value of {@link #queryPartitionNameAndIds()}.
    * @return A {@link StatsWrapper} represents the per host partition class stats.
    * @throws Exception
    */
-  StatsWrapper queryPartitionClassStatsByHost(String hostname, Map<String, Set<Integer>> partitionNameAndIds)
+  StatsWrapper queryPartitionClassStatsByHost(String hostname, int port, Map<String, Set<Integer>> partitionNameAndIds)
       throws Exception;
 
   /**
