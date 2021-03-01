@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2Utils {
 
-  private static final Logger logger = LoggerFactory.getLogger(Http2ClientResponseHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(Http2Utils.class);
 
   static RequestInfo releaseAndCloseStreamChannel(Channel streamChannel) {
     logger.debug("Stream channel is being closed. Stream: {}, Parent: {}", streamChannel, streamChannel.parent());

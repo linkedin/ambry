@@ -21,7 +21,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.ArrayBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +60,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     ChannelFutureListener channelFutureListener = new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
+        http2ServerMetrics.responseFlushTime.update(System.currentTimeMillis() - originalRequest.getStartTimeInMs());
         if (!future.isSuccess()) {
           ReferenceCountUtil.safeRelease(payloadToSend);
         }

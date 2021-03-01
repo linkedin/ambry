@@ -15,9 +15,12 @@
 package com.github.ambry.network.http2;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.utils.Utils;
+import io.netty.channel.EventLoopGroup;
 
 
 /**
@@ -25,6 +28,7 @@ import com.codahale.metrics.MetricRegistry;
  */
 public class Http2ClientMetrics {
 
+  private final MetricRegistry registry;
   public final Histogram http2ConnectionAcquireTime;
   public final Histogram http2StreamAcquireTime;
   public final Histogram http2FirstStreamAcquireTime;
@@ -56,6 +60,7 @@ public class Http2ClientMetrics {
   public final Counter http2StreamExceptionCount;
 
   public Http2ClientMetrics(MetricRegistry registry) {
+    this.registry = registry;
     http2ConnectionAcquireTime =
         registry.histogram(MetricRegistry.name(Http2NetworkClient.class, "Http2ConnectionAcquireTime"));
     http2StreamAcquireTime =
@@ -104,5 +109,10 @@ public class Http2ClientMetrics {
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2ParentExceptionCount"));
     http2StreamExceptionCount =
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamExceptionCount"));
+  }
+
+  void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup) {
+    Gauge<Long> pendingTasksGetter =  () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
+    registry.register(MetricRegistry.name(Http2NetworkClient.class, "NettyPendingTasks"), pendingTasksGetter);
   }
 }

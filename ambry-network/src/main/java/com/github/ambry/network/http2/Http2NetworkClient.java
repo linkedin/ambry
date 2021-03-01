@@ -21,6 +21,7 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.utils.Utils;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -64,7 +65,6 @@ public class Http2NetworkClient implements NetworkClient {
 
   public Http2NetworkClient(Http2ClientMetrics http2ClientMetrics, Http2ClientConfig http2ClientConfig,
       SSLFactory sslFactory, EventLoopGroup eventLoopGroup) {
-    logger.info("Http2NetworkClient started");
     this.http2ClientConfig = http2ClientConfig;
     this.http2ClientResponseHandler = new Http2ClientResponseHandler(http2ClientMetrics);
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
@@ -74,6 +74,7 @@ public class Http2NetworkClient implements NetworkClient {
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
     correlationIdInFlightToChannelMap = new ConcurrentHashMap<>();
+    logger.info("Http2NetworkClient started");
   }
 
   @Override

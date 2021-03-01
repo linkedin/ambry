@@ -16,6 +16,9 @@ package com.github.ambry.utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.EventLoopGroup;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.SingleThreadEventExecutor;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -1354,5 +1357,25 @@ public class Utils {
     public int size() {
       return currentSize.getAsInt();
     }
+  }
+
+  /**
+   * Get number of total pending tasks in Netty EventLoopGroup.
+   */
+  public static long getNumberOfPendingTasks(final EventLoopGroup eventLoopGroup) {
+    int index = 0;
+    long totalPendingTasks = 0;
+    for (final EventExecutor eventExecutor : eventLoopGroup) {
+      if (eventExecutor instanceof SingleThreadEventExecutor) {
+        int pendingTasks = ((SingleThreadEventExecutor) eventExecutor).pendingTasks();
+        totalPendingTasks += pendingTasks;
+        logger.debug("EventLoop-{} pending tasks: {}", index, pendingTasks);
+        index++;
+      } else {
+        logger.warn("EventLoop is not SingleThreadEventExecutor");
+        break;
+      }
+    }
+    return totalPendingTasks;
   }
 }

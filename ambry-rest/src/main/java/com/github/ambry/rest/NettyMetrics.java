@@ -18,6 +18,8 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.utils.Utils;
+import io.netty.channel.EventLoopGroup;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -352,5 +354,16 @@ public class NettyMetrics {
   void registerConnectionsStatsHandler(final AtomicLong openConnectionsCount) {
     Gauge<Long> openConnections = openConnectionsCount::get;
     metricRegistry.register(MetricRegistry.name(ConnectionStatsHandler.class, "OpenConnections"), openConnections);
+  }
+
+  /**
+   * Registers pendingTasks of NettyServer worker's EventLoopGroup to track
+   * @param eventLoopGroup the {@link EventLoopGroup} tracked
+   * @param groupName the eventLoopGroup's name: Worker or Boss
+   */
+  void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup, String groupName) {
+    Gauge<Long> pendingTasksGetter = () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
+    metricRegistry.register(MetricRegistry.name(NettyServer.class, "Netty" + groupName + "PendingTasks"),
+        pendingTasksGetter);
   }
 }
