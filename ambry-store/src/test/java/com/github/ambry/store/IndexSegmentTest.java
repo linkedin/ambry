@@ -943,22 +943,30 @@ public class IndexSegmentTest {
    */
   private IndexSegment generateIndexSegment(Offset startOffset, StoreKeyFactory storeKeyFactory) {
     IndexSegment indexSegment;
-    if (formatVersion == PersistentIndex.VERSION_0) {
-      indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, config, metrics,
-          time, PersistentIndex.VERSION_0);
-    } else if (formatVersion == PersistentIndex.VERSION_1) {
-      indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
-          metrics, time, formatVersion);
-    } else if (formatVersion == PersistentIndex.VERSION_2) {
-      indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
-          metrics, time);
-    } else {
-      indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, config, metrics,
-          time, formatVersion);
+    switch (formatVersion) {
+      case PersistentIndex.VERSION_0:
+        indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, config,
+            metrics, time, formatVersion);
+        break;
+      case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
+        indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
+            metrics, time, formatVersion);
+        break;
+      case PersistentIndex.VERSION_3:
+        indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, config,
+            metrics, time, formatVersion);
+        break;
+      case PersistentIndex.VERSION_4:
+        indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, config,
+            metrics, time);
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported index version: " + formatVersion);
     }
     return indexSegment;
   }
