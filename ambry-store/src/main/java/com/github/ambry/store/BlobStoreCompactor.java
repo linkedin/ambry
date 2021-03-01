@@ -552,7 +552,7 @@ class BlobStoreCompactor {
   private boolean copyDataByLogSegment(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan)
       throws IOException, StoreException {
     logger.info("Copying data from {}", logSegmentToCopy);
-    long logSegmentStartTime = SystemTime.getInstance().milliseconds();
+    long logSegmentStartTime = time.milliseconds();
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
       logger.info("Processing index segment {}", indexSegmentToCopy.getFile());

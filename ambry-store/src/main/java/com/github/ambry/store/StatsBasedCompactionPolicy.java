@@ -48,7 +48,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
       long segmentHeaderSize, List<LogSegmentName> logSegmentsNotInJournal, BlobStoreStats blobStoreStats,
       String dataDir) throws StoreException {
     CompactionDetails details = null;
-    logger.trace("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);
+    logger.debug("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =

@@ -117,7 +117,7 @@ public class StoreConfig {
   public final int storeCompactionOperationsBytesPerSec;
 
   /**
-   * The check interval used in compaction rate throttler.
+   * The check interval used in compaction rate throttler. -1 means we check rate in every call.
    */
   @Config("store.compaction.throttler.check.interval.ms")
   @Default("-1")
@@ -401,7 +401,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.compaction.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
     storeCompactionThrottlerCheckIntervalMs =
-        verifiableProperties.getIntInRange("store.compaction.throttler.check.interval.ms", -1, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("store.compaction.throttler.check.interval.ms", -1, -1, Integer.MAX_VALUE);
     storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
     storeCompactionPurgeExpiredDeleteTombstone =
         verifiableProperties.getBoolean("store.compaction.purge.expired.delete.tombstone", false);

@@ -71,7 +71,7 @@ class CostBenefitInfo implements Comparable<CostBenefitInfo> {
 
   @Override
   public String toString() {
-    return "[CandidateInfo: Segments to compact " + segmentsToCompact + ", Cost " + cost + "," + "Benefit " + benefit
+    return "[CandidateInfo: Segments to compact " + segmentsToCompact + ", Cost " + cost + ", Benefit " + benefit
         + ", CostBenefitRatio " + costBenefitRatio + "]";
   }
 }
