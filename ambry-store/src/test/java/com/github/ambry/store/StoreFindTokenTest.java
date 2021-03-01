@@ -327,19 +327,16 @@ public class StoreFindTokenTest {
         assertEquals("Reset key type mismatch", token.getResetKeyType(), deSerToken.getResetKeyType());
         assertEquals("Reset key life version mismatch", token.getResetKeyVersion(), deSerToken.getResetKeyVersion());
       }
-      // TODO remove this "if" condition when StoreFindToken's serialize method supports VERSION 3.
-      if (version < VERSION_3) {
-        // use StoreFindToken's actual serialize method to verify that token is serialized in the expected
-        // version
-        stream = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes())));
-        deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
-        assertEquals("Stream should have ended ", 0, stream.available());
-        assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
-        compareTokens(token, deSerToken);
-        assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
-        if (version >= VERSION_2) {
-          assertEquals("IncarnationId mismatch ", token.getIncarnationId(), deSerToken.getIncarnationId());
-        }
+      // use StoreFindToken's actual serialize method to verify that token is serialized in the expected
+      // version
+      stream = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes())));
+      deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
+      assertEquals("Stream should have ended ", 0, stream.available());
+      assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
+      compareTokens(token, deSerToken);
+      assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
+      if (version >= VERSION_2) {
+        assertEquals("IncarnationId mismatch ", token.getIncarnationId(), deSerToken.getIncarnationId());
       }
     }
   }

@@ -253,6 +253,14 @@ public class StoreConfig {
   public final int storeIndexPersistedEntryMinBytes;
 
   /**
+   * Whether to rebuild replication token (if it's been invalidated) based on reset key. If {@code false}, the token
+   * will be reset to the very beginning of whole log.
+   */
+  @Config("store.rebuild.token.based.on.reset.key")
+  @Default("false")
+  public final boolean storeRebuildTokenBasedOnResetKey;
+
+  /**
    * Enables or disables accountId and containerId validation for GET/DELETE request.
    */
   @Config("store.validate.authorization")
@@ -461,5 +469,6 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.enable.bucket.for.log.segment.reports", false);
     storeAlwaysEnableTargetIndexDuplicateChecking =
         verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
+    storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);
   }
 }

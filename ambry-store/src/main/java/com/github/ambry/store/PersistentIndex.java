@@ -17,6 +17,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -1190,7 +1191,7 @@ class PersistentIndex {
       StoreFindToken storeToken = resetTokenIfRequired((StoreFindToken) token);
       logger.trace("Time used to validate token: {}", (time.milliseconds() - startTimeInMs));
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
-      storeToken = revalidateStoreFindToken(storeToken, indexSegments);
+      storeToken = revalidateStoreFindToken(storeToken, indexSegments, false);
 
       List<MessageInfo> messageEntries = new ArrayList<>();
       if (!storeToken.getType().equals(FindTokenType.IndexBased)) {
@@ -1234,15 +1235,16 @@ class PersistentIndex {
           eliminateDuplicates(messageEntries);
           logger.trace("Journal based token, Time used to eliminate duplicates: {}",
               (time.milliseconds() - startTimeInMs));
-
-          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false, null, null,
-              UNINITIALIZED_RESET_KEY_VERSION);
+          IndexSegment segmentWithToken = indexSegments.floorEntry(offsetEnd).getValue();
+          Pair<StoreKey, PersistentIndex.IndexEntryType> resetKeyPair = segmentWithToken.getResetKey();
+          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false, resetKeyPair.getFirst(), resetKeyPair.getSecond(),
+              segmentWithToken.getResetKeyVersion());
           // use the latest ref of indexSegments
           long bytesRead = getTotalBytesRead(storeFindToken, messageEntries, logEndOffsetBeforeFind, indexSegments);
           storeFindToken.setBytesRead(bytesRead);
           return new FindInfo(messageEntries, storeFindToken);
         } else {
-          storeToken = revalidateStoreFindToken(storeToken, indexSegments);
+          storeToken = revalidateStoreFindToken(storeToken, indexSegments, false);
           offsetToStart = storeToken.getType().equals(FindTokenType.Uninitialized) ? getStartOffset(indexSegments)
               : storeToken.getOffset();
           // Find index segment closest to the token offset.
@@ -1252,7 +1254,7 @@ class PersistentIndex {
           if (entry != null && !entry.getKey().equals(indexSegments.lastKey())) {
             startTimeInMs = time.milliseconds();
             newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
-                new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments);
+                new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
             logger.trace("Journal based to segment based token, Time used to find entries: {}",
                 (time.milliseconds() - startTimeInMs));
 
@@ -1273,12 +1275,13 @@ class PersistentIndex {
           return new FindInfo(messageEntries, newToken);
         }
       } else {
+        // Index based token
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
         StoreFindToken newToken =
             findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-                new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments);
+                new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
         logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
 
         startTimeInMs = time.milliseconds();
@@ -1310,7 +1313,7 @@ class PersistentIndex {
    * @param storeToken the {@link StoreFindToken} that needs to be validated
    * @return the new {@link StoreFindToken} after validating
    */
-  private StoreFindToken resetTokenIfRequired(StoreFindToken storeToken) {
+  private StoreFindToken resetTokenIfRequired(StoreFindToken storeToken) throws StoreException {
     UUID remoteIncarnationId = storeToken.getIncarnationId();
     // if incarnationId is null, for backwards compatibility purposes, the token is considered as good.
     /// if not null, we check for a match
@@ -1329,8 +1332,11 @@ class PersistentIndex {
             && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
           logger.info("Index : {} resetting offset after not clean shutdown {} before offset {}", dataDir,
               logEndOffsetOnStartup, storeToken.getOffset());
-          storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true, null, null,
-              UNINITIALIZED_RESET_KEY_VERSION);
+          IndexSegment segmentWithToken = validIndexSegments.floorEntry(logEndOffsetOnStartup).getValue();
+          Pair<StoreKey, PersistentIndex.IndexEntryType> resetKeyPair = segmentWithToken.getResetKey();
+          storeToken =
+              new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true, resetKeyPair.getFirst(),
+                  resetKeyPair.getSecond(), segmentWithToken.getResetKeyVersion());
         }
       } else if (!storeToken.getType().equals(FindTokenType.Uninitialized)
           && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
@@ -1493,17 +1499,18 @@ class PersistentIndex {
    * Finds entries starting from a key from the segment with start offset initialSegmentStartOffset. The key represents
    * the position in the segment starting from where entries needs to be fetched.
    * @param initialSegmentStartOffset The segment start offset of the segment to start reading entries from.
-   * @param key The key representing the position (exclusive) in the segment to start reading entries from. If the key
-   *            is null, all the keys will be read.
+   * @param key The key representing the position in the segment to start reading entries from (whether to read this key
+   *           as well depends on inclusive variable). If the key is null, all the keys will be read.
    * @param messageEntries the list to be populated with the MessageInfo for every entry that is read.
    * @param findEntriesCondition that determines whether to fetch more entries based on a maximum total size of entries
    *                             that needs to be returned and a time that determines the latest segment to be scanned.
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
+   * @param inclusive whether to start reading entries from the key, {@code true} inclusive, {@code false} exclusive.
    * @return A token representing the position in the segment/journal up to which entries have been read and returned.
    */
   private StoreFindToken findEntriesFromSegmentStartOffset(Offset initialSegmentStartOffset, StoreKey key,
       List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition,
-      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments, boolean inclusive) throws StoreException {
     Offset segmentStartOffset = initialSegmentStartOffset;
     if (segmentStartOffset.equals(indexSegments.lastKey())) {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
@@ -1522,7 +1529,8 @@ class PersistentIndex {
        key. Otherwise, since all the keys starting from the offset have to be read, skip this and check in the journal
        first. */
     if (key != null) {
-      if (segmentToProcess.getEntriesSince(key, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
+      if (segmentToProcess.getEntriesSince(key, findEntriesCondition, messageEntries, currentTotalSizeOfEntries,
+          inclusive)) {
         // if we did fetch entries from this segment, set the new token info accordingly.
         newTokenSegmentStartOffset = segmentStartOffset;
       }
@@ -1591,7 +1599,8 @@ class PersistentIndex {
                 + ", " + journalLastOffsetBeforeCheck + "]");
       } else {
         // Read and populate from the first key in the segment with this segmentStartOffset
-        if (segmentToProcess.getEntriesSince(null, findEntriesCondition, messageEntries, currentTotalSizeOfEntries)) {
+        if (segmentToProcess.getEntriesSince(null, findEntriesCondition, messageEntries, currentTotalSizeOfEntries,
+            false)) {
           newTokenSegmentStartOffset = segmentStartOffset;
         }
         logger.trace(
@@ -1608,8 +1617,10 @@ class PersistentIndex {
       }
     }
     if (newTokenOffsetInJournal != null) {
-      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, null, null,
-          UNINITIALIZED_RESET_KEY_VERSION);
+      IndexSegment segmentWithToken = indexSegments.floorEntry(newTokenOffsetInJournal).getValue();
+      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKeyPair = segmentWithToken.getResetKey();
+      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, resetKeyPair.getFirst(),
+          resetKeyPair.getSecond(), segmentWithToken.getResetKeyVersion());
     } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
       // If the condition does not have an end time, then since we have entered a segment, we should return at least one
       // message
@@ -1617,11 +1628,16 @@ class PersistentIndex {
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
               + initialSegmentStartOffset + ", key: " + key + ", findEntriesCondition: " + findEntriesCondition);
     } else {
+      if (newTokenSegmentStartOffset == null) {
+        return new StoreFindToken();
+      }
       // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
       // uninitialized token
-      return newTokenSegmentStartOffset == null ? new StoreFindToken()
-          : new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
-              sessionId, incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION);
+      IndexSegment segmentWithToken = indexSegments.get(newTokenSegmentStartOffset);
+      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKeyPair = segmentWithToken.getResetKey();
+      return new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
+          sessionId, incarnationId, resetKeyPair.getFirst(), resetKeyPair.getSecond(),
+          segmentWithToken.getResetKeyVersion());
     }
   }
 
@@ -1859,7 +1875,7 @@ class PersistentIndex {
       // Find the index segment corresponding to the token indexStartOffset.
       // Get entries starting from the token Key in this index.
       newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-          new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), validIndexSegments);
+          new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), validIndexSegments, false);
       if (newToken.getType().equals(FindTokenType.Uninitialized)) {
         newToken = storeToken;
       }
@@ -1912,7 +1928,7 @@ class PersistentIndex {
         Map.Entry<Offset, IndexSegment> entry = indexSegments.floorEntry(offsetToStart);
         if (entry != null && entry.getKey() != indexSegments.lastKey()) {
           newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
-              new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), indexSegments);
+              new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), indexSegments, false);
           if (newToken.getType().equals(FindTokenType.Uninitialized)) {
             newToken = storeToken;
           }
@@ -1948,8 +1964,9 @@ class PersistentIndex {
    * @return {@code token} if is consistent with the current set of index segments, a new
    * {@link FindTokenType#Uninitialized} token otherwise.
    */
-  FindToken revalidateFindToken(FindToken token) {
-    return revalidateStoreFindToken((StoreFindToken) token, validIndexSegments);
+  FindToken revalidateFindToken(FindToken token) throws StoreException {
+    // we temporary disable reset key logic for token used by hard delete (although we can improve this in the future if needed)
+    return revalidateStoreFindToken((StoreFindToken) token, validIndexSegments, true);
   }
 
   /**
@@ -1957,11 +1974,12 @@ class PersistentIndex {
    * is not, a {@link FindTokenType#Uninitialized} token is returned.
    * @param token the {@link StoreFindToken} to revalidate.
    * @param indexSegments the view of the index segments to revalidate against.
+   * @param ignoreResetKey whether to ignore reset key if a new token needs to be built.
    * @return {@code token} if is consistent with {@code indexSegments}, a new {@link FindTokenType#Uninitialized}
    * token otherwise.
    */
   private StoreFindToken revalidateStoreFindToken(StoreFindToken token,
-      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments, boolean ignoreResetKey) throws StoreException {
     StoreFindToken revalidatedToken = token;
     Offset offset = token.getOffset();
     switch (token.getType()) {
@@ -1974,7 +1992,12 @@ class PersistentIndex {
         // previous log segment.
         Offset floorOffset = indexSegments.floorKey(offset);
         if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
-          revalidatedToken = new StoreFindToken();
+          if (ignoreResetKey || token.getResetKey() == null) {
+            revalidatedToken = new StoreFindToken();
+          } else {
+            // reset key is present in the token
+            revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
+          }
           metrics.journalBasedTokenResetCount.inc();
           logger.info("Revalidated token {} because it is invalid for the index segment map", token);
         }
@@ -1982,7 +2005,12 @@ class PersistentIndex {
       case IndexBased:
         // An index based token, but the offset is not in the segments, might be caused by the compaction
         if (!indexSegments.containsKey(offset)) {
-          revalidatedToken = new StoreFindToken();
+          if (ignoreResetKey || token.getResetKey() == null) {
+            revalidatedToken = new StoreFindToken();
+          } else {
+            // reset key is present in the token
+            revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
+          }
           metrics.indexBasedTokenResetCount.inc();
           logger.info("Revalidated token {} because it is invalid for the index segment map", token);
         }
@@ -1991,6 +2019,45 @@ class PersistentIndex {
         throw new IllegalStateException("Unrecognized token type: " + token.getType());
     }
     return revalidatedToken;
+  }
+
+  /**
+   * Generate store find token based on reset key within old token.
+   * @param token the old {@link StoreFindToken} that contains reset key.
+   * @param indexSegments current valid index segments to find.
+   * @return new created token.
+   */
+  private StoreFindToken generateTokenBasedOnResetKey(StoreFindToken token,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
+    StoreKey resetKey = token.getResetKey();
+    IndexEntryType resetKeyType = token.getResetKeyType();
+    short resetKeyLifeVersion = token.getResetKeyVersion();
+    List<IndexValue> indexValues = findAllIndexValuesForKey(resetKey, null, EnumSet.of(resetKeyType), indexSegments);
+    IndexValue resetKeyIndexValue = null;
+    for(IndexValue indexValue : indexValues){
+      if(indexValue.getLifeVersion() == resetKeyLifeVersion){
+        resetKeyIndexValue = indexValue;
+        break;
+      }
+    }
+    StoreFindToken newToken = new StoreFindToken();
+    if (resetKeyIndexValue == null) {
+      // reset key is not found in current valid index segments, reset it to very beginning
+      logger.info("Reset key {} is not found in current index, token is reset to the beginning of whole log", resetKey);
+    } else {
+      if(config.storeRebuildTokenBasedOnResetKey){
+        IndexSegment targetIndexSegment = indexSegments.floorEntry(resetKeyIndexValue.getOffset()).getValue();
+        Pair<StoreKey, IndexEntryType> resetKeyPair = targetIndexSegment.getResetKey();
+        // We set inclusive = true in new token to make index segment find all entries it has (including the first one).
+        // The new token should always be index-based
+        newToken = new StoreFindToken(FindTokenType.IndexBased, targetIndexSegment.getStartOffset(),
+            targetIndexSegment.getFirstKeyInSealedSegment(), sessionId, incarnationId, true,
+            StoreFindToken.CURRENT_VERSION, resetKeyPair.getFirst(), resetKeyPair.getSecond(),
+            targetIndexSegment.getResetKeyVersion());
+      }
+      metrics.resetKeyFoundInCurrentIndex.inc();
+    }
+    return newToken;
   }
 
   /**

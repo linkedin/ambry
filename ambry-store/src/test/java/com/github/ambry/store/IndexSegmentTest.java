@@ -242,7 +242,7 @@ public class IndexSegmentTest {
 
   /**
    * Tests some corner cases with
-   * {@link IndexSegment#getIndexEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)}
+   * {@link IndexSegment#getIndexEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean, boolean)}
    * - tests that all values of a key are returned even if the find entries condition max size expires when the first
    * value is loaded
    * @throws StoreException
@@ -299,12 +299,12 @@ public class IndexSegmentTest {
       // getIndexEntriesSince with maxSize = 0 should not return anything
       FindEntriesCondition condition = new FindEntriesCondition(0);
       assertFalse("getIndexEntriesSince() should not return anything",
-          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
       assertEquals("There should be no entries returned", 0, entries.size());
       // getIndexEntriesSince with maxSize <= 1000 should return only the first key (id1)
       condition = new FindEntriesCondition(1000);
       assertTrue("getIndexEntriesSince() should return one entry",
-          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
       assertEquals("There should be one entry returned", 1, entries.size());
       assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
       assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
@@ -313,7 +313,7 @@ public class IndexSegmentTest {
       for (int maxSize : new int[]{1001, 2050, 2150}) {
         condition = new FindEntriesCondition(maxSize);
         assertTrue("getIndexEntriesSince() should return entries",
-            fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+            fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
         assertEquals("There should be four entries returned", 4, entries.size());
         assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
         assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
@@ -328,7 +328,7 @@ public class IndexSegmentTest {
       // getIndexEntriesSince with maxSize > 2150 should return five entries
       condition = new FindEntriesCondition(2151);
       assertTrue("getIndexEntriesSince() should return entries",
-          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
       assertEquals("There should be five entries returned", 5, entries.size());
       assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
       assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
@@ -345,7 +345,7 @@ public class IndexSegmentTest {
       for (int maxSize : new int[]{1, 1050, 1150}) {
         condition = new FindEntriesCondition(maxSize);
         assertTrue("getIndexEntriesSince() should return entries",
-            fromDisk.getIndexEntriesSince(id1, condition, entries, new AtomicLong(0), false));
+            fromDisk.getIndexEntriesSince(id1, condition, entries, new AtomicLong(0), false, false));
         assertEquals("There should be three entries returned", 3, entries.size());
         assertEquals("Key in entry is incorrect", id2, entries.get(0).getKey());
         assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(0).getValue().getBytes());
@@ -788,7 +788,7 @@ public class IndexSegmentTest {
    * Comprehensive tests for {@link IndexSegment}.
    * 1. Creates a segment and checks the getters to make sure they return the right values
    * 2. Adds some put entries with random sizes, checks getters again and exercises {@link IndexSegment#find(StoreKey)}
-   * and {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)}.
+   * and {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)}.
    * 3. Adds some delete entries (deletes some existing put entries and creates deletes for puts not in this segment)
    * and does the same checks as #2.
    * 4. Writes index to a file and loads it sealed and not sealed and does all the checks in #2 once again along with
@@ -1120,7 +1120,7 @@ public class IndexSegmentTest {
   }
 
   /**
-   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)} to make sure that
+   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)} to make sure that
    * it returns the right values for all keys in {@code referenceIndex} and for all conditions.
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
@@ -1132,7 +1132,7 @@ public class IndexSegmentTest {
     FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE, segment.getLastModifiedTimeSecs() - 1);
     List<MessageInfo> entries = new ArrayList<>();
     assertFalse("Should not have fetched entries since segment is too recent",
-        segment.getEntriesSince(null, condition, entries, new AtomicLong(0)));
+        segment.getEntriesSince(null, condition, entries, new AtomicLong(0), false));
     assertEquals("Should not have fetched entries since segment is too recent", 0, entries.size());
 
     long sizeLeftInSegment = segment.getEndOffset().getOffset() - segment.getStartOffset().getOffset();
@@ -1149,7 +1149,7 @@ public class IndexSegmentTest {
   }
 
   /**
-   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)} to make sure that
+   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)} to make sure that
    * it returns the right values for {@code idToCheck} for all size conditions.
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
@@ -1189,7 +1189,7 @@ public class IndexSegmentTest {
   }
 
   /**
-   * Does the {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)} and checks that
+   * Does the {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)} and checks that
    * all the returned entries are as expected and that all the entries expected have been returned.
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
@@ -1207,7 +1207,7 @@ public class IndexSegmentTest {
 
     List<MessageInfo> entries = new ArrayList<>();
     assertEquals("Unexpected return value from getEntriesSince()", highestExpectedId != null,
-        segment.getEntriesSince(idToCheck, condition, entries, new AtomicLong(existingSize)));
+        segment.getEntriesSince(idToCheck, condition, entries, new AtomicLong(existingSize), false));
     if (highestExpectedId != null) {
       assertEquals("Highest ID not as expected", highestExpectedId, entries.get(entries.size() - 1).getStoreKey());
       MockId nextExpectedId = idToCheck == null ? referenceIndex.firstKey() : referenceIndex.higherKey(idToCheck);
@@ -1224,7 +1224,7 @@ public class IndexSegmentTest {
       List<IndexEntry> indexEntries = new ArrayList<>();
       assertEquals("Unexpected return value from getIndexEntriesSince()", highestExpectedId != null,
           segment.getIndexEntriesSince(idToCheck, condition, indexEntries, new AtomicLong(existingSize),
-              oneEntryPerKey));
+              oneEntryPerKey, false));
       if (highestExpectedId != null) {
         assertEquals("Highest ID not as expected", highestExpectedId,
             indexEntries.get(indexEntries.size() - 1).getKey());

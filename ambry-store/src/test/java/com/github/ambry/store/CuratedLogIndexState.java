@@ -971,7 +971,7 @@ class CuratedLogIndexState {
 
       List<IndexEntry> indexEntries = new ArrayList<>();
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), indexEntries, new AtomicLong(0),
-          false);
+          false, false);
       for (IndexEntry entry : indexEntries) {
         MockId id = (MockId) entry.getKey();
         IndexValue value = entry.getValue();

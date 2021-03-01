@@ -497,6 +497,52 @@ public class StoreFindToken implements FindToken {
           }
         }
         break;
+      case VERSION_3:
+        offsetBytes = getOffsetInBytes();
+        sessionIdBytes = getSessionIdInBytes();
+        incarnationIdBytes = getIncarnationIdInBytes();
+        storeKeyBytes = getStoreKeyInBytes();
+        byte[] resetKeyBytes = getResetKeyInBytes();
+        size = VERSION_SIZE + TYPE_SIZE;
+        if (type != FindTokenType.Uninitialized) {
+          size +=
+              INCARNATION_ID_LENGTH_SIZE + incarnationIdBytes.length + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length
+                  + offsetBytes.length;
+          if (type == FindTokenType.JournalBased) {
+            size += INCLUSIVE_BYTE_SIZE;
+          } else if (type == FindTokenType.IndexBased) {
+            size += storeKeyBytes.length;
+          }
+          size += resetKeyBytes.length + RESET_KEY_TYPE_SIZE + RESET_KEY_VERSION_SIZE;
+        }
+        buf = new byte[size];
+        bufWrap = ByteBuffer.wrap(buf);
+        // add version
+        bufWrap.putShort(VERSION_3);
+        // add type
+        bufWrap.putShort((short) type.ordinal());
+        if (type != FindTokenType.Uninitialized) {
+          // add incarnationId
+          bufWrap.putInt(incarnationIdBytes.length);
+          bufWrap.put(incarnationIdBytes);
+          // add sessionId
+          bufWrap.putInt(sessionIdBytes.length);
+          bufWrap.put(sessionIdBytes);
+          // add offset
+          bufWrap.put(offsetBytes);
+          if (type == FindTokenType.JournalBased) {
+            bufWrap.put(getInclusive() ? (byte) 1 : (byte) 0);
+          } else if (type == FindTokenType.IndexBased) {
+            bufWrap.put(storeKeyBytes);
+          }
+          // add reset key
+          bufWrap.put(resetKeyBytes);
+          // add reset key type
+          bufWrap.putShort((short) resetKeyType.ordinal());
+          // add reset key version
+          bufWrap.putShort(resetKeyVersion);
+        }
+        break;
     }
     return buf;
   }
@@ -507,6 +553,10 @@ public class StoreFindToken implements FindToken {
 
   byte[] getStoreKeyInBytes() {
     return storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+  }
+
+  byte[] getResetKeyInBytes() {
+    return resetKey != null ? resetKey.toBytes() : ZERO_LENGTH_ARRAY;
   }
 
   byte[] getSessionIdInBytes() {

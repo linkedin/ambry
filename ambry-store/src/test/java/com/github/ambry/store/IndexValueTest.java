@@ -55,7 +55,6 @@ public class IndexValueTest {
 
   /**
    * Creates a temporary directory and sets up metrics.
-   * @throws IOException
    */
   public IndexValueTest(short version) {
     this.version = version;

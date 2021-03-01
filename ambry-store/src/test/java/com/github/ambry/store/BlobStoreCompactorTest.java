@@ -621,7 +621,7 @@ public class BlobStoreCompactorTest {
         state.index.getIndexSegments().get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
     List<IndexEntry> indexEntries = new ArrayList<>();
     assertTrue("Should have got some index entries",
-        indexSegment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), true));
+        indexSegment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), true, false));
     assertEquals("There should be 5 index entries returned", 4, indexEntries.size());
     indexEntries.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
 
@@ -646,7 +646,7 @@ public class BlobStoreCompactorTest {
     indexSegment = state.index.getIndexSegments().higherEntry(indexSegment.getStartOffset()).getValue();
     indexEntries.clear();
     assertTrue("Should have got some index entries",
-        indexSegment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), true));
+        indexSegment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), true, false));
     assertEquals("There should be 5 index entries returned", 5, indexEntries.size());
     indexEntries.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), delUnexpPutDiffIdxSegId, currentExpectedOffset, DELETE_RECORD_SIZE,
@@ -1151,7 +1151,7 @@ public class BlobStoreCompactorTest {
       if (segment.getLogSegmentName().getGeneration() == 0) {
         break;
       }
-      segment.getIndexEntriesSince(null, condition, indexEntries, currentTotalSize, false);
+      segment.getIndexEntriesSince(null, condition, indexEntries, currentTotalSize, false, false);
     }
     indexEntries.forEach(entry -> {
       assertTrue("There cannot be a non-delete entry", entry.getValue().isDelete());
@@ -1307,7 +1307,7 @@ public class BlobStoreCompactorTest {
     IndexSegment segment = indexSegments.get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
     List<IndexEntry> indexEntries = new ArrayList<>();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p1.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
         false, false, (short) 0);
@@ -1320,7 +1320,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += ps; // skip one put
     verifyIndexEntry(indexEntries.get(1), (MockId) p3.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
@@ -1340,7 +1340,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += ps;
     verifyIndexEntry(indexEntries.get(1), (MockId) p6.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
@@ -1354,7 +1354,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p8.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
         false, false, (short) 3);
@@ -1408,7 +1408,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += 3 * ps; // skip three puts
     verifyIndexEntry(indexEntries.get(3), (MockId) p12.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
@@ -1579,7 +1579,7 @@ public class BlobStoreCompactorTest {
     IndexSegment segment = indexSegments.get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
     List<IndexEntry> indexEntries = new ArrayList<>();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p1.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
         false, false, (short) 0);
@@ -1598,7 +1598,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p2.getKey(), currentExpectedOffset, ts, Utils.Infinite_Time, false,
         true, false, (short) 0);
@@ -1617,7 +1617,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p3.getKey(), currentExpectedOffset, ts, Utils.Infinite_Time, false,
         true, false, (short) 1);
@@ -1636,7 +1636,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += ps; // skip one put
     verifyIndexEntry(indexEntries.get(1), (MockId) p5.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
@@ -1656,7 +1656,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += 3 * ps; // skip three puts
     verifyIndexEntry(indexEntries.get(3), (MockId) p8.getKey(), currentExpectedOffset, ps, expirationTime, false, false,
@@ -1670,7 +1670,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += 3 * ps; // skip three puts
     verifyIndexEntry(indexEntries.get(3), (MockId) p9.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
@@ -1684,7 +1684,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p9.getKey(), currentExpectedOffset, ts, Utils.Infinite_Time, false,
         true, false, (short) 2);
@@ -1732,7 +1732,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p11.getKey(), currentExpectedOffset, ps, expirationTime, false,
         false, false, (short) 0);
@@ -1751,7 +1751,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p12.getKey(), currentExpectedOffset, ts, Utils.Infinite_Time, false,
         true, false, (short) 0);
@@ -1770,7 +1770,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p13.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
         true, true, (short) 2);
@@ -1862,7 +1862,7 @@ public class BlobStoreCompactorTest {
     IndexSegment segment = indexSegments.get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
     List<IndexEntry> indexEntries = new ArrayList<>();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p1.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
         false, false, (short) 0);
@@ -1878,7 +1878,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), (MockId) p2.getKey(), currentExpectedOffset, ts, Utils.Infinite_Time, false,
         true, false, (short) 0);
@@ -2023,7 +2023,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), p2, currentExpectedOffset, ds, Utils.Infinite_Time, true, false, false,
         (short) 0);
@@ -2033,7 +2033,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), p3, currentExpectedOffset, us, Utils.Infinite_Time, false, false, true,
         (short) 1);
@@ -2043,7 +2043,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), p4, currentExpectedOffset, ts, Utils.Infinite_Time, false, true, false,
         (short) 0);
@@ -2056,7 +2056,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     verifyIndexEntry(indexEntries.get(0), p5, currentExpectedOffset, ds, Utils.Infinite_Time, true, true, false,
         (short) 0);
@@ -2069,7 +2069,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += 3 * ps; // skip three puts
     verifyIndexEntry(indexEntries.get(3), p7, currentExpectedOffset, ds, Utils.Infinite_Time, true, false, false,
@@ -2080,7 +2080,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += 2 * ps; // skip two puts
     verifyIndexEntry(indexEntries.get(2), p8, currentExpectedOffset, ts, Utils.Infinite_Time, false, true, false,
@@ -2094,7 +2094,7 @@ public class BlobStoreCompactorTest {
     segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
     indexEntries.clear();
     assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false);
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     currentExpectedOffset += ps; // skip one put
     verifyIndexEntry(indexEntries.get(1), p9, currentExpectedOffset, us, Utils.Infinite_Time, false, false, true,
@@ -3060,7 +3060,7 @@ public class BlobStoreCompactorTest {
       while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(logSegmentName)) {
         IndexSegment indexSegment = indexSegments.get(indexSegmentStartOffset);
         List<MessageInfo> infos = new ArrayList<>();
-        indexSegment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), infos, new AtomicLong(0));
+        indexSegment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), infos, new AtomicLong(0), false);
         List<IndexEntry> indexEntries = new ArrayList<>();
         for (MessageInfo info : infos) {
           indexSegment.find(info.getStoreKey())

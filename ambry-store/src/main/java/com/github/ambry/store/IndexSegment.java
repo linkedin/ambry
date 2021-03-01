@@ -1093,21 +1093,23 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
-   * Gets all the entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
-   * till maxTotalSizeOfEntriesInBytes
+   * Gets all the entries upto maxEntries from the start of a given key (whether to include this key depends on variable
+   * inclusive) or all entries if key is null, till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
    *            If the key is null, all entries are retrieved upto max entries
    * @param findEntriesCondition The condition that determines when to stop fetching entries.
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+   * @param inclusive whether to include the entry associated with given key in returned result.
    * @return true if any entries were added.
    * @throws StoreException
    */
   boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
-      AtomicLong currentTotalSizeOfEntriesInBytes) throws StoreException {
+      AtomicLong currentTotalSizeOfEntriesInBytes, boolean inclusive) throws StoreException {
     List<IndexEntry> indexEntries = new ArrayList<>();
     boolean areNewEntriesAdded =
-        getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes, true);
+        getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes, true,
+            inclusive);
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue value = indexEntry.getValue();
       MessageInfo info = new MessageInfo(indexEntry.getKey(), value.getSize(), value.isDelete(), value.isTtlUpdate(),
@@ -1167,8 +1169,8 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
-   * Gets all the index entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
-   * till maxTotalSizeOfEntriesInBytes
+   * Gets all the index entries upto maxEntries from the start of a given key (whether to include this key depends on
+   * inclusive variable) or all entries if key is null, till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
    *            If the key is null, all entries are retrieved up to max entries
    * @param findEntriesCondition The condition that determines when to stop fetching entries.
@@ -1176,11 +1178,12 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
    * @param oneEntryPerKey returns only one index entry per key even if the segment has multiple values for the key.
    *                       Favors DELETE records over all other records. Favors PUT over a TTL update record.
+   * @param inclusive whether to include entries associated with given key in returned result.
    * @return true if any entries were added.
    * @throws StoreException
    */
   boolean getIndexEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<IndexEntry> entries,
-      AtomicLong currentTotalSizeOfEntriesInBytes, boolean oneEntryPerKey) throws StoreException {
+      AtomicLong currentTotalSizeOfEntriesInBytes, boolean oneEntryPerKey, boolean inclusive) throws StoreException {
     if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
       return false;
     }
@@ -1198,7 +1201,7 @@ class IndexSegment implements Iterable<IndexEntry> {
             && index < totalEntries) {
           StoreKey newKey = getKeyAt(readBuf, index);
           // we include the key in the final list if it is not the initial key or if the initial key was null
-          if (key == null || newKey.compareTo(key) != 0) {
+          if (key == null || newKey.compareTo(key) != 0 || inclusive) {
             values.clear();
             index = getAllValuesFromMmap(readBuf, newKey, index, totalEntries, values).getSecond();
             for (IndexValue value : values) {
@@ -1218,7 +1221,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         tempMap = index.tailMap(key, true);
       }
       for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : tempMap.entrySet()) {
-        if (key == null || entry.getKey().compareTo(key) != 0) {
+        if (key == null || entry.getKey().compareTo(key) != 0 || inclusive) {
           for (IndexValue value : entry.getValue()) {
             IndexValue newValue = new IndexValue(startOffset.getName(), value.getBytes(), getVersion());
             entriesLocal.add(new IndexEntry(entry.getKey(), newValue));
@@ -1239,6 +1242,17 @@ class IndexSegment implements Iterable<IndexEntry> {
     }
     entries.addAll(entriesLocal);
     return entriesLocal.size() > 0;
+  }
+
+  /**
+   * @return the first key (in lexicographical order) of sealed index segment
+   */
+  StoreKey getFirstKeyInSealedSegment() throws StoreException {
+    if (!sealed.get()) {
+      throw new IllegalStateException("Index segment {} is not sealed, not able to determine the first key.");
+    }
+    ByteBuffer readBuf = serEntries.duplicate();
+    return getKeyAt(readBuf, 0);
   }
 
   /**
