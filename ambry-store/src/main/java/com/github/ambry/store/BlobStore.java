@@ -1212,7 +1212,7 @@ public class BlobStore implements Store {
     checkStarted();
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
-    logger.trace("One cycle of compaction is completed on the store {}", storeId);
+    logger.info("One cycle of compaction is completed on the store {}", storeId);
   }
 
   /**
