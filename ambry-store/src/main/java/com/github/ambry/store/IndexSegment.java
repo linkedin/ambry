@@ -112,7 +112,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   private Offset prevSafeEndPoint = null;
   // reset key refers to the first StoreKey that is added to the index segment
   private Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
-  private short resetKeyVersion = UNINITIALIZED_RESET_KEY_VERSION;
+  private short resetKeyLifeVersion = UNINITIALIZED_RESET_KEY_VERSION;
   private NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index = null;
 
   /**
@@ -337,8 +337,13 @@ class IndexSegment implements Iterable<IndexEntry> {
   /**
    * @return life version of reset key.
    */
-  short getResetKeyVersion() {
-    return resetKeyVersion;
+  short getResetKeyLifeVersion() throws StoreException {
+    if (resetKey == null || resetKeyLifeVersion != UNINITIALIZED_RESET_KEY_VERSION) {
+      return resetKeyLifeVersion;
+    }
+    NavigableSet<IndexValue> indexValues = find(resetKey.getFirst());
+    // reset key should be present in current index segment, hence indexValues is guaranteed to be non-empty
+    return indexValues.first().getLifeVersion();
   }
 
   /**
@@ -567,7 +572,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       }
       if (resetKey == null) {
         resetKey = new Pair<>(entry.getKey(), entry.getValue().getIndexValueType());
-        resetKeyVersion = entry.getValue().getLifeVersion();
+        resetKeyLifeVersion = entry.getValue().getLifeVersion();
       }
       numberOfItems.incrementAndGet();
       sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity());
@@ -753,7 +758,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         }
         if (getVersion() >= PersistentIndex.VERSION_4) {
           // write reset key life version
-          writer.writeShort(resetKeyVersion);
+          writer.writeShort(resetKeyLifeVersion);
         }
 
         byte[] maxPaddingBytes = null;
@@ -922,7 +927,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           lastModifiedTimeSec.set(serEntries.getLong());
           storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
           resetKeyType = serEntries.getShort();
-          resetKeyVersion = serEntries.getShort();
+          resetKeyLifeVersion = serEntries.getShort();
           resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
@@ -989,7 +994,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         indexSizeExcludingEntries +=
             LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
         if(getVersion() >= PersistentIndex.VERSION_4){
-          resetKeyVersion = stream.readShort();
+          resetKeyLifeVersion = stream.readShort();
           indexSizeExcludingEntries += RESET_KEY_VERSION_FIELD_LENGTH;
         }
       }
