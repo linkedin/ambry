@@ -32,6 +32,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
@@ -250,6 +251,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     assertEquals("No blob size should be returned in response", null,
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     verifyTrackingHeaders(response);
+    verifyUserQuotaHeaders(response);
     return new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 0, ACCOUNT.getId(), CONTAINER.getId(),
         new Partition(0L, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, 1073741824), false,
         BlobId.BlobDataType.SIMPLE).getID();
@@ -282,6 +284,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       verifyBlobPropertiesHeadersAbsent(response);
       verifyAccountAndContainerHeaders(null, null, response);
       verifyUserMetadataHeadersAbsent(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
@@ -309,6 +312,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
@@ -350,6 +354,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
         assertNoContent(responseParts.queue, 1);
       }
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+      verifyUserQuotaHeaders(response);
     }
   }
 
@@ -375,6 +380,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       assertFalse(RestUtils.Headers.LIFE_VERSION + " should not be present",
           response.headers().contains(RestUtils.Headers.LIFE_VERSION));
+      verifyUserQuotaHeaders(response);
     }
   }
 
@@ -390,6 +396,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
@@ -406,6 +413,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
@@ -421,6 +429,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
@@ -438,7 +447,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    * Verifies blob properties from output, to that sent in during input.
    * @param response the {@link HttpResponse} that contains the headers.
    */
-  void verifyBlobPropertiesHeadersAbsent(HttpResponse response) {
+  private void verifyBlobPropertiesHeadersAbsent(HttpResponse response) {
     assertFalse("Blob size should not be present", response.headers().contains(RestUtils.Headers.BLOB_SIZE));
     assertFalse("There should be no " + RestUtils.Headers.PRIVATE,
         response.headers().contains(RestUtils.Headers.PRIVATE));
@@ -455,13 +464,27 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    * Verifies User metadata headers from output, to that sent in during input
    * @param response the {@link HttpResponse} which contains the headers of the response.
    */
-  void verifyUserMetadataHeadersAbsent(HttpResponse response) {
+  private void verifyUserMetadataHeadersAbsent(HttpResponse response) {
     for (Map.Entry<String, String> header : response.headers()) {
       String key = header.getKey();
       if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
         fail("Key " + key + " should not be present in headers");
       }
     }
+  }
+
+  /**
+   * Verifies user quota headers from output.
+   * @param response the {@link HttpResponse} which contains the headers of the response.
+   */
+  private void verifyUserQuotaHeaders(HttpResponse response) {
+    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE));
+    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.RETRY_AFTER_MS));
+    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.USER_QUOTA_WARNING));
+    Map<String, String> quotaUsageHeader = RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(
+        response.headers().get(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE));
+    assertTrue(quotaUsageHeader.containsKey(QuotaName.READ_CAPACITY_UNIT.name()) || quotaUsageHeader.containsKey(
+        QuotaName.WRITE_CAPACITY_UNIT.name()));
   }
 
   static {

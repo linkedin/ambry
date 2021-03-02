@@ -22,10 +22,12 @@ import java.util.Map;
  * Class that returns the overall throttling recommendation for all the quotas.
  */
 public class ThrottlingRecommendation {
+  public static final long NO_RETRY_VALUE_FOR_RETRY_AFTER_MS = -1;
   private final boolean throttle;
   private final Map<QuotaName, Float> quotaUsagePercentage;
   private final int recommendedHttpStatus;
   private final long retryAfterMs;
+  private final QuotaWarningLevel quotaWarningLevel;
 
   /**
    * Constructor for {@link ThrottlingRecommendation}.
@@ -35,11 +37,12 @@ public class ThrottlingRecommendation {
    * @param retryAfterMs time in ms after which request should be retried. -1 if request is not throttled.
    */
   public ThrottlingRecommendation(boolean throttle, Map<QuotaName, Float> quotaUsagePercentage,
-      int recommendedHttpStatus, long retryAfterMs) {
+      int recommendedHttpStatus, long retryAfterMs, QuotaWarningLevel quotaWarningLevel) {
     this.throttle = throttle;
     this.quotaUsagePercentage = new HashMap<>(quotaUsagePercentage);
     this.recommendedHttpStatus = recommendedHttpStatus;
     this.retryAfterMs = retryAfterMs;
+    this.quotaWarningLevel = quotaWarningLevel;
   }
 
   /**
@@ -65,9 +68,15 @@ public class ThrottlingRecommendation {
 
   /**
    * @return the time interval in milliseconds after the request can be retried.
-   * If request is not throttled then returns 0.
    */
   public long getRetryAfterMs() {
     return this.retryAfterMs;
+  }
+
+  /**
+   * @return QuotaWarningLevel based on usage.
+   */
+  public QuotaWarningLevel getQuotaWarningLevel() {
+    return quotaWarningLevel;
   }
 }
