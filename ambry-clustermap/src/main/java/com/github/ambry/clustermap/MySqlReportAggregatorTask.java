@@ -199,19 +199,18 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
   }
 
   private Pair<String, Integer> getHostNameAndPort(String instanceName) {
+    String hostname = instanceName;
     int port = clusterMapConfig.clusterMapPort;
     int ind = instanceName.lastIndexOf("_");
-    if (ind == -1) {
-      return new Pair<>(instanceName, port);
-    } else {
+    if (ind != -1) {
       try {
         port = Short.valueOf(instanceName.substring(ind + 1));
+        hostname = instanceName.substring(0, ind);
       } catch (NumberFormatException e) {
-        // string after "_" is not a port number, then return instance name.
-        return new Pair<>(instanceName, port);
+        // String after "_" is not a port number, then the hostname should be the instanceName
       }
-      return new Pair<>(instanceName.substring(0, ind), port);
     }
+    return new Pair<>(hostname, port);
   }
 
   @Override

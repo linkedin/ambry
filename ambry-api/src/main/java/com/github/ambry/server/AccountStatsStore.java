@@ -139,7 +139,7 @@ public interface AccountStatsStore {
    * value from {@link #queryPartitionNameAndIds()}. The returned StatsWrapper is constructed in the same way as it's
    * passed to method {@link #storePartitionClassStats}.
    * @param hostname The hostname
-   * @param port The port numbere
+   * @param port The port number
    * @param partitionNameAndIds the return value of {@link #queryPartitionNameAndIds()}.
    * @return A {@link StatsWrapper} represents the per host partition class stats.
    * @throws Exception
