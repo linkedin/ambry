@@ -220,14 +220,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
         !CONTAINER.isCacheable(), ACCOUNT.getName(), CONTAINER.getName(), false);
   }
 
-  /**
-   * Posts a blob with the given {@code headers} and {@code content}.
-   * @param headers the headers required.
-   * @param content the content of the blob.
-   * @return the blob ID of the blob.
-   * @throws ExecutionException
-   * @throws InterruptedException
-   */
+  @Override
   String postBlobAndVerify(HttpHeaders headers, ByteBuffer content, long contentSize)
       throws ExecutionException, InterruptedException {
     if (!throttleRequest) {
@@ -262,19 +255,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
         BlobId.BlobDataType.SIMPLE).getID();
   }
 
-  /**
-   * Verifies the GET blob response.
-   * @param responseParts the response received from the server.
-   * @param range the {@link ByteRange} for the request.
-   * @param resolveRangeOnEmptyBlob {@code true} if the {@link RestUtils.Headers#RESOLVE_RANGE_ON_EMPTY_BLOB} header was
-   *                                sent.
-   * @param expectedHeaders the expected headers in the response.
-   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
-   * @param expectedContent the expected content of the blob.
-   * @param accountName the account name that should be in the response
-   * @param containerName the container name that should be in the response
-   * @throws RestServiceException
-   */
+  @Override
   void verifyGetBlobResponse(NettyClient.ResponseParts responseParts, ByteRange range, boolean resolveRangeOnEmptyBlob,
       HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
       String containerName) throws RestServiceException {
@@ -304,6 +285,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  @Override
   void verifyGetHeadResponse(HttpResponse response, HttpHeaders expectedHeaders, ByteRange range, boolean isPrivate,
       String accountName, String containerName, NettyClient.ResponseParts responseParts) throws RestServiceException {
     if (!throttleRequest) {
@@ -330,6 +312,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  @Override
   void verifyGetNotModifiedBlobResponse(HttpResponse response, boolean isPrivate,
       NettyClient.ResponseParts responseParts) {
     if (!throttleRequest) {
@@ -350,6 +333,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  @Override
   void verifyUserMetadataResponse(HttpResponse response, HttpHeaders expectedHeaders, byte[] usermetadata,
       NettyClient.ResponseParts responseParts) {
     if (!throttleRequest) {
@@ -369,6 +353,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  @Override
   void verifyGetBlobInfoResponse(HttpResponse response, HttpHeaders expectedHeaders, boolean isPrivate,
       String accountName, String containerName, byte[] usermetadata, NettyClient.ResponseParts responseParts) {
     if (!throttleRequest) {
@@ -393,10 +378,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
-  /**
-   * Verifies the response received after updating the TTL of a blob
-   * @param responseParts the parts of the response received
-   */
+  @Override
   void verifyUpdateBlobTtlResponse(NettyClient.ResponseParts responseParts) {
     if (!throttleRequest) {
       super.verifyUpdateBlobTtlResponse(responseParts);
@@ -411,13 +393,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
-  /**
-   * Verifies that a request returns the right response code  once the blob has been deleted.
-   * @param httpRequest the {@link FullHttpRequest} to send to the server.
-   * @param expectedStatusCode the expected {@link HttpResponseStatus}.
-   * @throws ExecutionException
-   * @throws InterruptedException
-   */
+  @Override
   void verifyDeleted(FullHttpRequest httpRequest, HttpResponseStatus expectedStatusCode)
       throws ExecutionException, InterruptedException {
     if (!throttleRequest) {
@@ -433,6 +409,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  @Override
   void verifyUndeleteBlobResponse(NettyClient.ResponseParts responseParts) {
     if (!throttleRequest) {
       super.verifyUndeleteBlobResponse(responseParts);
@@ -447,6 +424,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  /**
+   * Verify tht cache headers are absent.
+   * @param response {@link HttpResponse} object to get cache headers from.
+   */
   private void verifyCacheHeadersAbsent(HttpResponse response) {
     assertNull("Cache-Control value should be null", response.headers().get(RestUtils.Headers.CACHE_CONTROL));
     assertFalse("Pragma value should not be present", response.headers().contains(RestUtils.Headers.PRAGMA));
@@ -454,7 +435,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   }
 
   /**
-   * Verifies blob properties from output, to that sent in during input
+   * Verifies blob properties from output, to that sent in during input.
    * @param response the {@link HttpResponse} that contains the headers.
    */
   void verifyBlobPropertiesHeadersAbsent(HttpResponse response) {

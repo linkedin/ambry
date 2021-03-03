@@ -17,14 +17,13 @@ package com.github.ambry.quota;
  * Class representing recommendation made by a {@link QuotaEnforcer} implementation. QuotaEnforcer
  * implementations can use this object to provide a boolean recommendation to throttle the
  * request or not, along with usage information like usage percentage, name of the quota for which this recommendation
- * was made, the recommended http status (indicating whether or not throttled request should be retried) and cost to serve the request.
+ * was made and the recommended http status (indicating whether or not throttled request should be retried).
  */
 public class QuotaRecommendation {
   private final boolean shouldThrottle;
   private final float usagePercentage;
   private final QuotaName quotaName;
   private final int recommendedHttpStatus;
-  private final double requestCost;
   private final long retryAfterMs;
 
   /**
@@ -33,16 +32,14 @@ public class QuotaRecommendation {
    * @param usagePercentage percentage of resource usage.
    * @param quotaName name of the enforcement that made the recommendation.
    * @param recommendedHttpStatus recommended http status.
-   * @param requestCost cost of the request.
    * @param retryAfterMs time after which request can be retried.
    */
   public QuotaRecommendation(boolean shouldThrottle, float usagePercentage, QuotaName quotaName,
-      int recommendedHttpStatus, float requestCost, long retryAfterMs) {
+      int recommendedHttpStatus, long retryAfterMs) {
     this.shouldThrottle = shouldThrottle;
     this.usagePercentage = usagePercentage;
     this.quotaName = quotaName;
     this.recommendedHttpStatus = recommendedHttpStatus;
-    this.requestCost = requestCost;
     this.retryAfterMs = retryAfterMs;
   }
 
@@ -72,13 +69,6 @@ public class QuotaRecommendation {
    */
   public int getRecommendedHttpStatus() {
     return recommendedHttpStatus;
-  }
-
-  /**
-   * @return the cost of serving the request.
-   */
-  public double getRequestCost() {
-    return requestCost;
   }
 
   /**

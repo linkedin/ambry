@@ -21,7 +21,7 @@ import java.util.Map;
 /**
  * An implementation of {@link ThrottlePolicy} that creates a {@link ThrottlingRecommendation} to throttle if any one of
  * {@link QuotaRecommendation} recommendation is to throttle, and takes the max of retry after time interval. Also
- * groups the quota usage and request cost for all the quotas.
+ * groups the quota usage for all the quotas.
  */
 public class MaxThrottlePolicy implements ThrottlePolicy {
   @Override
@@ -29,13 +29,11 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
     boolean shouldThrottle = false;
     Map<QuotaName, Float> quotaUsagePercentage = new HashMap<>();
     int recommendedHttpStatus = 200;
-    Map<QuotaName, Double> requestCost = new HashMap<>();
     long retryAfterMs = -1;
     for (QuotaRecommendation recommendation : quotaRecommendations) {
       shouldThrottle = shouldThrottle | recommendation.shouldThrottle();
       quotaUsagePercentage.put(recommendation.getQuotaName(), recommendation.getQuotaUsagePercentage());
       recommendedHttpStatus = Math.max(recommendation.getRecommendedHttpStatus(), recommendedHttpStatus);
-      requestCost.put(recommendation.getQuotaName(), recommendation.getRequestCost());
       retryAfterMs = Math.max(recommendation.getRetryAfterMs(), retryAfterMs);
     }
     return new ThrottlingRecommendation(shouldThrottle, quotaUsagePercentage, recommendedHttpStatus, retryAfterMs);
