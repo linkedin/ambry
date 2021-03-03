@@ -235,8 +235,9 @@ public class IndexSegmentTest {
       verifyValues(fromDisk, id, valueCount, flags);
     }
     // verify reset key
-    if(formatVersion >= PersistentIndex.VERSION_1){
-      verifyResetKeyInfo(id3, value1, fromDisk.getResetKey(), fromDisk.getResetKeyLifeVersion());
+    if (formatVersion >= PersistentIndex.VERSION_1) {
+      verifyResetKeyInfo(id3, value1, fromDisk.getResetKey(), fromDisk.getResetKeyType(),
+          fromDisk.getResetKeyLifeVersion());
     }
   }
 
@@ -355,8 +356,9 @@ public class IndexSegmentTest {
         assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(2).getValue().getBytes());
         entries.clear();
       }
-      if(formatVersion >= PersistentIndex.VERSION_1) {
-        verifyResetKeyInfo(id3, value1, fromDisk.getResetKey(), fromDisk.getResetKeyLifeVersion());
+      if (formatVersion >= PersistentIndex.VERSION_1) {
+        verifyResetKeyInfo(id3, value1, fromDisk.getResetKey(), fromDisk.getResetKeyType(),
+            fromDisk.getResetKeyLifeVersion());
       }
     }
   }
@@ -696,7 +698,8 @@ public class IndexSegmentTest {
       assertIndexEntryEquals(expected, obtained);
     }
     if (formatVersion >= PersistentIndex.VERSION_1) {
-      verifyResetKeyInfo(id3, value1, indexSegment.getResetKey(), indexSegment.getResetKeyLifeVersion());
+      verifyResetKeyInfo(id3, value1, indexSegment.getResetKey(), indexSegment.getResetKeyType(),
+          indexSegment.getResetKeyLifeVersion());
     }
   }
 
@@ -771,14 +774,15 @@ public class IndexSegmentTest {
    * Verify reset key info in the index segment.
    * @param expectedId the expected store key of reset key.
    * @param indexValue the initial {@link IndexValue} associated with reset key.
-   * @param actualResetKeyPair actual reset key pair got from index segment.
-   * @param actualResetKeyLifeVersion actual reset key version got from index segment.
+   * @param actualResetKey actual reset key.
+   * @param actualResetKeyType actual reset key type.
+   * @param actualResetKeyLifeVersion actual reset key life version got from index segment.
    */
-  private void verifyResetKeyInfo(MockId expectedId, IndexValue indexValue,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> actualResetKeyPair, short actualResetKeyLifeVersion) {
-    assertEquals("Mismatch in reset key", expectedId, actualResetKeyPair.getFirst());
-    assertEquals("Mismatch in reset key type", indexValue.getIndexValueType(), actualResetKeyPair.getSecond());
-    assertEquals("Mismatch in version", indexValue.getLifeVersion(), actualResetKeyLifeVersion);
+  private void verifyResetKeyInfo(MockId expectedId, IndexValue indexValue, StoreKey actualResetKey,
+      PersistentIndex.IndexEntryType actualResetKeyType, short actualResetKeyLifeVersion) {
+    assertEquals("Mismatch in reset key", expectedId, actualResetKey);
+    assertEquals("Mismatch in reset key type", indexValue.getIndexValueType(), actualResetKeyType);
+    assertEquals("Mismatch in life version", indexValue.getLifeVersion(), actualResetKeyLifeVersion);
   }
 
   /**
@@ -1585,7 +1589,7 @@ class MockIndexSegment extends IndexSegment {
   }
 
   @Override
-  Pair<StoreKey, PersistentIndex.IndexEntryType> getResetKey() {
+  StoreKey getResetKey() {
     if (getVersion() == PersistentIndex.VERSION_0) {
       return null;
     } else {
