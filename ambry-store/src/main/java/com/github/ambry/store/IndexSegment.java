@@ -329,14 +329,14 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return the reset key for the index segment.
    */
   StoreKey getResetKey() {
-    return resetKeyInfo.getResetKey();
+    return resetKeyInfo == null ? null : resetKeyInfo.getResetKey();
   }
 
   /**
    * @return the {@link com.github.ambry.store.PersistentIndex.IndexEntryType} of reset key.
    */
   PersistentIndex.IndexEntryType getResetKeyType() {
-    return resetKeyInfo.getResetKeyType();
+    return resetKeyInfo == null ? null : resetKeyInfo.getResetKeyType();
   }
 
   /**

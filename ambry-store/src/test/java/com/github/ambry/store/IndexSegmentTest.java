@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -827,10 +826,11 @@ public class IndexSegmentTest {
       time.sleep(10 * Time.MsPerSec);
       PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
       IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
+      StoreKey resetKey = null;
+      PersistentIndex.IndexEntryType resetKeyType = null;
       short resetKeyLifeVersion = StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION;
       verifyIndexSegmentDetails(indexSegment, startOffset, 0, 0, false, startOffset.getOffset(), time.milliseconds(),
-          null, resetKeyLifeVersion);
+          null, null, resetKeyLifeVersion);
       int numItems = 10;
       int numSmallKeys = 0;
       int numLargeKeys = 0;
@@ -853,14 +853,15 @@ public class IndexSegmentTest {
       List<IndexEntry> newEntries =
           addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex, includeSmallKeys, includeLargeKeys);
       if (version != PersistentIndex.VERSION_0) {
-        resetKey = new Pair<>(newEntries.get(0).getKey(), PersistentIndex.IndexEntryType.PUT);
+        resetKey = newEntries.get(0).getKey();
+        resetKeyType = PersistentIndex.IndexEntryType.PUT;
         resetKeyLifeVersion = newEntries.get(0).getValue().getLifeVersion();
       }
       int expectedSizeWritten =
           SMALLER_KEY_SIZE * numSmallKeys + LARGER_KEY_SIZE * numLargeKeys + KEY_SIZE * (numItems - numSmallKeys
               - numLargeKeys) + numItems * valueSize;
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey, resetKeyLifeVersion);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       int extraIdsToTtlUpdate = 5;
       Set<MockId> idsToTtlUpdate = getIdsToTtlUpdate(referenceIndex, extraIdsToTtlUpdate);
@@ -871,10 +872,10 @@ public class IndexSegmentTest {
         expectedSizeWritten += valueSize + id.sizeInBytes();
       }
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey, resetKeyLifeVersion);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey, resetKeyLifeVersion);
+          time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       int extraIdsToDelete = 5;
       Set<MockId> idsToDelete = getIdsToDelete(referenceIndex, extraIdsToDelete);
@@ -885,10 +886,10 @@ public class IndexSegmentTest {
         expectedSizeWritten += valueSize + id.sizeInBytes();
       }
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey, resetKeyLifeVersion);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey, resetKeyLifeVersion);
+          time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       // all combinations
       offsets = new ArrayList<>();
@@ -918,10 +919,10 @@ public class IndexSegmentTest {
       numItems += 7;
       expectedSizeWritten += 7 * (KEY_SIZE + valueSize);
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey, resetKeyLifeVersion);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey, resetKeyLifeVersion);
+          time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       // verify that flipping StoreConfig.storeIndexMemStateName does not break anything
       IndexMemState saved = config.storeIndexMemState;
@@ -929,7 +930,7 @@ public class IndexSegmentTest {
         if (!state.equals(saved)) {
           setIndexMemState(state);
           verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten,
-              endOffset, time.milliseconds(), resetKey, resetKeyLifeVersion);
+              endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
         }
       }
       setIndexMemState(saved);
@@ -1038,11 +1039,12 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time in ms
    * @param resetKey the reset key for the index segment
+   * @param resetKeyType the reset key type
    * @param resetKeyLifeVersion the life version of reset key
    */
   private void verifyIndexSegmentDetails(IndexSegment indexSegment, Offset startOffset, int numItems, int sizeWritten,
-      boolean sealed, long endOffset, long lastModifiedTimeInMs,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey, short resetKeyLifeVersion) throws StoreException {
+      boolean sealed, long endOffset, long lastModifiedTimeInMs, StoreKey resetKey,
+      PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion) throws StoreException {
     LogSegmentName logSegmentName = startOffset.getName();
     int valueSize;
     switch (formatVersion) {
@@ -1070,6 +1072,7 @@ public class IndexSegmentTest {
         indexSegment.getPersistedEntrySize());
     assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
     assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
+    assertEquals("Reset key type mismatch ", resetKeyType, indexSegment.getResetKeyType());
     assertEquals("Reset key life version mismatch", resetKeyLifeVersion, indexSegment.getResetKeyLifeVersion());
     if (formatVersion != PersistentIndex.VERSION_0) {
       assertEquals("Last modified time is incorrect", lastModifiedTimeInMs, indexSegment.getLastModifiedTimeMs());
@@ -1411,17 +1414,18 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
    * @param resetKey the resetKey of the index segment
+   * @param resetKeyType the reset key type
    * @param resetKeyLifeVersion the life version of reset key
    * @throws StoreException
    */
   private void verifyReadFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, File file,
       Offset startOffset, int numItems, int expectedSizeWritten, long endOffset, long lastModifiedTimeInMs,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey, short resetKeyLifeVersion) throws StoreException {
+      StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion) throws StoreException {
     // read from file (not sealed) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, false,
-        endOffset, lastModifiedTimeInMs, resetKey, resetKeyLifeVersion);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     // journal should contain all the entries
     verifyJournal(referenceIndex, journal);
     File bloomFile = new File(file.getParent(),
@@ -1429,13 +1433,13 @@ public class IndexSegmentTest {
     fromDisk.seal();
     assertTrue("Bloom file does not exist", bloomFile.exists());
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-        endOffset, lastModifiedTimeInMs, resetKey, resetKeyLifeVersion);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
 
     // read from file (sealed) and verify that everything is ok
     journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     fromDisk = createIndexSegmentFromFile(file, true, journal);
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-        endOffset, lastModifiedTimeInMs, resetKey, resetKeyLifeVersion);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     // journal should not contain any entries
     assertNull("Journal should not have any entries", journal.getFirstOffset());
 
@@ -1448,7 +1452,7 @@ public class IndexSegmentTest {
     fromDisk = createIndexSegmentFromFile(file, true, journal);
     assertTrue("Bloom file does not exist", bloomFile.exists());
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-        endOffset, lastModifiedTimeInMs, resetKey, resetKeyLifeVersion);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     // journal should not contain any entries
     assertNull("Journal should not have any entries", journal.getFirstOffset());
   }
@@ -1478,16 +1482,17 @@ public class IndexSegmentTest {
    * @param sealed the expected sealed state of the {@code indexSegment}
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
-   * @param resetKey the resetKey of the index segment
+   * @param resetKey the reset key of the index segment
+   * @param resetKeyType the reset key type
    * @param resetKeyLifeVersion the life version of reset key
    * @throws StoreException
    */
   private void verifyAllForIndexSegmentFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
       IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean sealed, long endOffset,
-      long lastModifiedTimeInMs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey, short resetKeyLifeVersion)
+      long lastModifiedTimeInMs, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion)
       throws StoreException {
     verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, sealed, endOffset,
-        lastModifiedTimeInMs, resetKey, resetKeyLifeVersion);
+        lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
   }
@@ -1594,6 +1599,15 @@ class MockIndexSegment extends IndexSegment {
       return null;
     } else {
       return super.getResetKey();
+    }
+  }
+
+  @Override
+  PersistentIndex.IndexEntryType getResetKeyType() {
+    if (getVersion() == PersistentIndex.VERSION_0) {
+      return null;
+    } else {
+      return super.getResetKeyType();
     }
   }
 
