@@ -42,11 +42,23 @@ public class HostnameHelper {
   /**
    * Simplify and shorten hostname. If the given hostname is fully qualified domain name, like "ambry1.prod.github.com",
    * and the {@link AccountStatsMySqlConfig#domainNamesToRemove} includes ".github.com", then the hostname will be
-   * changed to "ambry1.prod_12345". "12345" is the port number.
+   * changed to "ambry1.prod_12345". "12345" is the port number passed to the constructor.
    * @param hostname The hostname to simplify
    * @return The simplified hostname.
    */
   public String simplifyHostname(String hostname) {
+    return simplifyHostname(hostname, this.port);
+  }
+
+  /**
+   * Simplify and shorten hostname. If the given hostname is fully qualified domain name, like "ambry1.prod.github.com",
+   * and the {@link AccountStatsMySqlConfig#domainNamesToRemove} includes ".github.com", then the hostname will be
+   * changed to "ambry1.prod_12345". "12345" is the given {@code port}.
+   * @param hostname The hostname to simplify
+   * @param port The port number.
+   * @return The simplified hostname.
+   */
+  public String simplifyHostname(String hostname, int port) {
     for (String domainName : domainNamesToRemove) {
       if (domainName != null && !(domainName = domainName.trim()).isEmpty()) {
         if (domainName.charAt(0) != '.') {

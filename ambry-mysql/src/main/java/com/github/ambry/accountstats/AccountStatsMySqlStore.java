@@ -241,13 +241,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * Query mysql database to get all the container storage usage for given {@code clusterName} and {@code queryHostname} and
    * construct a {@link StatsSnapshot} from them.
    * @param queryHostname the hostname to query
+   * @param port the port number to query
    * @return {@link StatsSnapshot} published by the given host.
    * @throws SQLException
    */
   @Override
-  public StatsWrapper queryAccountStatsByHost(String queryHostname) throws SQLException {
+  public StatsWrapper queryAccountStatsByHost(String queryHostname, int port) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    queryHostname = hostnameHelper.simplifyHostname(queryHostname);
+    queryHostname = hostnameHelper.simplifyHostname(queryHostname, port);
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
     StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
     AtomicLong timestamp = new AtomicLong(0);
@@ -486,10 +487,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public StatsWrapper queryPartitionClassStatsByHost(String hostname, Map<String, Set<Integer>> partitionNameAndIds)
-      throws SQLException {
+  public StatsWrapper queryPartitionClassStatsByHost(String hostname, int port,
+      Map<String, Set<Integer>> partitionNameAndIds) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
-    hostname = hostnameHelper.simplifyHostname(hostname);
+    hostname = hostnameHelper.simplifyHostname(hostname, port);
     Map<Integer, Map<Short, Map<Short, Long>>> partitionAccountContainerUsage = new HashMap<>();
     AtomicLong timestamp = new AtomicLong(0);
     accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
