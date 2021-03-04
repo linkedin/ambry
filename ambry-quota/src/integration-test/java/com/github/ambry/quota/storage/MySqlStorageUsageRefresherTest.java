@@ -350,7 +350,7 @@ public class MySqlStorageUsageRefresherTest {
   private AccountStatsMySqlStore createAccountStatsMySqlStore() throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsMySqlStore();
+        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 
   private Map<String, Map<String, Long>> cloneMap(Map<String, Map<String, Long>> origin) {

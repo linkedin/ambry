@@ -23,7 +23,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import java.nio.ByteBuffer;

@@ -153,7 +153,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
+    properties.setProperty("clustermap.port", String.valueOf(PORT));
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
+    properties.setProperty(FrontendConfig.ACCOUNT_STATS_STORE_FACTORY,
+        "com.github.ambry.frontend.MockAccountStatsStoreFactory");
     return properties;
   }
 

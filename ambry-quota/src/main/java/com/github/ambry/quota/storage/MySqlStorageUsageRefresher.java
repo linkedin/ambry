@@ -17,7 +17,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.MySqlReportAggregatorTask;
 import com.github.ambry.config.StorageQuotaConfig;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.File;

@@ -21,7 +21,6 @@ import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
-import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;

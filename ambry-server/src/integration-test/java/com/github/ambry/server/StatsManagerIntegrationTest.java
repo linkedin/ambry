@@ -162,6 +162,6 @@ public class StatsManagerIntegrationTest {
   private AccountStatsMySqlStore createAccountStatsMySqlStore(Properties configProps) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsMySqlStore();
+        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 }

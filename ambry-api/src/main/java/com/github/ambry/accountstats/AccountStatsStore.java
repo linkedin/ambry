@@ -11,8 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.accountstats;
 
+import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StatsWrapper;
 import java.util.Map;
 import java.util.Set;
 

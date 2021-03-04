@@ -19,7 +19,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.utils.Utils;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,6 +69,6 @@ public class AmbryStorageQuotaServiceFactoryTest {
 
   private AccountStatsStore createAccountStatsStore() throws Exception {
     return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), metricRegistry).getAccountStatsMySqlStore();
+        new StatsManagerConfig(verifiableProperties), metricRegistry).getAccountStatsStore();
   }
 }

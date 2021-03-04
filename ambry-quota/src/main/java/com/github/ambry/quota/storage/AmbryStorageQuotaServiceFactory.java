@@ -14,10 +14,9 @@
 package com.github.ambry.quota.storage;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 
 
 /**

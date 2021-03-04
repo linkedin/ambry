@@ -13,7 +13,7 @@
  */
 package com.github.ambry.frontend;
 
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import java.util.Map;

@@ -42,7 +42,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.ThrowingConsumer;

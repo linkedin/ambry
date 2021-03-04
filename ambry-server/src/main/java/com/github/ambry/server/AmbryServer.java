@@ -263,8 +263,8 @@ public class AmbryServer {
       logger.info("Creating StatsManager to publish stats");
 
       accountStatsMySqlStore =
-          statsConfig.enableMysqlReport ? new AccountStatsMySqlStoreFactory(properties, clusterMapConfig, statsConfig,
-              registry).getAccountStatsMySqlStore() : null;
+          statsConfig.enableMysqlReport ? (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(properties,
+              clusterMapConfig, statsConfig, registry).getAccountStatsStore() : null;
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
           clusterParticipants.get(0), accountStatsMySqlStore, accountService);
       if (serverConfig.serverStatsPublishLocalEnabled) {

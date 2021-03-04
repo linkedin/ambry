@@ -14,8 +14,8 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
-import com.github.ambry.accountstats.AccountStatsMySqlStore;
-import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStoreFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
@@ -95,8 +95,10 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       StorageQuotaService storageQuotaService = null;
-      AccountStatsMySqlStore mysqlStore = new AccountStatsMySqlStoreFactory(verifiableProperties, clusterMapConfig,
-          new StatsManagerConfig(verifiableProperties), clusterMap.getMetricRegistry()).getAccountStatsMySqlStore();
+      AccountStatsStore mysqlStore =
+          Utils.<AccountStatsStoreFactory>getObj(frontendConfig.accountStatsStoreFactory, verifiableProperties,
+              clusterMapConfig, new StatsManagerConfig(verifiableProperties),
+              clusterMap.getMetricRegistry()).getAccountStatsStore();
       if (frontendConfig.enableStorageQuotaService) {
         storageQuotaService =
             Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
@@ -104,8 +106,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       }
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
-              urlSigningService, idSigningService, accountAndContainerInjector, storageQuotaService,
-              quotaManager);
+              urlSigningService, idSigningService, accountAndContainerInjector, storageQuotaService, quotaManager);
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
           securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
           accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,

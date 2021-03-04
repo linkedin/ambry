@@ -14,7 +14,6 @@
 package com.github.ambry.accountstats;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
@@ -326,7 +325,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, localBackupFilePath.toString());
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsMySqlStore();
+        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 
   private static Path createTemporaryFile() throws IOException {
