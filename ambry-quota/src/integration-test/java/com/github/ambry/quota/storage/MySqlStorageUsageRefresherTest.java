@@ -349,7 +349,7 @@ public class MySqlStorageUsageRefresherTest {
 
   private AccountStatsMySqlStore createAccountStatsMySqlStore() throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
+    return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
         new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 
