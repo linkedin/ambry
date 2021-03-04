@@ -160,7 +160,12 @@ class CuratedLogIndexState {
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes)
       throws IOException, StoreException {
-    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes);
+    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, false);
+  }
+
+  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey)
+      throws IOException, StoreException {
+    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, enableResetKey);
   }
 
   /**
@@ -175,11 +180,12 @@ class CuratedLogIndexState {
    * @param initState sets up a diverse set of entries if {@code true}. Leaves the log and index empty if {@code false}.
    * @param addTtlUpdates if {@code true}, adds entries that update TTL.
    * @param addUndeletes if {@code true}, adds undelete entries.
+   * @param enableResetKey if {@code true}, use reset key to rebuild find token (if it's been invalidated due to compaction).
    * @throws IOException
    * @throws StoreException
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean hardDeleteEnabled, boolean initState,
-      boolean addTtlUpdates, boolean addUndeletes) throws IOException, StoreException {
+      boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     // advance time here so when we set delete's operation time to 0, it will fall within retention day.
     advanceTime(TimeUnit.HOURS.toMillis(CuratedLogIndexState.deleteRetentionHour));
@@ -197,6 +203,7 @@ class CuratedLogIndexState {
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     // set the delete retention day
     properties.put("store.deleted.message.retention.hours", Integer.toString(CuratedLogIndexState.deleteRetentionHour));
+    properties.put("store.rebuild.token.based.on.reset.key", Boolean.toString(enableResetKey));
     // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
     time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
     initIndex(null);

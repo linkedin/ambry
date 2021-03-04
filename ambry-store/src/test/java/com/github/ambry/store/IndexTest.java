@@ -73,7 +73,9 @@ public class IndexTest {
 
   private final boolean isLogSegmented;
   private final File tempDir;
+  private final File tokenTestDir;
   private final CuratedLogIndexState state;
+  private final CuratedLogIndexState stateForTokenTest;
   private final short persistentIndexVersion;
 
   // TODO: test that verifies that files with "_index" are not picked up if the corresponding log segment is not in log
@@ -96,10 +98,12 @@ public class IndexTest {
   public IndexTest(boolean isLogSegmented, short persistentIndexVersion) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("indexDir-" + TestUtils.getRandomString(10));
+    tokenTestDir = StoreTestUtils.createTempDirectory("tokenTestDir-" + TestUtils.getRandomString(10));
     this.persistentIndexVersion = persistentIndexVersion;
     PersistentIndex.CURRENT_VERSION = persistentIndexVersion;
     boolean addUndeletes = PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3;
     state = new CuratedLogIndexState(isLogSegmented, tempDir, true, addUndeletes);
+    stateForTokenTest = new CuratedLogIndexState(true, tokenTestDir, true, addUndeletes, true);
   }
 
   /**
@@ -111,7 +115,11 @@ public class IndexTest {
     if (state != null) {
       state.destroy();
     }
+    if (stateForTokenTest != null) {
+      stateForTokenTest.destroy();
+    }
     assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, true));
+    assertTrue(tokenTestDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tokenTestDir, true));
     PersistentIndex.CURRENT_VERSION = this.persistentIndexVersion;
   }
 
@@ -753,7 +761,7 @@ public class IndexTest {
   @Test
   public void getAbsoluteEndPositionOfLastPutTest() throws Exception {
     File testDir = StoreTestUtils.createTempDirectory("indexDirTest-" + TestUtils.getRandomString(10));
-    CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true);
+    CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true, false);
     assertEquals("There should be no PUT record since index is empty", -1,
         indexState.index.getAbsoluteEndPositionOfLastPut());
     long expiresAtMs = indexState.time.milliseconds() + TimeUnit.HOURS.toMillis(1);
@@ -1146,6 +1154,68 @@ public class IndexTest {
         doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
       }
     }
+  }
+
+  /**
+   * Tests cases where find token is rebuilt based on reset key.
+   * @throws StoreException
+   */
+  @Test
+  public void rebuildTokenBasedOnResetKeyTest() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment firstIndexSegment = stateForTokenTest.index.getIndexSegments().firstEntry().getValue();
+    IndexSegment secondIndexSegment =
+        stateForTokenTest.index.getIndexSegments().higherEntry(firstIndexSegment.getStartOffset()).getValue();
+    StoreKey firstKey = firstIndexSegment.iterator().next().getKey();
+    StoreKey keyFromFirstSegment = firstIndexSegment.listIterator(DEFAULT_MAX_IN_MEM_ELEMENTS - 2).next().getKey();
+    System.out.println("first key = " + firstKey);
+    System.out.println("random key = " + keyFromFirstSegment);
+    // 1. generate an invalid index-based token with reset key and the key can be found in current index
+    Offset invalidOffset =
+        new Offset(firstIndexSegment.getLogSegmentName(), firstIndexSegment.getStartOffset().getOffset() - 1);
+    StoreFindToken startToken = new StoreFindToken(keyFromFirstSegment, invalidOffset, stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
+        firstIndexSegment.getResetKeyLifeVersion());
+    //  the invalid token should be revalidated by looking up reset key in index
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    // the key in the token should be first key in first index segment, as we only get one entry from new start point,
+    // which is first key in first index segment (inclusive)
+    StoreFindToken expectedToken =
+        new StoreFindToken(firstKey, firstIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
+            firstIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+
+    // 2. generate an invalid journal based token with reset key pointing to 2nd index segment (this is to mock that the
+    // reset key fell out of journal and was copied to 2nd index segment by compaction)
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    invalidOffset = new Offset(lastIndexSegment.getLogSegmentName().getNextGenerationName(),
+        lastIndexSegment.getStartOffset().getOffset() + 1);
+    startToken = new StoreFindToken(invalidOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+        secondIndexSegment.getResetKey(), secondIndexSegment.getResetKeyType(),
+        secondIndexSegment.getResetKeyLifeVersion());
+    findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    token = (StoreFindToken) findInfo.getFindToken();
+    // expected token should be the first key in 2nd index segment (index-based)
+    StoreKey firstKeyFromSecondSegment = secondIndexSegment.iterator().next().getKey();
+    expectedToken =
+        new StoreFindToken(firstKeyFromSecondSegment, secondIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, secondIndexSegment.getResetKey(), secondIndexSegment.getResetKeyType(),
+            secondIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+
+    // 3. generate an invalid token with reset key but the reset key is not found in current index
+    StoreKey keyNotFound = stateForTokenTest.getUniqueId();
+    startToken = new StoreFindToken(invalidOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+        keyNotFound, PersistentIndex.IndexEntryType.PUT, (short) 0);
+    findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    token = (StoreFindToken) findInfo.getFindToken();
+    // token should be reset to the very beginning which is the first index segment
+    expectedToken = new StoreFindToken(firstKey, firstIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
+        firstIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
   }
 
   /**

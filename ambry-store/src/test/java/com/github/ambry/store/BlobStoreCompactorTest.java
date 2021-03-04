@@ -2434,7 +2434,7 @@ public class BlobStoreCompactorTest {
     if (state != null) {
       state.destroy();
     }
-    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, withUndelete);
+    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, withUndelete, false);
   }
 
   /**

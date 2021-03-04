@@ -1991,7 +1991,7 @@ class PersistentIndex {
           if (ignoreResetKey || token.getResetKey() == null) {
             revalidatedToken = new StoreFindToken();
           } else {
-            // reset key is present in the token
+            // reset key is present in the token, we attempt to generate the new token based on reset key
             revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
           }
           metrics.journalBasedTokenResetCount.inc();
@@ -2030,10 +2030,12 @@ class PersistentIndex {
     short resetKeyLifeVersion = token.getResetKeyVersion();
     List<IndexValue> indexValues = findAllIndexValuesForKey(resetKey, null, EnumSet.of(resetKeyType), indexSegments);
     IndexValue resetKeyIndexValue = null;
-    for(IndexValue indexValue : indexValues){
-      if(indexValue.getLifeVersion() == resetKeyLifeVersion){
-        resetKeyIndexValue = indexValue;
-        break;
+    if (indexValues != null) {
+      for (IndexValue indexValue : indexValues) {
+        if (indexValue.getLifeVersion() == resetKeyLifeVersion) {
+          resetKeyIndexValue = indexValue;
+          break;
+        }
       }
     }
     StoreFindToken newToken = new StoreFindToken();
