@@ -67,7 +67,7 @@ public class RestServiceException extends Exception {
    *                                          client as a response header.
    * @param includeExceptionMetadataInResponse {@code true} to hint the exception metadata should be included in the
    *                                                       response headers.
-   * @param exceptionMetadataMap {@link Map} of exception metadata.
+   * @param exceptionMetadataMap {@link Map} of exception metadata containing response headers as keys and corresponding values.
    */
   public RestServiceException(String message, RestServiceErrorCode error, boolean includeExceptionMessageInResponse,
       boolean includeExceptionMetadataInResponse, Map<String, String> exceptionMetadataMap) {

@@ -545,7 +545,7 @@ class NettyResponseChannel implements RestResponseChannel {
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
       }
-      if(restServiceException.shouldIncludeExceptionMetadataInResponse()) {
+      if (restServiceException.shouldIncludeExceptionMetadataInResponse()) {
         errHeaders = restServiceException.getExceptionMetadataMap();
       }
     } else if (Utils.isPossibleClientTermination(cause)) {
@@ -565,9 +565,7 @@ class NettyResponseChannel implements RestResponseChannel {
       response.headers().set(FAILURE_REASON_HEADER, errReason);
     }
     if(errHeaders != null) {
-      errHeaders.entrySet()
-          .stream()
-          .forEach(errHeader -> response.headers().set(errHeader.getKey(), errHeader.getValue()));
+      errHeaders.forEach((errHeaderKey, errHeaderVal) -> response.headers().set(errHeaderKey, errHeaderVal));
     }
     if (restServiceErrorCode != null && HttpStatusClass.CLIENT_ERROR.contains(status.code())) {
       response.headers().set(ERROR_CODE_HEADER, restServiceErrorCode.name());

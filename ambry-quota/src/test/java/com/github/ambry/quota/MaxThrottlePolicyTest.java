@@ -27,7 +27,7 @@ import static org.junit.Assert.*;
  * Test for @{@link MaxThrottlePolicy}.
  */
 public class MaxThrottlePolicyTest {
-  
+
   /** Test for {@link MaxThrottlePolicy#recommend}*/
   @Test
   public void testRecommend() {
@@ -35,9 +35,9 @@ public class MaxThrottlePolicyTest {
 
     // test for empty quota recommendation list
     ThrottlingRecommendation throttlingRecommendation = maxThrottlePolicy.recommend(Collections.emptyList());
-    assertEquals(ThrottlingRecommendation.NO_RETRY_VALUE_FOR_RETRY_AFTER_MS,
+    assertEquals(ThrottlingRecommendation.NO_RETRY_AFTER_MS,
         throttlingRecommendation.getRetryAfterMs());
-    assertEquals(QuotaWarningLevel.HEALTHY, throttlingRecommendation.getQuotaWarningLevel());
+    assertEquals(QuotaUsageLevel.HEALTHY, throttlingRecommendation.getQuotaUsageLevel());
     assertEquals(HttpResponseStatus.OK.code(), throttlingRecommendation.getRecommendedHttpStatus());
     assertEquals(false, throttlingRecommendation.shouldThrottle());
     assertTrue(throttlingRecommendation.getQuotaUsagePercentage().isEmpty());
@@ -47,7 +47,7 @@ public class MaxThrottlePolicyTest {
         new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             5);
     throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
-    verifyThrottlingRecommendation(QuotaWarningLevel.FATAL, true,
+    verifyThrottlingRecommendation(QuotaUsageLevel.FATAL, true,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
 
@@ -63,7 +63,7 @@ public class MaxThrottlePolicyTest {
         new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             1));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.FATAL, false,
+    verifyThrottlingRecommendation(QuotaUsageLevel.FATAL, false,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 10, throttlingRecommendation);
 
@@ -71,7 +71,7 @@ public class MaxThrottlePolicyTest {
         new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             12));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.FATAL, false,
+    verifyThrottlingRecommendation(QuotaUsageLevel.FATAL, false,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 12, throttlingRecommendation);
 
@@ -87,7 +87,7 @@ public class MaxThrottlePolicyTest {
         new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             5));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.FATAL, false,
+    verifyThrottlingRecommendation(QuotaUsageLevel.FATAL, false,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
 
@@ -95,7 +95,7 @@ public class MaxThrottlePolicyTest {
         new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             5));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.FATAL, true,
+    verifyThrottlingRecommendation(QuotaUsageLevel.FATAL, true,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
 
@@ -105,45 +105,45 @@ public class MaxThrottlePolicyTest {
         new QuotaRecommendation(false, 70, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             5));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.HEALTHY, false,
+    verifyThrottlingRecommendation(QuotaUsageLevel.HEALTHY, false,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 70.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
     quotaRecommendationList.add(
         new QuotaRecommendation(false, 81, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             5));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.WARNING, false,
+    verifyThrottlingRecommendation(QuotaUsageLevel.WARNING, false,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 81.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
     quotaRecommendationList.add(
         new QuotaRecommendation(false, 96, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             5));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.CRITICAL, false,
+    verifyThrottlingRecommendation(QuotaUsageLevel.CRITICAL, false,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 96.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
     quotaRecommendationList.add(
         new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
             5));
     throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
-    verifyThrottlingRecommendation(QuotaWarningLevel.FATAL, true,
+    verifyThrottlingRecommendation(QuotaUsageLevel.FATAL, true,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
   }
 
   /**
    * Verify that the fields of specified {@link ThrottlingRecommendation} object are same as specified parameters.
-   * @param quotaWarningLevel expected value for {@link QuotaWarningLevel}.
+   * @param quotaUsageLevel expected value for {@link QuotaUsageLevel}.
    * @param shouldThrottle expected value for throttle recommendation.
    * @param quotaUsageMap expected value for {@link Map} of quota usage.
    * @param httpStatus expected value for http status.
    * @param retryAfterMs expected value for retry interval.
    * @param throttlingRecommendation {@link ThrottlingRecommendation} object to verify.
    */
-  private void verifyThrottlingRecommendation(QuotaWarningLevel quotaWarningLevel, boolean shouldThrottle,
+  private void verifyThrottlingRecommendation(QuotaUsageLevel quotaUsageLevel, boolean shouldThrottle,
       Map<QuotaName, Float> quotaUsageMap, int httpStatus, long retryAfterMs,
       ThrottlingRecommendation throttlingRecommendation) {
-    assertEquals(quotaWarningLevel, throttlingRecommendation.getQuotaWarningLevel());
+    assertEquals(quotaUsageLevel, throttlingRecommendation.getQuotaUsageLevel());
     assertEquals(shouldThrottle, throttlingRecommendation.shouldThrottle());
     assertEquals(quotaUsageMap.size(), throttlingRecommendation.getQuotaUsagePercentage().size());
     for (Map.Entry<QuotaName, Float> usageEntry : throttlingRecommendation.getQuotaUsagePercentage().entrySet()) {

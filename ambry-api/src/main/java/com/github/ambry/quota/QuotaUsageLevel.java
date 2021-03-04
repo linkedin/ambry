@@ -16,17 +16,26 @@ package com.github.ambry.quota;
 /**
  * Quota warning levels.
  * The limit for each type of warning should be determined by {@link ThrottlePolicy} implementation.
+ * NOTE that the order of these enums should not be changed since their relative position is used for comparison.
  */
-public enum QuotaWarningLevel {
-  HEALTHY, /** The quota usage is within healthy usage limits. */
-  WARNING, /** The quota usage is approaching limit. */
-  CRITICAL, /** Usage at this level is fast approaching fatal level at which requests will be throttled. */
-  FATAL; /** The quota usage is at or above limit and will be throttled */
+public enum QuotaUsageLevel {
+
+  /** The quota usage is within healthy usage limits. */
+  HEALTHY,
+
+  /** The quota usage is approaching limit. */
+  WARNING,
+
+  /** Usage at this level is fast approaching fatal level at which requests will be throttled. */
+  CRITICAL,
+
+  /** The quota usage is at or above limit and will be throttled */
+  FATAL;
 
   /**
    * @return QuotaWarningLevel corresponding to the int specified.
    */
-  public static QuotaWarningLevel fromInt(int ordinal) {
-    return QuotaWarningLevel.values()[ordinal];
+  public static QuotaUsageLevel fromInt(int ordinal) {
+    return QuotaUsageLevel.values()[ordinal];
   }
 }

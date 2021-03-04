@@ -480,7 +480,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   private void verifyUserQuotaHeaders(HttpResponse response) {
     assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE));
     assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.RETRY_AFTER_MS));
-    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.USER_QUOTA_WARNING));
+    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE_LEVEL));
     Map<String, String> quotaUsageHeader = RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(
         response.headers().get(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE));
     assertTrue(quotaUsageHeader.containsKey(QuotaName.READ_CAPACITY_UNIT.name()) || quotaUsageHeader.containsKey(
