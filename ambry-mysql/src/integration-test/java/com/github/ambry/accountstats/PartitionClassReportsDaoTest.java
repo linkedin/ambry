@@ -216,7 +216,8 @@ public class PartitionClassReportsDaoTest {
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(batchSize));
     configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, tempDir.toString());
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
-    return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
+    return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
+        new ClusterMapConfig(verifiableProperties), new StatsManagerConfig(verifiableProperties),
+        new MetricRegistry()).getAccountStatsStore();
   }
 }
