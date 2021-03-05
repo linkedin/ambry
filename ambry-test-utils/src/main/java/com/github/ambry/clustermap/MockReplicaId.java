@@ -27,7 +27,7 @@ public class MockReplicaId implements ReplicaId {
   private static final String REPLICA_FILE_PREFIX = "replica";
   private String mountPath;
   private String replicaPath;
-  private List<ReplicaId> peerReplicas;
+  private List<ReplicaId> peerReplicas = new ArrayList<>();
   private MockPartitionId partitionId;
   private MockDataNodeId dataNodeId;
   private MockDiskId diskId;
@@ -90,7 +90,7 @@ public class MockReplicaId implements ReplicaId {
   }
 
   public void setPeerReplicas(List<ReplicaId> peerReplicas) {
-    this.peerReplicas = new ArrayList<>();
+    this.peerReplicas.clear();
     for (ReplicaId replicaId : peerReplicas) {
       if (!Objects.equals(mountPath, replicaId.getMountPath())) {
         this.peerReplicas.add(replicaId);

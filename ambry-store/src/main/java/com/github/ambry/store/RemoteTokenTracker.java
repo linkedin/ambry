@@ -15,6 +15,9 @@ package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.replication.FindToken;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -32,6 +35,7 @@ public class RemoteTokenTracker {
 
   public RemoteTokenTracker(ReplicaId localReplica) {
     this.localReplica = localReplica;
+    List<? extends ReplicaId> list = localReplica.getPeerReplicaIds();
     localReplica.getPeerReplicaIds().forEach(r -> {
       String hostnameAndPath = r.getDataNodeId().getHostname() + DELIMITER + r.getReplicaPath();
       peerReplicaAndToken.put(hostnameAndPath, new StoreFindToken());
@@ -56,5 +60,12 @@ public class RemoteTokenTracker {
     });
     // atomic switch
     peerReplicaAndToken = newPeerReplicaAndToken;
+  }
+
+  /**
+   * @return a snapshot of peer replica to token map.
+   */
+  Map<String, FindToken> getPeerReplicaAndToken() {
+    return new HashMap<>(peerReplicaAndToken);
   }
 }

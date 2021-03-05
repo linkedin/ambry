@@ -29,6 +29,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.json.JSONObject;
@@ -110,7 +111,7 @@ class StoreTestUtils {
 
     @Override
     public List<? extends ReplicaId> getPeerReplicaIds() {
-      return null;
+      return Collections.emptyList();
     }
 
     @Override

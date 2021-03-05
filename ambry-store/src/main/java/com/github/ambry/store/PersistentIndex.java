@@ -1310,7 +1310,7 @@ class PersistentIndex {
    * @param storeToken the {@link StoreFindToken} that needs to be validated
    * @return the new {@link StoreFindToken} after validating
    */
-  private StoreFindToken resetTokenIfRequired(StoreFindToken storeToken) throws StoreException {
+  StoreFindToken resetTokenIfRequired(StoreFindToken storeToken) throws StoreException {
     UUID remoteIncarnationId = storeToken.getIncarnationId();
     // if incarnationId is null, for backwards compatibility purposes, the token is considered as good.
     /// if not null, we check for a match

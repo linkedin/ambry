@@ -17,6 +17,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -1137,12 +1138,40 @@ class BlobStoreCompactor {
   /**
    * Check if given delete tombstone is removable. There are two cases where delete tombstone can be safely removed:
    * 1. delete record has finite expiration time and it has expired already;
-   * 2. (TODO) all peer replica tokens have passed the offset that refers to this delete (That is, they have replicated this delete already)
+   * 2. all peer replica tokens have passed the offset that refers to this delete (That is, they have replicated this delete already)
    * @param deleteIndexValue the {@link IndexValue} associated with delete tombstone
    * @return {@code true} if this delete tombstone can be safely removed. {@code false} otherwise.
    */
-  private boolean isDeleteTombstoneRemovable(IndexValue deleteIndexValue) {
-    return srcIndex.isExpired(deleteIndexValue);
+  private boolean isDeleteTombstoneRemovable(IndexValue deleteIndexValue) throws StoreException {
+    if (srcIndex.isExpired(deleteIndexValue)) {
+      return true;
+    }
+    long deletePosition = srcIndex.getAbsolutePositionInLogForOffset(deleteIndexValue.getOffset());
+    for (Map.Entry<String, FindToken> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
+      FindToken token = srcIndex.resetTokenIfRequired((StoreFindToken) entry.getValue());
+      if (!token.equals(entry.getValue())) {
+        // probably incarnation id has changed or there is unclean shutdown
+        return false;
+      }
+      token = srcIndex.revalidateFindToken(entry.getValue());
+      if (!token.equals(entry.getValue())) {
+        // probably log segment the token refers to has been compacted already
+        return false;
+      }
+      switch (token.getType()) {
+        case Uninitialized:
+          return false;
+        case JournalBased:
+        case IndexBased:
+          if (token.getBytesRead() < deletePosition + deleteIndexValue.getSize()) {
+            return false;
+          }
+        default:
+          throw new IllegalArgumentException("Unsupported token type in compaction: " + token.getType());
+      }
+    }
+    srcMetrics.permanentDeleteTombstonePurgeCount.inc();
+    return true;
   }
 
   /**
