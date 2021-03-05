@@ -30,12 +30,5 @@ public enum QuotaUsageLevel {
   CRITICAL,
 
   /** The quota usage is at or above limit and will be throttled */
-  FATAL;
-
-  /**
-   * @return QuotaWarningLevel corresponding to the int specified.
-   */
-  public static QuotaUsageLevel fromInt(int ordinal) {
-    return QuotaUsageLevel.values()[ordinal];
-  }
+  EXCEEDED
 }

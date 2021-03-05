@@ -85,6 +85,7 @@ public class AmbryQuotaManager implements QuotaManager {
     }
     return throttlePolicy.recommend(requestQuotaEnforcers.stream()
         .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
+        .filter(quotaRecommendation -> quotaRecommendation != null)
         .collect(Collectors.toList()));
   }
 

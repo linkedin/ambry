@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import io.netty.handler.codec.http.HttpResponseStatus;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,7 @@ import java.util.Map;
 public class MaxThrottlePolicy implements ThrottlePolicy {
   static final long DEFAULT_RETRY_AFTER_MS = ThrottlingRecommendation.NO_RETRY_AFTER_MS;
   static final int DEFAULT_RECOMMENDED_HTTP_STATUS = HttpResponseStatus.OK.code();
-  static final QuotaUsageLevel DEFAULT_QUOTA_WARNING_LEVEL = QuotaUsageLevel.HEALTHY;
+  static final QuotaUsageLevel DEFAULT_QUOTA_USAGE_LEVEL = QuotaUsageLevel.HEALTHY;
 
   // Percentage usage at or below this limit is healthy.
   static final int HEALTHY_USAGE_LEVEL_LIMIT = 80;
@@ -42,17 +43,16 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
     Map<QuotaName, Float> quotaUsagePercentage = new HashMap<>();
     int recommendedHttpStatus = DEFAULT_RECOMMENDED_HTTP_STATUS;
     long retryAfterMs = DEFAULT_RETRY_AFTER_MS;
-    QuotaUsageLevel quotaWarningLevel = DEFAULT_QUOTA_WARNING_LEVEL;
     for (QuotaRecommendation recommendation : quotaRecommendations) {
       shouldThrottle = shouldThrottle | recommendation.shouldThrottle();
       quotaUsagePercentage.put(recommendation.getQuotaName(), recommendation.getQuotaUsagePercentage());
       recommendedHttpStatus = Math.max(recommendation.getRecommendedHttpStatus(), recommendedHttpStatus);
       retryAfterMs = Math.max(recommendation.getRetryAfterMs(), retryAfterMs);
-      quotaWarningLevel = QuotaUsageLevel.fromInt(Math.max(quotaWarningLevel.ordinal(),
-          computeWarningLevel(recommendation.getQuotaUsagePercentage()).ordinal()));
     }
+    QuotaUsageLevel quotaUsageLevel = quotaUsagePercentage.isEmpty() ? DEFAULT_QUOTA_USAGE_LEVEL
+        : computeWarningLevel(Collections.max(quotaUsagePercentage.values()));
     return new ThrottlingRecommendation(shouldThrottle, quotaUsagePercentage, recommendedHttpStatus, retryAfterMs,
-        quotaWarningLevel);
+        quotaUsageLevel);
   }
 
   /**
@@ -62,7 +62,7 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
    */
   private QuotaUsageLevel computeWarningLevel(float usagePercentage) {
     if (usagePercentage >= CRITICAL_USAGE_LEVEL_LIMIT) {
-      return QuotaUsageLevel.FATAL;
+      return QuotaUsageLevel.EXCEEDED;
     }
     if (usagePercentage >= WARNING_USAGE_LEVEL_LIMIT) {
       return QuotaUsageLevel.CRITICAL;

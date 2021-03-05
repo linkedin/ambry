@@ -546,7 +546,7 @@ class NettyResponseChannel implements RestResponseChannel {
             StandardCharsets.US_ASCII);
       }
       if (restServiceException.shouldIncludeExceptionMetadataInResponse()) {
-        errHeaders = restServiceException.getExceptionMetadataMap();
+        errHeaders = restServiceException.getExceptionHeadersMap();
       }
     } else if (Utils.isPossibleClientTermination(cause)) {
       nettyMetrics.clientEarlyTerminationCount.inc();

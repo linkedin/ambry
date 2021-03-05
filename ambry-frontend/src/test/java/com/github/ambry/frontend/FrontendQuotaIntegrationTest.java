@@ -478,11 +478,11 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    * @param response the {@link HttpResponse} which contains the headers of the response.
    */
   private void verifyUserQuotaHeaders(HttpResponse response) {
-    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE));
-    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.RETRY_AFTER_MS));
-    assertTrue(response.headers().contains(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE_LEVEL));
+    assertTrue(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_USAGE));
+    assertTrue(response.headers().contains(RestUtils.RequestQuotaHeaders.RETRY_AFTER_MS));
+    assertTrue(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_WARNING));
     Map<String, String> quotaUsageHeader = RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(
-        response.headers().get(RestUtils.UserQuotaHeaders.USER_QUOTA_USAGE));
+        response.headers().get(RestUtils.RequestQuotaHeaders.USER_QUOTA_USAGE));
     assertTrue(quotaUsageHeader.containsKey(QuotaName.READ_CAPACITY_UNIT.name()) || quotaUsageHeader.containsKey(
         QuotaName.WRITE_CAPACITY_UNIT.name()));
   }

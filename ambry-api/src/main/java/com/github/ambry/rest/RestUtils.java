@@ -296,9 +296,9 @@ public class RestUtils {
   }
 
   /**
-   * Headers with information about user quota and usage.
+   * Headers with information about request quota and usage.
    */
-  public static final class UserQuotaHeaders {
+  public static final class RequestQuotaHeaders {
 
     /**
      * Response header indicating user quota usage information.
@@ -984,6 +984,7 @@ public class RestUtils {
   /**
    * Build the user quota headers map.
    * @param throttlingRecommendation {@link ThrottlingRecommendation} object.
+   * @return Map of request headers key-value pair related to request quota.
    */
   public static Map<String, String> buildUserQuotaHeadersMap(ThrottlingRecommendation throttlingRecommendation) {
     if (throttlingRecommendation.getQuotaUsagePercentage().isEmpty()) {
@@ -991,22 +992,21 @@ public class RestUtils {
     }
 
     Map<String, String> quotaHeadersMap = new HashMap<>();
-    // set usage headers if present.
-    if (!throttlingRecommendation.getQuotaUsagePercentage().isEmpty()) {
-      quotaHeadersMap.put(UserQuotaHeaders.USER_QUOTA_USAGE, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
-          throttlingRecommendation.getQuotaUsagePercentage()
-              .entrySet()
-              .stream()
-              .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
-    }
+    // set usage headers.
+    quotaHeadersMap.put(RequestQuotaHeaders.USER_QUOTA_USAGE, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
+        throttlingRecommendation.getQuotaUsagePercentage()
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
+
 
     // set retry header if present.
-    if (throttlingRecommendation.getRetryAfterMs() != ThrottlingRecommendation.NO_RETRY_VALUE_FOR_RETRY_AFTER_MS) {
-      quotaHeadersMap.put(UserQuotaHeaders.RETRY_AFTER_MS, String.valueOf(throttlingRecommendation.getRetryAfterMs()));
+    if (throttlingRecommendation.getRetryAfterMs() != ThrottlingRecommendation.NO_RETRY_AFTER_MS) {
+      quotaHeadersMap.put(RequestQuotaHeaders.RETRY_AFTER_MS, String.valueOf(throttlingRecommendation.getRetryAfterMs()));
     }
 
     // set the warning header.
-    quotaHeadersMap.put(UserQuotaHeaders.USER_QUOTA_WARNING, throttlingRecommendation.getQuotaWarningLevel().name());
+    quotaHeadersMap.put(RequestQuotaHeaders.USER_QUOTA_WARNING, throttlingRecommendation.getQuotaUsageLevel().name());
     return quotaHeadersMap;
   }
 
