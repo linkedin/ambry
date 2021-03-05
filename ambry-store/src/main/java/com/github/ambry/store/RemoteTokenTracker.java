@@ -34,7 +34,7 @@ public class RemoteTokenTracker {
     this.localReplica = localReplica;
     localReplica.getPeerReplicaIds().forEach(r -> {
       String hostnameAndPath = r.getDataNodeId().getHostname() + DELIMITER + r.getReplicaPath();
-      peerReplicaAndToken.put(hostnameAndPath, null);
+      peerReplicaAndToken.put(hostnameAndPath, new StoreFindToken());
     });
   }
 
@@ -51,7 +51,8 @@ public class RemoteTokenTracker {
     // this should remove peer replica that no longer exists (i.e original replica is moved to other node)
     localReplica.getPeerReplicaIds().forEach(r -> {
       String hostnameAndPath = r.getDataNodeId().getHostname() + DELIMITER + r.getReplicaPath();
-      newPeerReplicaAndToken.put(hostnameAndPath, peerReplicaAndToken.getOrDefault(hostnameAndPath, null));
+      newPeerReplicaAndToken.put(hostnameAndPath,
+          peerReplicaAndToken.getOrDefault(hostnameAndPath, new StoreFindToken()));
     });
     // atomic switch
     peerReplicaAndToken = newPeerReplicaAndToken;
