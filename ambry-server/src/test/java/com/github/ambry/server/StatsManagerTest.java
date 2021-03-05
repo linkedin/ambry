@@ -760,7 +760,8 @@ public class StatsManagerTest {
     }
 
     @Override
-    public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
+    public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname,
+        String remoteReplicaPath) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 

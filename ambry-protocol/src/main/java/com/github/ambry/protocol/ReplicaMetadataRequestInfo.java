@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Contains the token, hostname, replicapath for a local partition. This is used
+ * Contains the token, hostname, replica path for a local partition. This is used
  * by replica metadata request to specify token in a partition
  */
 public class ReplicaMetadataRequestInfo {

@@ -88,6 +88,7 @@ class BlobStoreCompactor {
   private final IndexSegmentValidEntryFilter validEntryFilter;
   private final AccountService accountService;
   private final Set<Pair<Short, Short>> deprecatedContainers;
+  private final RemoteTokenTracker remoteTokenTracker;
   private final boolean useDirectIO;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
@@ -113,13 +114,14 @@ class BlobStoreCompactor {
    * @param sessionId the sessionID of the store.
    * @param incarnationId the incarnation ID of the store.
    * @param accountService the {@link AccountService} instance to use.
+   * @param remoteTokenTracker the {@link RemoteTokenTracker} that tracks tokens from all peer replicas.
    * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
       StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
-      AccountService accountService) throws IOException, StoreException {
+      AccountService accountService, RemoteTokenTracker remoteTokenTracker) throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -135,6 +137,7 @@ class BlobStoreCompactor {
     this.incarnationId = incarnationId;
     this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
     this.deprecatedContainers = new HashSet<>();
+    this.remoteTokenTracker = remoteTokenTracker;
     if (config.storeCompactionFilter.equals(IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
       validEntryFilter = new IndexSegmentValidEntryFilterWithoutUndelete();
     } else {

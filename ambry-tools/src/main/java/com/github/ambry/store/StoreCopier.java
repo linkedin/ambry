@@ -53,8 +53,8 @@ import static com.github.ambry.utils.Utils.*;
  * made before copying
  * <p/>
  * This tool requires the source store to *not* return blobs that have already been deleted when
- * {@link Store#findEntriesSince(FindToken, long)} is called. It is also expected to be run when both locations (src and
- * tgt) are offline.
+ * {@link Store#findEntriesSince(FindToken, long, String, String)} is called. It is also expected to be run when both
+ * locations (src and tgt) are offline.
  */
 public class StoreCopier implements Closeable {
 
@@ -204,7 +204,7 @@ public class StoreCopier implements Closeable {
     FindToken token = startToken;
     do {
       lastToken = token;
-      FindInfo findInfo = src.findEntriesSince(lastToken, fetchSizeInBytes);
+      FindInfo findInfo = src.findEntriesSince(lastToken, fetchSizeInBytes, null, null);
       List<MessageInfo> messageInfos = findInfo.getMessageEntries();
       for (Transformer transformer : transformers) {
         transformer.warmup(messageInfos);
