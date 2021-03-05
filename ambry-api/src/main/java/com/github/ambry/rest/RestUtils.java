@@ -254,9 +254,9 @@ public class RestUtils {
     public final static String RESOLVE_RANGE_ON_EMPTY_BLOB = "x-ambry-resolve-range-on-empty-blob";
 
     /**
-     * Request header to carry clusterName for GetStatsReport request.
+     * Request header to carry clusterName.
      */
-    public final static String GET_STATS_REPORT_CLUSTER = "x-ambry-stats-cluster";
+    public final static String CLUSTER_NAME = "x-ambry-cluster-name";
 
     /**
      * Request header to carry {@link StatsReportType} for GetStatsReport request.

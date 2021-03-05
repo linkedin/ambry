@@ -20,16 +20,18 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 
+import static org.mockito.Mockito.*;
+
 
 /**
- * Factory implementation to return a {@link MockAccountStatsStore}.
+ * Factory implementation to return a mock {@link AccountStatsStore}.
  */
 public class MockAccountStatsStoreFactory implements AccountStatsStoreFactory {
   private final AccountStatsStore accountStatsStore;
 
   public MockAccountStatsStoreFactory(VerifiableProperties verifiableProperties, ClusterMapConfig clusterMapConfig,
       StatsManagerConfig statsManagerConfig, MetricRegistry registry) {
-    accountStatsStore = new MockAccountStatsStore(clusterMapConfig.clusterMapClusterName);
+    accountStatsStore = mock(AccountStatsStore.class);
   }
 
   @Override

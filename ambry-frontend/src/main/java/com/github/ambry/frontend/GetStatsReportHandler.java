@@ -116,7 +116,7 @@ class GetStatsReportHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.getStatsReportSecurityPostProcessRequestMetrics, securityCheckResult -> {
         String clusterName =
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.GET_STATS_REPORT_CLUSTER, true);
+            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.CLUSTER_NAME, true);
         String reportType = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.GET_STATS_REPORT_TYPE, true);
         StatsReportType statsReportType;
         try {

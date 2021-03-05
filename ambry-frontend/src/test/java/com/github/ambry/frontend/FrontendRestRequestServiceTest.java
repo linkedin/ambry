@@ -24,6 +24,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -145,7 +146,7 @@ public class FrontendRestRequestServiceTest {
   private final FrontendTestResponseHandler responseHandler;
   private final InMemoryRouter router;
   private final MockClusterMap clusterMap;
-  private final MockAccountStatsStore accountStatsStore;
+  private final AccountStatsStore accountStatsStore;
   private final BlobId referenceBlobId;
   private final String referenceBlobIdStr;
   private final short blobIdVersion;
@@ -211,7 +212,7 @@ public class FrontendRestRequestServiceTest {
     }
     blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
-    accountStatsStore = new MockAccountStatsStore(CLUSTER_NAME);
+    accountStatsStore = mock(AccountStatsStore.class);
     responseHandler = new FrontendTestResponseHandler();
     frontendRestRequestService = getFrontendRestRequestService();
     referenceBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
@@ -1022,15 +1023,29 @@ public class FrontendRestRequestServiceTest {
   public void getStatsReportTest() throws Exception {
     StatsSnapshot accountStatsSnapshot =
         TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
-    accountStatsStore.storeAggregatedAccountStats(accountStatsSnapshot);
     StatsSnapshot partitionClassStatsSnapshot =
         TestUtils.makeAggregatedPartitionClassStats(new String[]{"PartitionClass1", "PartitionClass2"}, 10, 10);
-    accountStatsStore.storeAggregatedPartitionClassStats(partitionClassStatsSnapshot);
+    doAnswer(invocation -> {
+      String clusterName = invocation.getArgument(0);
+      if (clusterName.equals(CLUSTER_NAME)) {
+        return accountStatsSnapshot;
+      } else {
+        return null;
+      }
+    }).when(accountStatsStore).queryAggregatedAccountStatsByClusterName(anyString());
+    doAnswer(invocation -> {
+      String clusterName = invocation.getArgument(0);
+      if (clusterName.equals(CLUSTER_NAME)) {
+        return partitionClassStatsSnapshot;
+      } else {
+        return null;
+      }
+    }).when(accountStatsStore).queryAggregatedPartitionClassStatsByClusterName(anyString());
     ObjectMapper mapper = new ObjectMapper();
 
     // construct a request to get account stats
     JSONObject headers = new JSONObject();
-    headers.put(RestUtils.Headers.GET_STATS_REPORT_CLUSTER, CLUSTER_NAME);
+    headers.put(RestUtils.Headers.CLUSTER_NAME, CLUSTER_NAME);
     headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.ACCOUNT_REPORT.name());
     RestRequest request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -1041,7 +1056,7 @@ public class FrontendRestRequestServiceTest {
 
     // construct a request to get partition class stats
     headers = new JSONObject();
-    headers.put(RestUtils.Headers.GET_STATS_REPORT_CLUSTER, CLUSTER_NAME);
+    headers.put(RestUtils.Headers.CLUSTER_NAME, CLUSTER_NAME);
     headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.PARTITION_CLASS_REPORT.name());
     request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
     restResponseChannel = new MockRestResponseChannel();
@@ -1052,7 +1067,7 @@ public class FrontendRestRequestServiceTest {
 
     // test clustername not found case to ensure that it goes through the exception path
     headers = new JSONObject();
-    headers.put(RestUtils.Headers.GET_STATS_REPORT_CLUSTER, "WRONG_CLUSTER");
+    headers.put(RestUtils.Headers.CLUSTER_NAME, "WRONG_CLUSTER");
     headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.ACCOUNT_REPORT.name());
     request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
     try {

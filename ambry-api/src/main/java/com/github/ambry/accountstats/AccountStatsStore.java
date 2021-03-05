@@ -21,7 +21,7 @@ import java.util.Set;
 
 /**
  * The interface that stores and fetches account stats, aggregated account stats.
- * TODO: Add methods to support partition class stats.
+ * TODO: add method to deal with replica reassignment.
  */
 public interface AccountStatsStore {
   /**

@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
@@ -35,6 +36,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -45,12 +47,12 @@ public class GetStatsReportHandlerTest {
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
   private final GetStatsReportHandler handler;
   private final ObjectMapper mapper = new ObjectMapper();
-  private final MockAccountStatsStore accountStatsStore;
+  private final AccountStatsStore accountStatsStore;
 
   public GetStatsReportHandlerTest() {
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
-    accountStatsStore = new MockAccountStatsStore(CLUSTER_NAME);
+    accountStatsStore = mock(AccountStatsStore.class);
     handler = new GetStatsReportHandler(securityServiceFactory.getSecurityService(), metrics, accountStatsStore);
   }
 
@@ -70,13 +72,27 @@ public class GetStatsReportHandlerTest {
     };
     StatsSnapshot accountStatsSnapshot =
         TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
-    accountStatsStore.storeAggregatedAccountStats(accountStatsSnapshot);
+    doAnswer(invocation -> {
+      String clusterName = invocation.getArgument(0);
+      if (clusterName.equals(CLUSTER_NAME)) {
+        return accountStatsSnapshot;
+      } else {
+        return null;
+      }
+    }).when(accountStatsStore).queryAggregatedAccountStatsByClusterName(anyString());
     RestRequest restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.ACCOUNT_REPORT.name());
     testAction.accept(restRequest, accountStatsSnapshot);
 
     StatsSnapshot partitionClassStatsSnapshot =
         TestUtils.makeAggregatedPartitionClassStats(new String[]{"PartitionClass1", "PartitionClass2"}, 10, 10);
-    accountStatsStore.storeAggregatedPartitionClassStats(partitionClassStatsSnapshot);
+    doAnswer(invocation -> {
+      String clusterName = invocation.getArgument(0);
+      if (clusterName.equals(CLUSTER_NAME)) {
+        return partitionClassStatsSnapshot;
+      } else {
+        return null;
+      }
+    }).when(accountStatsStore).queryAggregatedPartitionClassStatsByClusterName(anyString());
     restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.PARTITION_CLASS_REPORT.name());
     testAction.accept(restRequest, partitionClassStatsSnapshot);
   }
@@ -88,9 +104,6 @@ public class GetStatsReportHandlerTest {
           () -> sendRequestGetResponse(request, new MockRestResponseChannel()),
           e -> assertEquals(expectedErrorCode, e.getErrorCode()));
     };
-    StatsSnapshot accountStatsSnapshot =
-        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
-    accountStatsStore.storeAggregatedAccountStats(accountStatsSnapshot);
     RestRequest request = createRestRequest("WRONG_CLUSTER", StatsReportType.ACCOUNT_REPORT.name());
     testAction.accept(request, RestServiceErrorCode.NotFound);
     request = createRestRequest(null, StatsReportType.ACCOUNT_REPORT.name());
@@ -112,7 +125,7 @@ public class GetStatsReportHandlerTest {
       headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, reportType);
     }
     if (clusterName != null) {
-      headers.put(RestUtils.Headers.GET_STATS_REPORT_CLUSTER, clusterName);
+      headers.put(RestUtils.Headers.CLUSTER_NAME, clusterName);
     }
     data.put(MockRestRequest.HEADERS_KEY, headers);
     return new MockRestRequest(data, null);
