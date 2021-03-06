@@ -203,7 +203,7 @@ public class BlobStore implements Store {
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
-    remoteTokenTracker = new RemoteTokenTracker(replicaId);
+    remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
@@ -901,7 +901,7 @@ public class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.findEntriesSinceResponse.time();
     try {
-      if (hostname != null && !hostname.startsWith(Cloud_Replica_Keyword)) {
+      if (hostname != null && !hostname.startsWith(Cloud_Replica_Keyword) && remoteTokenTracker != null) {
         // only tokens from disk-backed replicas are tracked
         remoteTokenTracker.updateTokenFromPeerReplica(token, hostname, remoteReplicaPath);
       }
@@ -1219,7 +1219,9 @@ public class BlobStore implements Store {
    */
   void compact(CompactionDetails details, byte[] bundleReadBuffer) throws IOException, StoreException {
     checkStarted();
-    remoteTokenTracker.refreshPeerReplicaTokens();
+    if (remoteTokenTracker != null) {
+      remoteTokenTracker.refreshPeerReplicaTokens();
+    }
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
     logger.info("One cycle of compaction is completed on the store {}", storeId);
@@ -1234,7 +1236,9 @@ public class BlobStore implements Store {
     checkStarted();
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
-      remoteTokenTracker.refreshPeerReplicaTokens();
+      if(remoteTokenTracker != null) {
+        remoteTokenTracker.refreshPeerReplicaTokens();
+      }
       compactor.resumeCompaction(bundleReadBuffer);
       checkCapacityAndUpdateReplicaStatusDelegate();
     }

@@ -1146,6 +1146,9 @@ class BlobStoreCompactor {
     if (srcIndex.isExpired(deleteIndexValue)) {
       return true;
     }
+    if (remoteTokenTracker == null) {
+      return false;
+    }
     long deletePosition = srcIndex.getAbsolutePositionInLogForOffset(deleteIndexValue.getOffset());
     for (Map.Entry<String, FindToken> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
       FindToken token = srcIndex.resetTokenIfRequired((StoreFindToken) entry.getValue());

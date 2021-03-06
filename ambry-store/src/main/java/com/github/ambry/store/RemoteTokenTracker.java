@@ -35,7 +35,6 @@ public class RemoteTokenTracker {
 
   public RemoteTokenTracker(ReplicaId localReplica) {
     this.localReplica = localReplica;
-    List<? extends ReplicaId> list = localReplica.getPeerReplicaIds();
     localReplica.getPeerReplicaIds().forEach(r -> {
       String hostnameAndPath = r.getDataNodeId().getHostname() + DELIMITER + r.getReplicaPath();
       peerReplicaAndToken.put(hostnameAndPath, new StoreFindToken());
