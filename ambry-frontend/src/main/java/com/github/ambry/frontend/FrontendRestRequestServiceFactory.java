@@ -95,14 +95,14 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       StorageQuotaService storageQuotaService = null;
-      AccountStatsStore mysqlStore =
+      AccountStatsStore accountStatsStore =
           Utils.<AccountStatsStoreFactory>getObj(frontendConfig.accountStatsStoreFactory, verifiableProperties,
               clusterMapConfig, new StatsManagerConfig(verifiableProperties),
               clusterMap.getMetricRegistry()).getAccountStatsStore();
       if (frontendConfig.enableStorageQuotaService) {
         storageQuotaService =
             Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
-                mysqlStore, clusterMap.getMetricRegistry()).getStorageQuotaService();
+                accountStatsStore, clusterMap.getMetricRegistry()).getStorageQuotaService();
       }
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
@@ -110,7 +110,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
           securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
           accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
-          clusterMapConfig.clusterMapClusterName, storageQuotaService, mysqlStore);
+          clusterMapConfig.clusterMapClusterName, storageQuotaService, accountStatsStore);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);
     }
