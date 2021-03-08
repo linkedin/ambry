@@ -42,6 +42,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.ThrowingConsumer;
@@ -83,6 +84,7 @@ class FrontendRestRequestService implements RestRequestService {
   private final NamedBlobDb namedBlobDb;
   private final AccountService accountService;
   private final AccountAndContainerInjector accountAndContainerInjector;
+  private final AccountStatsStore accountStatsStore;
   private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final String datacenterName;
   private final String hostname;
@@ -100,6 +102,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
   private GetAccountsHandler getAccountsHandler;
   private PostAccountsHandler postAccountsHandler;
+  private GetStatsReportHandler getStatsReportHandler;
   private StorageQuotaService storageQuotaService;
   private boolean isUp = false;
 
@@ -121,12 +124,14 @@ class FrontendRestRequestService implements RestRequestService {
    * @param hostname the hostname for this frontend.
    * @param clusterName the name of the storage cluster that the router communicates with.
    * @param storageQuotaService the {@link StorageQuotaService} used to throttle traffics.
+   * @param accountStatsStore the {@link AccountStatsStore} used to fetch aggregated stats reports.
    */
   FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, Router router,
       ClusterMap clusterMap, IdConverterFactory idConverterFactory, SecurityServiceFactory securityServiceFactory,
       UrlSigningService urlSigningService, IdSigningService idSigningService, NamedBlobDb namedBlobDb,
       AccountService accountService, AccountAndContainerInjector accountAndContainerInjector, String datacenterName,
-      String hostname, String clusterName, StorageQuotaService storageQuotaService) {
+      String hostname, String clusterName, StorageQuotaService storageQuotaService,
+      AccountStatsStore accountStatsStore) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.router = router;
@@ -138,6 +143,7 @@ class FrontendRestRequestService implements RestRequestService {
     this.namedBlobDb = namedBlobDb;
     this.accountService = accountService;
     this.accountAndContainerInjector = accountAndContainerInjector;
+    this.accountStatsStore = accountStatsStore;
     this.datacenterName = datacenterName;
     this.hostname = hostname;
     this.clusterName = clusterName.toLowerCase();
@@ -190,6 +196,7 @@ class FrontendRestRequestService implements RestRequestService {
             clusterMap);
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
+    getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     isUp = true;
     logger.info("FrontendRestRequestService has started");
@@ -234,6 +241,9 @@ class FrontendRestRequestService implements RestRequestService {
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         getAccountsHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (requestPath.matchesOperation(Operations.GET_STATS_REPORT)) {
+        getStatsReportHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {

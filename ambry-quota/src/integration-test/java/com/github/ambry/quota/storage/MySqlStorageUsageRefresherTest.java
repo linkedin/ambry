@@ -123,7 +123,7 @@ public class MySqlStorageUsageRefresherTest {
     Files.createFile(tmpFilePath);
     manager = new MySqlStorageUsageRefresher.BackupFileManager(localBackupFilePath.toString());
     assertEquals(manager.getBackupFiles().size(), 2);
-    TestUtils.assertContainerMap(containerStorageUsages, manager.getBackupFileContent("2020-01"));
+    assertEquals(containerStorageUsages, manager.getBackupFileContent("2020-01"));
     assertFalse(Files.exists(tmpFilePath));
   }
 
@@ -135,7 +135,7 @@ public class MySqlStorageUsageRefresherTest {
   public void testStartRefresher() throws Exception {
     // Store something to mysql database as container usage and monthly container usage
     Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-    StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
+    StatsSnapshot snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages);
     accountStatsMySqlStore.storeAggregatedAccountStats(snapshot);
     accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(
         MySqlStorageUsageRefresher.getCurrentMonth());
@@ -156,17 +156,17 @@ public class MySqlStorageUsageRefresherTest {
     Map<String, Map<String, Long>> backupContainerStorageUsages =
         new ObjectMapper().readValue(backupFilePath.toFile(), new TypeReference<Map<String, Map<String, Long>>>() {
         });
-    TestUtils.assertContainerMap(containerStorageUsages, backupContainerStorageUsages);
+    assertEquals(containerStorageUsages, backupContainerStorageUsages);
 
     // recreate a refresher, but change the monthly container usages, new refresher should load it from backup
     containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
     accountStatsMySqlStore.storeAggregatedAccountStats(
-        TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages));
+        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages));
     accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(
         MySqlStorageUsageRefresher.getCurrentMonth());
     refresher = new MySqlStorageUsageRefresher(newAccountStatsMysqlStore, scheduler, storageQuotaConfig, metrics);
     Map<String, Map<String, Long>> currentMonthlyStorageUsages = refresher.getContainerStorageUsageMonthlyBase();
-    TestUtils.assertContainerMap(backupContainerStorageUsages, currentMonthlyStorageUsages);
+    assertEquals(backupContainerStorageUsages, currentMonthlyStorageUsages);
   }
 
   /**
@@ -216,7 +216,7 @@ public class MySqlStorageUsageRefresherTest {
   @Test
   public void testRefresherUpdateAndListener() throws Exception {
     Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-    StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
+    StatsSnapshot snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages);
     accountStatsMySqlStore.storeAggregatedAccountStats(snapshot);
     accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(
         MySqlStorageUsageRefresher.getCurrentMonth());
@@ -236,7 +236,7 @@ public class MySqlStorageUsageRefresherTest {
     });
     // Keep storage usage unchanged, listener should get an all-zero map
     accountStatsMySqlStore.storeAggregatedAccountStats(
-        TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages));
+        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages));
     CountDownLatch latch1 = new CountDownLatch(1);
     latchRef.set(latch1);
     latch1.await(10, TimeUnit.SECONDS);
@@ -245,7 +245,7 @@ public class MySqlStorageUsageRefresherTest {
     // Change some usage, listener should get
     containerStorageUsages.get("1").compute("1", (k, v) -> v + 1L);
     accountStatsMySqlStore.storeAggregatedAccountStats(
-        TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages));
+        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages));
     CountDownLatch latch2 = new CountDownLatch(1);
     latchRef.set(latch2);
     latch2.await(10, TimeUnit.SECONDS);
@@ -265,7 +265,7 @@ public class MySqlStorageUsageRefresherTest {
     try {
       String currentMonth = MySqlStorageUsageRefresher.getCurrentMonth();
       Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-      StatsSnapshot snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(containerStorageUsages);
+      StatsSnapshot snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages);
 
       accountStatsMySqlStore.storeAggregatedAccountStats(snapshot);
       accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonth);
@@ -277,23 +277,23 @@ public class MySqlStorageUsageRefresherTest {
 
       // Fetch monthly storage usage
       refresher.fetchStorageUsageMonthlyBase();
-      TestUtils.assertContainerMap(containerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
+      assertEquals(containerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
 
       // Change the month
       String notCurrentMonth = "1970-01";
       Map<String, Map<String, Long>> newContainerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-      snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(newContainerStorageUsages);
+      snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(newContainerStorageUsages);
       accountStatsMySqlStore.storeAggregatedAccountStats(snapshot);
       accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(notCurrentMonth);
       refresher.fetchStorageUsageMonthlyBase();
       // Monthly storage usage still the old one
-      TestUtils.assertContainerMap(containerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
+      assertEquals(containerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
 
       // Change the month back to the current month
       accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonth);
       // Wait for schedule to retry
       Thread.sleep(MYSQL_RETRY_BACKOFF_MS * 2);
-      TestUtils.assertContainerMap(newContainerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
+      assertEquals(newContainerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
 
       // Forward the time to next month
       mockTime.sleep((MySqlStorageUsageRefresher.secondsToNextMonthTick(currentMonth,
@@ -309,14 +309,13 @@ public class MySqlStorageUsageRefresherTest {
       assertEquals(stringMonthToInteger.apply(currentMonth) + 1, (int) stringMonthToInteger.apply(nextMonth));
       // Update the month to next month
       Map<String, Map<String, Long>> nextContainerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
-      snapshot = TestUtils.makeStatsSnapshotFromContainerStorageMap(nextContainerStorageUsages);
+      snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(nextContainerStorageUsages);
       accountStatsMySqlStore.storeAggregatedAccountStats(snapshot);
       accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(nextMonth);
       refresher.fetchStorageUsageMonthlyBase();
-      TestUtils.assertContainerMap(nextContainerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
+      assertEquals(nextContainerStorageUsages, refresher.getContainerStorageUsageMonthlyBase());
       // A backup file should be create as well
-      TestUtils.assertContainerMap(nextContainerStorageUsages,
-          refresher.getBackupFileManager().getBackupFileContent(nextMonth));
+      assertEquals(nextContainerStorageUsages, refresher.getBackupFileManager().getBackupFileContent(nextMonth));
     } finally {
       MySqlStorageUsageRefresher.time = SystemTime.getInstance();
     }
@@ -350,8 +349,8 @@ public class MySqlStorageUsageRefresherTest {
 
   private AccountStatsMySqlStore createAccountStatsMySqlStore() throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsMySqlStore();
+    return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
+        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 
   private Map<String, Map<String, Long>> cloneMap(Map<String, Map<String, Long>> origin) {

@@ -39,6 +39,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getSignedUrlMetricsGroup;
   public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
   public final RestRequestMetricsGroup getAccountsMetricsGroup;
+  public final RestRequestMetricsGroup getStatsReportMetricsGroup;
   // HEAD
   public final RestRequestMetricsGroup headBlobMetricsGroup;
   // OPTIONS
@@ -50,7 +51,6 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
   public final RestRequestMetricsGroup undeleteBlobMetricsGroup;
   public final RestRequestMetricsGroup putBlobMetricsGroup;
-
 
   // AsyncOperationTracker.Metrics instances
   public final AsyncOperationTracker.Metrics postSecurityProcessRequestMetrics;
@@ -91,6 +91,9 @@ public class FrontendMetrics {
 
   public final AsyncOperationTracker.Metrics getAccountsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getAccountsSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics getStatsReportSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getStatsReportSecurityPostProcessRequestMetrics;
 
   public final AsyncOperationTracker.Metrics postAccountsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postAccountsSecurityPostProcessRequestMetrics;
@@ -236,6 +239,8 @@ public class FrontendMetrics {
             metricRegistry);
     getAccountsMetricsGroup =
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, false, metricRegistry);
+    getStatsReportMetricsGroup =
+        new RestRequestMetricsGroup(GetStatsReportHandler.class, "GetStatsReport", false, false, metricRegistry);
     // HEAD
     headBlobMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "HeadBlob", false, false, metricRegistry);
@@ -323,6 +328,11 @@ public class FrontendMetrics {
     getAccountsSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetAccountsHandler.class, "SecurityPostProcessRequest", metricRegistry);
 
+    getStatsReportSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityProcessRequest", metricRegistry);
+    getStatsReportSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityPostProcessRequest", metricRegistry);
+
     postAccountsSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostAccountsHandler.class, "SecurityProcessRequest", metricRegistry);
     postAccountsSecurityPostProcessRequestMetrics =
@@ -370,23 +380,23 @@ public class FrontendMetrics {
     blobPropsBuildTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "BlobPropsBuildTimeInMs"));
     // NAMEDBLOBPUT
-    blobPropsBuildForNameBlobPutTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "blobPropsBuildForNameBlobPutTimeInMs"));
+    blobPropsBuildForNameBlobPutTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(FrontendRestRequestService.class, "blobPropsBuildForNameBlobPutTimeInMs"));
     // OPTIONS
     optionsPreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "OptionsPreProcessingTimeInMs"));
-    optionsSecurityRequestTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "OptionsSecurityRequestTimeInMs"));
-    optionsSecurityResponseTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "OptionsSecurityResponseTimeInMs"));
+    optionsSecurityRequestTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(FrontendRestRequestService.class, "OptionsSecurityRequestTimeInMs"));
+    optionsSecurityResponseTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(FrontendRestRequestService.class, "OptionsSecurityResponseTimeInMs"));
     // DeleteCallback
     deleteCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(FrontendRestRequestService.class, "DeleteCallbackProcessingTimeInMs"));
     deleteTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "DeleteCallbackResultTimeInMs"));
     // HeadCallback
-    headCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "HeadCallbackProcessingTimeInMs"));
+    headCallbackProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(FrontendRestRequestService.class, "HeadCallbackProcessingTimeInMs"));
     headTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "HeadCallbackResultTimeInMs"));
     headSecurityResponseCallbackProcessingTimeInMs = metricRegistry.histogram(
@@ -394,8 +404,8 @@ public class FrontendMetrics {
     headSecurityResponseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "HeadSecurityResponseTimeInMs"));
     // GetCallback
-    getCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "GetCallbackProcessingTimeInMs"));
+    getCallbackProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(FrontendRestRequestService.class, "GetCallbackProcessingTimeInMs"));
     getTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "GetCallbackResultTimeInMs"));
     getSecurityResponseCallbackProcessingTimeInMs = metricRegistry.histogram(
@@ -410,8 +420,8 @@ public class FrontendMetrics {
     // SecurityProcessRequestCallback
     deleteSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(FrontendRestRequestService.class, "DeleteSecurityRequestCallbackProcessingTimeInMs"));
-    deleteSecurityRequestTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "DeleteSecurityRequestTimeInMs"));
+    deleteSecurityRequestTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(FrontendRestRequestService.class, "DeleteSecurityRequestTimeInMs"));
     headSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(FrontendRestRequestService.class, "HeadSecurityRequestCallbackProcessingTimeInMs"));
     headSecurityRequestTimeInMs =
@@ -485,7 +495,8 @@ public class FrontendMetrics {
     getSecurityResponseCallbackProcessingError = metricRegistry.counter(
         MetricRegistry.name(FrontendRestRequestService.class, "GetSecurityResponseCallbackProcessingError"));
     // PostBlobHandler
-    ttlTooLargeError = metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "TtlTooLargeError"));
+    ttlTooLargeError =
+        metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "TtlTooLargeError"));
     ttlNotCompliantError =
         metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "TtlNotCompliantError"));
     // GetPeersHandler
@@ -512,8 +523,8 @@ public class FrontendMetrics {
         MetricRegistry.name(FrontendRestRequestService.class, "GetHeadDeleteUnrecognizedAccountCount"));
     getHeadDeleteUnrecognizedContainerCount = metricRegistry.counter(
         MetricRegistry.name(FrontendRestRequestService.class, "GetHeadDeleteUnrecognizedContainerCount"));
-    putWithServiceIdForAccountNameRate =
-        metricRegistry.meter(MetricRegistry.name(FrontendRestRequestService.class, "PutWithServiceIdForAccountNameRate"));
+    putWithServiceIdForAccountNameRate = metricRegistry.meter(
+        MetricRegistry.name(FrontendRestRequestService.class, "PutWithServiceIdForAccountNameRate"));
     putWithAccountAndContainerHeaderRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerHeaderRate"));
     putWithAccountAndContainerUriRate = metricRegistry.meter(

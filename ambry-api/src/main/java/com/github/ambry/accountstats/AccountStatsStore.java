@@ -11,15 +11,17 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.accountstats;
 
+import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StatsWrapper;
 import java.util.Map;
 import java.util.Set;
 
 
 /**
  * The interface that stores and fetches account stats, aggregated account stats.
- * TODO: Add methods to support partition class stats.
+ * TODO: add method to deal with replica reassignment.
  */
 public interface AccountStatsStore {
   /**
@@ -66,6 +68,16 @@ public interface AccountStatsStore {
    * @throws Exception
    */
   Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception;
+
+  /**
+   * Returns the aggregated account stats for the given {@code clusterName} in {@link StatsSnapshot}. The returned value
+   * is the same data set as {@link #queryAggregatedAccountStats()}, just in different format. It also returns null when
+   * the {@code clusterName} doesn't exist.
+   * @param clusterName The clusterName.
+   * @return A {@link StatsSnapshot} represents the aggregated account stats.
+   * @throws Exception
+   */
+  StatsSnapshot queryAggregatedAccountStatsByClusterName(String clusterName) throws Exception;
 
   /**
    * Return the monthly aggregated stats. This method returns a map in the same format as the {@link #queryAggregatedAccountStats}.
@@ -175,7 +187,17 @@ public interface AccountStatsStore {
    * @return A {@link StatsSnapshot} represents the aggregated partition class stats.
    * @throws Exception
    */
-  StatsSnapshot queryAggregatedPartitionClassStatsOf() throws Exception;
+  StatsSnapshot queryAggregatedPartitionClassStats() throws Exception;
+
+  /**
+   * Same as {@link #queryAggregatedPartitionClassStats()}, the only difference is that it takes {@code clusterName}
+   * as the first parameter and return the aggregated partition class stats for the given {@code clusterName}. It returns
+   * null if the clusterName doesn't exist.
+   * @param clusterName the clusterName
+   * @return A {@link StatsSnapshot} represents the aggregated partition class stats.
+   * @throws Exception
+   */
+  StatsSnapshot queryAggregatedPartitionClassStatsByClusterName(String clusterName) throws Exception;
 
   /**
    * Helper method to close the active connection, if there is one. Connection should be closed when there is no

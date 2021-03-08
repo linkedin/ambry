@@ -65,6 +65,8 @@ public class FrontendRestRequestServiceFactoryTest {
     Properties properties = new Properties();
     CommonTestUtils.populateRequiredRouterProps(properties);
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
+    properties.setProperty(FrontendConfig.ACCOUNT_STATS_STORE_FACTORY,
+        "com.github.ambry.frontend.MockAccountStatsStoreFactory");
     properties.setProperty("clustermap.cluster.name", "Cluster-Name");
     properties.setProperty("clustermap.datacenter.name", "Datacenter-Name");
     properties.setProperty("clustermap.host.name", "localhost");

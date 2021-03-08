@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.DataNodeId;
@@ -142,7 +143,8 @@ public class StatsManagerIntegrationTest {
     publisher.run();
 
     Map<String, Set<Integer>> partitionNameAndIds = accountStatsMySqlStore.queryPartitionNameAndIds();
-    StatsWrapper statsWrapper = accountStatsMySqlStore.queryPartitionClassStatsByHost(HOSTNAME, PORT, partitionNameAndIds);
+    StatsWrapper statsWrapper =
+        accountStatsMySqlStore.queryPartitionClassStatsByHost(HOSTNAME, PORT, partitionNameAndIds);
     assertEquals(aggregatedPartitionClassStatsSnapshot, statsWrapper.getSnapshot());
   }
 
@@ -161,7 +163,8 @@ public class StatsManagerIntegrationTest {
 
   private AccountStatsMySqlStore createAccountStatsMySqlStore(Properties configProps) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
-    return new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsMySqlStore();
+    return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
+        new ClusterMapConfig(verifiableProperties), new StatsManagerConfig(verifiableProperties),
+        new MetricRegistry()).getAccountStatsStore();
   }
 }

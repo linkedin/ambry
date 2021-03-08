@@ -21,7 +21,6 @@ import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
-import com.github.ambry.server.AccountStatsStore;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
@@ -317,6 +316,32 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
+  public StatsSnapshot queryAggregatedAccountStatsByClusterName(String clusterName) throws Exception {
+    long startTimeMs = System.currentTimeMillis();
+    Map<Short, Map<Short, Long>> accountContainerUsage = new HashMap<>();
+    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
+      accountContainerUsage.computeIfAbsent(accountId, k -> new HashMap<>()).put(containerId, storageUsage);
+    });
+    if (accountContainerUsage.isEmpty()) {
+      return null;
+    }
+
+    Map<String, StatsSnapshot> accountSubMap = new HashMap<>();
+    for (Short accountId : accountContainerUsage.keySet()) {
+      Map<String, StatsSnapshot> containerSubMap = accountContainerUsage.get(accountId)
+          .entrySet()
+          .stream()
+          .collect(Collectors.toMap(ent -> Utils.statsContainerKey(ent.getKey()),
+              ent -> new StatsSnapshot(ent.getValue(), null)));
+      long containerValue = containerSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+      accountSubMap.put(Utils.statsAccountKey(accountId), new StatsSnapshot(containerValue, containerSubMap));
+    }
+    long accountValue = accountSubMap.values().stream().mapToLong(StatsSnapshot::getValue).sum();
+    storeMetrics.queryAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    return new StatsSnapshot(accountValue, accountSubMap);
+  }
+
+  @Override
   public Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
@@ -438,7 +463,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public StatsSnapshot queryAggregatedPartitionClassStatsOf() throws SQLException {
+  public StatsSnapshot queryAggregatedPartitionClassStats() throws SQLException {
+    return queryAggregatedPartitionClassStatsByClusterName(this.clusterName);
+  }
+
+  @Override
+  public StatsSnapshot queryAggregatedPartitionClassStatsByClusterName(String clusterName) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<Short, Map<Short, Long>>> partitionClassNameAccountContainerUsages = new HashMap<>();
     AtomicLong timestamp = new AtomicLong(0);
@@ -449,6 +479,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
               .put(containerId, storageUsage);
           timestamp.set(Math.max(timestamp.get(), updatedAt));
         });
+    if (partitionClassNameAccountContainerUsages.isEmpty()) {
+      return null;
+    }
     // Here, partitionClassNameAccountContainerUsages map has partition class name, account id, container id as
     // keys of map at each level, the value is the storage usage.
 

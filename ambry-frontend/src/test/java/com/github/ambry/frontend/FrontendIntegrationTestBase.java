@@ -71,6 +71,7 @@ public class FrontendIntegrationTestBase {
   static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
   static final String DATA_CENTER_NAME = "Datacenter-Name";
   static final String HOST_NAME = "localhost";
+  static final int PORT = 12345;
   static final String CLUSTER_NAME = "Cluster-name";
   protected FrontendConfig frontendConfig;
   protected NettyClient nettyClient;

@@ -118,7 +118,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
   private final boolean useSSL;
   private final boolean addClusterPrefix;
 
-
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
@@ -436,8 +435,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     uri = new URI(signedGetUrl);
     httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    verifyGetBlobResponse(responseParts, null, false, headers, !container.isCacheable(), content,
-        account.getName(), container.getName());
+    verifyGetBlobResponse(responseParts, null, false, headers, !container.isCacheable(), content, account.getName(),
+        container.getName());
   }
 
   /**
@@ -566,8 +565,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
    * @param sslServerPort server port number to support ssl protocol
    * @return a {@link Properties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete, int plaintextServerPort,
-      int sslServerPort) throws IOException, GeneralSecurityException {
+  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
+      int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
@@ -589,6 +588,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
+    properties.setProperty(FrontendConfig.ACCOUNT_STATS_STORE_FACTORY,
+        "com.github.ambry.frontend.MockAccountStatsStoreFactory");
     return new VerifiableProperties(properties);
   }
 
