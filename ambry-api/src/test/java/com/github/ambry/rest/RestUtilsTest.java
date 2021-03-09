@@ -859,6 +859,11 @@ public class RestUtilsTest {
     headerValue.put(QuotaName.STORAGE_IN_GB.name(), String.valueOf(3.0));
     assertEquals("Invalid encoded value", "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0",
         RestUtils.KVHeaderValueEncoderDecoder.encodeKVHeaderValue(headerValue));
+
+    // test for single value in map
+    headerValue.remove(QuotaName.STORAGE_IN_GB.name());
+    assertEquals("Invalid encoded value", "READ_CAPACITY_UNIT=1.9",
+        RestUtils.KVHeaderValueEncoderDecoder.encodeKVHeaderValue(headerValue));
   }
 
   /**
@@ -884,8 +889,15 @@ public class RestUtilsTest {
     assertEquals("Invalid encoded value", RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(validEncodedHeader),
         decodedMap);
 
+    // test for single value
+    validEncodedHeader = "READ_CAPACITY_UNIT=1.9";
+    decodedMap = new HashMap<>();
+    decodedMap.put("READ_CAPACITY_UNIT", "1.9");
+    assertEquals("Invalid encoded value", RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(validEncodedHeader),
+        decodedMap);
+
     // test for invalid strings.
-    String[] invalidEncodedHeaders = new String[]{"invalid", "badkvkey=badkvval", "; ", "bad; bad; ", ";", "="};
+    String[] invalidEncodedHeaders = new String[]{"invalid", "; ", "bad; bad; ", ";", "="};
     for (String invalidEncodedHeader : invalidEncodedHeaders) {
       try {
         RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(invalidEncodedHeader);

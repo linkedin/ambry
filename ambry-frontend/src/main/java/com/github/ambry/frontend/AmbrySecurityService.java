@@ -138,7 +138,9 @@ class AmbrySecurityService implements SecurityService {
         if (quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()) {
-            throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests);
+            Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
+            throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests, true, true,
+                  quotaHeaderMap);
           }
         }
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
@@ -168,7 +170,13 @@ class AmbrySecurityService implements SecurityService {
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
     setRequestCostHeader(requestCost, responseChannel);
     if (quotaManager != null) {
-      quotaManager.charge(restRequest, blobInfo, requestCost);
+      ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, blobInfo, requestCost);
+      if (throttlingRecommendation != null) {
+        RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)
+            .entrySet()
+            .stream()
+            .forEach(headerEntry -> responseChannel.setHeader(headerEntry.getKey(), headerEntry.getValue()));
+      }
     }
   }
 

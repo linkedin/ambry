@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
@@ -294,12 +295,36 @@ public class RestUtils {
     }
   }
 
+  /**
+   * Headers with information about cost incurred in serving a request.
+   */
   public static final class RequestCostHeaders {
 
     /**
      * Response header indicating cost incurred by the request against capacity unit and storage quotas.
      */
     public static final String REQUEST_COST = "x-ambry-request-cost";
+  }
+
+  /**
+   * Headers with information about request quota and usage.
+   */
+  public static final class RequestQuotaHeaders {
+
+    /**
+     * Response header indicating user quota usage information.
+     */
+    public static final String USER_QUOTA_USAGE = "x-ambry-user-quota-usage";
+
+    /**
+     * Response header indicating user quota warning.
+     */
+    public static final String USER_QUOTA_WARNING = "x-ambry-user-quota-warning";
+
+    /**
+     * Response header indicating retry after interval in milliseconds.
+     */
+    public static final String RETRY_AFTER_MS = "x-ambry-retry-after-ms";
   }
 
   /**
@@ -968,6 +993,35 @@ public class RestUtils {
   }
 
   /**
+   * Build the user quota headers map.
+   * @param throttlingRecommendation {@link ThrottlingRecommendation} object.
+   * @return Map of request headers key-value pair related to request quota.
+   */
+  public static Map<String, String> buildUserQuotaHeadersMap(ThrottlingRecommendation throttlingRecommendation) {
+    if (throttlingRecommendation.getQuotaUsagePercentage().isEmpty()) {
+      return Collections.emptyMap();
+    }
+
+    Map<String, String> quotaHeadersMap = new HashMap<>();
+    // set usage headers.
+    quotaHeadersMap.put(RequestQuotaHeaders.USER_QUOTA_USAGE, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
+        throttlingRecommendation.getQuotaUsagePercentage()
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
+
+
+    // set retry header if present.
+    if (throttlingRecommendation.getRetryAfterMs() != ThrottlingRecommendation.NO_RETRY_AFTER_MS) {
+      quotaHeadersMap.put(RequestQuotaHeaders.RETRY_AFTER_MS, String.valueOf(throttlingRecommendation.getRetryAfterMs()));
+    }
+
+    // set the warning header.
+    quotaHeadersMap.put(RequestQuotaHeaders.USER_QUOTA_WARNING, throttlingRecommendation.getQuotaUsageLevel().name());
+    return quotaHeadersMap;
+  }
+
+  /**
    * Verify that the session ID in the chunk metadata matches the expected session.
    * @param chunkMetadata the metadata map parsed from a signed chunk ID.
    * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
@@ -1087,14 +1141,14 @@ public class RestUtils {
       if (value.isEmpty()) {
         return valueMap;
       }
-      if (!value.contains(DELIM)) {
-        throw new IllegalArgumentException("Invalid kv header value: " + value);
-      }
       for (String kvStr : value.split(DELIM)) {
         if (!kvStr.contains(KV_SEPERATOR)) {
           throw new IllegalArgumentException("Invalid kv header value: " + value);
         }
         String[] kv = kvStr.split(KV_SEPERATOR);
+        if (kv.length == 0) {
+          throw new IllegalArgumentException("Invalid kv header value: " + value);
+        }
         valueMap.put(kv[0], kv[1]);
       }
       if (valueMap.isEmpty()) {
