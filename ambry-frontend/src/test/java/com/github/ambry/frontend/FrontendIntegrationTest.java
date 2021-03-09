@@ -588,8 +588,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
-    properties.setProperty(FrontendConfig.ACCOUNT_STATS_STORE_FACTORY,
-        "com.github.ambry.frontend.MockAccountStatsStoreFactory");
     return new VerifiableProperties(properties);
   }
 
