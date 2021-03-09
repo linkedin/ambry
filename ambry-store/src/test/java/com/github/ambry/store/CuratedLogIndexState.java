@@ -136,6 +136,7 @@ class CuratedLogIndexState {
   MetricRegistry metricRegistry = new MetricRegistry();
   // The deleted key with associated PUT record in the same log segment
   MockId deletedKeyWithPutInSameSegment = null;
+  List<MockId> permanentDeleteTombstones = new ArrayList<>();
 
   // Variables that represent the folder where the data resides
   private final File tempDir;
@@ -1419,6 +1420,7 @@ class CuratedLogIndexState {
       }
       // 1 DELETE that has the TTL update flag set but has no corresponding TTL update or PUT entries
       uniqueId = getUniqueId();
+      permanentDeleteTombstones.add(uniqueId);
       addDeleteEntry(uniqueId,
           new MessageInfo(uniqueId, Integer.MAX_VALUE, true, true, Utils.Infinite_Time, uniqueId.getAccountId(),
               uniqueId.getContainerId(), time.milliseconds()));
