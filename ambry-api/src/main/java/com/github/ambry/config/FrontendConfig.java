@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.accountstats.AccountStatsStoreFactory;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.router.GetBlobOptions;
@@ -53,7 +54,7 @@ public class FrontendConfig {
       "com.github.ambry.quota.storage.AmbryStorageQuotaServiceFactory";
 
   private static final String DEFAULT_ACCOUNT_STATS_STORE_FACTORY =
-      "com.github.ambry.accountstats.AccountStatsMySqlStoreFactory";
+      "com.github.ambry.accountstats.InmemoryAccountStatsStoreFactory";
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
