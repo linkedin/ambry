@@ -119,7 +119,7 @@ public class GetStatsReportHandlerTest {
   private RestRequest createRestRequest(String clusterName, String reportType) throws Exception {
     JSONObject data = new JSONObject();
     data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
-    data.put(MockRestRequest.URI_KEY, Operations.GET_STATS_REPORT);
+    data.put(MockRestRequest.URI_KEY, Operations.STATS_REPORT);
     JSONObject headers = new JSONObject();
     if (reportType != null) {
       headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, reportType);

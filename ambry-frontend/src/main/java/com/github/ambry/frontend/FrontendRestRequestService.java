@@ -242,7 +242,7 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         getAccountsHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.GET_STATS_REPORT)) {
+      } else if (requestPath.matchesOperation(Operations.STATS_REPORT)) {
         getStatsReportHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
