@@ -1016,7 +1016,7 @@ public class FrontendRestRequestServiceTest {
   }
 
   /**
-   * Tests the handling of {@link Operations#GET_STATS_REPORT} get requests.
+   * Tests the handling of {@link Operations#STATS_REPORT} get requests.
    * @throws Exception
    */
   @Test
@@ -1047,7 +1047,7 @@ public class FrontendRestRequestServiceTest {
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.Headers.CLUSTER_NAME, CLUSTER_NAME);
     headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.ACCOUNT_REPORT.name());
-    RestRequest request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
+    RestRequest request = createRestRequest(RestMethod.GET, Operations.STATS_REPORT, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(request, restResponseChannel);
     StatsSnapshot accountStatsFromService =
@@ -1058,7 +1058,7 @@ public class FrontendRestRequestServiceTest {
     headers = new JSONObject();
     headers.put(RestUtils.Headers.CLUSTER_NAME, CLUSTER_NAME);
     headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.PARTITION_CLASS_REPORT.name());
-    request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
+    request = createRestRequest(RestMethod.GET, Operations.STATS_REPORT, headers, null);
     restResponseChannel = new MockRestResponseChannel();
     doOperation(request, restResponseChannel);
     StatsSnapshot partitionClassStatsFromService =
@@ -1069,7 +1069,7 @@ public class FrontendRestRequestServiceTest {
     headers = new JSONObject();
     headers.put(RestUtils.Headers.CLUSTER_NAME, "WRONG_CLUSTER");
     headers.put(RestUtils.Headers.GET_STATS_REPORT_TYPE, StatsReportType.ACCOUNT_REPORT.name());
-    request = createRestRequest(RestMethod.GET, Operations.GET_STATS_REPORT, headers, null);
+    request = createRestRequest(RestMethod.GET, Operations.STATS_REPORT, headers, null);
     try {
       doOperation(request, new MockRestResponseChannel());
       fail("Operation should have failed");
