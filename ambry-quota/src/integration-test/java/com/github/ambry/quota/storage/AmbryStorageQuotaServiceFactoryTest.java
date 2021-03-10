@@ -48,8 +48,9 @@ public class AmbryStorageQuotaServiceFactoryTest {
 
   @Test
   public void testBasic() throws Exception {
-    StorageQuotaService service = new AmbryStorageQuotaServiceFactory(verifiableProperties, accountStatsStore,
-        metricRegistry).getStorageQuotaService();
+    StorageQuotaService service =
+        new AmbryStorageQuotaServiceFactory(new StorageQuotaConfig(verifiableProperties), accountStatsStore,
+            metricRegistry).getStorageQuotaService();
     assertNotNull(service);
   }
 

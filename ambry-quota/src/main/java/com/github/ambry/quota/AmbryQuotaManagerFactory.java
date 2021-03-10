@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 
 
@@ -25,10 +26,12 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
 
   /**
    * @param quotaConfig {@link QuotaConfig} object.
+   * @param accountStatsStore
    * @throws ReflectiveOperationException
    */
-  public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService)
-      throws ReflectiveOperationException {
+  public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
+      AccountStatsStore accountStatsStore) throws ReflectiveOperationException {
+    AmbryQuotaManager.AmbryQuotaManagerComponents.accountStatsStore = accountStatsStore;
     quotaManager = new AmbryQuotaManager(quotaConfig, throttlePolicy, accountService);
   }
 

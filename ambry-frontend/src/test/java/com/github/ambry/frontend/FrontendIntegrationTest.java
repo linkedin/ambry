@@ -407,7 +407,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     URI uri = new URI(signedPostUrl);
     httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    String blobId = verifyPostAndReturnBlobId(responseParts, content.capacity());
+    String blobId = verifyPostAndReturnBlobId(responseParts, content.capacity(), false);
 
     // verify POST
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
@@ -629,7 +629,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
       // Use signed URL to POST
       httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
       responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-      String signedId = verifyPostAndReturnBlobId(responseParts, chunkSize);
+      String signedId = verifyPostAndReturnBlobId(responseParts, chunkSize, false);
       assertTrue("Blob ID for chunk upload must be signed", idSigningService.isIdSigned(signedId.substring(1)));
       Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(signedId.substring(1));
       // Inspect metadata fields
@@ -673,7 +673,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     HttpRequest httpRequest = buildRequest(HttpMethod.POST, Operations.STITCH, stitchHeaders,
         ByteBuffer.wrap(StitchRequestSerDe.toJson(signedChunkIds).toString().getBytes(StandardCharsets.UTF_8)));
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    String stitchedBlobId = verifyPostAndReturnBlobId(responseParts, stitchedBlobSize);
+    String stitchedBlobId = verifyPostAndReturnBlobId(responseParts, stitchedBlobSize, true);
     HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(stitchHeaders);
     // Test different request types on stitched blob ID
     // (getBlobInfo, getBlob, getBlob w/ range, head, updateBlobTtl, deleteBlob)

@@ -72,8 +72,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     FrontendRestRequestServiceFactory frontendRestRequestServiceFactory =
         new FrontendRestRequestServiceFactory(verifiableProperties, new MockClusterMap(),
-            new InMemoryRouter(verifiableProperties, new MockClusterMap()), new InMemAccountService(false, true),
-            QUOTA_MANAGER);
+            new InMemoryRouter(verifiableProperties, new MockClusterMap()), new InMemAccountService(false, true));
     RestRequestService ambryRestRequestService = frontendRestRequestServiceFactory.getRestRequestService();
     assertNotNull("No RestRequestService returned", ambryRestRequestService);
     assertEquals("Did not receive an FrontendRestRequestService instance",
@@ -95,7 +94,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // VerifiableProperties null.
     try {
-      new FrontendRestRequestServiceFactory(null, clusterMap, router, accountService, QUOTA_MANAGER);
+      new FrontendRestRequestServiceFactory(null, clusterMap, router, accountService);
       fail("Instantiation should have failed because VerifiableProperties was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -103,7 +102,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // ClusterMap null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, null, router, accountService, QUOTA_MANAGER);
+      new FrontendRestRequestServiceFactory(verifiableProperties, null, router, accountService);
       fail("Instantiation should have failed because ClusterMap was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -111,7 +110,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // Router null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, null, accountService, QUOTA_MANAGER);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, null, accountService);
       fail("Instantiation should have failed because Router was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.
@@ -119,7 +118,7 @@ public class FrontendRestRequestServiceFactoryTest {
 
     // AccountService null.
     try {
-      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, router, null, QUOTA_MANAGER);
+      new FrontendRestRequestServiceFactory(verifiableProperties, clusterMap, router, null);
       fail("Instantiation should have failed because AccountService was null");
     } catch (NullPointerException e) {
       // expected. Nothing to do.

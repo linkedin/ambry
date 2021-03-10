@@ -26,15 +26,11 @@ import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.quota.MaxThrottlePolicy;
-import com.github.ambry.quota.QuotaManager;
-import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
@@ -88,7 +84,6 @@ public class RestServer {
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final NettyInternalMetrics nettyInternalMetrics;
-
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -217,17 +212,10 @@ public class RestServer {
       ((HelixAccountService) accountService).setupRouter(router);
     }
 
-    // setup quota management
-    QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
-    QuotaManager quotaManager =
-        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
-            accountService)).getQuotaManager();
-    quotaManager.init();
-
     // setup restRequestService
     RestRequestServiceFactory restRequestServiceFactory =
         Utils.getObj(restServerConfig.restServerRestRequestServiceFactory, verifiableProperties, clusterMap, router,
-            accountService, quotaManager);
+            accountService);
     restRequestService = restRequestServiceFactory.getRestRequestService();
     if (restRequestService == null) {
       throw new InstantiationException("RestRequestService is null");
@@ -288,10 +276,8 @@ public class RestServer {
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
-      if (nettyInternalMetrics != null) {
-        nettyInternalMetrics.start();
-        logger.info("NettyInternalMetric starts");
-      }
+      nettyInternalMetrics.start();
+      logger.info("NettyInternalMetric starts");
 
       restServerState.markServiceUp();
       logger.info("Service marked as up");
@@ -315,10 +301,8 @@ public class RestServer {
       restServerState.markServiceDown();
       logger.info("Service marked as down ");
 
-      if (nettyInternalMetrics != null) {
-        nettyInternalMetrics.stop();
-        logger.info("NettyInternalMetrics stops");
-      }
+      nettyInternalMetrics.stop();
+      logger.info("NettyInternalMetrics stops");
 
       nioServer.shutdown();
       long nioServerShutdownTime = System.currentTimeMillis();

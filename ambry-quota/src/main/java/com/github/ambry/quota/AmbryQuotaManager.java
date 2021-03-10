@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
@@ -27,12 +28,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * {@link QuotaManager} implementation to handle all the quota and quota enforcement for Ambry.
  */
 public class AmbryQuotaManager implements QuotaManager {
+  private static final Logger logger = LoggerFactory.getLogger(AmbryQuotaManager.class);
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
@@ -60,9 +64,18 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public void init() {
-    for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
-      quotaEnforcer.init();
+  public void init() throws InstantiationException {
+    try {
+      for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+        quotaEnforcer.init();
+      }
+    } catch (Exception e) {
+      logger.error("Failed to init quotaEnforcer", e);
+      if (e instanceof InstantiationException) {
+        throw (InstantiationException) e;
+      } else {
+        throw new InstantiationException(e.getMessage());
+      }
     }
   }
 
@@ -140,5 +153,9 @@ public class AmbryQuotaManager implements QuotaManager {
       }
     }
     return quotaSourceObjectMap;
+  }
+
+  public final static class AmbryQuotaManagerComponents {
+    public static AccountStatsStore accountStatsStore;
   }
 }

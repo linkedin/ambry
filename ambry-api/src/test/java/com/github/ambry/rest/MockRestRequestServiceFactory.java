@@ -31,7 +31,7 @@ public class MockRestRequestServiceFactory implements RestRequestServiceFactory 
   private final Router router;
 
   public MockRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap, Router router,
-      AccountService accountService, QuotaManager quotaManager) {
+      AccountService accountService) {
     this.verifiableProperties = verifiableProperties;
     this.router = router;
   }

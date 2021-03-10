@@ -29,7 +29,7 @@ public interface QuotaManager {
   /**
    * Method to initialize the {@link QuotaManager}.
    */
-  void init();
+  void init() throws InstantiationException;
 
   /**
    * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.

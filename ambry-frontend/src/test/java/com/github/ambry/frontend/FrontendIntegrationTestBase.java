@@ -149,6 +149,7 @@ public class FrontendIntegrationTestBase {
   }
 
 // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
+
   /**
    * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
    * @param contentSize the size of the blob to be tested
@@ -272,15 +273,17 @@ public class FrontendIntegrationTestBase {
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    return verifyPostAndReturnBlobId(responseParts, contentSize);
+    return verifyPostAndReturnBlobId(responseParts, contentSize, false);
   }
 
   /**
    * Verifies a POST and returns the blob ID.
    * @param responseParts the response received from the server.
+   * @param contentSize the size of the blob
+   * @param isStitch True is the POST request is a stitch operation.
    * @returnn the blob ID of the blob.
    */
-  String verifyPostAndReturnBlobId(NettyClient.ResponseParts responseParts, long contentSize) {
+  String verifyPostAndReturnBlobId(NettyClient.ResponseParts responseParts, long contentSize, boolean isStitch) {
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
@@ -294,7 +297,7 @@ public class FrontendIntegrationTestBase {
     assertEquals("Correct blob size should be returned in response", Long.toString(contentSize),
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     verifyTrackingHeaders(response);
-    verifyPostRequestCostHeaders(response, contentSize);
+    verifyPostRequestCostHeaders(response, isStitch ? 0 : contentSize);
     return blobId;
   }
 
@@ -828,7 +831,7 @@ public class FrontendIntegrationTestBase {
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, usermetadata);
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
-    return verifyPostAndReturnBlobId(responseParts, content.capacity());
+    return verifyPostAndReturnBlobId(responseParts, content.capacity(), false);
   }
 
   /**
@@ -917,7 +920,7 @@ public class FrontendIntegrationTestBase {
    * @param response the {@link HttpResponse} to be verified.
    */
   private void verifyTtlUpdateRequestCostHeaders(HttpResponse response) {
-    verifyCommonRequestCostHeaders(response, 1, 0.00390625, false);
+    verifyCommonRequestCostHeaders(response, 1, 0.0, false);
   }
 
   /**

@@ -62,19 +62,16 @@ class AmbrySecurityService implements SecurityService {
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
   private final HostLevelThrottler hostLevelThrottler;
-  private final StorageQuotaService storageQuotaService;
   private final QuotaManager quotaManager;
   private final RequestCostPolicy requestCostPolicy;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler,
-      StorageQuotaService storageQuotaService, QuotaManager quotaManager) {
+      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler, QuotaManager quotaManager) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
-    this.storageQuotaService = storageQuotaService;
     this.quotaManager = quotaManager;
     this.requestCostPolicy = new UserQuotaRequestCostPolicy();
     isOpen = true;
@@ -132,15 +129,13 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
-      } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
-        exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
       } else {
         if (quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()) {
             Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
             throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests, true, true,
-                  quotaHeaderMap);
+                quotaHeaderMap);
           }
         }
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {

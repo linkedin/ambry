@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
@@ -672,6 +673,20 @@ public class RestUtils {
   }
 
   /**
+   * Return true if this request is uploading a blob. We now have two ways of uploading a blob
+   * 1. A POST request to root path
+   * 2. A PUT request to namedBlob path
+   * @param restRequest The {@link RestRequest}.
+   * @return
+   */
+  public static boolean isUploadRequest(RestRequest restRequest) {
+    RequestPath requestPath = RestUtils.getRequestPath(restRequest);
+    RestMethod method = restRequest.getRestMethod();
+    return method == RestMethod.POST && requestPath.getOperationOrBlobId(true).isEmpty()
+        || method == RestMethod.PUT && requestPath.matchesOperation(Operations.NAMED_BLOB);
+  }
+
+  /**
    * Fetch time in ms for the {@code dateString} passed in, since epoch
    * @param dateString the String representation of the date that needs to be parsed
    * @return Time in ms since epoch. Note http time is kept in Seconds so last three digits will be 000.
@@ -1010,10 +1025,10 @@ public class RestUtils {
             .stream()
             .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
 
-
     // set retry header if present.
     if (throttlingRecommendation.getRetryAfterMs() != ThrottlingRecommendation.NO_RETRY_AFTER_MS) {
-      quotaHeadersMap.put(RequestQuotaHeaders.RETRY_AFTER_MS, String.valueOf(throttlingRecommendation.getRetryAfterMs()));
+      quotaHeadersMap.put(RequestQuotaHeaders.RETRY_AFTER_MS,
+          String.valueOf(throttlingRecommendation.getRetryAfterMs()));
     }
 
     // set the warning header.

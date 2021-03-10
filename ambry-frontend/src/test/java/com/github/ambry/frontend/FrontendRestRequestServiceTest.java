@@ -197,7 +197,7 @@ public class FrontendRestRequestServiceTest {
         new AmbryIdConverterFactory(verifiableProperties, metricRegistry, idSigningService, namedBlobDb);
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService, idSigningService,
-            accountAndContainerInjector, null, QUOTA_MANAGER);
+            accountAndContainerInjector, QUOTA_MANAGER);
     accountService.clear();
     accountService.updateAccounts(Collections.singleton(InMemAccountService.UNKNOWN_ACCOUNT));
     refAccount = accountService.createAndAddRandomAccount();
@@ -253,7 +253,7 @@ public class FrontendRestRequestServiceTest {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     try {
       frontendRestRequestService.start();
       fail("Test should fail if ResponseHandler is not setup");
@@ -839,7 +839,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     JSONObject headers = new JSONObject();
@@ -862,7 +862,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     // test good requests
@@ -1189,7 +1189,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
@@ -1572,7 +1572,7 @@ public class FrontendRestRequestServiceTest {
     FrontendRestRequestService frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     return frontendRestRequestService;
   }
@@ -2271,7 +2271,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, converterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
@@ -2303,7 +2303,7 @@ public class FrontendRestRequestServiceTest {
       frontendRestRequestService =
           new FrontendRestRequestService(frontendConfig, frontendMetrics, new FrontendTestRouter(), clusterMap,
               idConverterFactory, securityFactory, urlSigningService, idSigningService, null, accountService,
-              accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+              accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
       frontendRestRequestService.setupResponseHandler(responseHandler);
       frontendRestRequestService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
@@ -2362,7 +2362,7 @@ public class FrontendRestRequestServiceTest {
     frontendRestRequestService =
         new FrontendRestRequestService(frontendConfig, frontendMetrics, testRouter, clusterMap, idConverterFactory,
             securityServiceFactory, urlSigningService, idSigningService, null, accountService,
-            accountAndContainerInjector, datacenterName, hostname, clusterName, null, accountStatsStore);
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
     frontendRestRequestService.setupResponseHandler(responseHandler);
     frontendRestRequestService.start();
     for (RestMethod restMethod : RestMethod.values()) {

@@ -23,7 +23,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.storage.StorageQuotaService;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -103,7 +103,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetAccountsHandler getAccountsHandler;
   private PostAccountsHandler postAccountsHandler;
   private GetStatsReportHandler getStatsReportHandler;
-  private StorageQuotaService storageQuotaService;
+  private QuotaManager quotaManager;
   private boolean isUp = false;
 
   /**
@@ -123,15 +123,13 @@ class FrontendRestRequestService implements RestRequestService {
    * @param datacenterName the local datacenter name for this frontend.
    * @param hostname the hostname for this frontend.
    * @param clusterName the name of the storage cluster that the router communicates with.
-   * @param storageQuotaService the {@link StorageQuotaService} used to throttle traffics.
    * @param accountStatsStore the {@link AccountStatsStore} used to fetch aggregated stats reports.
    */
   FrontendRestRequestService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, Router router,
       ClusterMap clusterMap, IdConverterFactory idConverterFactory, SecurityServiceFactory securityServiceFactory,
       UrlSigningService urlSigningService, IdSigningService idSigningService, NamedBlobDb namedBlobDb,
       AccountService accountService, AccountAndContainerInjector accountAndContainerInjector, String datacenterName,
-      String hostname, String clusterName, StorageQuotaService storageQuotaService,
-      AccountStatsStore accountStatsStore) {
+      String hostname, String clusterName, AccountStatsStore accountStatsStore, QuotaManager quotaManager) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.router = router;
@@ -146,9 +144,9 @@ class FrontendRestRequestService implements RestRequestService {
     this.accountStatsStore = accountStatsStore;
     this.datacenterName = datacenterName;
     this.hostname = hostname;
+    this.quotaManager = quotaManager;
     this.clusterName = clusterName.toLowerCase();
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
-    this.storageQuotaService = storageQuotaService;
     logger.trace("Instantiated FrontendRestRequestService");
   }
 
@@ -166,16 +164,9 @@ class FrontendRestRequestService implements RestRequestService {
       throw new InstantiationException("ResponseHandler is not set.");
     }
     long startupBeginTime = System.currentTimeMillis();
+    quotaManager.init();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
-    if (storageQuotaService != null) {
-      try {
-        storageQuotaService.start();
-      } catch (Exception e) {
-        logger.error("Failed to start storage quota service", e);
-        throw new InstantiationException("StorageQuotaService fail to start");
-      }
-    }
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     getSignedUrlHandler =
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
@@ -208,6 +199,10 @@ class FrontendRestRequestService implements RestRequestService {
     long shutdownBeginTime = System.currentTimeMillis();
     isUp = false;
     try {
+      if (quotaManager != null) {
+        quotaManager.shutdown();
+        quotaManager = null;
+      }
       if (securityService != null) {
         securityService.close();
         securityService = null;
@@ -215,9 +210,6 @@ class FrontendRestRequestService implements RestRequestService {
       if (idConverter != null) {
         idConverter.close();
         idConverter = null;
-      }
-      if (storageQuotaService != null) {
-        storageQuotaService.shutdown();
       }
       logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {
