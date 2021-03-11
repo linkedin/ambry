@@ -197,46 +197,46 @@ public class StoreFindTokenTest {
       // Journal based token
       doSerDeTest(
           new StoreFindToken(offset, sessionId, incarnationId, false, null, null, UNINITIALIZED_RESET_KEY_VERSION),
-          VERSION_0, VERSION_1, VERSION_2);
-      // Journal based token (VERSION_3)
+          VERSION_0, VERSION_1, VERSION_2, VERSION_3);
+      // Journal based token with resetKey and resetKeyType specified (VERSION_3)
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, resetKey, resetKeyType, resetKeyVersion),
           VERSION_3);
 
       // inclusiveness is present only in {VERSION_2, VERSION_3}
       doSerDeTest(
           new StoreFindToken(offset, sessionId, incarnationId, true, null, null, UNINITIALIZED_RESET_KEY_VERSION),
-          VERSION_2);
+          VERSION_2, VERSION_3);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, resetKey, resetKeyType, resetKeyVersion),
           VERSION_3);
 
       // Index based
       doSerDeTest(
           new StoreFindToken(key, offset, sessionId, incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION),
-          VERSION_0, VERSION_1, VERSION_2);
+          VERSION_0, VERSION_1, VERSION_2, VERSION_3);
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, resetKey, resetKeyType, resetKeyVersion),
           VERSION_3);
     } else {
       // UnInitialized
-      doSerDeTest(new StoreFindToken(), VERSION_1, VERSION_2);
+      doSerDeTest(new StoreFindToken(), VERSION_1, VERSION_2, VERSION_3);
 
       // Journal based token
       doSerDeTest(
           new StoreFindToken(offset, sessionId, incarnationId, false, null, null, UNINITIALIZED_RESET_KEY_VERSION),
-          VERSION_1, VERSION_2);
+          VERSION_1, VERSION_2, VERSION_3);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false, resetKey, resetKeyType, resetKeyVersion),
           VERSION_3);
 
       // inclusiveness is present only in VERSION_2
       doSerDeTest(
           new StoreFindToken(offset, sessionId, incarnationId, true, null, null, UNINITIALIZED_RESET_KEY_VERSION),
-          VERSION_2);
+          VERSION_2, VERSION_3);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true, resetKey, resetKeyType, resetKeyVersion),
           VERSION_3);
 
       // Index based
       doSerDeTest(
           new StoreFindToken(key, offset, sessionId, incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION),
-          VERSION_1, VERSION_2);
+          VERSION_1, VERSION_2, VERSION_3);
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId, resetKey, resetKeyType, resetKeyVersion),
           VERSION_3);
     }
@@ -276,8 +276,7 @@ public class StoreFindTokenTest {
     for (FindTokenType type : EnumSet.of(FindTokenType.JournalBased, FindTokenType.IndexBased)) {
       for (Pair<MockId, PersistentIndex.IndexEntryType> pair : Arrays.asList(
           new Pair<MockId, PersistentIndex.IndexEntryType>(resetKey, null),
-          new Pair<MockId, PersistentIndex.IndexEntryType>(null, resetKeyType),
-          new Pair<MockId, PersistentIndex.IndexEntryType>(null, null))) {
+          new Pair<MockId, PersistentIndex.IndexEntryType>(null, resetKeyType))) {
         try {
           new StoreFindToken(type, offset, key, sessionId, incarnationId, type == FindTokenType.JournalBased, VERSION_3,
               pair.getFirst(), pair.getSecond(), resetKeyVersion);
@@ -452,9 +451,12 @@ public class StoreFindTokenTest {
           } else if (type == FindTokenType.IndexBased) {
             size += storeKeyInBytes.length;
           }
-          size += resetKeyInBytes.length;
-          size += RESET_KEY_TYPE_SIZE;
-          size += RESET_KEY_VERSION_SIZE;
+          size += HAS_RESET_KEY_INFO_BYTE_SIZE;
+          if (resetKey != null) {
+            size += resetKeyInBytes.length;
+            size += RESET_KEY_TYPE_SIZE;
+            size += RESET_KEY_VERSION_SIZE;
+          }
         }
         bytes = new byte[size];
         bufWrap = ByteBuffer.wrap(bytes);
@@ -476,10 +478,13 @@ public class StoreFindTokenTest {
           } else if (type == FindTokenType.IndexBased) {
             bufWrap.put(storeKeyInBytes);
           }
+          bufWrap.put(resetKey == null ? (byte) 0 : 1);
           // both journal and index based tokens have reset key
-          bufWrap.put(resetKeyInBytes);
-          bufWrap.putShort((short) resetKeyType.ordinal());
-          bufWrap.putShort(resetKeyVersion);
+          if (resetKey != null) {
+            bufWrap.put(resetKeyInBytes);
+            bufWrap.putShort((short) resetKeyType.ordinal());
+            bufWrap.putShort(resetKeyVersion);
+          }
         }
         break;
       default:
