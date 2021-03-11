@@ -48,6 +48,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -283,18 +284,8 @@ public class BlobStoreCompactorTest {
     refreshState(false, true);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction);
-    Port port = new Port(6667, PortType.PLAINTEXT);
-    List<String> mountPaths = Arrays.asList("/mnt/u001", "/mnt/u002", "/mnt/u003");
-    // generate two peer replicas
-    MockDataNodeId peerNode1 = new MockDataNodeId("node1_host", Collections.singletonList(port), mountPaths, null);
-    MockDataNodeId peerNode2 = new MockDataNodeId("node2_host", Collections.singletonList(port), mountPaths, null);
-    MockDataNodeId localNode = new MockDataNodeId("local_host", Collections.singletonList(port), mountPaths, null);
-    MockPartitionId mockPartitionId = new MockPartitionId(101L, MockClusterMap.DEFAULT_PARTITION_CLASS);
-    MockReplicaId peerReplica1 = new MockReplicaId(port.getPort(), mockPartitionId, peerNode1, 0);
-    MockReplicaId peerReplica2 = new MockReplicaId(port.getPort(), mockPartitionId, peerNode2, 1);
-    MockReplicaId localReplica = new MockReplicaId(port.getPort(), mockPartitionId, localNode, 2);
-    localReplica.setPeerReplicas(Arrays.asList(peerReplica1, peerReplica2));
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localReplica);
+    List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0));
     // Generate tokens for peer replicas and make sure they are both past position of 1st delete tombstone and haven't
     // reached position of 2nd tombstone.
     MockId tombstone1 = state.permanentDeleteTombstones.get(0);
@@ -320,8 +311,12 @@ public class BlobStoreCompactorTest {
         new StoreFindToken(keyInToken2, indexSegment2.getStartOffset(), state.sessionId, state.incarnationId,
             indexSegment2.getResetKey(), indexSegment2.getResetKeyType(), indexSegment2.getResetKeyLifeVersion());
     // update token associated with peer replica
-    tokenTracker.updateTokenFromPeerReplica(peerToken1, peerNode1.getHostname(), peerReplica1.getReplicaPath());
-    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerNode2.getHostname(), peerReplica2.getReplicaPath());
+    MockReplicaId peerReplica1 = localAndPeerReplicas.get(1);
+    MockReplicaId peerReplica2 = localAndPeerReplicas.get(2);
+    tokenTracker.updateTokenFromPeerReplica(peerToken1, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
     // initiate compaction
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
     compactor.initialize(state.index);
@@ -335,6 +330,76 @@ public class BlobStoreCompactorTest {
     // the second delete tombstone should exist
     assertNotNull("Delete tombstone should be present as at least one token hasn't reached its position",
         state.index.findKey(tombstone2));
+  }
+
+  /**
+   * Tests compacting delete tombstone with both invalid and journal based tokens.
+   * @throws Exception
+   */
+  @Test
+  public void compactDeleteTombstoneTwice() throws Exception {
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction);
+    List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0));
+    MockId tombstone1 = state.permanentDeleteTombstones.get(0);
+    MockId tombstone2 = state.permanentDeleteTombstones.get(1);
+    IndexValue deleteIndexValue2 = state.index.findKey(tombstone2);
+    IndexSegment indexSegment2 = state.index.getIndexSegments().floorEntry(deleteIndexValue2.getOffset()).getValue();
+    MockId keyInToken = (MockId) indexSegment2.iterator().next().getKey();
+
+    UUID invalidIncarnationId;
+    do {
+      invalidIncarnationId = UUID.randomUUID();
+    } while (invalidIncarnationId.equals(state.incarnationId));
+    // invalid token with other incarnation id
+    StoreFindToken invalidToken =
+        new StoreFindToken(keyInToken, indexSegment2.getStartOffset(), state.sessionId, invalidIncarnationId,
+            indexSegment2.getResetKey(), indexSegment2.getResetKeyType(), indexSegment2.getResetKeyLifeVersion());
+    StoreFindToken peerToken2 =
+        new StoreFindToken(keyInToken, indexSegment2.getStartOffset(), state.sessionId, state.incarnationId,
+            indexSegment2.getResetKey(), indexSegment2.getResetKeyType(), indexSegment2.getResetKeyLifeVersion());
+    MockReplicaId peerReplica1 = localAndPeerReplicas.get(1);
+    MockReplicaId peerReplica2 = localAndPeerReplicas.get(2);
+    tokenTracker.updateTokenFromPeerReplica(invalidToken, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
+    // initiate compaction
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // both tombstones should exist
+    assertNotNull("Delete tombstone should be present", state.index.findKey(tombstone1));
+    assertNotNull("Delete tombstone should be present", state.index.findKey(tombstone2));
+
+    // update remote token tracker with journal based tokens and compact again.
+    IndexSegment lastIndexSegment = state.index.getIndexSegments().lastEntry().getValue();
+    peerToken2 = new StoreFindToken(lastIndexSegment.getStartOffset(), state.sessionId, state.incarnationId, true,
+        lastIndexSegment.getResetKey(), lastIndexSegment.getResetKeyType(), lastIndexSegment.getResetKeyLifeVersion());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
+    // initiate compaction
+    segmentsUnderCompaction = getLogSegments(0, 2);
+    details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // both tombstones should be compacted
+    assertNull("Delete tombstone should be compacted", state.index.findKey(tombstone1));
+    assertNull("Delete tombstone should be compacted", state.index.findKey(tombstone2));
   }
 
   /**
@@ -2452,6 +2517,26 @@ public class BlobStoreCompactorTest {
   // helpers
 
   // general
+
+  /**
+   * Generate local replica and two peer replicas.
+   * @return a list of replicas (first one is local replica, others are remote peer replicas)
+   */
+  private List<MockReplicaId> generateLocalAndPeerReplicas() {
+    Port port = new Port(6667, PortType.PLAINTEXT);
+    List<String> mountPaths = Arrays.asList("/mnt/u001", "/mnt/u002", "/mnt/u003");
+    // generate two peer replicas
+    MockDataNodeId peerNode1 = new MockDataNodeId("node1_host", Collections.singletonList(port), mountPaths, null);
+    MockDataNodeId peerNode2 = new MockDataNodeId("node2_host", Collections.singletonList(port), mountPaths, null);
+    MockDataNodeId localNode = new MockDataNodeId("local_host", Collections.singletonList(port), mountPaths, null);
+    MockPartitionId mockPartitionId = new MockPartitionId(101L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    MockReplicaId peerReplica1 = new MockReplicaId(port.getPort(), mockPartitionId, peerNode1, 0);
+    MockReplicaId peerReplica2 = new MockReplicaId(port.getPort(), mockPartitionId, peerNode2, 1);
+    MockReplicaId localReplica = new MockReplicaId(port.getPort(), mockPartitionId, localNode, 2);
+    localReplica.setPeerReplicas(Arrays.asList(peerReplica1, peerReplica2));
+    return Arrays.asList(localReplica, peerReplica1, peerReplica2);
+  }
+
   private void testDuplicatePutsHelper() throws Exception {
     // Construct a blob store, where there is a duplicate PUT indexValue in different log segment.
     refreshState(false, false);
