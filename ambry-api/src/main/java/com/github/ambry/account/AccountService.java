@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import java.io.Closeable;
 import java.util.Collection;
@@ -115,6 +116,17 @@ public interface AccountService extends Closeable {
    */
   default Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Get aggregated account stats from given cluster in specific fabric group.
+   * @param clusterName name of cluster.
+   * @param statsReportType the type of aggregated stats.
+   * @return the aggregated stats in string format.
+   * @throws AccountServiceException if an exception occurs.
+   */
+  default String getAggregatedStats(String clusterName, StatsReportType statsReportType) throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
