@@ -1283,7 +1283,7 @@ class BlobStoreCompactor {
           } else {
             // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
             // tombstone is removable.
-            if (config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(indexEntry,
+            if (config.storeCompactionPurgeDeleteTombstone && isDeleteTombstoneRemovable(indexEntry,
                 indexSegment)) {
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
@@ -1554,7 +1554,7 @@ class BlobStoreCompactor {
           }
           if (currentLatestState.isDelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()) {
             // check if this is a removable delete tombstone.
-            if (config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(entry, indexSegment)
+            if (config.storeCompactionPurgeDeleteTombstone && isDeleteTombstoneRemovable(entry, indexSegment)
                 && getPutValueFromSrc(currentKey, currentValue, indexSegment) == null) {
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
