@@ -486,6 +486,9 @@ public class StoreFindTokenTest {
             bufWrap.putShort(resetKeyVersion);
           }
         }
+        // TODO once CURRENT_VERSION == VERSION_3, use the token serialization logic in production code:
+        // case StoreFindToken.CURRENT_VERSION:
+        // bytes = token.toBytes();
         break;
       default:
         throw new IllegalArgumentException("Version " + version + " of StoreFindToken does not exist");

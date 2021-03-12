@@ -1218,19 +1218,17 @@ class IndexSegment implements Iterable<IndexEntry> {
     } else if (key == null || index.containsKey(key)) {
       NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = index;
       if (key != null) {
-        tempMap = index.tailMap(key, true);
+        tempMap = index.tailMap(key, inclusive);
       }
       for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : tempMap.entrySet()) {
-        if (key == null || entry.getKey().compareTo(key) != 0 || inclusive) {
-          for (IndexValue value : entry.getValue()) {
-            IndexValue newValue = new IndexValue(startOffset.getName(), value.getBytes(), getVersion());
-            entriesLocal.add(new IndexEntry(entry.getKey(), newValue));
-            currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
-          }
-          // will break if size exceeded only after processing ALL entries for a key
-          if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
-            break;
-          }
+        for (IndexValue value : entry.getValue()) {
+          IndexValue newValue = new IndexValue(startOffset.getName(), value.getBytes(), getVersion());
+          entriesLocal.add(new IndexEntry(entry.getKey(), newValue));
+          currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
+        }
+        // will break if size exceeded only after processing ALL entries for a key
+        if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
+          break;
         }
       }
     } else {
