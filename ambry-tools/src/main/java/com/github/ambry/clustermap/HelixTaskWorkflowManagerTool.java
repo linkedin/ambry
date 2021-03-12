@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.cloud.DeprecatedContainerCloudSyncTask;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
@@ -33,21 +34,24 @@ import org.apache.helix.task.ScheduleConfig;
 import org.apache.helix.task.TaskConfig;
 import org.apache.helix.task.TaskDriver;
 import org.apache.helix.task.Workflow;
+import org.bouncycastle.util.Strings;
 
 
 /**
  * This tool triggers a one-time/recurrent cluster wide stats aggregation as a generic job (executed by a random live instance).
  */
-public class HelixClusterWideAggregationTool {
-  private static int SESSION_TIMEOUT = (int) TimeUnit.SECONDS.toMillis(30);
-  private static int CONNECTION_TIMEOUT = (int) TimeUnit.SECONDS.toMillis(120);
-  private static String TASK_SUFFIX = "_aggregate_task";
-  private static String ONE_TIME_JOB_SUFFIX = "_one_time";
-  private static String RECURRENT_JOB_SUFFIX = "_recurrent";
-  private static long TIME_OUT_MILLI_SEC = 10000L;
+public class HelixTaskWorkflowManagerTool {
+  private static final String TASK_SUFFIX = "task";
+  private static final String JOB_SUFFIX = "job";
+  private static final String AGGREGATE_TASK_SUFFIX = "_aggregate_" + TASK_SUFFIX;
+  private static final String ONE_TIME_JOB_SUFFIX = "_one_time";
+  private static final String RECURRENT_JOB_SUFFIX = "_recurrent";
+  private static final int SESSION_TIMEOUT = (int) TimeUnit.SECONDS.toMillis(30);
+  private static final int CONNECTION_TIMEOUT = (int) TimeUnit.SECONDS.toMillis(120);
+  private static final long TIME_OUT_MILLI_SEC = 10000L;
 
   /**
-   * Config for the HelixClusterWideAggregationTool.
+   * Config for the HelixTaskWorkflowManagerTool.
    */
   private static class AggregationToolConfig {
 
@@ -108,6 +112,10 @@ public class HelixClusterWideAggregationTool {
     @Default("false")
     final boolean deleteSpecifiedWorkflow;
 
+    @Config("task.type")
+    @Default("AGGREGATION_TASK")
+    final TaskType taskType;
+
     @Config("is.mysql")
     @Default("false")
     final boolean isMysql;
@@ -126,13 +134,26 @@ public class HelixClusterWideAggregationTool {
       statsReportsToAggregate =
           Arrays.asList(verifiableProperties.getString("stats.reports.to.aggregate", "").split(","));
       isMysql = verifiableProperties.getBoolean("is.mysql", false);
+      taskType = TaskType.valueOf(
+          Strings.toUpperCase(verifiableProperties.getString("task.type", TaskType.AGGREGATE_TASK.name())));
     }
+  }
+
+  /**
+   * Type of task for which helix workflow needs to be created or deleted.
+   */
+  enum TaskType {
+    /** Task to gather aggregated stats reports. */
+    AGGREGATE_TASK,
+
+    /** Task to sync deprecated containers to cloud. */
+    DEPRECATED_CONTAINER_CLOUD_SYNC_TASK
   }
 
   /**
    * Runs the cluster wide aggregation tool
    * @param args arguments specifying config file. For example: --propsFile /path/AggregationToolConfig
-   * @throws Exception
+   * @throws Exception in case of any error.
    */
   public static void main(String[] args) throws Exception {
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
@@ -164,26 +185,12 @@ public class HelixClusterWideAggregationTool {
         } else {
           Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);
           try {
-            // create separate job for each type of stats report
-            for (String report : config.statsReportsToAggregate) {
-              StatsReportType statsType = StatsReportType.valueOf(report);
-              String reportName = AmbryStatsReport.convertStatsReportTypeToProperString(statsType)
-                  + AmbryStatsReport.REPORT_NAME_SUFFIX;
-              String jobId = statsType.toString().toLowerCase() + (isRecurrentWorkflow ? RECURRENT_JOB_SUFFIX
-                  : ONE_TIME_JOB_SUFFIX);
-              String taskId = statsType.toString().toLowerCase() + TASK_SUFFIX;
-              String aggregationCommand = String.format("%s_%s",
-                  config.isMysql ? MySqlReportAggregatorTask.TASK_COMMAND_PREFIX
-                      : HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, reportName);
-              // build task
-              List<TaskConfig> taskConfigs = new ArrayList<>();
-              taskConfigs.add(new TaskConfig.Builder().setTaskId(taskId).setCommand(aggregationCommand).build());
-              // build job
-              JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
-              jobConfigBuilder.addTaskConfigs(taskConfigs);
-              jobConfigBuilder.setCommand(aggregationCommand);
-              // add job into workflow
-              workflowBuilder.addJob(jobId, jobConfigBuilder);
+            if (config.taskType == TaskType.AGGREGATE_TASK) {
+              buildAggregationTaskWorkflow(workflowBuilder, config, isRecurrentWorkflow);
+            } else if (config.taskType == TaskType.DEPRECATED_CONTAINER_CLOUD_SYNC_TASK) {
+              buildDeprecatedContainerCloudSyncTaskWorkflow(workflowBuilder);
+            } else {
+              throw new IllegalArgumentException("Invalid task type: " + config.taskType);
             }
             if (isRecurrentWorkflow) {
               workflowBuilder.setScheduleConfig(
@@ -191,7 +198,7 @@ public class HelixClusterWideAggregationTool {
               workflowBuilder.setExpiry(TimeUnit.MINUTES.toMillis(recurrentIntervalInMinutes));
             }
             Workflow workflow = workflowBuilder.build();
-            taskDriver.start(workflow);
+            //taskDriver.start(workflow);
             System.out.println(
                 String.format("%s started successfully in cluster %s at %s", workflowName, clusterName, zkAddress));
           } catch (Exception | Error e) {
@@ -201,5 +208,56 @@ public class HelixClusterWideAggregationTool {
         }
       }
     }
+  }
+
+  /**
+   * Build the workflow for aggregation tasks.
+   * @param workflowBuilder {@link Workflow.Builder} object.
+   * @param config {@link AggregationToolConfig} object.
+   * @param isRecurrentWorkflow {@code true} is the workflow is recurrent. {@code false} otherwise.
+   */
+  private static void buildAggregationTaskWorkflow(Workflow.Builder workflowBuilder, AggregationToolConfig config,
+      boolean isRecurrentWorkflow) {
+    // create separate job for each type of stats report
+    for (String report : config.statsReportsToAggregate) {
+      StatsReportType statsType = StatsReportType.valueOf(report);
+      String reportName =
+          AmbryStatsReport.convertStatsReportTypeToProperString(statsType) + AmbryStatsReport.REPORT_NAME_SUFFIX;
+      String jobId =
+          statsType.toString().toLowerCase() + (isRecurrentWorkflow ? RECURRENT_JOB_SUFFIX : ONE_TIME_JOB_SUFFIX);
+      String taskId = statsType.toString().toLowerCase() + AGGREGATE_TASK_SUFFIX;
+      String aggregationCommand = String.format("%s_%s", config.isMysql ? MySqlReportAggregatorTask.TASK_COMMAND_PREFIX
+          : HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, reportName);
+      // build task
+      List<TaskConfig> taskConfigs = new ArrayList<>();
+      taskConfigs.add(new TaskConfig.Builder().setTaskId(taskId).setCommand(aggregationCommand).build());
+      // build job
+      JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
+      jobConfigBuilder.addTaskConfigs(taskConfigs);
+      jobConfigBuilder.setCommand(aggregationCommand);
+      // add job into workflow
+      workflowBuilder.addJob(jobId, jobConfigBuilder);
+    }
+  }
+
+  /**
+   * Build the workflow for deprecated container cloud sync task.
+   *
+   * @param workflowBuilder {@link Workflow.Builder} object.
+   */
+  private static void buildDeprecatedContainerCloudSyncTaskWorkflow(Workflow.Builder workflowBuilder) {
+    // build task
+    String taskId = String.format("%s_%s", DeprecatedContainerCloudSyncTask.COMMAND, TASK_SUFFIX);
+    String jobId = String.format("%s_%s", DeprecatedContainerCloudSyncTask.COMMAND, JOB_SUFFIX);
+    List<TaskConfig> taskConfigs = new ArrayList<>();
+    taskConfigs.add(
+        new TaskConfig.Builder().setTaskId(taskId).setCommand(DeprecatedContainerCloudSyncTask.COMMAND).build());
+    // build job
+    JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
+    jobConfigBuilder.addTaskConfigs(taskConfigs);
+    jobConfigBuilder.setCommand(DeprecatedContainerCloudSyncTask.COMMAND);
+
+    // add job into workflow
+    workflowBuilder.addJob(jobId, jobConfigBuilder);
   }
 }
