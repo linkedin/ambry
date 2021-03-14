@@ -54,6 +54,7 @@ import java.rmi.UnexpectedException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -172,7 +173,7 @@ public class ServerReadPerformance {
 
       ToolUtils.ensureOrExit(listOpt, options, parser);
 
-      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
+      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * TimeUnit.SECONDS.toNanos(1);
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
           sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
@@ -213,7 +214,7 @@ public class ServerReadPerformance {
             shutdown.set(true);
             String message = "Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get()
                 + " Nano Seconds  Average time taken per read "
-                + ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalReads.get() + " Seconds";
+                + ((double) totalTimeTaken.get()) / TimeUnit.SECONDS.toNanos(1) / totalReads.get() + " Seconds";
             System.out.println(message);
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
@@ -275,7 +276,7 @@ public class ServerReadPerformance {
             totalLatencyForGetBlobs += latencyPerBlob;
             if (enableVerboseLogging) {
               System.out.println(
-                  "Time taken to get blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
+                  "Time taken to get blob id " + blobId + " in ms " + latencyPerBlob / TimeUnit.MICROSECONDS.toNanos(1));
             }
             if (latencyPerBlob > maxLatencyForGetBlobs) {
               maxLatencyForGetBlobs = latencyPerBlob;
@@ -288,9 +289,9 @@ public class ServerReadPerformance {
               int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
               String message =
-                  totalNumberOfGetBlobs + "," + (double) latenciesForGetBlobs.get(index99) / SystemTime.NsPerSec + ","
-                      + (double) latenciesForGetBlobs.get(index95) / SystemTime.NsPerSec + "," + (
-                      (double) totalLatencyForGetBlobs / SystemTime.NsPerSec / totalNumberOfGetBlobs);
+                  totalNumberOfGetBlobs + "," + (double) latenciesForGetBlobs.get(index99) / TimeUnit.SECONDS.toNanos(1) + ","
+                      + (double) latenciesForGetBlobs.get(index95) / TimeUnit.SECONDS.toNanos(1) + "," + (
+                      (double) totalLatencyForGetBlobs / TimeUnit.SECONDS.toNanos(1) / totalNumberOfGetBlobs);
               System.out.println(message);
               writer.write(message + "\n");
               totalLatencyForGetBlobs = 0;

@@ -44,6 +44,7 @@ import java.util.GregorianCalendar;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.github.ambry.rest.RestUtils.*;
@@ -365,7 +366,7 @@ class AmbrySecurityService implements SecurityService {
     Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
     if (container.isCacheable()) {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
-          new Date(System.currentTimeMillis() + frontendConfig.cacheValiditySeconds * Time.MsPerSec));
+          new Date(System.currentTimeMillis() + frontendConfig.cacheValiditySeconds * TimeUnit.SECONDS.toMicros(1)));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.cacheValiditySeconds);
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, restResponseChannel.getHeader(RestUtils.Headers.DATE));

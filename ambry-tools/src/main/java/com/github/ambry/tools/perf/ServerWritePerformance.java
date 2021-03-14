@@ -51,6 +51,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -187,7 +188,7 @@ public class ServerWritePerformance {
 
       ToolUtils.ensureOrExit(listOpt, options, parser);
 
-      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
+      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * TimeUnit.SECONDS.toNanos(1);
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
           sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
@@ -236,7 +237,7 @@ public class ServerWritePerformance {
             latch.await();
             System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTaken.get()
                 + " Nano Seconds  Average time taken per write "
-                + ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalWrites.get() + " Seconds");
+                + ((double) totalTimeTaken.get()) / TimeUnit.SECONDS.toNanos(1) / totalWrites.get() + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
@@ -370,7 +371,7 @@ public class ServerWritePerformance {
             blobIdWriter.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
             if (enableVerboseLogging) {
-              System.out.println("Time taken to put blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs
+              System.out.println("Time taken to put blob id " + blobId + " in ms " + latencyPerBlob / TimeUnit.MICROSECONDS.toNanos(1)
                   + " for blob of size " + blob.length);
             }
             numberOfPuts++;
@@ -386,9 +387,9 @@ public class ServerWritePerformance {
               int index99 = (int) (latenciesForPutBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForPutBlobs.size() * 0.95) - 1;
               String message = threadIndex + "," + numberOfPuts + ","
-                  + (double) latenciesForPutBlobs.get(index99) / SystemTime.NsPerSec + ","
-                  + (double) latenciesForPutBlobs.get(index95) / SystemTime.NsPerSec + "," + (
-                  ((double) totalLatencyInNanoSeconds) / SystemTime.NsPerSec / numberOfPuts);
+                  + (double) latenciesForPutBlobs.get(index99) / TimeUnit.SECONDS.toNanos(1) + ","
+                  + (double) latenciesForPutBlobs.get(index95) / TimeUnit.SECONDS.toNanos(1) + "," + (
+                  ((double) totalLatencyInNanoSeconds) / TimeUnit.SECONDS.toNanos(1) / numberOfPuts);
               System.out.println(message);
               performanceWriter.write(message + "\n");
               numberOfPuts = 0;

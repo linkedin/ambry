@@ -238,8 +238,10 @@ class PersistentIndex {
       if (scheduler != null) {
         // start scheduler thread to persist index in the background
         persistorTask = scheduler.scheduleAtFixedRate(persistor,
-            config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
-            config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+                config.storeDataFlushDelaySeconds +
+                        new Random().nextInt(Math.toIntExact(TimeUnit.MINUTES.toSeconds(1))),
+                config.storeDataFlushIntervalSeconds,
+                TimeUnit.SECONDS);
       } else {
         persistorTask = null;
       }

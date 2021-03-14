@@ -433,8 +433,8 @@ public class NettyPerfClient {
         logger.error("NettyPerfClient shutdown interrupted", e);
       } finally {
         logger.info("Executed for approximately {} s and sent {} requests ({} requests/sec)",
-            (float) totalRunTimeInMs / (float) Time.MsPerSec, totalRequestCount.get(),
-            (float) totalRequestCount.get() * (float) Time.MsPerSec / (float) totalRunTimeInMs);
+            (float) totalRunTimeInMs / (float) TimeUnit.SECONDS.toMicros(1), totalRequestCount.get(),
+            (float) totalRequestCount.get() * (float) TimeUnit.SECONDS.toMicros(1) / (float) totalRunTimeInMs);
         Snapshot rttStatsSnapshot = perfClientMetrics.requestRoundTripTimeInMs.getSnapshot();
         logger.info("RTT stats: Min - {} ms, Mean - {} ms, Max - {} ms", rttStatsSnapshot.getMin(),
             rttStatsSnapshot.getMean(), rttStatsSnapshot.getMax());

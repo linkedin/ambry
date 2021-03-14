@@ -70,7 +70,7 @@ class BlobStoreCompactor {
     }
   };
 
-  private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * Time.MsPerSec;
+  private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * TimeUnit.SECONDS.toMicros(1);
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final File dataDir;
   private final String storeId;
@@ -842,7 +842,7 @@ class BlobStoreCompactor {
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
             }
             long lastModifiedTimeSecsToSet =
-                srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
+                srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / TimeUnit.SECONDS.toMicros(1)
                     : lastModifiedTimeSecs;
             tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
             writtenLastTime = srcValue.getSize();

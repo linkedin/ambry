@@ -72,7 +72,7 @@ class CuratedLogIndexState {
 
   static final int DEFAULT_MAX_IN_MEM_ELEMENTS = 5;
   static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
-  static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * Time.MsPerSec;
+  static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * TimeUnit.SECONDS.toMicros(1);
   static final StoreKeyFactory STORE_KEY_FACTORY;
   // deliberately do not divide the capacities perfectly.
   static final long PUT_RECORD_SIZE = 53;
@@ -275,7 +275,7 @@ class CuratedLogIndexState {
         liveKeys.add(id);
       }
       index.addToIndex(Collections.singletonList(entry), fileSpan);
-      lastModifiedTimesInSecs.put(indexSegmentStartOffset, value.getOperationTimeInMs() / Time.MsPerSec);
+      lastModifiedTimesInSecs.put(indexSegmentStartOffset, value.getOperationTimeInMs() / TimeUnit.SECONDS.toMicros(1));
       expectedJournalLastOffset = fileSpan.getStartOffset();
       endOffsetOfPrevMsg = fileSpan.getEndOffset();
     }
@@ -321,7 +321,7 @@ class CuratedLogIndexState {
       liveKeys.add(id);
     }
     index.addToIndex(Collections.singletonList(entry), fileSpan);
-    lastModifiedTimesInSecs.put(indexSegmentStartOffset, value.getOperationTimeInMs() / Time.MsPerSec);
+    lastModifiedTimesInSecs.put(indexSegmentStartOffset, value.getOperationTimeInMs() / TimeUnit.SECONDS.toMicros(1));
   }
 
   /**
@@ -493,7 +493,7 @@ class CuratedLogIndexState {
     logOrder.put(startOffset, new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));
     allKeys.computeIfAbsent(idToDelete, k -> new TreeSet<>()).add(newValue);
     referenceIndex.get(indexSegmentStartOffset).computeIfAbsent(idToDelete, k -> new TreeSet<>()).add(newValue);
-    lastModifiedTimesInSecs.put(indexSegmentStartOffset, newValue.getOperationTimeInMs() / Time.MsPerSec);
+    lastModifiedTimesInSecs.put(indexSegmentStartOffset, newValue.getOperationTimeInMs() / TimeUnit.SECONDS.toMicros(1));
     endOffsetOfPrevMsg = fileSpan.getEndOffset();
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
     assertEquals("Journal's last offset not as expected", startOffset, index.journal.getLastOffset());
@@ -578,7 +578,7 @@ class CuratedLogIndexState {
     logOrder.put(startOffset, new Pair<>(idToUndelete, new LogEntry(dataWritten, newValue)));
     allKeys.computeIfAbsent(idToUndelete, k -> new TreeSet<>()).add(newValue);
     referenceIndex.get(indexSegmentStartOffset).computeIfAbsent(idToUndelete, k -> new TreeSet<>()).add(newValue);
-    lastModifiedTimesInSecs.put(indexSegmentStartOffset, newValue.getOperationTimeInMs() / Time.MsPerSec);
+    lastModifiedTimesInSecs.put(indexSegmentStartOffset, newValue.getOperationTimeInMs() / TimeUnit.SECONDS.toMicros(1));
     endOffsetOfPrevMsg = fileSpan.getEndOffset();
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
     assertEquals("Journal's last offset not as expected", startOffset, index.journal.getLastOffset());
@@ -926,7 +926,7 @@ class CuratedLogIndexState {
     IndexValue value = getExpectedValue(id, false);
     Offset deleteIndexSegmentStartOffset = value.isDelete() ? referenceIndex.floorKey(value.getOffset()) : null;
     return deleteIndexSegmentStartOffset != null
-        && lastModifiedTimesInSecs.get(deleteIndexSegmentStartOffset) * Time.MsPerSec < referenceTimeMs;
+        && lastModifiedTimesInSecs.get(deleteIndexSegmentStartOffset) * TimeUnit.SECONDS.toMicros(1) < referenceTimeMs;
   }
 
   /**
@@ -1133,7 +1133,7 @@ class CuratedLogIndexState {
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
     // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
-    advanceTime(Time.MsPerSec);
+    advanceTime(TimeUnit.SECONDS.toMicros(1));
     assertEquals("Incorrect log segment count", 0, index.getLogSegmentCount());
     long expectedUsedCapacity;
     if (!isLogSegmented) {

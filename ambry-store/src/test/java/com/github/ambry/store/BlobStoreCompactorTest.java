@@ -192,12 +192,12 @@ public class BlobStoreCompactorTest {
     LogSegmentName firstLogSegmentName = state.referenceIndex.firstKey().getName();
     LogSegmentName secondLogSegmentName = state.log.getNextSegment(state.log.getSegment(firstLogSegmentName)).getName();
     LogSegmentName lastLogSegmentName = state.referenceIndex.lastKey().getName();
-    CompactionDetails details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds() + TimeUnit.SECONDS.toMicros(1),
         Arrays.asList(firstLogSegmentName, lastLogSegmentName));
     ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
 
     // compaction range contains segments in the wrong order
-    details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
+    details = new CompactionDetails(state.time.milliseconds() + TimeUnit.SECONDS.toMicros(1),
         Arrays.asList(secondLogSegmentName, firstLogSegmentName));
     ensureArgumentFailure(details, "Should have failed because segments are in the wrong order");
 
@@ -287,7 +287,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void compactWholeLogWithNoChangeExpectedTest() throws Exception {
-    long delayBeforeLastLogSegmentWrite = 20 * Time.MsPerSec;
+    long delayBeforeLastLogSegmentWrite = 20 * TimeUnit.SECONDS.toMicros(1);
     refreshState(false, false);
     // write data until the very last segment is reached
     long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity();
@@ -345,8 +345,8 @@ public class BlobStoreCompactorTest {
     Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
 
     for (long setTimeMs : expiryTimesMs) {
-      if (state.time.milliseconds() < setTimeMs + Time.MsPerSec) {
-        state.advanceTime(setTimeMs + Time.MsPerSec - state.time.milliseconds());
+      if (state.time.milliseconds() < setTimeMs + TimeUnit.SECONDS.toMicros(1)) {
+        state.advanceTime(setTimeMs + TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
       }
       long deleteReferenceTimeMs = state.time.milliseconds();
       getCurrentBlobIdsFromWholeIndex(state.index, compactedDeletes, purgeExpiredDelete);
@@ -423,7 +423,7 @@ public class BlobStoreCompactorTest {
         state.addDeleteEntry(id);
       }
     }
-    long deleteReferenceTimeMs = state.time.milliseconds() + Time.MsPerSec;
+    long deleteReferenceTimeMs = state.time.milliseconds() + TimeUnit.SECONDS.toMicros(1);
     state.advanceTime(deleteReferenceTimeMs - state.time.milliseconds());
     assertEquals("Valid size in the segments under compaction should be 0", 0,
         getValidDataSize(segmentsUnderCompaction, deleteReferenceTimeMs, purgeExpiredDelete));
@@ -452,7 +452,7 @@ public class BlobStoreCompactorTest {
 
     // there will be changes past expiration time
     expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
-    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
+    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
     compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true);
   }
 
@@ -465,7 +465,7 @@ public class BlobStoreCompactorTest {
   public void deletionTimeEnforcementTest() throws Exception {
     // no change before delete time
     Pair<Long, List<LogSegmentName>> deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
-    long deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst() - Time.MsPerSec;
+    long deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst() - TimeUnit.SECONDS.toMicros(1);
     Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
     compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
@@ -479,7 +479,7 @@ public class BlobStoreCompactorTest {
 
     // there will be changes past delete time
     deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
-    state.advanceTime(Time.MsPerSec);
+    state.advanceTime(TimeUnit.SECONDS.toMicros(1));
     compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true);
   }
 
@@ -491,9 +491,9 @@ public class BlobStoreCompactorTest {
   @Test
   public void differentDeleteAndExpiryTimesTest() throws Exception {
     Pair<Long, List<LogSegmentName>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
-    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
+    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
     long deleteReferenceTimeMs = state.time.milliseconds();
-    state.advanceTime(Time.MsPerSec);
+    state.advanceTime(TimeUnit.SECONDS.toMicros(1));
     int deleteCount = 10;
     Set<MockId> idsInSegments = getIdsWithPutInSegments(expiryTimeAndSegmentsUnderCompaction.getSecond());
     List<MockId> idsToExamine = new ArrayList<>();
@@ -1188,7 +1188,7 @@ public class BlobStoreCompactorTest {
     state.initIndex(null);
 
     // Log Segment 0
-    long expirationTime = state.time.milliseconds() + 200 * Time.MsPerSec;
+    long expirationTime = state.time.milliseconds() + 200 * TimeUnit.SECONDS.toMicros(1);
     // Index Segment 0.1 P D U -> P U
     IndexEntry p1 = state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
     state.addDeleteEntry((MockId) p1.getKey());
@@ -1438,7 +1438,7 @@ public class BlobStoreCompactorTest {
     state.initIndex(null);
 
     // Log Segment 0
-    long expirationTime = state.time.milliseconds() + 500 * Time.MsPerSec;
+    long expirationTime = state.time.milliseconds() + 500 * TimeUnit.SECONDS.toMicros(1);
     // Index Segment 0.1 P T D U -> P T U
     IndexEntry p1 = state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
     state.makePermanent((MockId) p1.getKey(), false);
@@ -2291,7 +2291,7 @@ public class BlobStoreCompactorTest {
     state.initIndex(null);
 
     // Insert P, D, U in the first log segment
-    long p1Expiration = state.time.milliseconds() + 1000 * Time.MsPerSec;
+    long p1Expiration = state.time.milliseconds() + 1000 * TimeUnit.SECONDS.toMicros(1);
     IndexEntry p1 = state.addPutEntries(1, PUT_RECORD_SIZE, p1Expiration).get(0);
     state.addDeleteEntry((MockId) p1.getKey());
     state.addUndeleteEntry((MockId) p1.getKey());
@@ -2563,7 +2563,7 @@ public class BlobStoreCompactorTest {
         validDataSize = getValidDataSize(logSegmentsToReduceFrom, state.time.milliseconds() + 1, purgeExpiredDelete);
       }
     }
-    state.advanceTime(Time.MsPerSec);
+    state.advanceTime(TimeUnit.SECONDS.toMicros(1));
     return state.time.milliseconds();
   }
 
@@ -3237,7 +3237,7 @@ public class BlobStoreCompactorTest {
     long possibleIndexSegments = numSegmentsToWritePutRecordsTo + possiblePutRecords / state.getMaxInMemElements() + 1;
     long invalidationTimeMs = state.time.milliseconds() + possibleIndexSegments * DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS;
     // round up to the next second
-    return (invalidationTimeMs / Time.MsPerSec + 1) * Time.MsPerSec;
+    return (invalidationTimeMs / TimeUnit.SECONDS.toMicros(1) + 1) * TimeUnit.SECONDS.toMicros(1);
   }
 
   /**
@@ -3332,7 +3332,7 @@ public class BlobStoreCompactorTest {
     // there will be changes past expiration time
     expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
-    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
+    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
     // create another log that wraps over the same files but induces close as required.
     log = new InterruptionInducingLog(addSegmentCallCountToInterruptAt, dropSegmentCallCountToInterruptAt);
     compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction,
@@ -3359,7 +3359,7 @@ public class BlobStoreCompactorTest {
     // there will be changes past expiration time
     expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
-    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
+    state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
     // create another index that wraps over the same files but induces close as required.
     index = new InterruptionInducingIndex();
     compactWithRecoveryAndVerify(state.log, DISK_IO_SCHEDULER, index, segmentsUnderCompaction,
@@ -3391,7 +3391,7 @@ public class BlobStoreCompactorTest {
       // there will be changes past expiration time
       expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
       segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
-      state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
+      state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
       // if negative, set crash count starting from the end
       countToInterruptAt = interruptAt >= 0 ? interruptAt
           : getIndexSegmentStartOffsetsForLogSegments(segmentsUnderCompaction).size() + interruptAt;
@@ -3448,7 +3448,7 @@ public class BlobStoreCompactorTest {
       // there will be changes past expiration time
       expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
       segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
-      state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
+      state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
       countToInterruptAt = interruptAt;
       if (countToInterruptAt < 0) {
         // while copying each index segment, the bytes copied for the last record is not reported to the diskIOScheduler

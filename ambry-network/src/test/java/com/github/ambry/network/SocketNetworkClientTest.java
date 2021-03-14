@@ -399,7 +399,7 @@ public class SocketNetworkClientTest {
     responseInfoList.forEach(ResponseInfo::release);
 
     // 4. one of the connection lost in sendAndPoll 3 should be replenished
-    time.setCurrentMilliseconds(time.milliseconds() + Time.MsPerSec);
+    time.setCurrentMilliseconds(time.milliseconds() + TimeUnit.SECONDS.toMicros(1));
     selector.setState(MockSelectorState.Good);
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(0), Collections.emptySet(), POLL_TIMEOUT_MS);
     expectedConnectCalls.addAndGet(1);

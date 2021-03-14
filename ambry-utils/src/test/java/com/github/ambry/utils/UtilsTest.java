@@ -557,7 +557,7 @@ public class UtilsTest {
   @Test
   public void getTimeInMsToTheNearestSecTest() {
     long msValue = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
-    long expectedMsValue = (msValue / Time.MsPerSec) * Time.MsPerSec;
+    long expectedMsValue = (msValue / TimeUnit.SECONDS.toMicros(1)) * TimeUnit.SECONDS.toMicros(1);
     assertEquals("Time in Ms to the nearest Sec mismatch ", expectedMsValue, Utils.getTimeInMsToTheNearestSec(msValue));
     msValue = Utils.Infinite_Time;
     assertEquals("Time in Ms to the nearest Sec mismatch ", msValue, Utils.getTimeInMsToTheNearestSec(msValue));
@@ -571,7 +571,7 @@ public class UtilsTest {
     for (int i = 0; i < 5; i++) {
       long epochTimeInMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt(10000);
       long deltaInSecs = TestUtils.RANDOM.nextInt(10000);
-      assertEquals("epoch epochTimeInMs mismatch ", epochTimeInMs + (deltaInSecs * Time.MsPerSec),
+      assertEquals("epoch epochTimeInMs mismatch ", epochTimeInMs + (deltaInSecs * TimeUnit.SECONDS.toMicros(1)),
           Utils.addSecondsToEpochTime(epochTimeInMs, deltaInSecs));
       assertEquals("epoch epochTimeInMs mismatch ", Utils.Infinite_Time,
           Utils.addSecondsToEpochTime(Utils.Infinite_Time, deltaInSecs));

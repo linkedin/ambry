@@ -84,7 +84,8 @@ public class SocketNetworkClient implements NetworkClient {
     connectionIdToRequestInFlight = new HashMap<>();
     correlationIdInFlightToConnectionId = new HashMap<>();
     pendingConnectionsToAssociatedRequests = new HashMap<>();
-    nextReplenishMs = time.milliseconds() + ThreadLocalRandom.current().nextInt(Time.MsPerSec);
+    nextReplenishMs = time.milliseconds() + ThreadLocalRandom.current().nextInt(
+            Math.toIntExact(TimeUnit.SECONDS.toMicros(1)));
     networkMetrics.registerNetworkClientPendingConnections(numPendingRequests);
   }
 
@@ -245,7 +246,7 @@ public class SocketNetworkClient implements NetworkClient {
       if (connectionsInitiated > 0) {
         networkMetrics.connectionReplenished.inc(connectionsInitiated);
         logger.debug("replenishConnections initiated {} connections", connectionsInitiated);
-        nextReplenishMs = currentTimeMs + Time.MsPerSec;
+        nextReplenishMs = currentTimeMs + TimeUnit.SECONDS.toMicros(1);
       }
     }
   }

@@ -414,9 +414,9 @@ class IndexValue implements Comparable<IndexValue> {
         value.putLong(size);
         value.putLong(offset.getOffset());
         value.put(flags);
-        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / TimeUnit.SECONDS.toMicros(1)) : (int) expiresAtMs);
         value.putLong(originalMessageOffset);
-        value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / Time.MsPerSec)
+        value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / TimeUnit.SECONDS.toMicros(1))
             : (int) operationTimeInMs);
         value.putShort(accountId);
         value.putShort(containerId);
@@ -427,9 +427,9 @@ class IndexValue implements Comparable<IndexValue> {
         value.putLong(size);
         value.putLong(offset.getOffset());
         value.put(flags);
-        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / TimeUnit.SECONDS.toMicros(1)) : (int) expiresAtMs);
         value.putLong(originalMessageOffset);
-        value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / Time.MsPerSec)
+        value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / TimeUnit.SECONDS.toMicros(1))
             : (int) operationTimeInMs);
         value.putShort(accountId);
         value.putShort(containerId);

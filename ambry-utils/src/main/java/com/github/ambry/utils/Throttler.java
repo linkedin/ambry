@@ -16,6 +16,8 @@ package com.github.ambry.utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.TimeUnit;
+
 
 /**
  * A class to measure and throttle the rate of some process. The throttler takes a desired rate-per-second
@@ -62,12 +64,12 @@ public class Throttler {
 
       // if we have completed an interval AND we have observed something, maybe
       // we should take a little nap
-      if ((checkIntervalMs < 0 || elapsedNs > checkIntervalMs * Time.NsPerMs) && observedSoFar > 0) {
-        double rateInSecs = elapsedNs > 0 ? (observedSoFar * Time.NsPerSec) / elapsedNs : Double.MAX_VALUE;
+      if ((checkIntervalMs < 0 || elapsedNs > checkIntervalMs * TimeUnit.MICROSECONDS.toNanos(1)) && observedSoFar > 0) {
+        double rateInSecs = elapsedNs > 0 ? (observedSoFar * TimeUnit.SECONDS.toNanos(1)) / elapsedNs : Double.MAX_VALUE;
         if (throttleDown == rateInSecs > desiredRatePerSec) {
           // solve for the amount of time to sleep to make us hit the desired rate
-          double desiredRateMs = desiredRatePerSec / Time.MsPerSec;
-          double elapsedMs = elapsedNs / Time.NsPerMs;
+          double desiredRateMs = desiredRatePerSec / TimeUnit.SECONDS.toMicros(1);
+          double elapsedMs = elapsedNs / TimeUnit.MICROSECONDS.toNanos(1);
           long sleepTime = Math.round(observedSoFar / desiredRateMs - elapsedMs);
           if (sleepTime > 0) {
             logger.trace("Natural rate is {} per second but desired rate is {}, sleeping for {} ms to compensate.",

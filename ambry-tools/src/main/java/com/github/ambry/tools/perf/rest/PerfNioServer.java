@@ -147,8 +147,8 @@ class PerfNioServer implements NioServer {
       }
       long totalRunTimeInMs = System.currentTimeMillis() - startTime;
       logger.info("LoadCreator executed for approximately {} s and sent {} requests ({} requests/sec)",
-          (float) totalRunTimeInMs / (float) Time.MsPerSec, requestCount,
-          (float) requestCount * (float) Time.MsPerSec / (float) totalRunTimeInMs);
+          (float) totalRunTimeInMs / (float) TimeUnit.SECONDS.toMicros(1), requestCount,
+          (float) requestCount * (float) TimeUnit.SECONDS.toMicros(1) / (float) totalRunTimeInMs);
       Snapshot rttStatsSnapshot = perfNioServerMetrics.requestRoundTripTimeInMs.getSnapshot();
       logger.info("RTT stats: Min - {} ms, Mean - {} ms, Max - {} ms", rttStatsSnapshot.getMin(),
           rttStatsSnapshot.getMean(), rttStatsSnapshot.getMax());
