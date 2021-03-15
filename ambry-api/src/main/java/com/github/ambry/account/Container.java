@@ -768,7 +768,7 @@ public class Container {
         && deleteTriggerTime == container.deleteTriggerTime && Objects.equals(description, container.description)
         && Objects.equals(replicationPolicy, container.replicationPolicy) && ttlRequired == container.ttlRequired
         && securePathRequired == container.securePathRequired && overrideAccountAcl == container.overrideAccountAcl
-        && Objects.equals(contentTypeWhitelistForFilenamesOnDownload,
+        && namedBlobMode == container.namedBlobMode && Objects.equals(contentTypeWhitelistForFilenamesOnDownload,
         container.contentTypeWhitelistForFilenamesOnDownload);
   }
 
