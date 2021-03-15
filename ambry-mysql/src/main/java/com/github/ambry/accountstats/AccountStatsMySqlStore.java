@@ -193,8 +193,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     // 2. If a container storage usage only exists in first StatsSnapshot.
     // If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
     // TODO: should delete rows in database when the previous statsSnapshot has more data than current one.
-    Map<String, StatsSnapshot> currPartitionMap = statsWrapper.getSnapshot().getSubMap();
-    Map<String, StatsSnapshot> prevPartitionMap = prevSnapshot.getSubMap();
+    Map<String, StatsSnapshot> currPartitionMap =
+        Optional.ofNullable(statsWrapper.getSnapshot().getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
+    Map<String, StatsSnapshot> prevPartitionMap =
+        Optional.ofNullable(prevSnapshot.getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
     for (Map.Entry<String, StatsSnapshot> currPartitionMapEntry : currPartitionMap.entrySet()) {
       String partitionIdKey = currPartitionMapEntry.getKey();
       StatsSnapshot currAccountStatsSnapshot = currPartitionMapEntry.getValue();

@@ -139,6 +139,29 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
     StatsWrapper obtainedStats3 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
     assertTrue(obtainedStats3.getSnapshot().getSubMap().containsKey(Utils.statsPartitionKey((short) 10)));
+
+    // Write a new stats with empty submap
+    StatsWrapper stats4 = generateStatsWrapper(1, 1, 1, StatsReportType.ACCOUNT_REPORT);
+    stats4.getSnapshot().setSubMap(null);
+    mySqlStore.storeAccountStats(stats4);
+
+    // empty stats should not override any mysql database rows
+    StatsWrapper obtainedStats4 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats3.getSnapshot(), obtainedStats4.getSnapshot());
+
+    // Write a new stats with empty submap again
+    StatsWrapper stats5 = generateStatsWrapper(1, 1, 1, StatsReportType.ACCOUNT_REPORT);
+    stats5.getSnapshot().setSubMap(null);
+    mySqlStore.storeAccountStats(stats5);
+
+    // empty stats should not override any mysql database rows
+    StatsWrapper obtainedStats5 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats3.getSnapshot(), obtainedStats5.getSnapshot());
+
+    StatsWrapper stats6 = generateStatsWrapper(20, 20, 20, StatsReportType.ACCOUNT_REPORT);
+    mySqlStore.storeAccountStats(stats6);
+    StatsWrapper obtainedStats6 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats6.getSnapshot(), stats6.getSnapshot());
   }
 
   /**
