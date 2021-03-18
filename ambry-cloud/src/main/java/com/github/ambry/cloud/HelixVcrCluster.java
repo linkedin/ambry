@@ -180,7 +180,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
     if (cloudConfig.cloudContainerCompactionEnabled) {
       Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-      taskFactoryMap.put(DeprecatedContainerCloudSyncTask.class.getSimpleName(), new TaskFactory() {
+      taskFactoryMap.put(DeprecatedContainerCloudSyncTask.COMMAND, new TaskFactory() {
         @Override
         public Task createNewTask(TaskCallbackContext context) {
           return new DeprecatedContainerCloudSyncTask(accountService, storeConfig.storeContainerDeletionRetentionDays,
