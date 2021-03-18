@@ -186,12 +186,15 @@ public class HelixTaskWorkflowManagerTool {
         } else {
           Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);
           try {
-            if (config.taskType == TaskType.AGGREGATE_TASK) {
-              buildAggregationTaskWorkflow(workflowBuilder, config, isRecurrentWorkflow);
-            } else if (config.taskType == TaskType.DEPRECATED_CONTAINER_CLOUD_SYNC_TASK) {
-              buildDeprecatedContainerCloudSyncTaskWorkflow(workflowBuilder);
-            } else {
-              throw new IllegalArgumentException("Invalid task type: " + config.taskType);
+            switch (config.taskType) {
+              case AGGREGATE_TASK:
+                buildAggregationTaskWorkflow(workflowBuilder, config, isRecurrentWorkflow);
+                break;
+              case DEPRECATED_CONTAINER_CLOUD_SYNC_TASK:
+                buildDeprecatedContainerCloudSyncTaskWorkflow(workflowBuilder);
+                break;
+              default:
+                throw new IllegalArgumentException("Invalid task type: " + config.taskType);
             }
             if (isRecurrentWorkflow) {
               workflowBuilder.setScheduleConfig(
