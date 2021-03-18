@@ -1168,8 +1168,6 @@ public class IndexTest {
         stateForTokenTest.index.getIndexSegments().higherEntry(firstIndexSegment.getStartOffset()).getValue();
     StoreKey firstKey = firstIndexSegment.iterator().next().getKey();
     StoreKey keyFromFirstSegment = firstIndexSegment.listIterator(DEFAULT_MAX_IN_MEM_ELEMENTS - 2).next().getKey();
-    System.out.println("first key = " + firstKey);
-    System.out.println("random key = " + keyFromFirstSegment);
     // 1. generate an invalid index-based token with reset key and the key can be found in current index
     Offset invalidOffset =
         new Offset(firstIndexSegment.getLogSegmentName(), firstIndexSegment.getStartOffset().getOffset() - 1);
