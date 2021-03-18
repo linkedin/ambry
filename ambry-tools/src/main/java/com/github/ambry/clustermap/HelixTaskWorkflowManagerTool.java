@@ -38,7 +38,8 @@ import org.bouncycastle.util.Strings;
 
 
 /**
- * This tool triggers a one-time/recurrent cluster wide stats aggregation as a generic job (executed by a random live instance).
+ * This tool triggers a one-time/recurrent cluster wide workflow for stats aggregation or container deletion sync to cloud
+ * as a generic job (executed by a random live instance).
  */
 public class HelixTaskWorkflowManagerTool {
   private static final String TASK_SUFFIX = "task";
