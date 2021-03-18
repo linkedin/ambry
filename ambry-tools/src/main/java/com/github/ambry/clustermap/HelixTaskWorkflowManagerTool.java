@@ -113,7 +113,7 @@ public class HelixTaskWorkflowManagerTool {
     final boolean deleteSpecifiedWorkflow;
 
     @Config("task.type")
-    @Default("AGGREGATION_TASK")
+    @Default("AGGREGATE_TASK")
     final TaskType taskType;
 
     @Config("is.mysql")
@@ -198,7 +198,7 @@ public class HelixTaskWorkflowManagerTool {
               workflowBuilder.setExpiry(TimeUnit.MINUTES.toMillis(recurrentIntervalInMinutes));
             }
             Workflow workflow = workflowBuilder.build();
-            //taskDriver.start(workflow);
+            taskDriver.start(workflow);
             System.out.println(
                 String.format("%s started successfully in cluster %s at %s", workflowName, clusterName, zkAddress));
           } catch (Exception | Error e) {
