@@ -16,7 +16,6 @@ package com.github.ambry.store;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.replication.FindToken;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -28,10 +27,10 @@ import java.util.concurrent.ConcurrentMap;
  */
 public class RemoteTokenTracker {
   private static final String DELIMITER = ":";
+  private final ReplicaId localReplica;
   // The key of peerReplicaAndToken is a string containing hostname and path of peer replica.
   // For example: localhost:/mnt/u001/p1
   private ConcurrentMap<String, FindToken> peerReplicaAndToken = new ConcurrentHashMap<>();
-  private ReplicaId localReplica;
 
   public RemoteTokenTracker(ReplicaId localReplica) {
     this.localReplica = localReplica;
@@ -41,6 +40,12 @@ public class RemoteTokenTracker {
     });
   }
 
+  /**
+   * Update peer replica token within this tracker.
+   * @param token the most recent token from peer replica.
+   * @param remoteHostName the hostname of peer node (where the peer replica resides).
+   * @param remoteReplicaPath the path of peer replica on remote peer node.
+   */
   void updateTokenFromPeerReplica(FindToken token, String remoteHostName, String remoteReplicaPath) {
     // this already handles newly added peer replica (i.e. move replica)
     peerReplicaAndToken.put(remoteHostName + DELIMITER + remoteReplicaPath, token);
