@@ -73,7 +73,9 @@ public class IndexTest {
 
   private final boolean isLogSegmented;
   private final File tempDir;
+  private final File tokenTestDir;
   private final CuratedLogIndexState state;
+  private final CuratedLogIndexState stateForTokenTest;
   private final short persistentIndexVersion;
 
   // TODO: test that verifies that files with "_index" are not picked up if the corresponding log segment is not in log
@@ -96,10 +98,12 @@ public class IndexTest {
   public IndexTest(boolean isLogSegmented, short persistentIndexVersion) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("indexDir-" + TestUtils.getRandomString(10));
+    tokenTestDir = StoreTestUtils.createTempDirectory("tokenTestDir-" + TestUtils.getRandomString(10));
     this.persistentIndexVersion = persistentIndexVersion;
     PersistentIndex.CURRENT_VERSION = persistentIndexVersion;
     boolean addUndeletes = PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3;
     state = new CuratedLogIndexState(isLogSegmented, tempDir, true, addUndeletes);
+    stateForTokenTest = new CuratedLogIndexState(true, tokenTestDir, true, addUndeletes, true);
   }
 
   /**
@@ -111,7 +115,11 @@ public class IndexTest {
     if (state != null) {
       state.destroy();
     }
+    if (stateForTokenTest != null) {
+      stateForTokenTest.destroy();
+    }
     assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, true));
+    assertTrue(tokenTestDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tokenTestDir, true));
     PersistentIndex.CURRENT_VERSION = this.persistentIndexVersion;
   }
 
@@ -753,7 +761,7 @@ public class IndexTest {
   @Test
   public void getAbsoluteEndPositionOfLastPutTest() throws Exception {
     File testDir = StoreTestUtils.createTempDirectory("indexDirTest-" + TestUtils.getRandomString(10));
-    CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true);
+    CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true, false);
     assertEquals("There should be no PUT record since index is empty", -1,
         indexState.index.getAbsoluteEndPositionOfLastPut());
     long expiresAtMs = indexState.time.milliseconds() + TimeUnit.HOURS.toMillis(1);
@@ -1055,10 +1063,13 @@ public class IndexTest {
                 null, UNINITIALIZED_RESET_KEY_VERSION);
       }
       // token should get reset internally, no keys should be returned and the returned token should be correct (offset
-      // in it will be the current log end offset = firstRecordFileSpan.getEndOffset()).
+      // in it will be the current log end offset = firstRecordFileSpan.getEndOffset()). The returned token should have correct reset key info.
+      IndexSegment segmentOfToken =
+          state.index.getIndexSegments().floorEntry(firstRecordFileSpan.getEndOffset()).getValue();
       StoreFindToken expectedEndToken =
-          new StoreFindToken(firstRecordFileSpan.getEndOffset(), state.sessionId, state.incarnationId, true, null, null,
-              UNINITIALIZED_RESET_KEY_VERSION);
+          new StoreFindToken(firstRecordFileSpan.getEndOffset(), state.sessionId, state.incarnationId, true,
+              segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
+              segmentOfToken.getResetKeyLifeVersion());
       expectedEndToken.setBytesRead(bytesRead);
       doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.emptySet(), expectedEndToken);
 
@@ -1072,9 +1083,11 @@ public class IndexTest {
         startToken = new StoreFindToken(lastRecordOffset, oldSessionId, incarnationIdToTest, false, null, null,
             UNINITIALIZED_RESET_KEY_VERSION);
       }
+      segmentOfToken = state.index.getIndexSegments().floorEntry(firstRecordFileSpan.getStartOffset()).getValue();
       expectedEndToken =
-          new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false, null,
-              null, UNINITIALIZED_RESET_KEY_VERSION);
+          new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false,
+              segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
+              segmentOfToken.getResetKeyLifeVersion());
       expectedEndToken.setBytesRead(bytesRead);
       doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.singleton(newId), expectedEndToken);
     }
@@ -1108,8 +1121,10 @@ public class IndexTest {
   public void tokenRevalidationTest() throws StoreException {
     // this test is valid only when the log has > 1 log segments i.e. when it can undergo compaction.
     if (isLogSegmented) {
+      IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(state.logOrder.lastKey()).getValue();
       StoreFindToken absoluteEndToken =
-          new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false, null, null, UNINITIALIZED_RESET_KEY_VERSION);
+          new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false,
+              segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
       absoluteEndToken.setBytesRead(state.index.getLogUsedCapacity());
 
       Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
@@ -1139,6 +1154,66 @@ public class IndexTest {
         doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
       }
     }
+  }
+
+  /**
+   * Tests cases where find token is rebuilt based on reset key.
+   * @throws StoreException
+   */
+  @Test
+  public void rebuildTokenBasedOnResetKeyTest() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment firstIndexSegment = stateForTokenTest.index.getIndexSegments().firstEntry().getValue();
+    IndexSegment secondIndexSegment =
+        stateForTokenTest.index.getIndexSegments().higherEntry(firstIndexSegment.getStartOffset()).getValue();
+    StoreKey firstKey = firstIndexSegment.iterator().next().getKey();
+    StoreKey keyFromFirstSegment = firstIndexSegment.listIterator(DEFAULT_MAX_IN_MEM_ELEMENTS - 2).next().getKey();
+    // 1. generate an invalid index-based token with reset key and the key can be found in current index
+    Offset invalidOffset =
+        new Offset(firstIndexSegment.getLogSegmentName(), firstIndexSegment.getStartOffset().getOffset() - 1);
+    StoreFindToken startToken = new StoreFindToken(keyFromFirstSegment, invalidOffset, stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
+        firstIndexSegment.getResetKeyLifeVersion());
+    //  the invalid token should be revalidated by looking up reset key in index
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    // the key in the token should be first key in first index segment, as we only get one entry from new start point,
+    // which is first key in first index segment (inclusive)
+    StoreFindToken expectedToken =
+        new StoreFindToken(firstKey, firstIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
+            firstIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+
+    // 2. generate an invalid journal based token with reset key pointing to 2nd index segment (this is to mock that the
+    // reset key fell out of journal and was copied to 2nd index segment by compaction)
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    invalidOffset = new Offset(lastIndexSegment.getLogSegmentName().getNextGenerationName(),
+        lastIndexSegment.getStartOffset().getOffset() + 1);
+    startToken = new StoreFindToken(invalidOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+        secondIndexSegment.getResetKey(), secondIndexSegment.getResetKeyType(),
+        secondIndexSegment.getResetKeyLifeVersion());
+    findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    token = (StoreFindToken) findInfo.getFindToken();
+    // expected token should be the first key in 2nd index segment (index-based)
+    StoreKey firstKeyFromSecondSegment = secondIndexSegment.iterator().next().getKey();
+    expectedToken =
+        new StoreFindToken(firstKeyFromSecondSegment, secondIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, secondIndexSegment.getResetKey(), secondIndexSegment.getResetKeyType(),
+            secondIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+
+    // 3. generate an invalid token with reset key but the reset key is not found in current index
+    StoreKey keyNotFound = stateForTokenTest.getUniqueId();
+    startToken = new StoreFindToken(invalidOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+        keyNotFound, PersistentIndex.IndexEntryType.PUT, (short) 0);
+    findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    token = (StoreFindToken) findInfo.getFindToken();
+    // token should be reset to the very beginning which is the first index segment
+    expectedToken = new StoreFindToken(firstKey, firstIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
+        firstIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
   }
 
   /**
@@ -1173,9 +1248,10 @@ public class IndexTest {
         state.incarnationId, false, null, null, UNINITIALIZED_RESET_KEY_VERSION);
     // end token should point to log end offset on startup
     long bytesRead = state.index.getAbsolutePositionInLogForOffset(state.log.getEndOffset());
+    IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(state.log.getEndOffset()).getValue();
     StoreFindToken expectedEndToken =
-        new StoreFindToken(state.log.getEndOffset(), state.sessionId, state.incarnationId, true, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(state.log.getEndOffset(), state.sessionId, state.incarnationId, true,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     expectedEndToken.setBytesRead(bytesRead);
     // Fetch the FindToken returned from findEntriesSince
     FindInfo findInfo = state.index.findEntriesSince(startToken, Long.MAX_VALUE);
@@ -1189,9 +1265,10 @@ public class IndexTest {
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     expectedEntries.add(state.logOrder.lastEntry().getValue().getFirst());
     bytesRead = state.index.getAbsolutePositionInLogForOffset(state.index.getCurrentEndOffset());
+    segmentOfToken = state.index.getIndexSegments().floorEntry(state.index.journal.getLastOffset()).getValue();
     expectedEndToken =
-        new StoreFindToken(state.index.journal.getLastOffset(), state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(state.index.journal.getLastOffset(), state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest((StoreFindToken) findInfo.getFindToken(), Long.MAX_VALUE, expectedEntries, expectedEndToken);
   }
@@ -1236,9 +1313,11 @@ public class IndexTest {
             UNINITIALIZED_RESET_KEY_VERSION);
     // token should get reset internally, all keys should be returned and the returned token should be pointing to
     // start offset of firstRecordFileSpan.
+    IndexSegment segmentOfToken =
+        state.index.getIndexSegments().floorEntry(firstRecordFileSpan.getStartOffset()).getValue();
     StoreFindToken expectedEndToken =
-        new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false, null,
-            null, UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), expectedEndToken);
 
@@ -1248,8 +1327,8 @@ public class IndexTest {
     startToken = new StoreFindToken(lastRecordOffset, oldSessionId, oldIncarnationId, false, null, null,
         UNINITIALIZED_RESET_KEY_VERSION);
     expectedEndToken =
-        new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false, null,
-            null, UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), expectedEndToken);
   }
@@ -2459,9 +2538,11 @@ public class IndexTest {
     StoreFindToken startToken =
         new StoreFindToken(firstId, firstIndexSegmentStartOffset, state.sessionId, state.incarnationId, null, null,
             UNINITIALIZED_RESET_KEY_VERSION);
+    IndexSegment segmentOfToken = state.index.getIndexSegments().get(secondIndexSegmentStartOffset);
     StoreFindToken expectedEndToken =
         new StoreFindToken(secondIndexSegmentEntry.getKey(), secondIndexSegmentStartOffset, state.sessionId,
-            state.incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION);
+            state.incarnationId, segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
+            segmentOfToken.getResetKeyLifeVersion());
     expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(secondIndexSegmentStartOffset));
     doFindEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
 
@@ -2491,9 +2572,10 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceToJournalBasedTest() throws StoreException {
+    IndexSegment segmentOfToken = state.index.getIndexSegments().lastEntry().getValue();
     StoreFindToken absoluteEndToken =
-        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     absoluteEndToken.setBytesRead(state.index.getLogUsedCapacity());
 
     // ------------------
@@ -2561,11 +2643,13 @@ public class IndexTest {
         stoppedAt = indexSegmentStartOffset;
         break;
       }
+      IndexSegment segmentOfToken = state.index.getIndexSegments().get(indexSegmentStartOffset);
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
         StoreFindToken expectedEndToken =
-            new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId, null, null,
-                UNINITIALIZED_RESET_KEY_VERSION);
+            new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId,
+                segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
+                segmentOfToken.getResetKeyLifeVersion());
         expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(indexSegmentStartOffset));
         doFindEntriesSinceTest(startToken, getSizeOfAllValues(indexSegmentEntry.getValue()), Collections.singleton(id),
             expectedEndToken);
@@ -2579,9 +2663,10 @@ public class IndexTest {
       MockId id = logEntry.getValue().getFirst();
       // size returned is the size of the most recent record
       long size = state.getExpectedValue(id, EnumSet.allOf(PersistentIndex.IndexEntryType.class), null).getSize();
+      IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(startOffset).getValue();
       StoreFindToken expectedEndToken =
-          new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false, null, null,
-              UNINITIALIZED_RESET_KEY_VERSION);
+          new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false, segmentOfToken.getResetKey(),
+              segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
       Offset endOffset = state.log.getFileSpanForMessage(startOffset, size).getEndOffset();
       expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(endOffset));
       doFindEntriesSinceTest(startToken, size, Collections.singleton(id), expectedEndToken);
@@ -2618,9 +2703,10 @@ public class IndexTest {
     maxSize += size;
 
     Offset endOffset = state.log.getFileSpanForMessage(nextIndexSegmentStartOffset, size).getEndOffset();
+    IndexSegment segmentOfToken = state.index.getIndexSegments().get(nextIndexSegmentStartOffset);
     StoreFindToken expectedEndToken =
-        new StoreFindToken(nextIndexSegmentStartOffset, state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(nextIndexSegmentStartOffset, state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(endOffset));
     doFindEntriesSinceTest(startToken, maxSize, expectedKeys, expectedEndToken);
   }
@@ -2735,9 +2821,10 @@ public class IndexTest {
     long expiresAtMs = state.time.milliseconds() + TimeUnit.HOURS.toMillis(1);
     MockId id = (MockId) state.addPutEntries(1, PUT_RECORD_SIZE, expiresAtMs).get(0).getKey();
     state.makePermanent(id, false);
+    IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(state.logOrder.lastKey()).getValue();
     StoreFindToken expectedEndToken =
-        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     expectedEndToken.setBytesRead(state.index.getLogUsedCapacity());
     doFindEntriesSinceTest(new StoreFindToken(), Long.MAX_VALUE, Collections.singleton(id), expectedEndToken);
     findEntriesSinceOneByOneTest();
@@ -2788,10 +2875,11 @@ public class IndexTest {
    * @param lastKey the {@link StoreKey} of the last message that will be returned in the query.
    * @return a {@link StoreFindToken} with bytes read set.
    */
-  private StoreFindToken getExpectedJournalEndToken(Offset tokenOffset, StoreKey lastKey) {
+  private StoreFindToken getExpectedJournalEndToken(Offset tokenOffset, StoreKey lastKey) throws StoreException {
+    IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(tokenOffset).getValue();
     StoreFindToken expectedEndToken =
-        new StoreFindToken(tokenOffset, state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(tokenOffset, state.sessionId, state.incarnationId, false, segmentOfToken.getResetKey(),
+            segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     // the last message's size will be the size of the most recent log entry for its key, not necessarily the entry at
     // tokenOffset. This size is used to calculate bytes read. even if it is not strictly the entry at the log offset
     // of the last journal entry processed.
@@ -2837,9 +2925,10 @@ public class IndexTest {
     StoreFindToken startToken =
         new StoreFindToken(firstSegmentEntry.getKey(), secondIndexSegmentStartOffset, state.sessionId,
             state.incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION);
+    IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(secondIndexSegmentStartOffset).getValue();
     StoreFindToken expectedEndToken =
-        new StoreFindToken(lastKey, secondIndexSegmentStartOffset, state.sessionId, state.incarnationId, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(lastKey, secondIndexSegmentStartOffset, state.sessionId, state.incarnationId,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     doFindDeletedEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
 
     // ------------------
@@ -2882,9 +2971,10 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findDeletedEntriesSinceToJournalBasedTest() throws StoreException {
+    IndexSegment segmentOfToken = state.index.getIndexSegments().lastEntry().getValue();
     StoreFindToken absoluteEndToken =
-        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
 
     // ------------------
     // 1. Uninitialized -> Journal
@@ -2947,14 +3037,16 @@ public class IndexTest {
         stoppedAt = indexSegmentStartOffset;
         break;
       }
+      IndexSegment segmentOfToken = state.index.getIndexSegments().get(indexSegmentStartOffset);
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
         boolean isDeleted = indexSegmentEntry.getValue().last().isDelete() &&
             state.getExpectedValue(indexSegmentEntry.getKey(), EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE),
                 null) == null;
         StoreFindToken expectedEndToken =
-            new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId, null, null,
-                UNINITIALIZED_RESET_KEY_VERSION);
+            new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId,
+                segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
+                segmentOfToken.getResetKeyLifeVersion());
         long size = getSizeOfAllValues(indexSegmentEntry.getValue());
         doFindDeletedEntriesSinceTest(startToken, size, isDeleted ? Collections.singleton(id) : Collections.emptySet(),
             expectedEndToken);
@@ -2969,11 +3061,12 @@ public class IndexTest {
       IndexValue value = state.getExpectedValue(id, false);
       boolean isDeleted = value.isDelete()
           && state.getExpectedValue(id, EnumSet.of(PersistentIndex.IndexEntryType.UNDELETE), null) == null;
-      ;
       // size returned is the size of the delete if the key has been deleted.
       long size = value.getSize();
+      IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(startOffset).getValue();
       StoreFindToken expectedEndToken =
-          new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false, null, null, UNINITIALIZED_RESET_KEY_VERSION);
+          new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false, segmentOfToken.getResetKey(),
+              segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
       doFindDeletedEntriesSinceTest(startToken, size, isDeleted ? Collections.singleton(id) : Collections.emptySet(),
           expectedEndToken);
       startToken = expectedEndToken;
@@ -3011,10 +3104,10 @@ public class IndexTest {
       size = CuratedLogIndexState.DELETE_RECORD_SIZE;
     }
     maxSize += size;
-
+    IndexSegment segmentOfToken = state.index.getIndexSegments().get(nextIndexSegmentStartOffset);
     StoreFindToken expectedEndToken =
-        new StoreFindToken(nextIndexSegmentStartOffset, state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
+        new StoreFindToken(nextIndexSegmentStartOffset, state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
     doFindDeletedEntriesSinceTest(startToken, maxSize, expectedKeys, expectedEndToken);
   }
 

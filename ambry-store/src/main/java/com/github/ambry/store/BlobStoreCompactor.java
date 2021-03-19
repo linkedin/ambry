@@ -148,7 +148,7 @@ class BlobStoreCompactor {
    * Initializes the compactor and sets the {@link PersistentIndex} to copy data from.
    * @param srcIndex the {@link PersistentIndex} to copy data from.
    */
-  void initialize(PersistentIndex srcIndex) {
+  void initialize(PersistentIndex srcIndex) throws StoreException {
     this.srcIndex = srcIndex;
     if (compactionLog == null && srcIndex.hardDeleter != null && srcIndex.hardDeleter.isPaused()) {
       logger.debug("Resuming hard delete in {} during compactor initialize because there is no compaction in progress",
@@ -1052,7 +1052,7 @@ class BlobStoreCompactor {
   /**
    * Ends compaction by closing the compaction log if it exists.
    */
-  private void endCompaction() {
+  private void endCompaction() throws StoreException {
     if (compactionLog != null) {
       if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         logger.info("Compaction of {} finished", storeId);
@@ -1153,7 +1153,7 @@ class BlobStoreCompactor {
       List<IndexEntry> allIndexEntries = new ArrayList<>();
       // get all entries. We get one entry per key
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), allIndexEntries,
-          new AtomicLong(0), true);
+          new AtomicLong(0), true, false);
       // save a token for restart (the key gets ignored but is required to be non null for construction)
       StoreFindToken safeToken =
           new StoreFindToken(allIndexEntries.get(0).getKey(), indexSegment.getStartOffset(), sessionId, incarnationId,

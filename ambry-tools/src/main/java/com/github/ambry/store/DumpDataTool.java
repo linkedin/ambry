@@ -226,7 +226,7 @@ public class DumpDataTool {
       RandomAccessFile randomAccessFile = new RandomAccessFile(logFile, "r");
       long logFileSize = randomAccessFile.getChannel().size();
       List<MessageInfo> entries = new ArrayList<>();
-      segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
+      segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), false);
       for (MessageInfo entry : entries) {
         StoreKey key = entry.getStoreKey();
         IndexValue value = segment.find(key).last();
