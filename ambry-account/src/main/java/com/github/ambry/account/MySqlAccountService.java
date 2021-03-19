@@ -15,6 +15,7 @@ package com.github.ambry.account;
 
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
+import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Pair;
@@ -73,8 +74,8 @@ public class MySqlAccountService extends AbstractAccountService {
   private final Set<String> recentNotFoundContainersCache;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
-      MySqlAccountStoreFactory mySqlAccountStoreFactory) throws SQLException, IOException {
-    super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"));
+      MySqlAccountStoreFactory mySqlAccountStoreFactory, Notifier<String> notifier) throws SQLException, IOException {
+    super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"), notifier);
     this.config = config;
     this.mySqlAccountStoreFactory = mySqlAccountStoreFactory;
     try {
@@ -149,6 +150,8 @@ public class MySqlAccountService extends AbstractAccountService {
       logger.info("Background account updater will fetch accounts from mysql db at intervals of {} seconds",
           config.updaterPollingIntervalSeconds);
     }
+
+    maybeSubscribeChangeTopic(false);
   }
 
   /**
@@ -319,6 +322,8 @@ public class MySqlAccountService extends AbstractAccountService {
       logger.error("Failed updating accounts={} in MySql DB", accounts, e);
       handleSQLException(e);
     }
+    // Tell the world
+    publishChangeNotice();
 
     // write added/modified accounts to in-memory cache
     updateAccountsInCache(accounts);
@@ -339,6 +344,7 @@ public class MySqlAccountService extends AbstractAccountService {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
     }
+    maybeUnsubscribeChangeTopic();
     open.set(false);
   }
 
@@ -351,6 +357,38 @@ public class MySqlAccountService extends AbstractAccountService {
 
   ExecutorService getScheduler() {
     return scheduler;
+  }
+
+  @Override
+  protected void publishChangeNotice() {
+    // TODO: can optimize this by sending the account/container payload as the topic message,
+    // so subscribers can update their cache and avoid the database query.
+    super.publishChangeNotice();
+  }
+
+  @Override
+  protected void onAccountChangeMessage(String topic, String message) {
+    if (!open.get()) {
+      // take no action instead of throwing an exception to silence noisy log messages when a message is received while
+      // closing the AccountService.
+      return;
+    }
+    try {
+      switch (message) {
+        case FULL_ACCOUNT_METADATA_CHANGE_MESSAGE:
+          logger.info("Processing message={} for topic={}", message, topic);
+          fetchAndUpdateCache();
+          logger.trace("Completed processing message={} for topic={}", message, topic);
+          break;
+        default:
+          accountServiceMetrics.unrecognizedMessageErrorCount.inc();
+          throw new RuntimeException("Could not understand message=" + message + " for topic=" + topic);
+      }
+    } catch (Exception e) {
+      logger.error("Exception occurred when processing message={} for topic={}.", message, topic, e);
+      accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+      accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+    }
   }
 
   @Override
@@ -383,6 +421,8 @@ public class MySqlAccountService extends AbstractAccountService {
       logger.error("Failed updating containers {} in MySql DB", resolvedContainers, e);
       handleSQLException(e);
     }
+    // Tell the world
+    publishChangeNotice();
 
     // write added/modified containers to in-memory cache
     updateContainersInCache(resolvedContainers);

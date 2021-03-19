@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
+import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
@@ -52,6 +53,7 @@ public class MySqlAccountServiceTest {
   MySqlAccountService mySqlAccountService;
   MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   MySqlAccountStore mockMySqlAccountStore;
+  Notifier<String> mockNotifier = new MockNotifier<>();
   Properties mySqlConfigProps = new Properties();
 
   public MySqlAccountServiceTest() throws Exception {
@@ -68,7 +70,8 @@ public class MySqlAccountServiceTest {
   private MySqlAccountService getAccountService() throws IOException, SQLException {
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     return new MySqlAccountService(accountServiceMetrics,
-        new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mockMySqlAccountStoreFactory);
+        new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mockMySqlAccountStoreFactory,
+        mockNotifier);
   }
 
   /**
@@ -163,8 +166,8 @@ public class MySqlAccountServiceTest {
     verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(argThat(accountsInfo -> {
       AccountUtils.AccountUpdateInfo accountUpdateInfo = accountsInfo.get(0);
       return accountUpdateInfo.getAccount().equals(finalTestAccount0) && !accountUpdateInfo.isAdded()
-          && accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers()
-          .isEmpty() && accountUpdateInfo.getUpdatedContainers().isEmpty();
+          && accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers().isEmpty()
+          && accountUpdateInfo.getUpdatedContainers().isEmpty();
     }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
