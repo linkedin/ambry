@@ -75,6 +75,5 @@ public class MockNotifier<T> implements Notifier<T> {
    */
   void unsubscribeAll() {
     topicToListenersMap.clear();
-    //Optional.ofNullable(topicToListenersMap.get(topic)).ifPresent(Set::clear);
   }
 }
