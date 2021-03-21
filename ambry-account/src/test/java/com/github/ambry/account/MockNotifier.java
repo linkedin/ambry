@@ -18,6 +18,7 @@ import com.github.ambry.commons.TopicListener;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 
@@ -67,5 +68,12 @@ public class MockNotifier<T> implements Notifier<T> {
     if (listeners != null) {
       listeners.remove(listener);
     }
+  }
+
+  /**
+   * Remove all listeners.
+   */
+  void unsubscribeAll() {
+    topicToListenersMap.clear();
   }
 }

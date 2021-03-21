@@ -27,6 +27,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
   public static final String DB_EXECUTE_BATCH_SIZE = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.execute.batch.size";
+  public static final String ZK_CLIENT_CONNECT_STRING_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -106,6 +107,13 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("50")
   public final int dbExecuteBatchSize;
 
+  /**
+   * The ZooKeeper server address for change notifications.  May be null.  If supplied, account service
+   * will subscribe to the change topic.
+   */
+  @Config(ZK_CLIENT_CONNECT_STRING_KEY)
+  public final String zkClientConnectString;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -117,5 +125,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
     dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 50, 1, Integer.MAX_VALUE);
+    zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY, null);
   }
 }

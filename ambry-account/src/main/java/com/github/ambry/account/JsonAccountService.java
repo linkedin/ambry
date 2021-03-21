@@ -67,7 +67,7 @@ final class JsonAccountService extends AbstractAccountService {
    */
   JsonAccountService(Path accountFile, AccountServiceMetrics accountServiceMetrics, ScheduledExecutorService scheduler,
       JsonAccountConfig accountConfig) {
-    super(accountConfig, accountServiceMetrics);
+    super(accountConfig, accountServiceMetrics, null);
 
     this.accountFile = Objects.requireNonNull(accountFile, "helixStore cannot be null");
     this.accountServiceMetrics = Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null");
@@ -113,6 +113,11 @@ final class JsonAccountService extends AbstractAccountService {
     if (!initialized.get()) {
       throw new IllegalStateException("AccountService is closed.");
     }
+  }
+
+  @Override
+  protected void onAccountChangeMessage(String topic, String message) {
+    // We're good.
   }
 
   /**

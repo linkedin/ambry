@@ -15,6 +15,9 @@ package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
+import com.github.ambry.commons.HelixNotifier;
+import com.github.ambry.commons.Notifier;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import org.slf4j.Logger;
@@ -31,6 +34,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
   protected final MySqlAccountServiceConfig accountServiceConfig;
   protected final AccountServiceMetrics accountServiceMetrics;
   protected final MySqlAccountStoreFactory mySqlAccountStoreFactory;
+  protected final Notifier<String> notifier;
 
   /**
    * Constructor.
@@ -41,6 +45,8 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
     this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
     this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
     this.mySqlAccountStoreFactory = new MySqlAccountStoreFactory(verifiableProperties, metricRegistry);
+    this.notifier = accountServiceConfig.zkClientConnectString != null ? new HelixNotifier(
+        accountServiceConfig.zkClientConnectString, new HelixPropertyStoreConfig(verifiableProperties)) : null;
   }
 
   @Override
@@ -49,7 +55,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a MySqlAccountService");
       MySqlAccountService mySqlAccountService =
-          new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStoreFactory);
+          new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStoreFactory, notifier);
       long spentTimeMs = System.currentTimeMillis() - startTimeMs;
       logger.info("MySqlAccountService started, took {} ms", spentTimeMs);
       accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
