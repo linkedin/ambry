@@ -219,7 +219,7 @@ class MockStorageManager extends StorageManager {
       try {
         MessageFormatInputStream stream =
             new UndeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
-                info.getOperationTimeMs(), (short) returnValueOfUndelete);
+                info.getOperationTimeMs(), returnValueOfUndelete);
         // Update info to add stream size;
         info = new MessageInfo(info.getStoreKey(), stream.getSize(), false, false, true, Utils.Infinite_Time, null,
             info.getAccountId(), info.getContainerId(), info.getOperationTimeMs(), returnValueOfUndelete);
@@ -239,7 +239,8 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
-    public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
+    public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname,
+        String remoteReplicaPath) throws StoreException {
       operationReceived = RequestOrResponseType.ReplicaMetadataRequest;
       tokenReceived = token;
       maxTotalSizeOfEntriesReceived = maxTotalSizeOfEntries;
@@ -250,7 +251,7 @@ class MockStorageManager extends StorageManager {
 
     @Override
     public MessageInfo findKey(StoreKey key) throws StoreException {
-      return new MessageInfo(key, 1, Utils.Infinite_Time, (short) 0, (short) 0, (long) 0);
+      return new MessageInfo(key, 1, Utils.Infinite_Time, (short) 0, (short) 0, 0);
     }
 
     @Override

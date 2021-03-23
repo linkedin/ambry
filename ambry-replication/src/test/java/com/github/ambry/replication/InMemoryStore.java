@@ -15,13 +15,13 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.router.AsyncWritableChannel;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
@@ -360,7 +360,8 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries, String hostname, String remoteReplicaPath)
+      throws StoreException {
     // unused function
     MockFindToken mockToken = (MockFindToken) token;
     List<MessageInfo> entriesToReturn = new ArrayList<>();

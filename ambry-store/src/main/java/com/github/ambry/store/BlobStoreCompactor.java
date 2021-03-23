@@ -17,6 +17,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -88,6 +89,7 @@ class BlobStoreCompactor {
   private final IndexSegmentValidEntryFilter validEntryFilter;
   private final AccountService accountService;
   private final Set<Pair<Short, Short>> deprecatedContainers;
+  private final RemoteTokenTracker remoteTokenTracker;
   private final boolean useDirectIO;
   private volatile boolean isActive = false;
   private PersistentIndex srcIndex;
@@ -113,13 +115,14 @@ class BlobStoreCompactor {
    * @param sessionId the sessionID of the store.
    * @param incarnationId the incarnation ID of the store.
    * @param accountService the {@link AccountService} instance to use.
+   * @param remoteTokenTracker the {@link RemoteTokenTracker} that tracks tokens from all peer replicas.
    * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
       StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
-      AccountService accountService) throws IOException, StoreException {
+      AccountService accountService, RemoteTokenTracker remoteTokenTracker) throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -135,6 +138,7 @@ class BlobStoreCompactor {
     this.incarnationId = incarnationId;
     this.useDirectIO = Utils.isLinux() && config.storeCompactionEnableDirectIO;
     this.deprecatedContainers = new HashSet<>();
+    this.remoteTokenTracker = remoteTokenTracker;
     if (config.storeCompactionFilter.equals(IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
       validEntryFilter = new IndexSegmentValidEntryFilterWithoutUndelete();
     } else {
@@ -1134,12 +1138,60 @@ class BlobStoreCompactor {
   /**
    * Check if given delete tombstone is removable. There are two cases where delete tombstone can be safely removed:
    * 1. delete record has finite expiration time and it has expired already;
-   * 2. (TODO) all peer replica tokens have passed the offset that refers to this delete (That is, they have replicated this delete already)
-   * @param deleteIndexValue the {@link IndexValue} associated with delete tombstone
+   * 2. all peer replica tokens have passed position of this delete (That is, they have replicated this delete already)
+   * @param deleteIndexEntry the {@link IndexEntry} associated with delete tombstone
+   * @param currentIndexSegment the {@link IndexSegment} delete tombstone comes from.
    * @return {@code true} if this delete tombstone can be safely removed. {@code false} otherwise.
    */
-  private boolean isDeleteTombstoneRemovable(IndexValue deleteIndexValue) {
-    return srcIndex.isExpired(deleteIndexValue);
+  private boolean isDeleteTombstoneRemovable(IndexEntry deleteIndexEntry, IndexSegment currentIndexSegment)
+      throws StoreException {
+    if (srcIndex.isExpired(deleteIndexEntry.getValue())) {
+      return true;
+    }
+    if (remoteTokenTracker == null) {
+      return false;
+    }
+    for (Map.Entry<String, FindToken> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
+      FindToken token = srcIndex.resetTokenIfRequired((StoreFindToken) entry.getValue());
+      if (!token.equals(entry.getValue())) {
+        // incarnation id has changed or there is unclean shutdown
+        return false;
+      }
+      token = srcIndex.revalidateFindToken(entry.getValue());
+      if (!token.equals(entry.getValue())) {
+        // the log segment (token refers to) has been compacted already
+        return false;
+      }
+      switch (token.getType()) {
+        case Uninitialized:
+          return false;
+        case JournalBased:
+          // if code reaches here, it means the journal-based token is valid (didn't get reset). Since compaction always
+          // performs on segments out of journal, this journal-based token must be past the delete tombstone.
+          break;
+        case IndexBased:
+          // if code reaches here, the index-based token is valid (didn't get reset). We check two following rules:
+          // 1. token's index segment is behind delete tombstone's index segment
+          // 2. if they are in the same segment, compare the store key (sealed index segment is sorted based on key)
+          StoreFindToken indexBasedToken = (StoreFindToken) token;
+          if (indexBasedToken.getOffset().compareTo(currentIndexSegment.getStartOffset()) < 0) {
+            // index-based token is ahead of current index segment (hasn't reached this delete tombstone)
+            return false;
+          }
+          if (indexBasedToken.getOffset().compareTo(currentIndexSegment.getStartOffset()) == 0) {
+            // index-based token refers to current index segment, we need to compare the key
+            if (indexBasedToken.getStoreKey().compareTo(deleteIndexEntry.getKey()) <= 0) {
+              return false;
+            }
+          }
+          // if tokens start offset > current index segment start offset, then token is obviously past tombstone
+          break;
+        default:
+          throw new IllegalArgumentException("Unsupported token type in compaction: " + token.getType());
+      }
+    }
+    srcMetrics.permanentDeleteTombstonePurgeCount.inc();
+    return true;
   }
 
   /**
@@ -1231,7 +1283,8 @@ class BlobStoreCompactor {
           } else {
             // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
             // tombstone is removable.
-            if (config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(value)) {
+            if (config.storeCompactionPurgeDeleteTombstone && isDeleteTombstoneRemovable(indexEntry,
+                indexSegment)) {
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   indexEntry.getKey(), value.getExpiresAtMs());
@@ -1501,7 +1554,7 @@ class BlobStoreCompactor {
           }
           if (currentLatestState.isDelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()) {
             // check if this is a removable delete tombstone.
-            if (config.storeCompactionPurgeExpiredDeleteTombstone && isDeleteTombstoneRemovable(currentValue)
+            if (config.storeCompactionPurgeDeleteTombstone && isDeleteTombstoneRemovable(entry, indexSegment)
                 && getPutValueFromSrc(currentKey, currentValue, indexSegment) == null) {
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",

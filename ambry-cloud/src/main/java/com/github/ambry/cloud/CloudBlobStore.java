@@ -758,7 +758,8 @@ class CloudBlobStore implements Store {
   }
 
   @Override
-  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname,
+      String remoteReplicaPath) throws StoreException {
     try {
       FindResult findResult = requestAgent.doWithRetries(
           () -> cloudDestination.findEntriesSince(partitionId.toPathString(), token, maxTotalSizeOfEntries),
