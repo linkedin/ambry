@@ -176,9 +176,9 @@ class AccountInfoMap {
    */
   boolean hasConflictingAccount(Collection<Account> accountsToSet, boolean ignoreVersion) {
     for (Account account : accountsToSet) {
-      // if the account already exists, check that the snapshot version matches the expected value.
+      // if the account already exists, check that the snapshot version is not lower than the stored value.
       Account accountInMap = getAccountById(account.getId());
-      if (!ignoreVersion && accountInMap != null && account.getSnapshotVersion() != accountInMap.getSnapshotVersion()) {
+      if (!ignoreVersion && accountInMap != null && account.getSnapshotVersion() < accountInMap.getSnapshotVersion()) {
         logger.error(
             "Account to update (accountId={} accountName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
             account.getId(), account.getName(), account.getSnapshotVersion(), accountInMap.getSnapshotVersion());
@@ -212,15 +212,17 @@ class AccountInfoMap {
       return false;
     }
     for (Container container : containersToSet) {
-      // if the container already exists, check that the snapshot version matches the expected value.
+      // if the container already exists, check that the snapshot version is not lower than the stored value.
       Container containerInMap = account.getContainerByName(container.getName());
       if (!ignoreVersion && containerInMap != null
-          && container.getSnapshotVersion() != containerInMap.getSnapshotVersion()) {
-        logger.error(
-            "Container to update in AccountId {} (containerId={} containerName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
-            parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(),
-            containerInMap.getSnapshotVersion());
-        return true;
+          && container.getSnapshotVersion() < containerInMap.getSnapshotVersion()) {
+        // Snapshot version only matters if other container properties are modified
+        if (!container.isSameContainer(containerInMap)) {
+          logger.error(
+              "Container to update in AccountId {} (containerId={} containerName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
+              parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(), containerInMap.getSnapshotVersion());
+          return true;
+        }
       }
 
       // check that there are no other containers that conflict with the name of the container to update

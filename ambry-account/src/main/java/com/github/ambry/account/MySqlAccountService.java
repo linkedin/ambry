@@ -325,8 +325,8 @@ public class MySqlAccountService extends AbstractAccountService {
     // Tell the world
     publishChangeNotice();
 
-    // write added/modified accounts to in-memory cache
-    updateAccountsInCache(accounts);
+    // Note: don't write accounts to in-memory cache since snapshot version will be incorrect.
+    // Cache will be updated on next DB sync.
   }
 
   @Override
@@ -424,8 +424,8 @@ public class MySqlAccountService extends AbstractAccountService {
     // Tell the world
     publishChangeNotice();
 
-    // write added/modified containers to in-memory cache
-    updateContainersInCache(resolvedContainers);
+    // Note: don't write containers to in-memory cache since snapshot version will be incorrect.
+    // Cache will be updated on next DB sync.
   }
 
   /**
