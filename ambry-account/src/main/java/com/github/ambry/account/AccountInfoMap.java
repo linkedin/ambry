@@ -216,11 +216,13 @@ class AccountInfoMap {
       Container containerInMap = account.getContainerByName(container.getName());
       if (!ignoreVersion && containerInMap != null
           && container.getSnapshotVersion() != containerInMap.getSnapshotVersion()) {
-        logger.error(
-            "Container to update in AccountId {} (containerId={} containerName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
-            parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(),
-            containerInMap.getSnapshotVersion());
-        return true;
+        // Snapshot version only matters if other container properties are modified
+        if (!container.isSameContainer(containerInMap)) {
+          logger.error(
+              "Container to update in AccountId {} (containerId={} containerName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
+              parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(), containerInMap.getSnapshotVersion());
+          return true;
+        }
       }
 
       // check that there are no other containers that conflict with the name of the container to update

@@ -88,6 +88,7 @@ abstract class AbstractAccountService implements AccountService {
   protected void maybeSubscribeChangeTopic(boolean reportNull) {
     if (notifier != null) {
       notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
+      logger.info("Subscribed to {} for change notifications.", ACCOUNT_METADATA_CHANGE_TOPIC);
     } else if (reportNull) {
       logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
           + "be in sync with remote account data.");

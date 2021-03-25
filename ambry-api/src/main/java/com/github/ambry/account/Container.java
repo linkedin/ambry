@@ -524,6 +524,7 @@ public class Container {
         && Objects.equals(this.isEncrypted(), containerToCompare.isEncrypted())
         && Objects.equals(this.isMediaScanDisabled(), containerToCompare.isMediaScanDisabled())
         && Objects.equals(this.isTtlRequired(), containerToCompare.isTtlRequired())
+        && Objects.equals(this.getStatus(), containerToCompare.getStatus())
         && Objects.equals(this.getReplicationPolicy(), containerToCompare.getReplicationPolicy())
         && Objects.equals(this.isSecurePathRequired(), containerToCompare.isSecurePathRequired())
         && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled())
@@ -761,6 +762,7 @@ public class Container {
       return false;
     }
     Container container = (Container) o;
+    // Note: do not under any circumstances compare snapshotVersion!
     return id == container.id && encrypted == container.encrypted
         && previouslyEncrypted == container.previouslyEncrypted && cacheable == container.cacheable
         && mediaScanDisabled == container.mediaScanDisabled && parentAccountId == container.parentAccountId
