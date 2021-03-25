@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.RequestCostPolicy;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -26,7 +27,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.rest.RestUtils.SubResource;
+import static com.github.ambry.frontend.Operations.*;
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -114,11 +116,11 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
         double cost = Math.ceil(contentSize / CU_COST_UNIT);
         return (cost > 0) ? cost : 1;
       case GET:
-        String uri = restRequest.getUri();
-        if (uri.contains(Operations.GET_SIGNED_URL)) {
+        RequestPath requestPath = getRequestPath(restRequest);
+        SubResource subResource = requestPath.getSubResource();
+        if (requestPath.matchesOperation(GET_SIGNED_URL)) {
           return INDEX_ONLY_COST;
-        } else if (uri.contains(SubResource.BlobInfo.name()) || uri.contains(SubResource.UserMetadata.name())) {
-          // metadata request
+        } else if (subResource == SubResource.BlobInfo || subResource == SubResource.UserMetadata) {
           return INDEX_ONLY_COST;
         } else {
           long size = 0;

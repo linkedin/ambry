@@ -16,11 +16,13 @@ package com.github.ambry.frontend;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import java.io.UnsupportedEncodingException;
-import java.net.URISyntaxException;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
+import java.util.Collections;
 import java.util.Map;
 import org.junit.Test;
 
@@ -41,14 +43,15 @@ public class UserQuotaRequestCostPolicyTest {
   private final static long GB = MB * 1024L;
 
   @Test
-  public void testCalculateRequestCost() throws UnsupportedEncodingException, URISyntaxException {
+  public void testCalculateRequestCost() throws Exception {
     UserQuotaRequestCostPolicy quotaRequestCostPolicy = new UserQuotaRequestCostPolicy();
 
     RestResponseChannel restResponseChannel = mock(RestResponseChannel.class);
     when(restResponseChannel.getHeader(anyString())).thenReturn(0);
+    String blobUri = "/AAYIAQSSAAgAAQAAAAAAABpFymbGwe7sRBWYa5OPlkcNHQ.bin";
     // test for a 4 MB GET request.
     BlobInfo blobInfo = getBlobInfo(4 * MB);
-    RestRequest restRequest = createMockRequestWithMethod(RestMethod.GET, -1);
+    RestRequest restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
     Map<String, Double> costMap =
         quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
@@ -60,40 +63,40 @@ public class UserQuotaRequestCostPolicyTest {
 
     // test for a GET request of blob of size 0.
     blobInfo = getBlobInfo(0);
-    restRequest = createMockRequestWithMethod(RestMethod.GET, -1);
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
 
     // test for a small POST request (fractional storage cost).
     blobInfo = getBlobInfo(8 * MB);
-    restRequest = createMockRequestWithMethod(RestMethod.POST, 8 * MB);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 8 * MB);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 2, .0078125);
 
     // test for a large POST request.
     blobInfo = getBlobInfo(4 * GB);
-    restRequest = createMockRequestWithMethod(RestMethod.POST, 4 * GB);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 4 * GB);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1024, 4);
 
     // test for a POST request of blob of size 0.
     blobInfo = getBlobInfo(0);
-    restRequest = createMockRequestWithMethod(RestMethod.POST, 0);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 0);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0);
 
     // test for a HEAD request.
-    restRequest = createMockRequestWithMethod(RestMethod.HEAD, -1);
+    restRequest = createMockRequestWithMethod(RestMethod.HEAD, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
 
     // test for a DELETE request.
-    restRequest = createMockRequestWithMethod(RestMethod.DELETE, -1);
+    restRequest = createMockRequestWithMethod(RestMethod.DELETE, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0.00390625);
 
     // test for a PUT request.
-    restRequest = createMockRequestWithMethod(RestMethod.PUT, -1);
+    restRequest = createMockRequestWithMethod(RestMethod.PUT, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0.00390625);
 
@@ -102,17 +105,15 @@ public class UserQuotaRequestCostPolicyTest {
     verifyWriteCost(costMap, 1, 0.00390625);
 
     // test BlobInfo and UserMetadata GET requests
-    String blobId = "/AAYIAQSSAAgAAQAAAAAAABpFymbGwe7sRBWYa5OPlkcNHQ.bin";
     blobInfo = getBlobInfo(40 * GB);
-    restRequest = createMockRequestWithMethod(RestMethod.GET, -1);
-    when(restRequest.getUri()).thenReturn(blobId + "/BlobInfo");
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri + "/BlobInfo", -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
-    when(restRequest.getUri()).thenReturn(blobId + "/UserMetadata");
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri + "/UserMetadata", -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
     // Plain GET should use blob size
-    when(restRequest.getUri()).thenReturn(blobId);
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 10240, 0);
 
@@ -167,11 +168,15 @@ public class UserQuotaRequestCostPolicyTest {
    * @param bytesReceived number of bytes received in the request.
    * @return RestRequest object.
    */
-  private RestRequest createMockRequestWithMethod(RestMethod restMethod, long bytesReceived) {
+  private RestRequest createMockRequestWithMethod(RestMethod restMethod, String uri, long bytesReceived)
+      throws RestServiceException {
     RestRequest restRequest = mock(RestRequest.class);
     when(restRequest.getRestMethod()).thenReturn(restMethod);
     when(restRequest.getBytesReceived()).thenReturn(bytesReceived);
-    when(restRequest.getUri()).thenReturn("/");
+    when(restRequest.getUri()).thenReturn(uri);
+    when(restRequest.getPath()).thenReturn(uri);
+    RequestPath requestPath = RequestPath.parse(restRequest, null, "ambry-test");
+    when(restRequest.getArgs()).thenReturn(Collections.singletonMap(RestUtils.InternalKeys.REQUEST_PATH, requestPath));
     return restRequest;
   }
 }
