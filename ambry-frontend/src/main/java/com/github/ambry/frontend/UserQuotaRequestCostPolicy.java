@@ -27,7 +27,6 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 
 
@@ -105,10 +104,11 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
    */
   private double calculateCapacityUnitCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo) {
+    RequestPath requestPath = getRequestPath(restRequest);
     switch (restRequest.getRestMethod()) {
       case POST:
         long contentSize = 0;
-        if (restRequest.getUri().contains(Operations.STITCH)) {
+        if (requestPath.matchesOperation(Operations.STITCH)) {
           contentSize = Long.parseLong((String) restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
         } else {
           contentSize = restRequest.getBytesReceived();
@@ -116,9 +116,8 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
         double cost = Math.ceil(contentSize / CU_COST_UNIT);
         return (cost > 0) ? cost : 1;
       case GET:
-        RequestPath requestPath = getRequestPath(restRequest);
         SubResource subResource = requestPath.getSubResource();
-        if (requestPath.matchesOperation(GET_SIGNED_URL)) {
+        if (requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
           return INDEX_ONLY_COST;
         } else if (subResource == SubResource.BlobInfo || subResource == SubResource.UserMetadata) {
           return INDEX_ONLY_COST;
