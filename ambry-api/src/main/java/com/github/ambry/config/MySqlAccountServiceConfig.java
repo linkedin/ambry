@@ -28,6 +28,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
   public static final String DB_EXECUTE_BATCH_SIZE = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.execute.batch.size";
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
+  public static final String WRITE_CACHE_AFTER_UPDATE = MYSQL_ACCOUNT_SERVICE_PREFIX + "write.cache.after.update";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -108,6 +109,14 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public final int dbExecuteBatchSize;
 
   /**
+   * If true, account service will write changes to the cache immediately after updating the persistent store.
+   * If false, the cache will be updated on the subsequent sync call.
+   * If written immediately, updated accounts and containers will have out of date snapshot version.
+   */
+  @Config(WRITE_CACHE_AFTER_UPDATE)
+  @Default("true")
+  public final boolean writeCacheAfterUpdate;
+  /**
    * The ZooKeeper server address for change notifications.  May be null.  If supplied, account service
    * will subscribe to the change topic.
    */
@@ -126,5 +135,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
     dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 50, 1, Integer.MAX_VALUE);
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY, null);
+    writeCacheAfterUpdate = verifiableProperties.getBoolean(WRITE_CACHE_AFTER_UPDATE, true);
   }
 }

@@ -72,6 +72,7 @@ public class MySqlAccountService extends AbstractAccountService {
   private boolean needRefresh = false;
   private long lastSyncTime = -1;
   private final Set<String> recentNotFoundContainersCache;
+  private final boolean writeCacheAfterUpdate;
 
   public MySqlAccountService(AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config,
       MySqlAccountStoreFactory mySqlAccountStoreFactory, Notifier<String> notifier) throws SQLException, IOException {
@@ -104,6 +105,7 @@ public class MySqlAccountService extends AbstractAccountService {
             return size() > cacheMaxLimit;
           }
         }));
+    this.writeCacheAfterUpdate = config.writeCacheAfterUpdate;
     // Initialize cache from backup file on disk
     initCacheFromBackupFile();
     // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
@@ -325,8 +327,10 @@ public class MySqlAccountService extends AbstractAccountService {
     // Tell the world
     publishChangeNotice();
 
-    // Note: don't write accounts to in-memory cache since snapshot version will be incorrect.
-    // Cache will be updated on next DB sync.
+    if (writeCacheAfterUpdate) {
+      // Write accounts to in-memory cache. Snapshot version will be out of date until the next DB refresh.
+      updateAccountsInCache(accounts);
+    }
   }
 
   @Override
@@ -424,8 +428,10 @@ public class MySqlAccountService extends AbstractAccountService {
     // Tell the world
     publishChangeNotice();
 
-    // Note: don't write containers to in-memory cache since snapshot version will be incorrect.
-    // Cache will be updated on next DB sync.
+    if (writeCacheAfterUpdate) {
+      // Write containers to in-memory cache. Snapshot version will be out of date until the next DB refresh.
+      updateContainersInCache(resolvedContainers);
+    }
   }
 
   /**
