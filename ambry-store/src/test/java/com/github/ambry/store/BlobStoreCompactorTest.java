@@ -297,18 +297,14 @@ public class BlobStoreCompactorTest {
     IndexSegment indexSegment1 = state.index.getIndexSegments().floorEntry(deleteIndexValue1.getOffset()).getValue();
     IndexSegment indexSegment2 = state.index.getIndexSegments().floorEntry(deleteIndexValue2.getOffset()).getValue();
     // find a key that is behind tombstone1 and the other key that falls between tombstone1 and tombstone2
-    Iterator<IndexEntry> iterator = indexSegment1.iterator();
-    while(iterator.hasNext()){
-      MockId key = (MockId) iterator.next().getKey();
-      if(key.compareTo(tombstone1) == 0){
-        break;
-      }
-    }
-    MockId keyInToken1 = (MockId) iterator.next().getKey();
+    IndexSegment segmentBehindSegment1 =
+        state.index.getIndexSegments().higherEntry(indexSegment1.getStartOffset()).getValue();
+    MockId keyInToken1 = (MockId) segmentBehindSegment1.iterator().next().getKey();
     MockId keyInToken2 = (MockId) indexSegment2.iterator().next().getKey();
     StoreFindToken peerToken1 =
-        new StoreFindToken(keyInToken1, indexSegment1.getStartOffset(), state.sessionId, state.incarnationId,
-            indexSegment1.getResetKey(), indexSegment1.getResetKeyType(), indexSegment1.getResetKeyLifeVersion());
+        new StoreFindToken(keyInToken1, segmentBehindSegment1.getStartOffset(), state.sessionId, state.incarnationId,
+            segmentBehindSegment1.getResetKey(), segmentBehindSegment1.getResetKeyType(),
+            segmentBehindSegment1.getResetKeyLifeVersion());
     StoreFindToken peerToken2 =
         new StoreFindToken(keyInToken2, indexSegment2.getStartOffset(), state.sessionId, state.incarnationId,
             indexSegment2.getResetKey(), indexSegment2.getResetKeyType(), indexSegment2.getResetKeyLifeVersion());
