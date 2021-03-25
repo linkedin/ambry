@@ -280,7 +280,6 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   @Test
-  @Ignore // TODO: need to fix https://github.com/linkedin/ambry/issues/1811
   public void deleteTombstoneCleanupTest() throws Exception {
     assumeTrue(purgeDeleteTombstone);
     refreshState(false, true);
