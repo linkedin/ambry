@@ -991,7 +991,7 @@ public class HelixBootstrapUpgradeUtil {
         } else {
           if (!dryRun) {
             info("[{}] Instance {} already present in Helix {}, with same Data, skipping. Remaining instances: {}",
-                dcName.toUpperCase(), instanceName, --totalInstances);
+                dcName.toUpperCase(), instanceName, dataNodeConfigSourceType.name(), --totalInstances);
           }
         }
       }
