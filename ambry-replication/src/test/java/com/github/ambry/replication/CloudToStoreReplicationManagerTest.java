@@ -55,9 +55,9 @@ import org.json.JSONObject;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.FieldSetter;
 
-import static com.github.ambry.clustermap.CloudReplica.*;
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 

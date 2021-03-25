@@ -20,6 +20,7 @@ import java.io.File;
 import java.util.Properties;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
 import static org.junit.Assert.*;
 
 
@@ -55,7 +56,7 @@ public class CloudReplicaTest {
     CloudReplica cloudReplica = new CloudReplica(new MockPartitionId(), cloudDataNode);
     assertEquals("Wrong mount path", mockPartitionId.toPathString(), cloudReplica.getMountPath());
     assertEquals("Wrong replica path",
-        CloudReplica.Cloud_Replica_Keyword + File.separator + mockPartitionId.toPathString() + File.separator
+        Cloud_Replica_Keyword + File.separator + mockPartitionId.toPathString() + File.separator
             + mockPartitionId.toPathString(), cloudReplica.getReplicaPath());
     assertEquals("Wrong dataNodeId", cloudDataNode, cloudReplica.getDataNodeId());
     assertEquals("Wrong partitionId", mockPartitionId, cloudReplica.getPartitionId());

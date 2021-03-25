@@ -22,6 +22,7 @@ import java.util.List;
  * In Virtual Replicator Cluster, {@link PartitionId}s are resources and they are assigned to participant node.
  */
 public interface VirtualReplicatorCluster extends AutoCloseable {
+  String Cloud_Replica_Keyword = "vcr";
 
   /**
    * Gets all nodes in the cluster.

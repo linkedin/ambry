@@ -536,7 +536,8 @@ public class CloudBlobStoreTest {
     when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong())).thenReturn(
         new FindResult(Collections.emptyList(), cosmosChangeFeedFindToken));
     CosmosChangeFeedFindToken startToken = new CosmosChangeFeedFindToken();
-    FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize);
+    // remote node host name and replica path are not really used by cloud store, it's fine to keep them null
+    FindInfo findInfo = store.findEntriesSince(startToken, maxTotalSize, null, null);
     CosmosChangeFeedFindToken outputToken = (CosmosChangeFeedFindToken) findInfo.getFindToken();
     assertEquals(blobSize * numBlobsFound, outputToken.getBytesRead());
     assertEquals(numBlobsFound, outputToken.getTotalItems());
@@ -548,7 +549,7 @@ public class CloudBlobStoreTest {
             UUID.randomUUID().toString());
     when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong())).thenReturn(
         new FindResult(Collections.emptyList(), cosmosChangeFeedFindToken));
-    findInfo = store.findEntriesSince(outputToken, maxTotalSize);
+    findInfo = store.findEntriesSince(outputToken, maxTotalSize, null, null);
     outputToken = (CosmosChangeFeedFindToken) findInfo.getFindToken();
     assertEquals(blobSize * 2 * numBlobsFound, outputToken.getBytesRead());
     assertEquals(numBlobsFound, outputToken.getTotalItems());
@@ -557,7 +558,7 @@ public class CloudBlobStoreTest {
     // 3) call find with new token, no more data, verify token unchanged
     when(dest.findEntriesSince(anyString(), any(CosmosChangeFeedFindToken.class), anyLong())).thenReturn(
         new FindResult(Collections.emptyList(), outputToken));
-    findInfo = store.findEntriesSince(outputToken, maxTotalSize);
+    findInfo = store.findEntriesSince(outputToken, maxTotalSize, null, null);
     assertTrue(findInfo.getMessageEntries().isEmpty());
     FindToken finalToken = findInfo.getFindToken();
     assertEquals(outputToken, finalToken);

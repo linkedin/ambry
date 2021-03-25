@@ -81,10 +81,13 @@ public interface Store {
    * @param token The token that acts as a bookmark to make subsequent searches
    * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to
    *                              return a list of entries whose total size is close to this value.
+   * @param hostname HostName of the datanode where the token belongs to.
+   * @param remoteReplicaPath The path of remote replica.
    * @return The FindInfo instance that contains the entries found and the new token for future searches
    * @throws StoreException
    */
-  FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException;
+  FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname, String remoteReplicaPath)
+      throws StoreException;
 
   /**
    * Finds all the keys that are not present in the store from the input keys

@@ -576,7 +576,8 @@ public class AmbryRequests implements RequestAPI {
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             FindInfo findInfo =
-                store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes());
+                store.findEntriesSince(findToken, replicaMetadataRequest.getMaxTotalSizeOfEntriesInBytes(), hostName,
+                    replicaPath);
             logger.trace("{} Time used to find entry since: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 

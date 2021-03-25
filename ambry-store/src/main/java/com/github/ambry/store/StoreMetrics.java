@@ -89,6 +89,7 @@ public class StoreMetrics {
   public final Counter compactionBundleReadBufferUsed;
   public final Counter compactionBundleReadBufferIoCount;
   public final Counter compactionTargetIndexDuplicateOnNonRecoveryCount;
+  public final Counter permanentDeleteTombstonePurgeCount;
   public final Timer compactionCopyRecordTimeInMs;
   public final Timer compactionCopyDataByIndexSegmentTimeInMs;
   public final Timer compactionCopyDataByLogSegmentTimeInMs;
@@ -197,6 +198,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferIoCount"));
     compactionTargetIndexDuplicateOnNonRecoveryCount = registry.counter(
         MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionTargetIndexDuplicateOnNonRecoveryCount"));
+    permanentDeleteTombstonePurgeCount = registry.counter(
+        MetricRegistry.name(BlobStoreCompactor.class, name + "PermanentDeleteTombstonePurgeCount"));
     compactionCopyRecordTimeInMs =
         registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyRecordTimeInMs"));
     compactionCopyDataByIndexSegmentTimeInMs = registry.timer(

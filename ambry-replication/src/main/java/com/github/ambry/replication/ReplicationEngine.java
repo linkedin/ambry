@@ -56,6 +56,8 @@ import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
+
 
 /**
  * Abstract class to handle replication for given partitions. Responsible for the following
@@ -231,7 +233,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         break;
       }
     }
-    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(CloudReplica.Cloud_Replica_Keyword)) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
