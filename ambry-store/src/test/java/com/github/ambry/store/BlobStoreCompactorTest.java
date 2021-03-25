@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -279,6 +280,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   @Test
+  @Ignore // TODO: need to fix https://github.com/linkedin/ambry/issues/1811
   public void deleteTombstoneCleanupTest() throws Exception {
     assumeTrue(purgeDeleteTombstone);
     refreshState(false, true);

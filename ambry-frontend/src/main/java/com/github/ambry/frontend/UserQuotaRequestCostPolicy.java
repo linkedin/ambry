@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.RequestCostPolicy;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -25,6 +26,8 @@ import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -36,7 +39,7 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
   final static double BYTES_IN_GB = 1024 * 1024 * 1024;
   final static double INDEX_ONLY_COST = 1;
   final static double MIN_CU_COST = INDEX_ONLY_COST;
-  private static final Logger LOGGER = LoggerFactory.getLogger(UserQuotaRequestCostPolicy.class);
+  private static final Logger logger = LoggerFactory.getLogger(UserQuotaRequestCostPolicy.class);
 
   @Override
   public Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
@@ -101,10 +104,11 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
    */
   private double calculateCapacityUnitCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo) {
+    RequestPath requestPath = getRequestPath(restRequest);
     switch (restRequest.getRestMethod()) {
       case POST:
         long contentSize = 0;
-        if (restRequest.getUri().contains(Operations.STITCH)) {
+        if (requestPath.matchesOperation(Operations.STITCH)) {
           contentSize = Long.parseLong((String) restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
         } else {
           contentSize = restRequest.getBytesReceived();
@@ -112,7 +116,10 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
         double cost = Math.ceil(contentSize / CU_COST_UNIT);
         return (cost > 0) ? cost : 1;
       case GET:
-        if (restRequest.getUri().contains(Operations.GET_SIGNED_URL)) {
+        SubResource subResource = requestPath.getSubResource();
+        if (requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
+          return INDEX_ONLY_COST;
+        } else if (subResource == SubResource.BlobInfo || subResource == SubResource.UserMetadata) {
           return INDEX_ONLY_COST;
         } else {
           long size = 0;
@@ -126,14 +133,14 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
                   .getRangeSize();
             } catch (RestServiceException rsEx) {
               // this should never happen.
-              LOGGER.error("Exception {} while calculation CU cost for range request", rsEx);
+              logger.error("Exception while calculation CU cost for range request", rsEx);
               size = 0; // this will default to one chunk
             }
           } else { // regular GET blob
             size = blobInfo.getBlobProperties().getBlobSize();
           }
           cost = Math.ceil(size / CU_COST_UNIT);
-          return (cost > MIN_CU_COST) ? cost : MIN_CU_COST;
+          return Math.max(cost, MIN_CU_COST);
         }
       default:
         return INDEX_ONLY_COST; // Assuming 1 unit of capacity unit cost for all requests that don't fetch or store a blob's data.
