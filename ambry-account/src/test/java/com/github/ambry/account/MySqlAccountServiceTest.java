@@ -55,6 +55,7 @@ public class MySqlAccountServiceTest {
   MySqlAccountStore mockMySqlAccountStore;
   Notifier<String> mockNotifier = new MockNotifier<>();
   Properties mySqlConfigProps = new Properties();
+  MockContainerQuotaUpdateConsumer mockContainerQuotaUpdateConsumer = new MockContainerQuotaUpdateConsumer();
 
   public MySqlAccountServiceTest() throws Exception {
     mySqlConfigProps.setProperty(DB_INFO, "");
@@ -64,6 +65,7 @@ public class MySqlAccountServiceTest {
     mockMySqlAccountStore = mock(MySqlAccountStore.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mockMySqlAccountStore);
     mySqlAccountService = getAccountService();
+    mySqlAccountService.addContainerUpdateConsumer(mockContainerQuotaUpdateConsumer);
   }
 
   // TODO: parametrize to use mock or real store (maybe blank url = test)
@@ -139,6 +141,7 @@ public class MySqlAccountServiceTest {
 
     when(mockMySqlAccountStore.getNewAccounts(0)).thenReturn(new ArrayList<>());
     mySqlAccountService = getAccountService();
+    mySqlAccountService.addContainerUpdateConsumer(mockContainerQuotaUpdateConsumer);
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
             (short) 1).build();
@@ -158,6 +161,8 @@ public class MySqlAccountServiceTest {
         mySqlAccountService.getAccountById(testAccount.getId()));
     assertEquals("Mismatch in account retrieved by name", testAccount,
         mySqlAccountService.getAccountByName(testAccount.getName()));
+    assertEquals("Mismatch in number of containers for which container update notification was sent", 1,
+        mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
 
     // 2. Update existing account by changing aclInheritedByContainer to true. Verify account is updated in cache and written to mysql store.
     testAccount = new AccountBuilder(testAccount).aclInheritedByContainer(true).build();
@@ -171,6 +176,8 @@ public class MySqlAccountServiceTest {
     }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
+    assertEquals("Mismatch in number of containers for which container update notification was sent", 2,
+        mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
 
     // 3. Update existing account by adding new container. Verify account is updated in cache and written to mysql store.
     Container testContainer2 =
@@ -187,6 +194,8 @@ public class MySqlAccountServiceTest {
     }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
+    assertEquals("Mismatch in number of containers for which container update notification was sent", 4,
+        mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
 
     // 4. Update existing container. Verify container is updated in cache and written to mysql store.
     testContainer = new ContainerBuilder(testContainer).setMediaScanDisabled(true).setCacheable(true).build();
@@ -207,6 +216,8 @@ public class MySqlAccountServiceTest {
         mySqlAccountService.accountServiceMetrics.timeInSecondsSinceLastSyncGauge.getValue() < 10);
     assertEquals("Unexpected container count", 2,
         mySqlAccountService.accountServiceMetrics.containerCountGauge.getValue().intValue());
+    assertEquals("Mismatch in number of containers for which container update notification was sent", 6,
+        mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
   }
 
   /**
@@ -535,6 +546,7 @@ public class MySqlAccountServiceTest {
   @Test
   public void testCreateExistingContainerInDifferentStates() throws Exception {
     AccountService mySqlAccountService = getAccountService();
+    mySqlAccountService.addContainerUpdateConsumer(mockContainerQuotaUpdateConsumer);
     String accountName = "test-account";
     String inactiveContainer = "inactive-container";
     String deleteInProgressContainer1 = "delete-in-progress-container1";
@@ -552,6 +564,9 @@ public class MySqlAccountServiceTest {
                 System.currentTimeMillis() - TimeUnit.DAYS.toMillis(15)).build())
             .build();
     mySqlAccountService.updateAccounts(Collections.singletonList(accountToUpdate));
+    assertEquals(
+        "Mismatch in the number of containers updated vs number of container for which update notification was received.",
+        3, mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
 
     // Attempting to create an existing container with INACTIVE state should fail
     Container containerToCreate =
@@ -563,6 +578,9 @@ public class MySqlAccountServiceTest {
     } catch (AccountServiceException ase) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
     }
+    assertEquals(
+        "Mismatch in the number of containers updated vs number of container for which update notification was received.",
+        3, mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
 
     // Attempting to create an existing container with DELETE_IN_PROGRESS state (within retention time) should fail
     containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer1,
@@ -573,6 +591,9 @@ public class MySqlAccountServiceTest {
     } catch (AccountServiceException ase) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.MethodNotAllowed, ase.getErrorCode());
     }
+    assertEquals(
+        "Mismatch in the number of containers updated vs number of container for which update notification was received.",
+        3, mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
 
     // Attempting to create an existing container with DELETE_IN_PROGRESS state (past retention time) should fail
     containerToCreate = new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, deleteInProgressContainer2,
@@ -582,6 +603,9 @@ public class MySqlAccountServiceTest {
       fail("should fail because container to create is in DELETE_IN_PROGRESS state and past retention time");
     } catch (AccountServiceException ase) {
       assertEquals("Mismatch in error code", AccountServiceErrorCode.ResourceHasGone, ase.getErrorCode());
+      assertEquals(
+          "Mismatch in the number of containers updated vs number of container for which update notification was received.",
+          3, mockContainerQuotaUpdateConsumer.getUpdatedContainers().size());
     }
   }
 
@@ -594,5 +618,29 @@ public class MySqlAccountServiceTest {
     assertTrue("Sync time not updated", accountServiceMetrics.timeInSecondsSinceLastSyncGauge.getValue() < 10);
     assertEquals("Unexpected container count", expectedContainerCount,
         accountServiceMetrics.containerCountGauge.getValue().intValue());
+  }
+
+  /**
+   * Mock implementation of {@link Consumer} to get notified on container updates.
+   */
+  class MockContainerQuotaUpdateConsumer implements Consumer<Collection<Container>> {
+    private final Collection<Container> updatedContainers = new ArrayList<>();
+
+    @Override
+    public void accept(Collection<Container> containers) {
+      updatedContainers.addAll(containers);
+    }
+
+    @Override
+    public Consumer<Collection<Container>> andThen(Consumer<? super Collection<Container>> after) {
+      return null;
+    }
+
+    /**
+     * @return Collection of updated {@link Container}s for which update notifications have been received.
+     */
+    public Collection<Container> getUpdatedContainers() {
+      return updatedContainers;
+    }
   }
 }
