@@ -17,6 +17,7 @@ import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
+import java.util.List;
 
 
 /**
@@ -28,4 +29,7 @@ public class UnlimitedQuotaSource implements QuotaSource {
   public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) {
     return new Quota<>(quotaName, Long.MAX_VALUE, quotaResource);
   }
+
+  @Override
+  public void updateQuota(List<Quota> updatedQuotaList) {}
 }
