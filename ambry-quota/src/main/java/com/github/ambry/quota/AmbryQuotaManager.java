@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -54,6 +56,11 @@ public class AmbryQuotaManager implements QuotaManager {
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)))).getRequestQuotaEnforcer());
+    }
+    if (!Utils.isNullOrEmpty(quotaConfig.containerUpdateConsumer)) {
+      Consumer<Collection<Container>> containerUpdateConsumer =
+          Utils.getObj(quotaConfig.containerUpdateConsumer, quotaSourceObjectMap.values());
+      accountService.addContainerUpdateConsumer(containerUpdateConsumer);
     }
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;

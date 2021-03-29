@@ -107,6 +107,21 @@ public interface AccountService extends Closeable {
   boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
+   * Adds a {@link Consumer} for newly created or updated {@link Container}s.
+   * @param containerUpdateConsumer The {@link Consumer} to add. Cannot be {@code null}.
+   * @return {@code true} if the specified {@link Consumer} was not previously added, {@code false} otherwise.
+   */
+  boolean addContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer);
+
+  /**
+   * Removes a {@link Consumer} for newly created or updated {@link Container}s.
+   * @param containerUpdateConsumer The {@link Consumer} to remove. Cannot be {@code null}.
+   * @return {@code true} if the {@link Consumer} exists and removed, {@code false} if the {@link Consumer} does not
+   *          exist.
+   */
+  boolean removeContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer);
+
+  /**
    * Add or update a collection of containers in an existing account.
    * @param accountName the name of account which container belongs to.
    * @param containers a collection of new or modified {@link Container}s.

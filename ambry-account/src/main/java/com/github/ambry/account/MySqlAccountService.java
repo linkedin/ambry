@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,6 +224,7 @@ public class MySqlAccountService extends AbstractAccountService {
             account -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(account.getId())));
         updatedContainersInDB.forEach(
             container -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(container.getParentAccountId())));
+        // todo ANKUR why is this called only from fetchAndUpdateCache?
         notifyAccountUpdateConsumers(updatedAccounts, false);
 
         // Persist all account metadata to back up file on disk.
@@ -326,6 +328,8 @@ public class MySqlAccountService extends AbstractAccountService {
     }
     // Tell the world
     publishChangeNotice();
+    containerUpdateConsumers.forEach(containerUpdateConsumer -> containerUpdateConsumer.accept(
+        accounts.stream().flatMap(account -> account.getAllContainers().stream()).collect(Collectors.toList())));
 
     if (writeCacheAfterUpdate) {
       // Write accounts to in-memory cache. Snapshot version will be out of date until the next DB refresh.
@@ -399,7 +403,9 @@ public class MySqlAccountService extends AbstractAccountService {
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
     try {
-      return super.updateContainers(accountName, containers);
+      Collection<Container> updatedContainers = super.updateContainers(accountName, containers);
+      containerUpdateConsumers.forEach(containerUpdateConsumer -> containerUpdateConsumer.accept(updatedContainers));
+      return updatedContainers;
     } catch (AccountServiceException ase) {
       if (needRefresh) {
         // refresh and retry (with regenerated containerIds)

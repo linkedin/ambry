@@ -106,6 +106,16 @@ public class CompositeAccountService implements AccountService {
   }
 
   @Override
+  public boolean addContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    return primaryAccountService.addContainerUpdateConsumer(containerUpdateConsumer);
+  }
+
+  @Override
+  public boolean removeContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    return primaryAccountService.removeContainerUpdateConsumer(containerUpdateConsumer);
+  }
+
+  @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
     Collection<Container> primaryResult = primaryAccountService.updateContainers(accountName, containers);

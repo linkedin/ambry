@@ -49,6 +49,8 @@ abstract class AbstractAccountService implements AccountService {
   protected final ReentrantLock lock = new ReentrantLock();
   protected final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers =
       new CopyOnWriteArraySet<>();
+  protected final CopyOnWriteArraySet<Consumer<Collection<Container>>> containerUpdateConsumers =
+      new CopyOnWriteArraySet<>();
   protected final AccountServiceMetrics accountServiceMetrics;
   protected final Notifier<String> notifier;
   protected final TopicListener<String> changeTopicListener;
@@ -259,6 +261,20 @@ abstract class AbstractAccountService implements AccountService {
     checkOpen();
     Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
     return accountUpdateConsumers.remove(accountUpdateConsumer);
+  }
+
+  @Override
+  public boolean addContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(containerUpdateConsumer, "containerUpdateConsumer to subscribe cannot be null");
+    return containerUpdateConsumers.add(containerUpdateConsumer);
+  }
+
+  @Override
+  public boolean removeContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(containerUpdateConsumer, "containerUpdateConsumer to unsubscribe cannot be null");
+    return containerUpdateConsumers.remove(containerUpdateConsumer);
   }
 
   /**

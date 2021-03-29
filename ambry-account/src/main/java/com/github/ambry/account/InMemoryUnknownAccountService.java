@@ -56,6 +56,20 @@ class InMemoryUnknownAccountService implements AccountService {
   }
 
   @Override
+  public boolean addContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(containerUpdateConsumer, "containerUpdateConsumer to subscribe cannot be null");
+    return true;
+  }
+
+  @Override
+  public boolean removeContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(containerUpdateConsumer, "containerUpdateConsumer to unsubscribe cannot be null");
+    return true;
+  }
+
+  @Override
   public Account getAccountByName(String accountName) {
     checkOpen();
     Objects.requireNonNull(accountName, "accountName cannot be null.");

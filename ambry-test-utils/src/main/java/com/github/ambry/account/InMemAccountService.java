@@ -49,6 +49,7 @@ public class InMemAccountService implements AccountService {
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
   private final Map<String, Account> nameToAccountMap = new HashMap<>();
   private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
+  private final Set<Consumer<Collection<Container>>> containerUpdateConsumers = new HashSet<>();
   private boolean shouldUpdateSucceed = true;
 
   /**
@@ -128,6 +129,18 @@ public class InMemAccountService implements AccountService {
   public synchronized boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
     return accountUpdateConsumers.remove(accountUpdateConsumer);
+  }
+
+  @Override
+  public boolean addContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    Objects.requireNonNull(containerUpdateConsumer, "containerUpdateConsumer to subscribe cannot be null");
+    return containerUpdateConsumers.add(containerUpdateConsumer);
+  }
+
+  @Override
+  public boolean removeContainerUpdateConsumer(Consumer<Collection<Container>> containerUpdateConsumer) {
+    Objects.requireNonNull(containerUpdateConsumer, "containerUpdateConsumer to unsubscribe cannot be null");
+    return containerUpdateConsumers.remove(containerUpdateConsumer);
   }
 
   @Override

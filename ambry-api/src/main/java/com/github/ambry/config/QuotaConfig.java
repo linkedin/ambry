@@ -31,6 +31,7 @@ public class QuotaConfig {
   public static final String REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON =
       QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
   public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manager.factory";
+  public static final String CONTAINER_UPDATE_CONSUMER = QUOTA_CONFIG_PREFIX + "container.update.consumer";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public StorageQuotaConfig storageQuotaConfig;
@@ -77,6 +78,12 @@ public class QuotaConfig {
   public QuotaMode throttlingMode;
 
   /**
+   * Consumer class for container update notifications.
+   */
+  @Config(CONTAINER_UPDATE_CONSUMER)
+  public String containerUpdateConsumer;
+
+  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
@@ -88,6 +95,7 @@ public class QuotaConfig {
             buildDefaultQuotaEnforcerSourceInfoPairJson().toString());
     quotaManagerFactory = verifiableProperties.getString(QUOTA_MANAGER_FACTORY, DEFAULT_QUOTA_MANAGER_FACTORY);
     throttlingMode = QuotaMode.valueOf(verifiableProperties.getString(THROTTLING_MODE, DEFAULT_QUOTA_THROTTLING_MODE));
+    containerUpdateConsumer = verifiableProperties.getString(CONTAINER_UPDATE_CONSUMER, null);
   }
 
   /**
