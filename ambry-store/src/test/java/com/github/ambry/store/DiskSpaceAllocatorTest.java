@@ -437,6 +437,26 @@ public class DiskSpaceAllocatorTest {
   }
 
   /**
+   * Test reserved directories can be deleted if pooling is disabled.
+   */
+  @Test
+  public void removeReservedDirTest() throws Exception {
+    alloc = constructAllocator();
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(storeId0, 50, 1, 0)));
+    verifyPoolState(new ExpectedState().addStoreSeg(storeId0, 50, 1));
+    assertTrue("Reserve directory should exist", reserveFileDir.exists());
+
+    // Then construct unpooled allocator, reserved directories should be deleted.
+    alloc = constructUnpooledAllocator();
+    verifyPoolState(null);
+    File f1 = allocateAndVerify(storeId0, "file1", 20, false);
+    verifyPoolState(null);
+    freeAndVerify(storeId0, f1, 20, false);
+    verifyPoolState(null);
+    assertFalse("Reserve directory should not exist", reserveFileDir.exists());
+  }
+
+  /**
    * Test that disk allocator is able to dynamically add/delete segments for certain store.
    * @throws Exception
    */

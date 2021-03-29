@@ -35,6 +35,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.commons.io.FileUtils.*;
+
 
 /**
  * {@link DiskSpaceAllocator} handles the allocation of disk space to entities that require disk segments, such as the
@@ -101,6 +103,12 @@ class DiskSpaceAllocator {
         prepareDirectory(swapReserveDir);
         inventoryExistingReserveFiles();
         poolState = PoolState.INVENTORIED;
+      } else {
+        // Clean up reserve directory if previously created.
+        if (reserveDir != null) {
+          deleteDirectory(reserveDir);
+          deleteDirectory(swapReserveDir);
+        }
       }
     } catch (Exception e) {
       inventoryException = e;
