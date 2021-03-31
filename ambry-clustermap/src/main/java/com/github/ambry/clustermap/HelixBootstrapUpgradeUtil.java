@@ -62,6 +62,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.clustermap.DataNodeConfigSourceType.*;
+import static com.github.ambry.clustermap.PropertyStoreToDataNodeConfigAdapter.Converter.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -380,7 +382,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, null, null, null, null,
-            HelixAdminOperation.MigrateToPropertyStore, DataNodeConfigSourceType.PROPERTY_STORE, false);
+            HelixAdminOperation.MigrateToPropertyStore, PROPERTY_STORE, false);
     helixBootstrapUpgradeUtil.migrateToPropertyStore();
   }
 
@@ -495,8 +497,7 @@ public class HelixBootstrapUpgradeUtil {
     this.portNum = portNum;
     this.partitionName = partitionName;
     this.helixAdminOperation = helixAdminOperation;
-    this.dataNodeConfigSourceType =
-        dataNodeConfigSourceType == null ? DataNodeConfigSourceType.INSTANCE_CONFIG : dataNodeConfigSourceType;
+    this.dataNodeConfigSourceType = dataNodeConfigSourceType == null ? INSTANCE_CONFIG : dataNodeConfigSourceType;
     this.overrideReplicaStatus = overrideReplicaStatus;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
@@ -1039,7 +1040,7 @@ public class HelixBootstrapUpgradeUtil {
 
   private List<String> getInstanceNamesInHelix(String dcName, PropertyStoreToDataNodeConfigAdapter adapter) {
     List<String> instanceNames;
-    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+    if (dataNodeConfigSourceType == PROPERTY_STORE) {
       instanceNames = adapter.getAllDataNodeNames();
     } else {
       instanceNames = adminForDc.get(dcName).getInstancesInCluster(clusterName);
@@ -1060,7 +1061,7 @@ public class HelixBootstrapUpgradeUtil {
   private DataNodeConfig getDataNodeConfigFromHelix(String dcName, String instanceName,
       PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
     DataNodeConfig dataNodeConfig;
-    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+    if (dataNodeConfigSourceType == PROPERTY_STORE) {
       dataNodeConfig = adapter.get(instanceName);
     } else {
       dataNodeConfig = converter.convert(adminForDc.get(dcName).getInstanceConfig(clusterName, instanceName));
@@ -1070,7 +1071,7 @@ public class HelixBootstrapUpgradeUtil {
 
   private void setDataNodeConfigInHelix(String dcName, String instanceName, DataNodeConfig config,
       PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
-    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+    if (dataNodeConfigSourceType == PROPERTY_STORE) {
       if (!adapter.set(config)) {
         logger.error("[{}] Failed to persist config for node {} in the property store.", dcName.toUpperCase(),
             config.getInstanceName());
@@ -1083,7 +1084,7 @@ public class HelixBootstrapUpgradeUtil {
   private void addDataNodeConfigToHelix(String dcName, DataNodeConfig dataNodeConfig,
       PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
     // if this is a new instance, we should add it to both InstanceConfig and PropertyStore
-    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+    if (dataNodeConfigSourceType == PROPERTY_STORE) {
       // when source type is PROPERTY_STORE, we only need to add an InstanceConfig with minimum required information (i.e. hostname, port etc)
       InstanceConfig instanceConfig = new InstanceConfig(dataNodeConfig.getInstanceName());
       instanceConfig.setHostName(dataNodeConfig.getHostName());
@@ -1101,7 +1102,7 @@ public class HelixBootstrapUpgradeUtil {
   private void removeDataNodeConfigFromHelix(String dcName, String instanceName,
       PropertyStoreToDataNodeConfigAdapter adapter) {
     adminForDc.get(dcName).dropInstance(clusterName, new InstanceConfig(instanceName));
-    if (dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE) {
+    if (dataNodeConfigSourceType == PROPERTY_STORE) {
       if (adapter.remove(instanceName)) {
         logger.error("[{}] Failed to remove config for node {} in the property store.", dcName.toUpperCase(),
             instanceName);

@@ -303,6 +303,7 @@ public class ReplicationManager extends ReplicationEngine {
           // 3. create replicaInfo for new remote replicas and assign them to replica-threads.
           List<RemoteReplicaInfo> replicaInfosToAdd = new ArrayList<>();
           for (ReplicaId remoteReplica : addedPeerReplicas) {
+            logger.info("Attempting to add remote replica in replication manager: " + remoteReplica);
             PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
             // create findToken, remoteReplicaInfo
             FindToken findToken =
@@ -324,6 +325,7 @@ public class ReplicationManager extends ReplicationEngine {
           // 4. remove replicaInfo from existing partitionInfo and replica-threads
           List<RemoteReplicaInfo> replicaInfosToRemove = new ArrayList<>();
           for (ReplicaId remoteReplica : removedPeerReplicas) {
+            logger.info("Attempting to remove remote replica from replication manager: " + remoteReplica);
             PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
             RemoteReplicaInfo removedReplicaInfo = partitionInfo.removeReplicaInfoIfPresent(remoteReplica);
             if (removedReplicaInfo != null) {
@@ -334,6 +336,8 @@ public class ReplicationManager extends ReplicationEngine {
             }
           }
           removeRemoteReplicaInfoFromReplicaThread(replicaInfosToRemove);
+          logger.info("{} peer replicas are added and {} peer replicas are removed in replication manager",
+              addedPeerReplicas.size(), removedPeerReplicas.size());
         } finally {
           rwLock.readLock().unlock();
         }
