@@ -31,6 +31,8 @@ public class ClusterMapConfig {
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   public static final String OLD_STATE_MODEL_DEF = "LeaderStandby";
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
+  public static final String ENABLE_HELIX_HEALTH_REPORT = "clustermap.enable.helix.health.report";
+  public static final String ENABLE_HELIX_AGGREGATION_TASK = "clustermap.enable.helix.aggregation.task";
   public static final String ENABLE_MYSQL_AGGREGATION_TASK = "clustermap.enable.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
@@ -314,9 +316,27 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableAggregatedMonthlyAccountReport;
 
+  /**
+   * True to enable aggregation task of stats data in mysql database.
+   */
   @Config(ENABLE_MYSQL_AGGREGATION_TASK)
   @Default("false")
   public final boolean clustermapEnableMySqlAggregationTask;
+
+  /**
+   * True to enable aggregation task of stats data in helix. Set default to true to be backward compatible.
+   */
+  @Config(ENABLE_HELIX_AGGREGATION_TASK)
+  @Default("true")
+  public final boolean clustermapEnableHelixAggregationTask;
+
+  /**
+   * True to enable registering helix health report to publish stats data to helix. set default to true to be backward
+   * compatible.
+   */
+  @Config(ENABLE_HELIX_HEALTH_REPORT)
+  @Default("true")
+  public final boolean clustermapEnableHelixHealthReport;
 
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
@@ -387,5 +407,7 @@ public class ClusterMapConfig {
     clustermapEnableMySqlAggregationTask = verifiableProperties.getBoolean(ENABLE_MYSQL_AGGREGATION_TASK, false);
     clustermapEnableAggregatedMonthlyAccountReport =
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
+    clustermapEnableHelixAggregationTask = verifiableProperties.getBoolean(ENABLE_HELIX_AGGREGATION_TASK, true);
+    clustermapEnableHelixHealthReport = verifiableProperties.getBoolean(ENABLE_HELIX_AGGREGATION_TASK, true);
   }
 }
