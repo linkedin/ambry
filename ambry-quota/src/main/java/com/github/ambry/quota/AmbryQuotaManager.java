@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -40,6 +41,11 @@ public class AmbryQuotaManager implements QuotaManager {
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
+
+  // An atomic reference to hold accounStatsStore for all the enforcers that need accountStatsStore.
+  // Since when instantiating enforcers, AmbryQuotaManager object is not instantiated yet, thus, we need to use
+  // a static field.
+  private static final AtomicReference<AccountStatsStore> accountStatsStore = new AtomicReference<>(null);
 
   /**
    * Constructor for {@link AmbryQuotaManager}.
@@ -61,6 +67,29 @@ public class AmbryQuotaManager implements QuotaManager {
     }
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
+  }
+
+  /**
+   * Static setter method to set {@link AccountStatsStore} for {@link AmbryQuotaManager}. If will fail it's called
+   * multiple times.
+   * @param accountStatsStore the {@link AccountStatsStore}.
+   */
+  public static void setAccountStatsStore(AccountStatsStore accountStatsStore) {
+    if (!AmbryQuotaManager.accountStatsStore.compareAndSet(null, accountStatsStore)) {
+      throw new IllegalStateException("AccountStatsStore already set for AmbryQuotaManager");
+    }
+  }
+
+  /**
+   * Static getter method to return {@link AccountStatsStore} if it's already set.
+   * @return the {@link AccountStatsStore}.
+   */
+  public static AccountStatsStore getAccountStatsStore() {
+    AccountStatsStore result = AmbryQuotaManager.accountStatsStore.get();
+    if (result == null) {
+      throw new IllegalStateException("AccountStatsStore not set for AmbryQuotaManager");
+    }
+    return result;
   }
 
   @Override
@@ -153,9 +182,5 @@ public class AmbryQuotaManager implements QuotaManager {
       }
     }
     return quotaSourceObjectMap;
-  }
-
-  public final static class AmbryQuotaManagerComponents {
-    public static AccountStatsStore accountStatsStore;
   }
 }

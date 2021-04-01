@@ -34,7 +34,7 @@ public class StorageQuotaAdaptorQuotaEnforcerFactory implements QuotaEnforcerFac
    * @throws Exception
    */
   public StorageQuotaAdaptorQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource) throws Exception {
-    AccountStatsStore accountStatsStore = AmbryQuotaManager.AmbryQuotaManagerComponents.accountStatsStore;
+    AccountStatsStore accountStatsStore = AmbryQuotaManager.getAccountStatsStore();
     quotaEnforcer = new StorageQuotaAdaptorQuotaEnforcer(quotaConfig.storageQuotaConfig, accountStatsStore);
   }
 

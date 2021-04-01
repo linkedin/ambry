@@ -31,7 +31,7 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
    */
   public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
       AccountStatsStore accountStatsStore) throws ReflectiveOperationException {
-    AmbryQuotaManager.AmbryQuotaManagerComponents.accountStatsStore = accountStatsStore;
+    AmbryQuotaManager.setAccountStatsStore(accountStatsStore);
     quotaManager = new AmbryQuotaManager(quotaConfig, throttlePolicy, accountService);
   }
 
