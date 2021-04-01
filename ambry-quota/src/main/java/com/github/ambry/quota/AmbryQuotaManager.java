@@ -70,14 +70,11 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   /**
-   * Static setter method to set {@link AccountStatsStore} for {@link AmbryQuotaManager}. If will fail it's called
-   * multiple times.
+   * Static setter method to set {@link AccountStatsStore} for {@link AmbryQuotaManager}.
    * @param accountStatsStore the {@link AccountStatsStore}.
    */
   public static void setAccountStatsStore(AccountStatsStore accountStatsStore) {
-    if (!AmbryQuotaManager.accountStatsStore.compareAndSet(null, accountStatsStore)) {
-      throw new IllegalStateException("AccountStatsStore already set for AmbryQuotaManager");
-    }
+    AmbryQuotaManager.accountStatsStore.set(accountStatsStore);
   }
 
   /**
