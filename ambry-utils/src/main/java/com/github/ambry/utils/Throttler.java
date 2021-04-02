@@ -68,8 +68,8 @@ public class Throttler {
         double rateInSecs = elapsedNs > 0 ? (observedSoFar * TimeUnit.SECONDS.toNanos(1)) / elapsedNs : Double.MAX_VALUE;
         if (throttleDown == rateInSecs > desiredRatePerSec) {
           // solve for the amount of time to sleep to make us hit the desired rate
-          double desiredRateMs = desiredRatePerSec / TimeUnit.SECONDS.toMicros(1);
-          double elapsedMs = elapsedNs / TimeUnit.MICROSECONDS.toNanos(1);
+          double desiredRateMs = TimeUnit.MILLISECONDS.toSeconds((long) desiredRatePerSec);
+          double elapsedMs = TimeUnit.NANOSECONDS.toMicros(elapsedNs);
           long sleepTime = Math.round(observedSoFar / desiredRateMs - elapsedMs);
           if (sleepTime > 0) {
             logger.trace("Natural rate is {} per second but desired rate is {}, sleeping for {} ms to compensate.",

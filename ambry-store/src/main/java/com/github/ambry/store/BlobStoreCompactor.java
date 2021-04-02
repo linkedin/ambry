@@ -842,7 +842,7 @@ class BlobStoreCompactor {
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
             }
             long lastModifiedTimeSecsToSet =
-                srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / TimeUnit.SECONDS.toMicros(1)
+                srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? TimeUnit.MILLISECONDS.toSeconds(srcValue.getOperationTimeInMs())
                     : lastModifiedTimeSecs;
             tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
             writtenLastTime = srcValue.getSize();
