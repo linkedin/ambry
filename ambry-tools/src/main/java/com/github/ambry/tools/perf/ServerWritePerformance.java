@@ -237,7 +237,7 @@ public class ServerWritePerformance {
             latch.await();
             System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTaken.get()
                 + " Nano Seconds  Average time taken per write "
-                + TimeUnit.SECONDS.toNanos(totalTimeTaken.get()) / totalWrites.get() + " Seconds");
+                + ((double) totalTimeTaken.get()) / TimeUnit.SECONDS.toNanos(1) / totalWrites.get() + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
@@ -371,7 +371,7 @@ public class ServerWritePerformance {
             blobIdWriter.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
             if (enableVerboseLogging) {
-              System.out.println("Time taken to put blob id " + blobId + " in ms " + TimeUnit.MICROSECONDS.toNanos(latencyPerBlob)
+              System.out.println("Time taken to put blob id " + blobId + " in ms " + latencyPerBlob / TimeUnit.MICROSECONDS.toNanos(1)
                   + " for blob of size " + blob.length);
             }
             numberOfPuts++;
@@ -387,9 +387,9 @@ public class ServerWritePerformance {
               int index99 = (int) (latenciesForPutBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForPutBlobs.size() * 0.95) - 1;
               String message = threadIndex + "," + numberOfPuts + ","
-                  + TimeUnit.SECONDS.toNanos(latenciesForPutBlobs.get(index99)) + ","
-                  + TimeUnit.SECONDS.toNanos(latenciesForPutBlobs.get(index95)) + ","
-                  + (TimeUnit.SECONDS.toNanos(totalLatencyInNanoSeconds) / numberOfPuts);
+                  + (double) latenciesForPutBlobs.get(index99) / TimeUnit.SECONDS.toNanos(1) + ","
+                  + (double) latenciesForPutBlobs.get(index95) / TimeUnit.SECONDS.toNanos(1) + "," + (
+                  ((double) totalLatencyInNanoSeconds) / TimeUnit.SECONDS.toNanos(1) / numberOfPuts);
               System.out.println(message);
               performanceWriter.write(message + "\n");
               numberOfPuts = 0;

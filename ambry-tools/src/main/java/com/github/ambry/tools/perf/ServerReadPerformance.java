@@ -214,7 +214,7 @@ public class ServerReadPerformance {
             shutdown.set(true);
             String message = "Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get()
                 + " Nano Seconds  Average time taken per read "
-                + TimeUnit.SECONDS.toNanos(totalTimeTaken.get()) / totalReads.get() + " Seconds";
+                + ((double) totalTimeTaken.get()) / TimeUnit.SECONDS.toNanos(1) / totalReads.get() + " Seconds";
             System.out.println(message);
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
@@ -289,9 +289,9 @@ public class ServerReadPerformance {
               int index99 = (int) (latenciesForGetBlobs.size() * 0.99) - 1;
               int index95 = (int) (latenciesForGetBlobs.size() * 0.95) - 1;
               String message =
-                  totalNumberOfGetBlobs + "," + TimeUnit.SECONDS.toNanos(latenciesForGetBlobs.get(index99)) + ","
-                      + TimeUnit.SECONDS.toNanos(latenciesForGetBlobs.get(index95)) + ","
-                      + (TimeUnit.SECONDS.toNanos(totalLatencyForGetBlobs) / totalNumberOfGetBlobs);
+                  totalNumberOfGetBlobs + "," + (double) latenciesForGetBlobs.get(index99) / TimeUnit.SECONDS.toNanos(1) + ","
+                      + (double) latenciesForGetBlobs.get(index95) / TimeUnit.SECONDS.toNanos(1) + "," + (
+                      (double) totalLatencyForGetBlobs / TimeUnit.SECONDS.toNanos(1) / totalNumberOfGetBlobs);
               System.out.println(message);
               writer.write(message + "\n");
               totalLatencyForGetBlobs = 0;
