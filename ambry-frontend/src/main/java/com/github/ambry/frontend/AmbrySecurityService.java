@@ -22,6 +22,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
@@ -131,7 +132,9 @@ class AmbrySecurityService implements SecurityService {
       if (!isOpen) {
         exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
-        exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+        if(quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
+          exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
+        }
       } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
         exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
       } else {

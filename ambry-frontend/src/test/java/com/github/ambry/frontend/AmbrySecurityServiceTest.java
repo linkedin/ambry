@@ -240,15 +240,32 @@ public class AmbrySecurityServiceTest {
         new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
             new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager,
             null, QUOTA_MANAGER);
-    // Everything should be good.
-    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
-    for (int i = 0; i < 100; i++) {
+
+    // Everything should be good if quota mode is configured as tracking, irrespective of whether quota manager
+    // recommends throttling or not
+    boolean[] recommendations = {true, false};
+    for (boolean recommendation : recommendations) {
+      Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(recommendation);
       for (RestMethod restMethod : RestMethod.values()) {
         RestRequest restRequest = createRestRequest(restMethod, "/", null);
         ambrySecurityService.postProcessRequest(restRequest).get();
       }
     }
-    // Requests should be denied.
+
+    // When quota mode is configured as throttling, quota manager's recommendation should determine if requests are throttled.
+    QuotaManager throttlingModeQuotaManager =
+        new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.THROTTLING),
+            new MaxThrottlePolicy(), null);
+    ambrySecurityService = new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
+        new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager,
+        null, throttlingModeQuotaManager);
+
+    Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
+    for (RestMethod restMethod : RestMethod.values()) {
+      RestRequest restRequest = createRestRequest(restMethod, "/", null);
+      ambrySecurityService.postProcessRequest(restRequest).get();
+    }
+
     Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(true);
     for (RestMethod restMethod : RestMethod.values()) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
