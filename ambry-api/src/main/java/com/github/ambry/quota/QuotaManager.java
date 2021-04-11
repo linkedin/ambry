@@ -55,6 +55,11 @@ public interface QuotaManager {
   QuotaConfig getQuotaConfig();
 
   /**
+   * @return QuotaMetrics object.
+   */
+  QuotaMetrics getQuotaMetrics();
+
+  /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.
    */
   void shutdown();
