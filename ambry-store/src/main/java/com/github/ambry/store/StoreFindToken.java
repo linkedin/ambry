@@ -39,7 +39,7 @@ public class StoreFindToken implements FindToken {
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
   static final short VERSION_3 = 3;
-  static final short CURRENT_VERSION = VERSION_2;
+  static final short CURRENT_VERSION = VERSION_3;
 
   static final short UNINITIALIZED_RESET_KEY_VERSION = -1;
   static final short RESET_KEY_VERSION_SIZE = 2;
@@ -278,7 +278,9 @@ public class StoreFindToken implements FindToken {
         type = FindTokenType.values()[stream.readShort()];
         switch (type) {
           case Uninitialized:
-            storeFindToken = new StoreFindToken();
+            storeFindToken =
+                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_2, null, null,
+                    UNINITIALIZED_RESET_KEY_VERSION);
             break;
           case JournalBased:
             // read incarnationId
@@ -290,8 +292,8 @@ public class StoreFindToken implements FindToken {
             Offset logOffset = Offset.fromBytes(stream);
             byte inclusive = stream.readByte();
             storeFindToken =
-                new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1, null, null,
-                    UNINITIALIZED_RESET_KEY_VERSION);
+                new StoreFindToken(FindTokenType.JournalBased, logOffset, null, sessionIdUUID, incarnationIdUUID,
+                    inclusive == (byte) 1, VERSION_2, null, null, UNINITIALIZED_RESET_KEY_VERSION);
             break;
           case IndexBased:
             // read incarnationId
@@ -303,8 +305,8 @@ public class StoreFindToken implements FindToken {
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             StoreKey storeKey = factory.getStoreKey(stream);
             storeFindToken =
-                new StoreFindToken(storeKey, indexSegmentStartOffset, sessionIdUUID, incarnationIdUUID, null, null,
-                    UNINITIALIZED_RESET_KEY_VERSION);
+                new StoreFindToken(FindTokenType.IndexBased, indexSegmentStartOffset, storeKey, sessionIdUUID,
+                    incarnationIdUUID, false, VERSION_2, null, null, UNINITIALIZED_RESET_KEY_VERSION);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -314,11 +316,8 @@ public class StoreFindToken implements FindToken {
         // read type
         type = FindTokenType.values()[stream.readShort()];
         switch (type) {
-          // TODO update StoreFindToken method once CURRENT VERSION = VERSION 3.
           case Uninitialized:
-            storeFindToken =
-                new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null, true, VERSION_3, null, null,
-                    UNINITIALIZED_RESET_KEY_VERSION);
+            storeFindToken = new StoreFindToken();
             break;
           case JournalBased:
             // read incarnationId
@@ -338,10 +337,8 @@ public class StoreFindToken implements FindToken {
             // read reset key life version (if present)
             short journalResetKeyVersion =
                 hasRestKeyInfo == (byte) 1 ? stream.readShort() : UNINITIALIZED_RESET_KEY_VERSION;
-            storeFindToken =
-                new StoreFindToken(FindTokenType.JournalBased, logOffset, null, sessionIdUUID, incarnationIdUUID,
-                    inclusive == (byte) 1, VERSION_3, journalTokenResetKey, journalResetKeyType,
-                    journalResetKeyVersion);
+            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1,
+                journalTokenResetKey, journalResetKeyType, journalResetKeyVersion);
             break;
           case IndexBased:
             // read incarnationId
@@ -361,9 +358,8 @@ public class StoreFindToken implements FindToken {
             // read reset key life version (if present)
             short indexResetKeyVersion =
                 hasRestKeyInfo == (short) 1 ? stream.readShort() : UNINITIALIZED_RESET_KEY_VERSION;
-            storeFindToken =
-                new StoreFindToken(FindTokenType.IndexBased, indexSegmentStartOffset, storeKey, sessionIdUUID,
-                    incarnationIdUUID, false, VERSION_3, indexTokenResetKey, indexResetKeyType, indexResetKeyVersion);
+            storeFindToken = new StoreFindToken(storeKey, indexSegmentStartOffset, sessionIdUUID, incarnationIdUUID,
+                indexTokenResetKey, indexResetKeyType, indexResetKeyVersion);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
