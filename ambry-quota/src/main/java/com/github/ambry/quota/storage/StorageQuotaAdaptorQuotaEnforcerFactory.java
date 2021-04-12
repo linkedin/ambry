@@ -15,7 +15,6 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
-import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaEnforcerFactory;
 import com.github.ambry.quota.QuotaSource;
@@ -31,10 +30,11 @@ public class StorageQuotaAdaptorQuotaEnforcerFactory implements QuotaEnforcerFac
    * Constructor to instantiate a factory.
    * @param quotaConfig the {@link QuotaConfig}.
    * @param quotaSource the {@link QuotaSource}.
+   * @param accountStatsStore the {@link AccountStatsStore}.
    * @throws Exception
    */
-  public StorageQuotaAdaptorQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource) throws Exception {
-    AccountStatsStore accountStatsStore = AmbryQuotaManager.getAccountStatsStore();
+  public StorageQuotaAdaptorQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
+      AccountStatsStore accountStatsStore) throws Exception {
     quotaEnforcer = new StorageQuotaAdaptorQuotaEnforcer(quotaConfig.storageQuotaConfig, accountStatsStore);
   }
 

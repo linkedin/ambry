@@ -73,7 +73,6 @@ public class NamedBlobPutHandler {
    * Key to represent the time at which a blob will expire in ms. Used within the metadata map in signed IDs.
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
-  private static final String STITCH = "STITCH";
   private final SecurityService securityService;
   private final IdConverter idConverter;
   private final IdSigningService idSigningService;
@@ -178,8 +177,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        if (STITCH.equals(
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false))) {
+        if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
           RetainingAsyncWritableChannel channel =
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));

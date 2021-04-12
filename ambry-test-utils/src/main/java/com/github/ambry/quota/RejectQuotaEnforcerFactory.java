@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 
 
@@ -26,8 +27,10 @@ public class RejectQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * Constructor for {@link RejectQuotaEnforcerFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param quotaSource {@link QuotaSource} object.
+   * @param accountStatsStore the {@link AccountStatsStore}.
    */
-  public RejectQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource) {
+  public RejectQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
+      AccountStatsStore accountStatsStore) {
     this.rejectQuotaEnforcer = new RejectRequestQuotaEnforcer(quotaSource);
   }
 

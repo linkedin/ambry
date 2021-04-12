@@ -28,14 +28,11 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
@@ -931,6 +928,16 @@ public class RestUtilsTest {
         boolean isUpload = RestUtils.isUploadRequest(request);
         assertEquals(operation.equals(Operations.NAMED_BLOB) && method == RestMethod.PUT, isUpload);
       }
+    }
+    // One exception for PUT named blob
+    {
+      JSONObject header = new JSONObject();
+      header.put(RestUtils.InternalKeys.REQUEST_PATH,
+          RequestPath.parse("/" + Operations.NAMED_BLOB, Collections.emptyMap(), Collections.emptyList(),
+              "ambry-test"));
+      header.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, "STITCH");
+      RestRequest request = createRestRequest(RestMethod.PUT, "/" + Operations.NAMED_BLOB, header);
+      assertFalse(RestUtils.isUploadRequest(request));
     }
 
     for (RestMethod method : methods) {

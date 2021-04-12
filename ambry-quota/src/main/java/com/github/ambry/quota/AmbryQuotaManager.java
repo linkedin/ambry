@@ -25,7 +25,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -42,20 +41,16 @@ public class AmbryQuotaManager implements QuotaManager {
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
 
-  // An atomic reference to hold accounStatsStore for all the enforcers that need accountStatsStore.
-  // Since when instantiating enforcers, AmbryQuotaManager object is not instantiated yet, thus, we need to use
-  // a static field.
-  private static final AtomicReference<AccountStatsStore> accountStatsStore = new AtomicReference<>(null);
-
   /**
    * Constructor for {@link AmbryQuotaManager}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
    * @param accountService {@link AccountService} object to get all the accounts and container information.
+   * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
    * @throws ReflectiveOperationException in case of any exception.
    */
-  public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService)
-      throws ReflectiveOperationException {
+  public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
+      AccountStatsStore accountStatsStore) throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
@@ -63,30 +58,11 @@ public class AmbryQuotaManager implements QuotaManager {
     requestQuotaEnforcers = new HashSet<>();
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
-          quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)))).getRequestQuotaEnforcer());
+          quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)),
+          accountStatsStore)).getRequestQuotaEnforcer());
     }
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
-  }
-
-  /**
-   * Static setter method to set {@link AccountStatsStore} for {@link AmbryQuotaManager}.
-   * @param accountStatsStore the {@link AccountStatsStore}.
-   */
-  public static void setAccountStatsStore(AccountStatsStore accountStatsStore) {
-    AmbryQuotaManager.accountStatsStore.set(accountStatsStore);
-  }
-
-  /**
-   * Static getter method to return {@link AccountStatsStore} if it's already set.
-   * @return the {@link AccountStatsStore}.
-   */
-  public static AccountStatsStore getAccountStatsStore() {
-    AccountStatsStore result = AmbryQuotaManager.accountStatsStore.get();
-    if (result == null) {
-      throw new IllegalStateException("AccountStatsStore not set for AmbryQuotaManager");
-    }
-    return result;
   }
 
   @Override
