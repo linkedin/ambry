@@ -146,11 +146,6 @@ public class AmbryQuotaManager implements QuotaManager {
     return quotaConfig;
   }
 
-  @Override
-  public QuotaMetrics getQuotaMetrics() {
-    return quotaMetrics;
-  }
-
   /**
    * Parse the json config for {@link QuotaEnforcer} and {@link QuotaSource} factory pair and return them in a {@link Map}.
    * @param quotaEnforcerSourceJson json config string.
