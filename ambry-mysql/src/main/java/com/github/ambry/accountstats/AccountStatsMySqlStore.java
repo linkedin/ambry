@@ -192,7 +192,6 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     // 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
     // 2. If a container storage usage only exists in current StatsSnapshot.
     // If a container storage usage only exists in the previous StatsSnapshot, then it will not be applied to the given function.
-    // TODO: should delete rows in database when the previous statsSnapshot has more data than current one.
     Map<String, StatsSnapshot> currPartitionMap =
         Optional.ofNullable(statsWrapper.getSnapshot().getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
     Map<String, StatsSnapshot> prevPartitionMap =
@@ -235,6 +234,47 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     batch.flush();
     storeMetrics.batchSize.update(batchSize);
     storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
+
+    // Now delete the rows that appear in previousStats but not in the currentStats
+    for (Map.Entry<String, StatsSnapshot> prevPartitionMapEntry : prevPartitionMap.entrySet()) {
+      String partitionIdKey = prevPartitionMapEntry.getKey();
+      StatsSnapshot prevAccountStatsSnapshot = prevPartitionMapEntry.getValue();
+      StatsSnapshot currAccountStatsSnapshot = currPartitionMap.get(partitionIdKey);
+      int partitionId = Utils.partitionIdFromStatsPartitionKey(partitionIdKey);
+      if (prevAccountStatsSnapshot != null && prevAccountStatsSnapshot.getSubMap() != null && (
+          currAccountStatsSnapshot == null || currAccountStatsSnapshot.getSubMap() == null)) {
+        accountReportsDao.deleteStorageUsageForPartition(clusterName, hostname, partitionId);
+        continue;
+      }
+      if (prevAccountStatsSnapshot != null && prevAccountStatsSnapshot.getSubMap() != null
+          && currAccountStatsSnapshot != null && currAccountStatsSnapshot.getSubMap() != null) {
+        Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
+        Map<String, StatsSnapshot> currAccountMap = currAccountStatsSnapshot.getSubMap();
+        for (Map.Entry<String, StatsSnapshot> prevAccountMapEntry : prevAccountMap.entrySet()) {
+          String accountIdKey = prevAccountMapEntry.getKey();
+          StatsSnapshot prevContainerStatsSnapshot = prevAccountMapEntry.getValue();
+          StatsSnapshot currContainerStatsSnapshot = currAccountMap.get(accountIdKey);
+          int accountId = Utils.accountIdFromStatsAccountKey(accountIdKey);
+          if (prevContainerStatsSnapshot != null && prevContainerStatsSnapshot.getSubMap() != null && (
+              currContainerStatsSnapshot == null || currContainerStatsSnapshot.getSubMap() == null)) {
+            accountReportsDao.deleteStorageUsageForAccount(clusterName, hostname, partitionId, accountId);
+            continue;
+          }
+          if (prevContainerStatsSnapshot != null && prevContainerStatsSnapshot.getSubMap() != null
+              && currContainerStatsSnapshot != null && currContainerStatsSnapshot.getSubMap() != null) {
+            Map<String, StatsSnapshot> prevContainerMap = prevContainerStatsSnapshot.getSubMap();
+            Map<String, StatsSnapshot> currContainerMap = currContainerStatsSnapshot.getSubMap();
+            Set<String> containerIdKeys = new HashSet<String>(prevContainerMap.keySet());
+            containerIdKeys.removeAll(currContainerMap.keySet());
+            for (String containerIdKey : containerIdKeys) {
+              int containerId = Utils.containerIdFromStatsContainerKey(containerIdKey);
+              accountReportsDao.deleteStorageUsageForContainer(clusterName, hostname, partitionId, accountId,
+                  containerId);
+            }
+          }
+        }
+      }
+    }
     previousStats = statsWrapper;
   }
 
