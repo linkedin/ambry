@@ -70,7 +70,7 @@ public class CloudToStoreReplicationManagerTest {
   private static final String NEW_PARTITION_NAME = "12";
   private static final String CLOUD_DC_NAME = "CloudDc";
   private static final String VCR_MOUNT_PATH = CLOUD_REPLICA_MOUNT + "/1";
-  private static final String VCR_REPLICA_THREAD_PREFIX = "VcrReplicaThread-";
+  private static final String REPLICA_THREAD_PREFIX = "ReplicaThread-";
   private final VerifiableProperties verifiableProperties;
   private final ScheduledExecutorService mockScheduler;
   private final StoreKeyFactory storeKeyFactory;
@@ -149,7 +149,7 @@ public class CloudToStoreReplicationManagerTest {
     mockClusterSpectator.spectate();
     // 1. test adding cloud replica that is not present locally
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(NEW_PARTITION_NAME);
-    assertNull("Cloud replica thread should not be created", TestUtils.getThreadByThisName(VCR_REPLICA_THREAD_PREFIX));
+    assertNull("Cloud replica thread should not be created", TestUtils.getThreadByThisName(REPLICA_THREAD_PREFIX));
     // create a new partition and add corresponding store in storage manager
     PartitionId newPartition =
         new MockPartitionId(Long.parseLong(NEW_PARTITION_NAME), MockClusterMap.DEFAULT_PARTITION_CLASS,
@@ -159,12 +159,12 @@ public class CloudToStoreReplicationManagerTest {
     // 2. we deliberately shut down the store to induce failure when adding cloud replica
     storageManager.shutdownBlobStore(newPartition);
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(NEW_PARTITION_NAME);
-    assertNull("Cloud replica thread should not be created", TestUtils.getThreadByThisName(VCR_REPLICA_THREAD_PREFIX));
+    assertNull("Cloud replica thread should not be created", TestUtils.getThreadByThisName(REPLICA_THREAD_PREFIX));
     storageManager.startBlobStore(newPartition);
     // 3. mock success case
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(NEW_PARTITION_NAME);
     assertNotNull("Cloud replica thread should be created for DC1",
-        TestUtils.getThreadByThisName(VCR_REPLICA_THREAD_PREFIX));
+        TestUtils.getThreadByThisName(REPLICA_THREAD_PREFIX));
     cloudToStoreReplicationManager.shutdown();
     storageManager.shutdown();
   }
@@ -197,13 +197,13 @@ public class CloudToStoreReplicationManagerTest {
         cloudToStoreReplicationManager.getRemoteReplicaInfo(localPartition, vcrNode.getHostname(), replicaPath);
     assertNotNull("Remote replica info should not be null", remoteReplicaInfo);
     assertEquals("There should be only one cloud replica thread created", 1,
-        TestUtils.getAllThreadsByThisName(VCR_REPLICA_THREAD_PREFIX).size());
+        TestUtils.getAllThreadsByThisName(REPLICA_THREAD_PREFIX).size());
 
     // 2. before removing cloud replica of local partition let's remove a non-existent partition first
     mockHelixParticipant.onPartitionBecomeStandbyFromLeader(NEW_PARTITION_NAME);
     // ensure there is no change in replica thread
     assertEquals("There should be only one cloud replica thread created", 1,
-        TestUtils.getAllThreadsByThisName(VCR_REPLICA_THREAD_PREFIX).size());
+        TestUtils.getAllThreadsByThisName(REPLICA_THREAD_PREFIX).size());
 
     // 3. remove the cloud replica by calling Leader-To-Standby transition on local partition
     mockHelixParticipant.onPartitionBecomeStandbyFromLeader(localPartition.toPathString());
