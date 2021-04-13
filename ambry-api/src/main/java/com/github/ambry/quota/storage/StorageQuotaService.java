@@ -19,7 +19,6 @@ import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils.InternalKeys;
 
-
 /**
  * {@link StorageQuotaService} is the component to handles storage quota for different {@link Account} and {@link Container}.
  * It keeps track of the storage usage of different {@link Container}s and decides to throttle the Frontend operations

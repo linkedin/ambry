@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
@@ -37,11 +38,13 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.stream.Collectors;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -904,6 +907,46 @@ public class RestUtilsTest {
         fail("Decode of invalid encoded header " + invalidEncodedHeader + " should fail.");
       } catch (IllegalArgumentException iaEx) {
       }
+    }
+  }
+
+  /**
+   * Test request is upload request.
+   * @throws Exception
+   */
+  @Test
+  public void testIsUploadRequest() throws Exception {
+    List<String> operations = Utils.getStaticFieldValuesAsStrings(Operations.class).collect(Collectors.toList());
+    RestMethod[] methods = RestMethod.values();
+
+    for (String operation : operations) {
+      for (RestMethod method : methods) {
+        JSONObject header = new JSONObject();
+        header.put(RestUtils.InternalKeys.REQUEST_PATH,
+            RequestPath.parse("/" + operation, Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
+        RestRequest request = createRestRequest(method, "/" + operation, header);
+        boolean isUpload = RestUtils.isUploadRequest(request);
+        assertEquals(operation.equals(Operations.NAMED_BLOB) && method == RestMethod.PUT, isUpload);
+      }
+    }
+    // One exception for PUT named blob
+    {
+      JSONObject header = new JSONObject();
+      header.put(RestUtils.InternalKeys.REQUEST_PATH,
+          RequestPath.parse("/" + Operations.NAMED_BLOB, Collections.emptyMap(), Collections.emptyList(),
+              "ambry-test"));
+      header.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, "STITCH");
+      RestRequest request = createRestRequest(RestMethod.PUT, "/" + Operations.NAMED_BLOB, header);
+      assertFalse(RestUtils.isUploadRequest(request));
+    }
+
+    for (RestMethod method : methods) {
+      JSONObject header = new JSONObject();
+      header.put(RestUtils.InternalKeys.REQUEST_PATH,
+          RequestPath.parse("/", Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
+      RestRequest request = createRestRequest(method, "/", header);
+      boolean isUpload = RestUtils.isUploadRequest(request);
+      assertEquals(method == RestMethod.POST, isUpload);
     }
   }
 

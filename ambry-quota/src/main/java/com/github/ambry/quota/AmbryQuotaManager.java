@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
@@ -27,12 +28,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * {@link QuotaManager} implementation to handle all the quota and quota enforcement for Ambry.
  */
 public class AmbryQuotaManager implements QuotaManager {
+  private static final Logger logger = LoggerFactory.getLogger(AmbryQuotaManager.class);
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
@@ -42,10 +46,11 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param quotaConfig {@link QuotaConfig} object.
    * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
    * @param accountService {@link AccountService} object to get all the accounts and container information.
+   * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
    * @throws ReflectiveOperationException in case of any exception.
    */
-  public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService)
-      throws ReflectiveOperationException {
+  public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
+      AccountStatsStore accountStatsStore) throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
@@ -53,16 +58,26 @@ public class AmbryQuotaManager implements QuotaManager {
     requestQuotaEnforcers = new HashSet<>();
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
-          quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)))).getRequestQuotaEnforcer());
+          quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)),
+          accountStatsStore)).getRequestQuotaEnforcer());
     }
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
   }
 
   @Override
-  public void init() {
-    for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
-      quotaEnforcer.init();
+  public void init() throws InstantiationException {
+    try {
+      for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+        quotaEnforcer.init();
+      }
+    } catch (Exception e) {
+      logger.error("Failed to init quotaEnforcer", e);
+      if (e instanceof InstantiationException) {
+        throw (InstantiationException) e;
+      } else {
+        throw new InstantiationException(e.getMessage());
+      }
     }
   }
 

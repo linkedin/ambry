@@ -11,30 +11,31 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota.capacityunit;
+package com.github.ambry.quota.storage;
 
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaEnforcer;
-import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaEnforcerFactory;
+import com.github.ambry.quota.QuotaSource;
 
 
 /**
- * Implementation of {@link QuotaEnforcerFactory} that instantiates {@link AmbryCapacityUnitQuotaEnforcer}.
+ * A factory implementation to return {@link StorageQuotaAdaptorQuotaEnforcer}.
  */
-public class AmbryCapacityUnitQuotaEnforcerFactory implements QuotaEnforcerFactory {
-  private final QuotaEnforcer quotaEnforcer;
+public class StorageQuotaAdaptorQuotaEnforcerFactory implements QuotaEnforcerFactory {
+  private final StorageQuotaAdaptorQuotaEnforcer quotaEnforcer;
 
   /**
-   * Constructor for {@link AmbryCapacityUnitQuotaEnforcerFactory}.
-   * @param quotaConfig {@link QuotaConfig} object.
-   * @param quotaSource {@link QuotaSource} object.
+   * Constructor to instantiate a factory.
+   * @param quotaConfig the {@link QuotaConfig}.
+   * @param quotaSource the {@link QuotaSource}.
    * @param accountStatsStore the {@link AccountStatsStore}.
+   * @throws Exception
    */
-  public AmbryCapacityUnitQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) {
-    quotaEnforcer = new AmbryCapacityUnitQuotaEnforcer(quotaSource);
+  public StorageQuotaAdaptorQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
+      AccountStatsStore accountStatsStore) throws Exception {
+    quotaEnforcer = new StorageQuotaAdaptorQuotaEnforcer(quotaConfig.storageQuotaConfig, accountStatsStore);
   }
 
   @Override

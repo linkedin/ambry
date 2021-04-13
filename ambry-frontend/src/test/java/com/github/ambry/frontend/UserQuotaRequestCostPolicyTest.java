@@ -23,6 +23,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
 
@@ -71,7 +72,7 @@ public class UserQuotaRequestCostPolicyTest {
     blobInfo = getBlobInfo(8 * MB);
     restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 8 * MB);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyWriteCost(costMap, 2, .0078125);
+    verifyWriteCost(costMap, 2, 8 * 1024 * 1024 / UserQuotaRequestCostPolicy.BYTES_IN_GB);
 
     // test for a large POST request.
     blobInfo = getBlobInfo(4 * GB);
@@ -93,16 +94,16 @@ public class UserQuotaRequestCostPolicyTest {
     // test for a DELETE request.
     restRequest = createMockRequestWithMethod(RestMethod.DELETE, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyWriteCost(costMap, 1, 0.00390625);
+    verifyWriteCost(costMap, 1, 0.0);
 
     // test for a PUT request.
     restRequest = createMockRequestWithMethod(RestMethod.PUT, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyWriteCost(costMap, 1, 0.00390625);
+    verifyWriteCost(costMap, 1, 0.0);
 
     // test for PUT with null blob info.
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, null);
-    verifyWriteCost(costMap, 1, 0.00390625);
+    verifyWriteCost(costMap, 1, 0.0);
 
     // test BlobInfo and UserMetadata GET requests
     blobInfo = getBlobInfo(40 * GB);
@@ -168,15 +169,28 @@ public class UserQuotaRequestCostPolicyTest {
    * @param bytesReceived number of bytes received in the request.
    * @return RestRequest object.
    */
+
   private RestRequest createMockRequestWithMethod(RestMethod restMethod, String uri, long bytesReceived)
       throws RestServiceException {
     RestRequest restRequest = mock(RestRequest.class);
     when(restRequest.getRestMethod()).thenReturn(restMethod);
+    when(restRequest.getBlobBytesReceived()).thenReturn(bytesReceived);
     when(restRequest.getBytesReceived()).thenReturn(bytesReceived);
-    when(restRequest.getUri()).thenReturn(uri);
-    when(restRequest.getPath()).thenReturn(uri);
+    if (restMethod == RestMethod.POST) {
+      when(restRequest.getUri()).thenReturn("/");
+      when(restRequest.getPath()).thenReturn("/");
+    } else {
+      when(restRequest.getUri()).thenReturn(uri);
+      when(restRequest.getPath()).thenReturn(uri);
+    }
     RequestPath requestPath = RequestPath.parse(restRequest, null, "ambry-test");
-    when(restRequest.getArgs()).thenReturn(Collections.singletonMap(RestUtils.InternalKeys.REQUEST_PATH, requestPath));
+    if (restMethod == RestMethod.PUT && bytesReceived != -1) {
+      requestPath =
+          RequestPath.parse("/" + Operations.NAMED_BLOB, Collections.emptyMap(), Collections.emptyList(), "ambry-test");
+    }
+    Map<String, Object> args = new HashMap<>();
+    args.put(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
+    when(restRequest.getArgs()).thenReturn(args);
     return restRequest;
   }
 }

@@ -19,13 +19,14 @@ import com.github.ambry.accountstats.AccountStatsStoreFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
+import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaManager;
-import com.github.ambry.quota.storage.StorageQuotaService;
-import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
+import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.rest.RestRequestService;
 import com.github.ambry.rest.RestRequestServiceFactory;
 import com.github.ambry.router.Router;
@@ -50,7 +51,6 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
   private final ClusterMapConfig clusterMapConfig;
   private final Router router;
   private final AccountService accountService;
-  private final QuotaManager quotaManager;
 
   /**
    * Creates a new instance of FrontendRestRequestServiceFactory.
@@ -61,12 +61,11 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public FrontendRestRequestServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      Router router, AccountService accountService, QuotaManager quotaManager) {
+      Router router, AccountService accountService) {
     this.verifiableProperties = Objects.requireNonNull(verifiableProperties, "Provided VerifiableProperties is null");
     this.clusterMap = Objects.requireNonNull(clusterMap, "Provided ClusterMap is null");
     this.router = Objects.requireNonNull(router, "Provided Router is null");
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
-    this.quotaManager = quotaManager;
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
@@ -94,23 +93,21 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               clusterMap.getMetricRegistry()).getUrlSigningService();
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
-      StorageQuotaService storageQuotaService = null;
       AccountStatsStore accountStatsStore =
           Utils.<AccountStatsStoreFactory>getObj(frontendConfig.accountStatsStoreFactory, verifiableProperties,
               clusterMapConfig, new StatsManagerConfig(verifiableProperties),
               clusterMap.getMetricRegistry()).getAccountStatsStore();
-      if (frontendConfig.enableStorageQuotaService) {
-        storageQuotaService =
-            Utils.<StorageQuotaServiceFactory>getObj(frontendConfig.storageQuotaServiceFactory, verifiableProperties,
-                accountStatsStore, clusterMap.getMetricRegistry()).getStorageQuotaService();
-      }
+      QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
+      QuotaManager quotaManager =
+          ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
+              accountService, accountStatsStore)).getQuotaManager();
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
-              urlSigningService, idSigningService, accountAndContainerInjector, storageQuotaService, quotaManager);
+              urlSigningService, idSigningService, accountAndContainerInjector, quotaManager);
       return new FrontendRestRequestService(frontendConfig, frontendMetrics, router, clusterMap, idConverterFactory,
           securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
           accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
-          clusterMapConfig.clusterMapClusterName, storageQuotaService, accountStatsStore);
+          clusterMapConfig.clusterMapClusterName, accountStatsStore, quotaManager);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);
     }

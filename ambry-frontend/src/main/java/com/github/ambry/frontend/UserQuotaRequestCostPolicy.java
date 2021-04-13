@@ -35,8 +35,8 @@ import static com.github.ambry.rest.RestUtils.*;
  * Capacity unit cost is defined as the number of 4MB chunks. Storage cost is defined as number of GB of storage used.
  */
 public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
+  final static double BYTES_IN_GB = 1024 * 1024 * 1024; // 1GB
   final static double CU_COST_UNIT = 4 * 1024 * 1024; //4 MB
-  final static double BYTES_IN_GB = 1024 * 1024 * 1024;
   final static double INDEX_ONLY_COST = 1;
   final static double MIN_CU_COST = INDEX_ONLY_COST;
   private static final Logger logger = LoggerFactory.getLogger(UserQuotaRequestCostPolicy.class);
@@ -47,7 +47,7 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
     Map<String, Double> costMap = new HashMap<>();
     costMap.put(restMethodToCostMetric(restRequest.getRestMethod()),
         calculateCapacityUnitCost(restRequest, restResponseChannel, blobInfo));
-    costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, restResponseChannel));
+    costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest));
     return costMap;
   }
 
@@ -69,28 +69,11 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
 
   /**
    * Calculate the storage cost incurred to serve a request.
-   * For post requests this is the number bytes in GB of the blob data. For all other write requests the default is DEFAULT_COST_FOR_HEAD_DELETE_TTL.
-   * For read requests there is no storage cost incurred.
    * @param restRequest {@link RestRequest} to find type of request.
-   * @param restResponseChannel {@link RestResponseChannel} object.
    * @return storage cost.
    */
-  private double calculateStorageCost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    switch (restRequest.getRestMethod()) {
-      case POST:
-        long contentSize = 0;
-        if (restRequest.getUri().contains(Operations.STITCH)) {
-          contentSize = Long.parseLong((String) restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
-        } else {
-          contentSize = restRequest.getBytesReceived();
-        }
-        return contentSize / BYTES_IN_GB;
-      case DELETE:
-      case PUT:
-        return CU_COST_UNIT / BYTES_IN_GB; // Assuming 1 chunk worth of storage cost for deletes and ttl updates.
-      default:
-        return 0;
-    }
+  private double calculateStorageCost(RestRequest restRequest) {
+    return RestUtils.isUploadRequest(restRequest) ? restRequest.getBlobBytesReceived() / BYTES_IN_GB : 0;
   }
 
   /**

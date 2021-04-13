@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
@@ -672,6 +673,42 @@ public class RestUtils {
   }
 
   /**
+   * Return true if this request is uploading a blob. We now have two ways of uploading a blob
+   * 1. A POST request to root path
+   * 2. A PUT request to namedBlob path
+   * Notice that stitch requests are not uploads since chunks are uploaded through signed url post.
+   * @param restRequest The {@link RestRequest}.
+   * @return
+   */
+  public static boolean isUploadRequest(RestRequest restRequest) {
+    RequestPath requestPath = RestUtils.getRequestPath(restRequest);
+    RestMethod method = restRequest.getRestMethod();
+    // For POST request, when the operation is "", it's upload
+    // For PUT request, when the operation is named blob, it's named upload upload. However, we have to exclude the
+    // case for stitch named blob.
+    return method == RestMethod.POST && requestPath.getOperationOrBlobId(true).isEmpty()
+        || method == RestMethod.PUT && requestPath.matchesOperation(Operations.NAMED_BLOB) && !isNamedBlobStitchRequest(
+        restRequest);
+  }
+
+  /**
+   * Return true when the given named blob request is a stitch request. The {@code restRequest} has to be a named blob upload
+   * request, which means it's PUT request and the operation in requestPath is namedBlob.
+   * Notice that this method doesn't enforce this precondition.
+   * @param restRequest
+   * @return
+   */
+  public static boolean isNamedBlobStitchRequest(RestRequest restRequest) {
+    // This request has to be NamedBlob Request, which means it's PUT request and the operation in requestPath is namedBlob.
+    final String STITCH = "STITCH";
+    try {
+      return STITCH.equals(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false));
+    } catch (RestServiceException e) {
+      return false;
+    }
+  }
+
+  /**
    * Fetch time in ms for the {@code dateString} passed in, since epoch
    * @param dateString the String representation of the date that needs to be parsed
    * @return Time in ms since epoch. Note http time is kept in Seconds so last three digits will be 000.
@@ -1010,10 +1047,10 @@ public class RestUtils {
             .stream()
             .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
 
-
     // set retry header if present.
     if (throttlingRecommendation.getRetryAfterMs() != ThrottlingRecommendation.NO_RETRY_AFTER_MS) {
-      quotaHeadersMap.put(RequestQuotaHeaders.RETRY_AFTER_MS, String.valueOf(throttlingRecommendation.getRetryAfterMs()));
+      quotaHeadersMap.put(RequestQuotaHeaders.RETRY_AFTER_MS,
+          String.valueOf(throttlingRecommendation.getRetryAfterMs()));
     }
 
     // set the warning header.
