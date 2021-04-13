@@ -190,8 +190,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     // Find the differences between two {@link StatsSnapshot} and apply them to the given {@link ContainerUsageFunction}.
     // The difference is defined as
     // 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
-    // 2. If a container storage usage only exists in first StatsSnapshot.
-    // If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
+    // 2. If a container storage usage only exists in current StatsSnapshot.
+    // If a container storage usage only exists in the previous StatsSnapshot, then it will not be applied to the given function.
     // TODO: should delete rows in database when the previous statsSnapshot has more data than current one.
     Map<String, StatsSnapshot> currPartitionMap =
         Optional.ofNullable(statsWrapper.getSnapshot().getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
@@ -233,8 +233,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       }
     }
     batch.flush();
-    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.batchSize.update(batchSize);
+    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     previousStats = statsWrapper;
   }
 

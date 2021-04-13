@@ -47,6 +47,15 @@ public class AccountReportsDao {
       String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
           CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
           HOSTNAME_COLUMN);
+  private static final String deletePartitionSql =
+      String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
+          HOSTNAME_COLUMN, PARTITION_ID_COLUMN);
+  private static final String deleteAccountSql =
+      String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
+          HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN);
+  private static final String deleteContainerSql =
+      String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE,
+          CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
   private final MySqlDataAccessor dataAccessor;
 
   /**
@@ -119,6 +128,61 @@ public class AccountReportsDao {
       logger.error(
           String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clusterName,
               hostname), e);
+      throw e;
+    }
+  }
+
+  void deleteStorageUsageForPartition(String clusterName, String hostname, int partitionId) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deletePartitionSql, true);
+      deleteStatement.setString(1, clusterName);
+      deleteStatement.setString(2, hostname);
+      deleteStatement.setInt(3, partitionId);
+      deleteStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      logger.error("Failed to execute DELETE on {}, with parameter {}", ACCOUNT_REPORTS_TABLE, partitionId, e);
+      throw e;
+    }
+  }
+
+  void deleteStorageUsageForAccount(String clusterName, String hostname, int partitionId, int accountId)
+      throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteAccountSql, true);
+      deleteStatement.setString(1, clusterName);
+      deleteStatement.setString(2, hostname);
+      deleteStatement.setInt(3, partitionId);
+      deleteStatement.setInt(4, accountId);
+      deleteStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      logger.error("Failed to execute DELETE on {}, with parameter {}, {}", ACCOUNT_REPORTS_TABLE, partitionId,
+          accountId, e);
+      throw e;
+    }
+  }
+
+  void deleteStorageUsageForContainer(String clusterName, String hostname, int partitionId, int accountId,
+      int containerId) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteContainerSql, true);
+      deleteStatement.setString(1, clusterName);
+      deleteStatement.setString(2, hostname);
+      deleteStatement.setInt(3, partitionId);
+      deleteStatement.setInt(4, accountId);
+      deleteStatement.setInt(5, containerId);
+      deleteStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      logger.error("Failed to execute DELETE on {}, with parameter {}, {}, {}", ACCOUNT_REPORTS_TABLE, partitionId,
+          accountId, containerId, e);
       throw e;
     }
   }
