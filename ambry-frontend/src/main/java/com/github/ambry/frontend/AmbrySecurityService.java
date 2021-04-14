@@ -22,10 +22,10 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
-import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -132,7 +132,8 @@ class AmbrySecurityService implements SecurityService {
       } else {
         if (quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
-          if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()) {
+          if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
+              && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
             Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
             throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests, true, true,
                 quotaHeaderMap);

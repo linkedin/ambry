@@ -13,6 +13,9 @@
  */
 package com.github.ambry.quota;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
@@ -23,6 +26,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -40,6 +44,7 @@ public class AmbryQuotaManager implements QuotaManager {
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
+  private final QuotaMetrics quotaMetrics;
 
   /**
    * Constructor for {@link AmbryQuotaManager}.
@@ -47,10 +52,11 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
    * @param accountService {@link AccountService} object to get all the accounts and container information.
    * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
+   * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
    * @throws ReflectiveOperationException in case of any exception.
    */
   public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
-      AccountStatsStore accountStatsStore) throws ReflectiveOperationException {
+      AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
@@ -63,10 +69,12 @@ public class AmbryQuotaManager implements QuotaManager {
     }
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
+    this.quotaMetrics = new QuotaMetrics(metricRegistry);
   }
 
   @Override
   public void init() throws InstantiationException {
+    Timer.Context timer = quotaMetrics.quotaManagerInitTime.time();
     try {
       for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
         quotaEnforcer.init();
@@ -78,6 +86,8 @@ public class AmbryQuotaManager implements QuotaManager {
       } else {
         throw new InstantiationException(e.getMessage());
       }
+    } finally {
+      timer.stop();
     }
   }
 
@@ -86,10 +96,24 @@ public class AmbryQuotaManager implements QuotaManager {
     if (!quotaConfig.requestThrottlingEnabled || requestQuotaEnforcers.isEmpty()) {
       return null;
     }
-    return throttlePolicy.recommend(requestQuotaEnforcers.stream()
-        .map(quotaEnforcer -> quotaEnforcer.recommend(restRequest))
-        .filter(quotaRecommendation -> quotaRecommendation != null)
-        .collect(Collectors.toList()));
+    ThrottlingRecommendation throttlingRecommendation = null;
+    Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
+    try {
+      List<QuotaRecommendation> quotaRecommendations = requestQuotaEnforcers.stream()
+          .map(quotaEnforcer -> quotaEnforcer.recommend(restRequest))
+          .filter(quotaRecommendation -> quotaRecommendation != null)
+          .collect(Collectors.toList());
+      if (quotaRecommendations.size() == 0) {
+        quotaMetrics.quotaNotEnforcedCount.inc();
+      }
+      throttlingRecommendation = throttlePolicy.recommend(quotaRecommendations);
+      if (throttlingRecommendation.shouldThrottle()) {
+        quotaMetrics.quotaExceededCount.inc();
+      }
+    } finally {
+      timer.stop();
+    }
+    return throttlingRecommendation;
   }
 
   @Override
@@ -98,10 +122,17 @@ public class AmbryQuotaManager implements QuotaManager {
     if (!quotaConfig.requestThrottlingEnabled || requestQuotaEnforcers.isEmpty()) {
       return null;
     }
-    return throttlePolicy.recommend(requestQuotaEnforcers.stream()
-        .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
-        .filter(quotaRecommendation -> quotaRecommendation != null)
-        .collect(Collectors.toList()));
+    ThrottlingRecommendation throttlingRecommendation = null;
+    Timer.Context timer = quotaMetrics.quotaChargeTime.time();
+    try {
+      throttlingRecommendation = throttlePolicy.recommend(requestQuotaEnforcers.stream()
+          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
+          .filter(quotaRecommendation -> quotaRecommendation != null)
+          .collect(Collectors.toList()));
+    } finally {
+      timer.stop();
+    }
+    return throttlingRecommendation;
   }
 
   @Override
@@ -155,5 +186,28 @@ public class AmbryQuotaManager implements QuotaManager {
       }
     }
     return quotaSourceObjectMap;
+  }
+
+  /**
+   * Metrics class to capture metrics for user quota enforcement.
+   */
+  private static class QuotaMetrics {
+    public final Counter quotaExceededCount;
+    public final Timer quotaEnforcementTime;
+    public final Counter quotaNotEnforcedCount;
+    public final Timer quotaManagerInitTime;
+    public final Timer quotaChargeTime;
+
+    /**
+     * {@link QuotaMetrics} constructor.
+     * @param metricRegistry {@link MetricRegistry} object.
+     */
+    public QuotaMetrics(MetricRegistry metricRegistry) {
+      quotaExceededCount = metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaExceededCount"));
+      quotaEnforcementTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaEnforcementTime"));
+      quotaNotEnforcedCount = metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaNotEnforcedCount"));
+      quotaManagerInitTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaManagerInitTime"));
+      quotaChargeTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaChargeTime"));
+    }
   }
 }

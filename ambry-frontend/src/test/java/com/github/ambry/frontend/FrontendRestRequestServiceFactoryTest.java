@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
@@ -46,7 +47,7 @@ public class FrontendRestRequestServiceFactoryTest {
     try {
       QUOTA_MANAGER =
           new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              new MaxThrottlePolicy(), null, null);
+              new MaxThrottlePolicy(), null, null, new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }

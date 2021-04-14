@@ -100,7 +100,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
       QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
       QuotaManager quotaManager =
           ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
-              accountService, accountStatsStore)).getQuotaManager();
+              accountService, accountStatsStore, clusterMap.getMetricRegistry())).getQuotaManager();
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, idSigningService, accountAndContainerInjector, quotaManager);
