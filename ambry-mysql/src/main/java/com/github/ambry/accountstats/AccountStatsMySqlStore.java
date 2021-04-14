@@ -73,6 +73,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   private static class Metrics {
     public final Histogram batchSize;
     public final Histogram publishTimeMs;
+    public final Histogram insertAccountStatsTimeMs;
+    public final Histogram deleteAccountStatsTimeMs;
+    public final Histogram deleteStatementSize;
     public final Histogram aggregatedBatchSize;
     public final Histogram aggregatedPublishTimeMs;
     public final Histogram queryStatsTimeMs;
@@ -96,6 +99,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public Metrics(MetricRegistry registry) {
       batchSize = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "BatchSize"));
       publishTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "PublishTimeMs"));
+      insertAccountStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "InsertAccountStatsTimeMs"));
+      deleteAccountStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteAccountStatsTimeMs"));
+      deleteStatementSize =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteStatementSize"));
       aggregatedBatchSize =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedBatchSize"));
       aggregatedPublishTimeMs =
@@ -233,8 +242,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     }
     batch.flush();
     storeMetrics.batchSize.update(batchSize);
-    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    storeMetrics.insertAccountStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
 
+    long deleteStartTimeMs = System.currentTimeMillis();
+    int deleteStatementCounter = 0;
     // Now delete the rows that appear in previousStats but not in the currentStats
     for (Map.Entry<String, StatsSnapshot> prevPartitionMapEntry : prevPartitionMap.entrySet()) {
       String partitionIdKey = prevPartitionMapEntry.getKey();
@@ -244,6 +255,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       if (prevAccountStatsSnapshot != null && prevAccountStatsSnapshot.getSubMap() != null && (
           currAccountStatsSnapshot == null || currAccountStatsSnapshot.getSubMap() == null)) {
         accountReportsDao.deleteStorageUsageForPartition(clusterName, hostname, partitionId);
+        deleteStatementCounter++;
         continue;
       }
       if (prevAccountStatsSnapshot != null && prevAccountStatsSnapshot.getSubMap() != null
@@ -258,6 +270,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           if (prevContainerStatsSnapshot != null && prevContainerStatsSnapshot.getSubMap() != null && (
               currContainerStatsSnapshot == null || currContainerStatsSnapshot.getSubMap() == null)) {
             accountReportsDao.deleteStorageUsageForAccount(clusterName, hostname, partitionId, accountId);
+            deleteStatementCounter++;
             continue;
           }
           if (prevContainerStatsSnapshot != null && prevContainerStatsSnapshot.getSubMap() != null
@@ -270,11 +283,15 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
               int containerId = Utils.containerIdFromStatsContainerKey(containerIdKey);
               accountReportsDao.deleteStorageUsageForContainer(clusterName, hostname, partitionId, accountId,
                   containerId);
+              deleteStatementCounter++;
             }
           }
         }
       }
     }
+    storeMetrics.deleteStatementSize.update(deleteStatementCounter);
+    storeMetrics.deleteAccountStatsTimeMs.update(System.currentTimeMillis() - deleteStartTimeMs);
+    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     previousStats = statsWrapper;
   }
 

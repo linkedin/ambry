@@ -145,23 +145,112 @@ public class AccountStatsMySqlStoreIntegrationTest {
     stats4.getSnapshot().setSubMap(null);
     mySqlStore.storeAccountStats(stats4);
 
-    // empty stats should not override any mysql database rows
+    // empty stats should remove all the data in the database
     StatsWrapper obtainedStats4 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
-    assertEquals(obtainedStats3.getSnapshot(), obtainedStats4.getSnapshot());
+    assertTrue(obtainedStats4.getSnapshot().getSubMap().isEmpty());
 
     // Write a new stats with empty submap again
     StatsWrapper stats5 = generateStatsWrapper(1, 1, 1, StatsReportType.ACCOUNT_REPORT);
     stats5.getSnapshot().setSubMap(null);
     mySqlStore.storeAccountStats(stats5);
 
-    // empty stats should not override any mysql database rows
     StatsWrapper obtainedStats5 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
-    assertEquals(obtainedStats3.getSnapshot(), obtainedStats5.getSnapshot());
+    assertTrue(obtainedStats5.getSnapshot().getSubMap().isEmpty());
 
     StatsWrapper stats6 = generateStatsWrapper(20, 20, 20, StatsReportType.ACCOUNT_REPORT);
     mySqlStore.storeAccountStats(stats6);
     StatsWrapper obtainedStats6 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
     assertEquals(obtainedStats6.getSnapshot(), stats6.getSnapshot());
+  }
+
+  /**
+   * Test to delete partition, account and container data from database
+   * @throws Exception
+   */
+  @Test
+  public void testStatsDeletePartitionAccountContainer() throws Exception {
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
+    StatsWrapper stats = generateStatsWrapper(10, 10, 10, StatsReportType.ACCOUNT_REPORT);
+    mySqlStore.storeAccountStats(stats);
+
+    // Now remove one partition from stats
+    StatsWrapper stats2 = new StatsWrapper(new StatsHeader(stats.getHeader()), new StatsSnapshot(stats.getSnapshot()));
+    stats2.getSnapshot().getSubMap().remove(Utils.statsPartitionKey((short) 1));
+    stats2.getSnapshot().updateValue();
+    mySqlStore.storeAccountStats(stats2);
+    StatsWrapper obtainedStats2 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats2.getSnapshot(), stats2.getSnapshot());
+
+    // Now remove one partition's submap
+    StatsWrapper stats3 =
+        new StatsWrapper(new StatsHeader(stats2.getHeader()), new StatsSnapshot(stats2.getSnapshot()));
+    stats3.getSnapshot().getSubMap().get(Utils.statsPartitionKey((short) 2)).setSubMap(null);
+    stats3.getSnapshot().getSubMap().get(Utils.statsPartitionKey((short) 2)).setValue(0L);
+    stats3.getSnapshot().updateValue();
+    mySqlStore.storeAccountStats(stats3);
+    stats3.getSnapshot().getSubMap().remove(Utils.statsPartitionKey((short) 2));
+    StatsWrapper obtainedStats3 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats3.getSnapshot(), stats3.getSnapshot());
+
+    // Now remove one account from stats
+    StatsWrapper stats4 =
+        new StatsWrapper(new StatsHeader(stats3.getHeader()), new StatsSnapshot(stats3.getSnapshot()));
+    stats4.getSnapshot()
+        .getSubMap()
+        .get(Utils.statsPartitionKey((short) 3))
+        .getSubMap()
+        .remove(Utils.statsAccountKey((short) 1));
+    stats4.getSnapshot().updateValue();
+    mySqlStore.storeAccountStats(stats4);
+    StatsWrapper obtainedStats4 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats4.getSnapshot(), stats4.getSnapshot());
+
+    // Now remove one account's submap
+    StatsWrapper stats5 =
+        new StatsWrapper(new StatsHeader(stats4.getHeader()), new StatsSnapshot(stats4.getSnapshot()));
+    stats5.getSnapshot()
+        .getSubMap()
+        .get(Utils.statsPartitionKey((short) 3))
+        .getSubMap()
+        .get(Utils.statsAccountKey((short) 2))
+        .setSubMap(null);
+    stats5.getSnapshot()
+        .getSubMap()
+        .get(Utils.statsPartitionKey((short) 3))
+        .getSubMap()
+        .get(Utils.statsAccountKey((short) 2))
+        .setValue(0L);
+    stats5.getSnapshot().updateValue();
+    mySqlStore.storeAccountStats(stats5);
+    stats5.getSnapshot()
+        .getSubMap()
+        .get(Utils.statsPartitionKey((short) 3))
+        .getSubMap()
+        .remove(Utils.statsAccountKey((short) 2));
+    StatsWrapper obtainedStats5 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats5.getSnapshot(), stats5.getSnapshot());
+
+    // Now remove some containers
+    StatsWrapper stats6 =
+        new StatsWrapper(new StatsHeader(stats5.getHeader()), new StatsSnapshot(stats5.getSnapshot()));
+    for (short containerId : new short[]{0, 1, 2}) {
+      stats6.getSnapshot()
+          .getSubMap()
+          .get(Utils.statsPartitionKey((short) 3))
+          .getSubMap()
+          .get(Utils.statsAccountKey((short) 3))
+          .getSubMap()
+          .remove(Utils.statsContainerKey(containerId));
+    }
+    stats6.getSnapshot().updateValue();
+    mySqlStore.storeAccountStats(stats6);
+    StatsWrapper obtainedStats6 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats6.getSnapshot(), stats6.getSnapshot());
+
+    // Now write the stats back
+    mySqlStore.storeAccountStats(stats);
+    StatsWrapper obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertEquals(obtainedStats.getSnapshot(), stats.getSnapshot());
   }
 
   /**
