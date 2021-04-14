@@ -191,7 +191,7 @@ public class AmbryQuotaManager implements QuotaManager {
   /**
    * Metrics class to capture metrics for user quota enforcement.
    */
-  public class QuotaMetrics {
+  private static class QuotaMetrics {
     public final Counter quotaExceededCount;
     public final Timer quotaEnforcementTime;
     public final Counter quotaNotEnforcedCount;
