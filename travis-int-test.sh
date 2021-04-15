@@ -4,7 +4,7 @@
 set -e
 
 echo "Running integration tests"
-./gradlew -s --scan intTest codeCoverageReport
+./gradlew --scan intTest codeCoverageReport
 
 echo "Uploading integration test coverage to codecov"
 bash <(curl -s https://codecov.io/bash)

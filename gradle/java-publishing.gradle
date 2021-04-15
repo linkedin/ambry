@@ -1,6 +1,7 @@
 assert plugins.hasPlugin("java")
 
 apply plugin: 'maven-publish'
+apply plugin: 'com.jfrog.artifactory'
 apply plugin: 'com.jfrog.bintray'
 
 tasks.withType(Jar) {
@@ -54,7 +55,33 @@ publishing {
         }
     }
 }
+// Artifactory publishing
+artifactory {
+    //docs: https://www.jfrog.com/confluence/display/rtf/gradle+artifactory+plugin
+    contextUrl = 'https://linkedin.jfrog.io/artifactory'
+    publish {
+        repository {
+            repoKey = 'ambry'
+            username = System.getenv('ARTIFACTORY_USER')
+            password = System.getenv('ARTIFACTORY_API_KEY')
+            maven = true
+        }
 
+        defaults {
+            publications('maven')
+        }
+    }
+}
+
+artifactoryPublish {
+    skip = project.hasProperty('artifactory.dryRun')
+
+    doFirst {
+        println "Publishing $jar.baseName to Artifactory (dryRun: $dryRun, repo: $repoName, publish: $publish)"
+    }
+}
+
+// TODO remove bintray after artifactory fully tested
 bintray { //docs: https://github.com/bintray/gradle-bintray-plugin
     user = System.getenv("BINTRAY_USER")
     key = System.getenv("BINTRAY_API_KEY")
