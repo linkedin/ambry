@@ -132,6 +132,13 @@ public class AccountReportsDao {
     }
   }
 
+  /**
+   * Delete container storage usage rows for given {@code clusterName}, {@code hostname} and {@code partitionId}.
+   * @param clusterName The clusterName
+   * @param hostname The hostname
+   * @param partitionId The partitionId
+   * @throws SQLException
+   */
   void deleteStorageUsageForPartition(String clusterName, String hostname, int partitionId) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -148,6 +155,14 @@ public class AccountReportsDao {
     }
   }
 
+  /**
+   * Delete container storage usage rows for given {@code clusterName}, {@code hostname}, {@code partitionId} and {@code accountId}.
+   * @param clusterName The clusterName
+   * @param hostname The hostname
+   * @param partitionId The partitionId
+   * @param accountId The accountId
+   * @throws SQLException
+   */
   void deleteStorageUsageForAccount(String clusterName, String hostname, int partitionId, int accountId)
       throws SQLException {
     try {
@@ -167,6 +182,16 @@ public class AccountReportsDao {
     }
   }
 
+  /**
+   * Delete container storage usage rows for given {@code clusterName}, {@code hostname}, {@code partitionId},
+   * {@code accountId} and {@code containerId}.
+   * @param clusterName The clusterName
+   * @param hostname The hostname
+   * @param partitionId The partitionId
+   * @param accountId The accountId
+   * @param containerId The containerId
+   * @throws SQLException
+   */
   void deleteStorageUsageForContainer(String clusterName, String hostname, int partitionId, int accountId,
       int containerId) throws SQLException {
     try {
