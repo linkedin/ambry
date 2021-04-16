@@ -540,6 +540,9 @@ task codeCoverageReport(type: JacocoReport) {
         sourceSets it.sourceSets.main
     }
 
+    // always rerun task when requested to get new execution data
+    outputs.upToDateWhen { false }
+
     reports {
         xml.enabled true
         xml.destination file("${buildDir}/reports/jacoco/report.xml")
