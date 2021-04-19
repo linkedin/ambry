@@ -1,3 +1,15 @@
+task artifactoryPublishAll {
+    description = "Runs 'artifactoryPublish' tasks from all projects"
+    mustRunAfter "gitPush" //git push is easier to rollback so we run it first
+}
+
+allprojects {
+    tasks.matching { it.name == "artifactoryPublish" }.all {
+        artifactoryPublishAll.dependsOn it
+    }
+}
+
+// TODO remove bintray after artifactory fully tested
 task bintrayUploadAll {
     description = "Runs 'bintrayUpload' tasks from all projects"
     mustRunAfter "gitPush" //git push is easier to rollback so we run it first
@@ -11,7 +23,7 @@ allprojects {
 
 task ciPerformRelease {
     description = "Performs the release, intended to be ran on CI"
-    dependsOn "gitTag", "gitPush", "bintrayUploadAll"    
+    dependsOn "gitTag", "gitPush", "artifactoryPublishAll", "bintrayUploadAll"
 }
 
 task gitTag {
@@ -30,7 +42,7 @@ task gitTag {
 task gitPush(type: Exec) {
     description = "Pushes tags by running 'git push --tags'. Hides secret key from git push output."
     mustRunAfter "gitTag" //tag first, push later
-    
+
     doFirst { println "Pushing tag v$version" }
     commandLine "./gradle/git-push.sh", "v$version"
     doLast { println "Pushed tag v$version" }
