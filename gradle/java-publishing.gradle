@@ -77,7 +77,7 @@ artifactoryPublish {
     skip = project.hasProperty('artifactory.dryRun')
 
     doFirst {
-        println "Publishing $jar.baseName to Artifactory (dryRun: $dryRun, repo: $repoName, publish: $publish)"
+        println "Publishing $jar.baseName to Artifactory (dryRun: $skip)"
     }
 }
 
