@@ -84,6 +84,7 @@ public class RestServer {
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
   private final NettyInternalMetrics nettyInternalMetrics;
+  private final NotificationSystem notificationSystem;
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -107,6 +108,7 @@ public class RestServer {
     public final Histogram restServerStartTimeInMs;
     public final Histogram routerCloseTimeInMs;
     public final Histogram accountServiceCloseTimeInMs;
+    public final Histogram notificationSystemCloseTimeInMs;
 
     /**
      * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
@@ -145,7 +147,8 @@ public class RestServer {
       routerCloseTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
       accountServiceCloseTimeInMs =
           metricRegistry.histogram(MetricRegistry.name(RestServer.class, "AccountServiceCloseTimeInMs"));
-
+      notificationSystemCloseTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NotificationSystemCloseTimeInMs"));
       Gauge<Integer> restServerStatus = () -> restServerState.isServiceUp() ? 1 : 0;
       metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);
     }
@@ -189,6 +192,7 @@ public class RestServer {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
+    this.notificationSystem = notificationSystem;
 
     AccountServiceFactory accountServiceFactory =
         Utils.getObj(restServerConfig.restServerAccountServiceFactory, verifiableProperties,
@@ -340,8 +344,20 @@ public class RestServer {
       logger.info("Account service close took {} ms", elapsedTime);
       restServerMetrics.accountServiceCloseTimeInMs.update(elapsedTime);
 
+      long notificationSystemCloseTime;
+      try {
+        notificationSystem.close();
+      } catch (IOException e) {
+        logger.error("Error while closing notification system.", e);
+      } finally {
+        notificationSystemCloseTime = System.currentTimeMillis();
+        elapsedTime = notificationSystemCloseTime - accountServiceCloseTime;
+        logger.info("Notification system close took {} ms", elapsedTime);
+        restServerMetrics.notificationSystemCloseTimeInMs.update(elapsedTime);
+      }
+
       reporter.stop();
-      elapsedTime = System.currentTimeMillis() - accountServiceCloseTime;
+      elapsedTime = System.currentTimeMillis() - notificationSystemCloseTime;
       logger.info("JMX reporter shutdown took {} ms", elapsedTime);
       restServerMetrics.jmxReporterShutdownTimeInMs.update(elapsedTime);
     } catch (IOException e) {
