@@ -32,6 +32,7 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
@@ -163,6 +164,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         }
       } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB)) {
+        Objects.requireNonNull(blobInfo, "blobInfo cannot be null.");
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String blobId = RestUtils.stripSlashAndExtensionFromId(input);
         BlobProperties properties = blobInfo.getBlobProperties();
