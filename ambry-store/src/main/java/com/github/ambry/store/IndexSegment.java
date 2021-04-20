@@ -139,7 +139,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     version = PersistentIndex.CURRENT_VERSION;
     persistedEntrySize = Math.max(config.storeIndexPersistedEntryMinBytes, entrySize);
     bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
-        config.storeIndexBloomMaxFalsePositiveProbability);
+        config.storeIndexBloomMaxFalsePositiveProbability, config.storeBloomFilterMaximumPageCount);
     lastModifiedTimeSec.set(time.seconds());
     indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
     indexFile = new File(dataDir, indexSegmentFilenamePrefix + INDEX_SEGMENT_FILE_NAME_SUFFIX);
@@ -184,19 +184,29 @@ class IndexSegment implements Iterable<IndexEntry> {
         } else {
           // Load the bloom filter for this index
           // We need to load the bloom filter only for mapped indexes
+          boolean rebuildBloomFilter = false;
           CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
-          DataInputStream stream = new DataInputStream(crcBloom);
-          bloomFilter = FilterFactory.deserialize(stream);
-          long crcValue = crcBloom.getValue();
-          if (crcValue != stream.readLong()) {
-            // TODO metrics
-            // we don't recover the filter. we just by pass the filter. Crc corrections will be done
-            // by the scrubber
-            bloomFilter = null;
-            logger.error("IndexSegment : {} error validating crc for bloom filter for {}", indexFile.getAbsolutePath(),
-                bloomFile.getAbsolutePath());
+          try (DataInputStream stream = new DataInputStream(crcBloom)) {
+            bloomFilter = FilterFactory.deserialize(stream, config.storeBloomFilterMaximumPageCount);
+            long crcValue = crcBloom.getValue();
+            if (crcValue != stream.readLong()) {
+              // TODO metrics
+              bloomFilter = null;
+              throw new IllegalStateException(
+                  "IndexSegment : " + indexFile.getAbsolutePath() + " error validating crc for bloom filter");
+            }
+          } catch (Exception e) {
+            logger.warn("Encountered exception when loading bloom filter {} : {}", bloomFile.getAbsolutePath(),
+                e.getMessage());
+            rebuildBloomFilter = true;
           }
-          stream.close();
+          if (rebuildBloomFilter) {
+            logger.info("Rebuilding bloom filter for index segment: {}", indexFile.getAbsolutePath());
+            Utils.deleteFileOrDirectory(bloomFile);
+            generateBloomFilterAndPersist();
+            logger.info("Bloom filter for index segment: {} is generated", indexFile.getAbsolutePath());
+            metrics.bloomRebuildOnLoadFailureCount.inc();
+          }
         }
         if (config.storeSetFilePermissionEnabled) {
           Utils.setFilesPermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
@@ -204,7 +214,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       } else {
         index = new ConcurrentSkipListMap<>();
         bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
-            config.storeIndexBloomMaxFalsePositiveProbability);
+            config.storeIndexBloomMaxFalsePositiveProbability, config.storeBloomFilterMaximumPageCount);
         try {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {
@@ -453,7 +463,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     // that the number of entries in each index segment varies (from hundreds to thousands), the workaround ensures bloom
     // filter uses at least storeIndexMaxNumberOfInmemElements for creation to achieve decent performance.
     bloomFilter = FilterFactory.getFilter(Math.max(numOfIndexEntries, config.storeIndexMaxNumberOfInmemElements),
-        config.storeIndexBloomMaxFalsePositiveProbability);
+        config.storeIndexBloomMaxFalsePositiveProbability, config.storeBloomFilterMaximumPageCount);
     for (int i = 0; i < numOfIndexEntries; i++) {
       StoreKey key = getKeyAt(serEntries, i);
       bloomFilter.add(getStoreKeyBytes(key));
@@ -477,6 +487,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         Files.setPosixFilePermissions(bloomFile.toPath(), config.storeDataFilePermission);
       }
     } catch (IOException e) {
+      metrics.bloomPersistFailureCount.inc();
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
     }

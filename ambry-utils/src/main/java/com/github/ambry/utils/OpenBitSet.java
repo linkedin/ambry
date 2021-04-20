@@ -22,7 +22,7 @@ import java.util.Arrays;
 /**
  * An "open" BitSet implementation that allows direct access to the arrays of words
  * storing the bits.  Derived from Lucene's OpenBitSet, but with a paged backing array
- * (see bits delaration, below).
+ * (see bits declaration, below).
  * <p/>
  * Unlike java.util.bitset, the fact that bits are packed into an array of longs
  * is part of the interface.  This allows efficient implementation of other algorithms
@@ -56,13 +56,20 @@ public class OpenBitSet implements IBitSet {
   /**
    * Constructs an OpenBitSet large enough to hold numBits.
    * @param numBits
+   * @param maxPageCount
    */
-  public OpenBitSet(long numBits) {
+  public OpenBitSet(long numBits, int maxPageCount) {
+    if (numBits <= 0) {
+      throw new IllegalArgumentException("Number of bits should be positive but got : " + numBits);
+    }
     wlen = (int) bits2words(numBits);
     int lastPageSize = wlen % PAGE_SIZE;
     int fullPageCount = wlen / PAGE_SIZE;
     pageCount = fullPageCount + (lastPageSize == 0 ? 0 : 1);
-
+    if (pageCount > maxPageCount) {
+      throw new IllegalArgumentException(
+          "Page count " + pageCount + " is larger than specified limit: " + maxPageCount);
+    }
     bits = new long[pageCount][];
 
     for (int i = 0; i < fullPageCount; ++i) {
@@ -72,10 +79,6 @@ public class OpenBitSet implements IBitSet {
     if (lastPageSize != 0) {
       bits[bits.length - 1] = new long[lastPageSize];
     }
-  }
-
-  public OpenBitSet() {
-    this(64);
   }
 
   /**
@@ -420,10 +423,9 @@ public class OpenBitSet implements IBitSet {
     clear(0, capacity());
   }
 
-  public static OpenBitSet deserialize(DataInput in) throws IOException {
+  public static OpenBitSet deserialize(DataInput in, int maxPageCount) throws IOException {
     long bitLength = in.readInt();
-
-    OpenBitSet bs = new OpenBitSet(bitLength << 6);
+    OpenBitSet bs = new OpenBitSet(bitLength << 6, maxPageCount);
     int pageSize = bs.getPageSize();
     int pageCount = bs.getPageCount();
 

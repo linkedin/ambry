@@ -27,12 +27,14 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import static com.github.ambry.utils.FilterTestHelper.*;
+
 
 public class BloomFilterTest {
   public IFilter bf;
 
   public BloomFilterTest() {
-    bf = FilterFactory.getFilter(10000L, FilterTestHelper.MAX_FAILURE_RATE);
+    bf = FilterFactory.getFilter(10000L, FilterTestHelper.MAX_FAILURE_RATE, BLOOM_FILTER_MAX_PAGE_COUNT);
   }
 
   public static IFilter testSerialize(IFilter f) throws IOException {
@@ -43,7 +45,7 @@ public class BloomFilterTest {
 
     output.flip();
     DataInputStream input = new DataInputStream(new ByteBufferInputStream(output));
-    IFilter f2 = FilterFactory.deserialize(input);
+    IFilter f2 = FilterFactory.deserialize(input, BLOOM_FILTER_MAX_PAGE_COUNT);
 
     assert f2.isPresent(ByteBuffer.wrap("a".getBytes()));
     assert !f2.isPresent(ByteBuffer.wrap("b".getBytes()));
@@ -89,7 +91,8 @@ public class BloomFilterTest {
     if (KeyGenerator.WordGenerator.WORDS == 0) {
       return;
     }
-    IFilter bf2 = FilterFactory.getFilter(KeyGenerator.WordGenerator.WORDS / 2, FilterTestHelper.MAX_FAILURE_RATE);
+    IFilter bf2 =
+        FilterFactory.getFilter(KeyGenerator.WordGenerator.WORDS / 2, MAX_FAILURE_RATE, BLOOM_FILTER_MAX_PAGE_COUNT);
     int skipEven = KeyGenerator.WordGenerator.WORDS % 2 == 0 ? 0 : 2;
     FilterTestHelper.testFalsePositives(bf2, new KeyGenerator.WordGenerator(skipEven, 2),
         new KeyGenerator.WordGenerator(1, 2));
@@ -107,7 +110,7 @@ public class BloomFilterTest {
     while (keys.hasNext()) {
       hashes.clear();
       ByteBuffer buf = keys.next();
-      BloomFilter bf = (BloomFilter) FilterFactory.getFilter(10, 1);
+      BloomFilter bf = (BloomFilter) FilterFactory.getFilter(10, 1, BLOOM_FILTER_MAX_PAGE_COUNT);
       for (long hashIndex : bf.getHashBuckets(buf, MAX_HASH_COUNT, 1024 * 1024)) {
         hashes.add(hashIndex);
       }
@@ -128,7 +131,8 @@ public class BloomFilterTest {
     File f = File.createTempFile("bloomFilterTest-", ".dat");
     f.deleteOnExit();
 
-    BloomFilter filter = (BloomFilter) FilterFactory.getFilter(((long) 100000 / 8) + 1, 0.01d);
+    BloomFilter filter =
+        (BloomFilter) FilterFactory.getFilter(((long) 100000 / 8) + 1, 0.01d, BLOOM_FILTER_MAX_PAGE_COUNT);
     filter.add(test);
     DataOutputStream out = new DataOutputStream(new FileOutputStream(f));
     FilterFactory.serialize(filter, out);
@@ -136,7 +140,7 @@ public class BloomFilterTest {
     out.close();
 
     DataInputStream in = new DataInputStream(new FileInputStream(f));
-    BloomFilter filter2 = (BloomFilter) FilterFactory.deserialize(in);
+    BloomFilter filter2 = (BloomFilter) FilterFactory.deserialize(in, BLOOM_FILTER_MAX_PAGE_COUNT);
     Assert.assertTrue(filter2.isPresent(test));
     in.close();
   }

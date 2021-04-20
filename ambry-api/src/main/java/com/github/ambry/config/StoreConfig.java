@@ -357,6 +357,15 @@ public class StoreConfig {
   public final boolean storeIndexRebuildBloomFilterEnabled;
 
   /**
+   * Maximum page count to invalidate some corrupted bloom files that may compute super large value for number of pages
+   * and cause OutOfMemory issue. If computed page count is larger this value, an exception will be thrown to terminate
+   * store startup.
+   */
+  @Config("store.bloom.filter.maximum.page.count")
+  @Default("128")
+  public final int storeBloomFilterMaximumPageCount;
+
+  /**
    * True to enable container deletion in store.
    */
   @Config("store.container.deletion.enabled")
@@ -462,6 +471,8 @@ public class StoreConfig {
     storeUuidBasedBloomFilterEnabled = verifiableProperties.getBoolean("store.uuid.based.bloom.filter.enabled", false);
     storeIndexRebuildBloomFilterEnabled =
         verifiableProperties.getBoolean("store.index.rebuild.bloom.filter.enabled", false);
+    storeBloomFilterMaximumPageCount =
+        verifiableProperties.getIntInRange("store.bloom.filter.maximum.page.count", 128, 1, Integer.MAX_VALUE);
     storeContainerDeletionEnabled = verifiableProperties.getBoolean("store.container.deletion.enabled", false);
     storeSetLocalPartitionStateEnabled =
         verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
