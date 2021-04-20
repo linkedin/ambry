@@ -228,8 +228,8 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo, blobId)), uri, LOGGER,
-          finalCallback);
+          blobId -> idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId)), uri,
+          LOGGER, finalCallback);
     }
 
     /**
