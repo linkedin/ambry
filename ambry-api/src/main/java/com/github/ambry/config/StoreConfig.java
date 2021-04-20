@@ -358,8 +358,8 @@ public class StoreConfig {
 
   /**
    * Maximum page count to invalidate some corrupted bloom files that may compute super large value for number of pages
-   * and cause OutOfMemory issue. If computed page count is larger this value, an exception will be thrown to terminate
-   * store startup.
+   * and cause OutOfMemory issue. If computed page count is larger this value, an exception will be thrown to either
+   * rebuild bloom file or terminate store startup.
    */
   @Config("store.bloom.filter.maximum.page.count")
   @Default("128")
