@@ -100,6 +100,7 @@ class BlobStoreCompactor {
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
+  private CompactionDetails currentCompactionDetails = null;
 
   /**
    * Constructs the compactor component.
@@ -162,7 +163,7 @@ class BlobStoreCompactor {
     isActive = true;
     logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
         System.getProperty("os.name"), useDirectIO);
-    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress);
+    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -206,6 +207,7 @@ class BlobStoreCompactor {
     }
     checkSanity(details);
     logger.info("Compaction of {} started with details {}", storeId, details);
+    currentCompactionDetails = details;
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details, config);
     resumeCompaction(bundleReadBuffer);
   }

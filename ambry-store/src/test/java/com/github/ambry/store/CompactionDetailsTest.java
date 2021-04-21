@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -46,7 +45,7 @@ public class CompactionDetailsTest {
       segmentsUnderCompaction.add(segmentName);
     }
     long referenceTime = SystemTime.getInstance().milliseconds();
-    CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction);
+    CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction, null);
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(details.toBytes()));
     verifyEquality(details, CompactionDetails.fromBytes(stream));
   }
@@ -62,7 +61,7 @@ public class CompactionDetailsTest {
 
     // details contains no segments
     try {
-      new CompactionDetails(1, Collections.emptyList());
+      new CompactionDetails(1, Collections.emptyList(), null);
       fail("Should have failed because there were no log segments to compact");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -70,14 +69,14 @@ public class CompactionDetailsTest {
 
     // details has a negative ref time.
     try {
-      new CompactionDetails(-1, segmentsUnderCompaction);
+      new CompactionDetails(-1, segmentsUnderCompaction, null);
       fail("Should have failed because reference time is < 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // 0 ref time is ok.
-    new CompactionDetails(0, segmentsUnderCompaction);
+    new CompactionDetails(0, segmentsUnderCompaction, null);
   }
 
   /**

@@ -222,7 +222,8 @@ public class CompactionPolicyTest {
           * blobStore.capacityInBytes)) {
         verifyCompactionDetails(null, blobStore, compactionPolicy);
       } else {
-        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates),
+        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates,
+                null),
             blobStore, compactionPolicy);
       }
     }
@@ -251,7 +252,8 @@ public class CompactionPolicyTest {
           * blobStore.capacityInBytes)) {
         verifyCompactionDetails(null, blobStore, compactionPolicy);
       } else {
-        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates),
+        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates,
+                null),
             blobStore, compactionPolicy);
       }
     }
@@ -278,7 +280,8 @@ public class CompactionPolicyTest {
         compactionPolicy = new CompactAllPolicy(initState.getSecond(), time);
       }
       verifyCompactionDetails(
-          new CompactionDetails(time.milliseconds() - TimeUnit.HOURS.toMillis(messageRetentionHours), bestCandidates),
+          new CompactionDetails(time.milliseconds() - TimeUnit.HOURS.toMillis(messageRetentionHours), bestCandidates,
+              null),
           blobStore, compactionPolicy);
     }
   }
