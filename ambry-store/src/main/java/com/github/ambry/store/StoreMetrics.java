@@ -21,6 +21,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -261,6 +262,7 @@ public class StoreMetrics {
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"));
+    registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentInvalidDataSize"));
     registry.remove(MetricRegistry.name(Log.class, "ByteBufferForAppendTotalCount"));
     registry.remove(MetricRegistry.name(Log.class, "UnderCompaction" + SEPARATOR + "ByteBufferForAppendTotalCount"));
   }
@@ -297,12 +299,13 @@ public class StoreMetrics {
   }
 
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress,
-      CompactionDetails compactionDetails) {
+      AtomicReference<CompactionDetails> compactionDetailsAtomicReference) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
         compactionInProgressGauge);
     Gauge<Long> compactionCost = () -> {
+      CompactionDetails compactionDetails = compactionDetailsAtomicReference.get();
       if (compactionDetails == null || compactionDetails.getCostBenefitInfo() == null) {
         return -1L;
       } else {
@@ -311,6 +314,7 @@ public class StoreMetrics {
     };
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionCost"), compactionCost);
     Gauge<Integer> compactionBenefit = () -> {
+      CompactionDetails compactionDetails = compactionDetailsAtomicReference.get();
       if (compactionDetails == null || compactionDetails.getCostBenefitInfo() == null) {
         return -1;
       } else {
@@ -327,6 +331,8 @@ public class StoreMetrics {
   private void deregisterCompactorGauges(String storeId) {
     String prefix = storeId + SEPARATOR;
     registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"));
+    registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionCost"));
+    registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionBenefit"));
   }
 
   /**
