@@ -271,8 +271,10 @@ class CompactionManager {
         if (triggers.contains(Trigger.PERIODIC)) {
           storesToCheck.addAll(stores);
         }
+        int storesNoCompaction = 0;
         while (enabled) {
           try {
+            storesNoCompaction = 0;
             while (enabled && storesToCheck.peek() != null) {
               BlobStore store = storesToCheck.poll();
               logger.trace("{} being checked for compaction", store);
@@ -287,6 +289,7 @@ class CompactionManager {
                     compactionStarted = true;
                     store.compact(details, bundleReadBuffer);
                   } else {
+                    storesNoCompaction++;
                     logger.info("{} is not eligible for compaction due to empty compaction details", store);
                   }
                 }
@@ -305,7 +308,10 @@ class CompactionManager {
               if (enabled) {
                 if (storesToCheck.peek() == null) {
                   if (triggers.contains(Trigger.PERIODIC)) {
-                    long actualWaitTimeMs = expectedNextCheckTime - time.milliseconds();
+                    // If compaction is not run on some of stores, wait time should be reduced.
+                    // The max time to reduce is waitTimeMs / 2;
+                    long compensation = waitTimeMs / 2 * storesNoCompaction / stores.size();
+                    long actualWaitTimeMs = expectedNextCheckTime - compensation - time.milliseconds();
                     logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
                     time.await(waitCondition, actualWaitTimeMs);
                   } else {
