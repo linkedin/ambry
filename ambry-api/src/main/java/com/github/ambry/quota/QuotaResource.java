@@ -13,10 +13,15 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+
+
 /**
  * Resource for which quota is specified for enforced.
  */
 public class QuotaResource {
+  private final static String DELIM = "_";
   private final String resourceId; // unique identifier for Ambry account, container or host.
   private final QuotaResourceType quotaResourceType;
 
@@ -28,6 +33,26 @@ public class QuotaResource {
   public QuotaResource(String resourceId, QuotaResourceType quotaResourceType) {
     this.resourceId = resourceId;
     this.quotaResourceType = quotaResourceType;
+  }
+
+  /**
+   * Create {@link QuotaResource} from {@link Container}.
+   * @param container {@link Container} object.
+   * @return QuotaResource object.
+   */
+  public static QuotaResource fromContainer(Container container) {
+    return new QuotaResource(
+        String.join(DELIM, String.valueOf(container.getId()), String.valueOf(container.getParentAccountId())),
+        QuotaResourceType.CONTAINER);
+  }
+
+  /**
+   * Create {@link QuotaResource} from {@link Account}.
+   * @param account {@link Account} object.
+   * @return QuotaResource object.
+   */
+  public static QuotaResource fromAccount(Account account) {
+    return new QuotaResource(String.valueOf(account.getId()), QuotaResourceType.CONTAINER);
   }
 
   /**
@@ -48,6 +73,6 @@ public class QuotaResource {
    * Type of Ambry resource for which quota can be applied.
    */
   enum QuotaResourceType {
-    AMBRY_ACCOUNT, AMBRY_CONTAINER
+    ACCOUNT, CONTAINER
   }
 }

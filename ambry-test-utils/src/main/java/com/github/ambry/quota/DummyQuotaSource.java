@@ -13,6 +13,9 @@
  */
 package com.github.ambry.quota;
 
+import java.util.Collection;
+
+
 /**
  * Dummy {@link QuotaSource} implementation for test.
  */
@@ -21,5 +24,10 @@ public class DummyQuotaSource implements QuotaSource {
   @Override
   public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) {
     return null;
+  }
+
+  @Override
+  public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
+
   }
 }

@@ -16,12 +16,14 @@ package com.github.ambry.quota;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -70,6 +73,9 @@ public class AmbryQuotaManager implements QuotaManager {
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = new QuotaMetrics(metricRegistry);
+    Consumer<Collection<Account>> accountUpdateQuotaConsumer = (accounts) -> {
+      onAccountUpdateNotification(accounts);
+    };
   }
 
   @Override
@@ -145,6 +151,27 @@ public class AmbryQuotaManager implements QuotaManager {
   @Override
   public QuotaConfig getQuotaConfig() {
     return quotaConfig;
+  }
+
+  /**
+   * Notify {@link QuotaSource}s about creation of new Ambry {@link Account} or {@link com.github.ambry.account.Container}.
+   * @param updatedAccounts {@link Collection} of {@link Account}s updated.
+   */
+  private void onAccountUpdateNotification(Collection<Account> updatedAccounts) {
+    requestQuotaEnforcers.stream().map(QuotaEnforcer::getQuotaSource).forEach(quotaSource -> {
+      List<QuotaResource> quotaResources = new ArrayList<>();
+      for (Account updatedAccount : updatedAccounts) {
+        if (updatedAccount.isQuotaAggregatedInAccount()) {
+          quotaResources.add(QuotaResource.fromAccount(updatedAccount));
+        } else {
+          quotaResources.addAll(updatedAccount.getAllContainers()
+              .stream()
+              .map(QuotaResource::fromContainer)
+              .collect(Collectors.toList()));
+        }
+      }
+      quotaSource.updateNewQuotaResources(quotaResources);
+    });
   }
 
   /**

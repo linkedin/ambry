@@ -27,13 +27,13 @@ import static com.github.ambry.account.Account.*;
  * This class is not thread safe.
  */
 public class AccountBuilder {
+  private final Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
   private short id;
   private String name;
   private AccountStatus status;
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
   private boolean aclInheritedByContainer = ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE;
-  private Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
 
   /**
    * Constructor. This will build a new {@link Account} from an existing {@link Account} object. The builder will
@@ -182,6 +182,7 @@ public class AccountBuilder {
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
   public Account build() {
-    return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(), lastModifiedTime);
+    return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(),
+        lastModifiedTime, false);
   }
 }
