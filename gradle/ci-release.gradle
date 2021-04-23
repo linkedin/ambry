@@ -9,21 +9,9 @@ allprojects {
     }
 }
 
-// TODO remove bintray after artifactory fully tested
-task bintrayUploadAll {
-    description = "Runs 'bintrayUpload' tasks from all projects"
-    mustRunAfter "gitPush" //git push is easier to rollback so we run it first
-}
-
-allprojects {
-    tasks.matching { it.name == "bintrayUpload" }.all {
-        bintrayUploadAll.dependsOn it
-    }
-}
-
 task ciPerformRelease {
     description = "Performs the release, intended to be ran on CI"
-    dependsOn "gitTag", "gitPush", "artifactoryPublishAll", "bintrayUploadAll"
+    dependsOn "gitTag", "gitPush", "artifactoryPublishAll"
 }
 
 task gitTag {

@@ -7,8 +7,7 @@ echo "Building artifacts, and creating pom files"
 ./gradlew --scan assemble publishToMavenLocal
 
 echo "Testing publication by uploading in dry run mode"
-# TODO remove bintray here
-./gradlew -i --scan bintrayUploadAll artifactoryPublishAll -Pbintray.dryRun -Partifactory.dryRun
+./gradlew -i --scan artifactoryPublishAll -Partifactory.dryRun
 
 echo "Pull request: [$TRAVIS_PULL_REQUEST], Travis branch: [$TRAVIS_BRANCH]"
 # release only from master when no pull request build
