@@ -196,16 +196,15 @@ class IndexSegment implements Iterable<IndexEntry> {
                   "IndexSegment : " + indexFile.getAbsolutePath() + " error validating crc for bloom filter");
             }
           } catch (Exception e) {
-            logger.warn("Encountered exception when loading bloom filter {} : {}", bloomFile.getAbsolutePath(),
-                e.getMessage());
+            logger.error("Encountered exception when loading bloom filter {}", bloomFile.getAbsolutePath(), e);
             rebuildBloomFilter = true;
           }
           if (rebuildBloomFilter) {
+            metrics.bloomRebuildOnLoadFailureCount.inc();
             logger.info("Rebuilding bloom filter for index segment: {}", indexFile.getAbsolutePath());
             Utils.deleteFileOrDirectory(bloomFile);
             generateBloomFilterAndPersist();
             logger.info("Bloom filter for index segment: {} is generated", indexFile.getAbsolutePath());
-            metrics.bloomRebuildOnLoadFailureCount.inc();
           }
         }
         if (config.storeSetFilePermissionEnabled) {
