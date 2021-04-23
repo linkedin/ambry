@@ -250,7 +250,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   /**
-   * Delete container account stats data if the partition, or account, or container exists in previous partition map but
+   * Delete container's accountstats data if partition, or account, or container exists in previous partition map but
    * missing in current partition map.
    * @param prevPartitionMap the previous partition stats map.
    * @param currPartitionMap the current partition stats map.
