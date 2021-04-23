@@ -73,6 +73,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   private static class Metrics {
     public final Histogram batchSize;
     public final Histogram publishTimeMs;
+    public final Histogram insertAccountStatsTimeMs;
+    public final Histogram deleteAccountStatsTimeMs;
+    public final Histogram deleteStatementSize;
     public final Histogram aggregatedBatchSize;
     public final Histogram aggregatedPublishTimeMs;
     public final Histogram queryStatsTimeMs;
@@ -96,6 +99,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public Metrics(MetricRegistry registry) {
       batchSize = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "BatchSize"));
       publishTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "PublishTimeMs"));
+      insertAccountStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "InsertAccountStatsTimeMs"));
+      deleteAccountStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteAccountStatsTimeMs"));
+      deleteStatementSize =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteStatementSize"));
       aggregatedBatchSize =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedBatchSize"));
       aggregatedPublishTimeMs =
@@ -190,9 +199,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     // Find the differences between two {@link StatsSnapshot} and apply them to the given {@link ContainerUsageFunction}.
     // The difference is defined as
     // 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
-    // 2. If a container storage usage only exists in first StatsSnapshot.
-    // If a container storage usage only exists in the second StatsSnapshot, then it will not be applied to the given function.
-    // TODO: should delete rows in database when the previous statsSnapshot has more data than current one.
+    // 2. If a container storage usage only exists in current StatsSnapshot.
+    // If a container storage usage only exists in the previous StatsSnapshot, then it will not be applied to the given function.
     Map<String, StatsSnapshot> currPartitionMap =
         Optional.ofNullable(statsWrapper.getSnapshot().getSubMap()).orElseGet(HashMap<String, StatsSnapshot>::new);
     Map<String, StatsSnapshot> prevPartitionMap =
@@ -233,9 +241,70 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       }
     }
     batch.flush();
-    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     storeMetrics.batchSize.update(batchSize);
+    storeMetrics.insertAccountStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+
+    deleteContainerAccountStats(prevPartitionMap, currPartitionMap);
+    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
     previousStats = statsWrapper;
+  }
+
+  /**
+   * Delete container's accountstats data if partition, or account, or container exists in previous partition map but
+   * missing in current partition map.
+   * @param prevPartitionMap the previous partition stats map.
+   * @param currPartitionMap the current partition stats map.
+   * @throws SQLException
+   */
+  private void deleteContainerAccountStats(Map<String, StatsSnapshot> prevPartitionMap,
+      Map<String, StatsSnapshot> currPartitionMap) throws SQLException {
+    long deleteStartTimeMs = System.currentTimeMillis();
+    int deleteStatementCounter = 0;
+    // Now delete the rows that appear in previousStats but not in the currentStats
+    for (Map.Entry<String, StatsSnapshot> prevPartitionMapEntry : prevPartitionMap.entrySet()) {
+      String partitionIdKey = prevPartitionMapEntry.getKey();
+      StatsSnapshot prevAccountStatsSnapshot = prevPartitionMapEntry.getValue();
+      StatsSnapshot currAccountStatsSnapshot = currPartitionMap.get(partitionIdKey);
+      int partitionId = Utils.partitionIdFromStatsPartitionKey(partitionIdKey);
+      if (prevAccountStatsSnapshot != null && prevAccountStatsSnapshot.getSubMap() != null && (
+          currAccountStatsSnapshot == null || currAccountStatsSnapshot.getSubMap() == null)) {
+        accountReportsDao.deleteStorageUsageForPartition(clusterName, hostname, partitionId);
+        deleteStatementCounter++;
+        continue;
+      }
+      if (prevAccountStatsSnapshot != null && prevAccountStatsSnapshot.getSubMap() != null
+          && currAccountStatsSnapshot != null && currAccountStatsSnapshot.getSubMap() != null) {
+        Map<String, StatsSnapshot> prevAccountMap = prevAccountStatsSnapshot.getSubMap();
+        Map<String, StatsSnapshot> currAccountMap = currAccountStatsSnapshot.getSubMap();
+        for (Map.Entry<String, StatsSnapshot> prevAccountMapEntry : prevAccountMap.entrySet()) {
+          String accountIdKey = prevAccountMapEntry.getKey();
+          StatsSnapshot prevContainerStatsSnapshot = prevAccountMapEntry.getValue();
+          StatsSnapshot currContainerStatsSnapshot = currAccountMap.get(accountIdKey);
+          int accountId = Utils.accountIdFromStatsAccountKey(accountIdKey);
+          if (prevContainerStatsSnapshot != null && prevContainerStatsSnapshot.getSubMap() != null && (
+              currContainerStatsSnapshot == null || currContainerStatsSnapshot.getSubMap() == null)) {
+            accountReportsDao.deleteStorageUsageForAccount(clusterName, hostname, partitionId, accountId);
+            deleteStatementCounter++;
+            continue;
+          }
+          if (prevContainerStatsSnapshot != null && prevContainerStatsSnapshot.getSubMap() != null
+              && currContainerStatsSnapshot != null && currContainerStatsSnapshot.getSubMap() != null) {
+            Map<String, StatsSnapshot> prevContainerMap = prevContainerStatsSnapshot.getSubMap();
+            Map<String, StatsSnapshot> currContainerMap = currContainerStatsSnapshot.getSubMap();
+            Set<String> containerIdKeys = new HashSet<String>(prevContainerMap.keySet());
+            containerIdKeys.removeAll(currContainerMap.keySet());
+            for (String containerIdKey : containerIdKeys) {
+              int containerId = Utils.containerIdFromStatsContainerKey(containerIdKey);
+              accountReportsDao.deleteStorageUsageForContainer(clusterName, hostname, partitionId, accountId,
+                  containerId);
+              deleteStatementCounter++;
+            }
+          }
+        }
+      }
+    }
+    storeMetrics.deleteStatementSize.update(deleteStatementCounter);
+    storeMetrics.deleteAccountStatsTimeMs.update(System.currentTimeMillis() - deleteStartTimeMs);
   }
 
   /**

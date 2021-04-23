@@ -23,6 +23,7 @@ import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -125,15 +126,15 @@ public class AccountStatsMySqlStoreTest {
           long containerUsage = defaultValue ? DEFAULT_CONTAINER_USAGE
               : Math.abs(random.nextLong()) % (MAX_CONTAINER_USAGE - MIN_CONTAINER_USAGE) + MIN_CONTAINER_USAGE;
           StatsSnapshot containerStatsSnapshot = new StatsSnapshot(containerUsage, null);
-          containerSubMap.put("C[" + (BASE_CONTAINER_ID + ic) + "]", containerStatsSnapshot);
+          containerSubMap.put(Utils.statsContainerKey((short) (BASE_CONTAINER_ID + ic)), containerStatsSnapshot);
           allContainerValue += containerUsage;
         }
         StatsSnapshot accountStatsSnapshot = new StatsSnapshot(allContainerValue, containerSubMap);
-        accountSubMap.put("A[" + (BASE_ACCOUNT_ID + ia) + "]", accountStatsSnapshot);
+        accountSubMap.put(Utils.statsAccountKey((short) (BASE_ACCOUNT_ID + ia)), accountStatsSnapshot);
         allAccountValue += allContainerValue;
       }
       StatsSnapshot partitionStatsSnapshot = new StatsSnapshot(allAccountValue, accountSubMap);
-      partitionSubMap.put("Partition[" + (BASE_PARTITION_ID + ip) + "]", partitionStatsSnapshot);
+      partitionSubMap.put(Utils.statsPartitionKey((short) (BASE_PARTITION_ID + ip)), partitionStatsSnapshot);
       allPartitionValue += allAccountValue;
     }
     return new StatsSnapshot(allPartitionValue, partitionSubMap);
