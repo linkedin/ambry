@@ -244,6 +244,20 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     storeMetrics.batchSize.update(batchSize);
     storeMetrics.insertAccountStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
 
+    deleteContainerAccountStats(prevPartitionMap, currPartitionMap);
+    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    previousStats = statsWrapper;
+  }
+
+  /**
+   * Delete container account stats data if the partition, or account, or container exists in previous partition map but
+   * missing in current partition map.
+   * @param prevPartitionMap the previous partition stats map.
+   * @param currPartitionMap the current partition stats map.
+   * @throws SQLException
+   */
+  private void deleteContainerAccountStats(Map<String, StatsSnapshot> prevPartitionMap,
+      Map<String, StatsSnapshot> currPartitionMap) throws SQLException {
     long deleteStartTimeMs = System.currentTimeMillis();
     int deleteStatementCounter = 0;
     // Now delete the rows that appear in previousStats but not in the currentStats
@@ -291,8 +305,6 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     }
     storeMetrics.deleteStatementSize.update(deleteStatementCounter);
     storeMetrics.deleteAccountStatsTimeMs.update(System.currentTimeMillis() - deleteStartTimeMs);
-    storeMetrics.publishTimeMs.update(System.currentTimeMillis() - startTimeMs);
-    previousStats = statsWrapper;
   }
 
   /**
