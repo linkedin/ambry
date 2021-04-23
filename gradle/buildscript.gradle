@@ -19,8 +19,6 @@ repositories {
 dependencies {
     classpath "gradle.plugin.com.hierynomus.gradle.plugins:license-gradle-plugin:0.15.0"
     classpath "org.shipkit:shipkit-auto-version:0.0.30"
-    // TODO remove bintray after artifactory fully tested
-    classpath "com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4"
     // this is actually the artifactory plugin
     classpath "org.jfrog.buildinfo:build-info-extractor-gradle:4.21.0"
 }
