@@ -16,12 +16,18 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.FilterFactory;
+import com.github.ambry.utils.IFilter;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -535,6 +541,52 @@ public class IndexSegmentTest {
     } finally {
       assertTrue("Could not make writable", tempDir.setWritable(true));
     }
+  }
+
+  /**
+   * Test failure on loading bloom filter file and verify that bloom filter is rebuilt.
+   * @throws Exception
+   */
+  @Test
+  public void loadBloomFileFailureTest() throws Exception{
+    assumeTrue(formatVersion > PersistentIndex.VERSION_1);
+    LogSegmentName logSegmentName1 = LogSegmentName.fromPositionAndGeneration(0, 0);
+    int indexValueSize =
+        PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4
+            : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
+    IndexSegment indexSegment1 =
+        new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName1, 0), STORE_KEY_FACTORY,
+            KEY_SIZE + indexValueSize, indexValueSize, config, metrics, time);
+    Random random = new Random();
+    short accountId1 = getRandomShort(random);
+    short containerId1= getRandomShort(random);
+    MockId id1 = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE), accountId1, containerId1);
+    IndexValue value1 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
+            accountId1, containerId1, (short) 0, formatVersion);
+    indexSegment1.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName1, 1000));
+    indexSegment1.writeIndexSegmentToFile(new Offset(logSegmentName1, 1000));
+    indexSegment1.seal();
+    File bloomFile =
+        new File(tempDir, generateIndexSegmentFilenamePrefix(new Offset(logSegmentName1, 0)) + BLOOM_FILE_NAME_SUFFIX);
+    assertTrue("The bloom file should exist", bloomFile.exists());
+    CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
+    IFilter bloomFilter;
+    try (DataInputStream stream = new DataInputStream(crcBloom)) {
+      bloomFilter = FilterFactory.deserialize(stream, config.storeBloomFilterMaximumPageCount);
+      long crcValue = crcBloom.getValue();
+      assertEquals("Crc mismatch", crcValue, stream.readLong());
+    }
+    // induce crc mismatch during serialization
+    CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
+    DataOutputStream stream = new DataOutputStream(crcStream);
+    FilterFactory.serialize(bloomFilter, stream);
+    long crcValue = crcStream.getValue() + 1;
+    stream.writeLong(crcValue);
+    stream.close();
+    // load from file, which should trigger bloom filter rebuild as crc value doesn't match
+    new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, config, metrics, null, time);
+    assertEquals("Bloom filter rebuild count mismatch", 1, metrics.bloomRebuildOnLoadFailureCount.getCount());
   }
 
   /**

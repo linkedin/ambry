@@ -24,9 +24,9 @@ abstract class BloomFilterSerializer {
     bf.bitset.serialize(out);
   }
 
-  public BloomFilter deserialize(DataInput in) throws IOException {
+  public BloomFilter deserialize(DataInput in, int maxPageCount) throws IOException {
     int hashes = in.readInt();
-    IBitSet bs = OpenBitSet.deserialize(in);
+    IBitSet bs = OpenBitSet.deserialize(in, maxPageCount);
     return createFilter(hashes, bs);
   }
 

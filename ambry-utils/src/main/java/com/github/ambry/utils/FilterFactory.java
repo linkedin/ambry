@@ -29,15 +29,15 @@ public class FilterFactory {
     Murmur3BloomFilter.serializer.serialize((Murmur3BloomFilter) bf, output);
   }
 
-  public static IFilter deserialize(DataInput input) throws IOException {
-    return Murmur3BloomFilter.serializer.deserialize(input);
+  public static IFilter deserialize(DataInput input, int maxPageCount) throws IOException {
+    return Murmur3BloomFilter.serializer.deserialize(input, maxPageCount);
   }
 
   /**
    * @return A BloomFilter with the lowest practical false positive
    *         probability for the given number of elements.
    */
-  public static IFilter getFilter(long numElements, int targetBucketsPerElem) {
+  public static IFilter getFilter(long numElements, int targetBucketsPerElem, int maxPageCount) {
     int maxBucketsPerElement = Math.max(1, BloomCalculations.maxBucketsPerElement(numElements));
     int bucketsPerElement = Math.min(targetBucketsPerElem, maxBucketsPerElement);
     if (bucketsPerElement < targetBucketsPerElem) {
@@ -45,7 +45,7 @@ public class FilterFactory {
           numElements, bucketsPerElement, targetBucketsPerElem));
     }
     BloomCalculations.BloomSpecification spec = BloomCalculations.computeBloomSpec(bucketsPerElement);
-    return createFilter(spec.K, numElements, spec.bucketsPerElement);
+    return createFilter(spec.K, numElements, spec.bucketsPerElement, maxPageCount);
   }
 
   /**
@@ -55,16 +55,16 @@ public class FilterFactory {
    *         Asserts that the given probability can be satisfied using this
    *         filter.
    */
-  public static IFilter getFilter(long numElements, double maxFalsePosProbability) {
+  public static IFilter getFilter(long numElements, double maxFalsePosProbability, int maxPageCount) {
     int bucketsPerElement = BloomCalculations.maxBucketsPerElement(numElements);
     BloomCalculations.BloomSpecification spec =
         BloomCalculations.computeBloomSpec(bucketsPerElement, maxFalsePosProbability);
-    return createFilter(spec.K, numElements, spec.bucketsPerElement);
+    return createFilter(spec.K, numElements, spec.bucketsPerElement, maxPageCount);
   }
 
-  private static IFilter createFilter(int hash, long numElements, int bucketsPer) {
+  private static IFilter createFilter(int hash, long numElements, int bucketsPer, int maxPageCount) {
     long numBits = (numElements * bucketsPer) + BITSET_EXCESS;
-    IBitSet bitset = new OpenBitSet(numBits);
+    IBitSet bitset = new OpenBitSet(numBits, maxPageCount);
     return new Murmur3BloomFilter(hash, bitset);
   }
 }

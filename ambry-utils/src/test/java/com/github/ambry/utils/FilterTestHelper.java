@@ -23,6 +23,7 @@ public class FilterTestHelper {
   public static final BloomCalculations.BloomSpecification spec =
       BloomCalculations.computeBloomSpec(15, MAX_FAILURE_RATE);
   static final int ELEMENTS = 10000;
+  static final int BLOOM_FILTER_MAX_PAGE_COUNT = 128;
 
   static final ResetableIterator<ByteBuffer> intKeys() {
     return new KeyGenerator.IntGenerator(ELEMENTS);
