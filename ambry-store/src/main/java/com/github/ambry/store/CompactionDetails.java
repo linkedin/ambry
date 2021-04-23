@@ -40,7 +40,7 @@ class CompactionDetails {
    * @param referenceTimeMs the epoch time to use to get the same results from the {@link BlobStore} as when these
    *                        details were created.
    * @param logSegmentsUnderCompaction the names of the {@link LogSegment} under compaction.
-   * @param costBenefitInfo
+   * @param costBenefitInfo the {@link CostBenefitInfo} based on current Compaction Details
    * @throws IllegalArgumentException if {@code referenceTimeMs} < 0 or if {@code logSegmentsUnderCompaction} has no
    * elements.
    */
