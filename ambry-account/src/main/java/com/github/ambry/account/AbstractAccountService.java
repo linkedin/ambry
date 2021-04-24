@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  * for all the implementations. The only thing the implementations (usually) differ in is what the source is of the
  * accounts (Zookeeper / Helix, MySql, local JSON file, etcd, Consul, etc).
  */
-abstract class AbstractAccountService implements AccountService {
+public abstract class AbstractAccountService implements AccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(AbstractAccountService.class);
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";

@@ -28,6 +28,5 @@ public class DummyQuotaSource implements QuotaSource {
 
   @Override
   public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
-
   }
 }

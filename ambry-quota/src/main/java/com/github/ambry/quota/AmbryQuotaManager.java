@@ -23,7 +23,6 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -76,6 +75,7 @@ public class AmbryQuotaManager implements QuotaManager {
     Consumer<Collection<Account>> accountUpdateQuotaConsumer = (accounts) -> {
       onAccountUpdateNotification(accounts);
     };
+    accountService.addAccountUpdateConsumer(accountUpdateQuotaConsumer);
   }
 
   @Override
@@ -157,20 +157,12 @@ public class AmbryQuotaManager implements QuotaManager {
    * Notify {@link QuotaSource}s about creation of new Ambry {@link Account} or {@link com.github.ambry.account.Container}.
    * @param updatedAccounts {@link Collection} of {@link Account}s updated.
    */
-  private void onAccountUpdateNotification(Collection<Account> updatedAccounts) {
+  protected void onAccountUpdateNotification(Collection<Account> updatedAccounts) {
     requestQuotaEnforcers.stream().map(QuotaEnforcer::getQuotaSource).forEach(quotaSource -> {
-      List<QuotaResource> quotaResources = new ArrayList<>();
-      for (Account updatedAccount : updatedAccounts) {
-        if (updatedAccount.isQuotaAggregatedInAccount()) {
-          quotaResources.add(QuotaResource.fromAccount(updatedAccount));
-        } else {
-          quotaResources.addAll(updatedAccount.getAllContainers()
-              .stream()
-              .map(QuotaResource::fromContainer)
-              .collect(Collectors.toList()));
-        }
-      }
-      quotaSource.updateNewQuotaResources(quotaResources);
+      quotaSource.updateNewQuotaResources(updatedAccounts.stream()
+          .flatMap(account -> account.getAllContainers().stream())
+          .map(QuotaResource::fromContainer)
+          .collect(Collectors.toList()));
     });
   }
 

@@ -74,18 +74,6 @@ import org.json.JSONObject;
  * </p>
  */
 public class Account {
-  /**
-   * The id of unknown account.
-   */
-  public static final short UNKNOWN_ACCOUNT_ID = -1;
-  /**
-   * The name of the unknown account.
-   */
-  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
-  /**
-   * The id for to save account metadata in ambry.
-   */
-  public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
@@ -95,24 +83,37 @@ public class Account {
   static final String CONTAINERS_KEY = "containers";
   static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
   static final String ACL_INHERITED_BY_CONTAINER_KEY = "aclInheritedByContainer";
-  static final String QUOTA_AGGREGATED_IN_ACCOUNT_KEY = "quotaAggregatedInAccount";
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
   static final boolean ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE = false;
-  static final boolean QUOTA_AGGREGATED_IN_ACCOUNT_DEFAULT_VALUE = false;
+
+  /**
+   * The id of unknown account.
+   */
+  public static final short UNKNOWN_ACCOUNT_ID = -1;
+
+  /**
+   * The name of the unknown account.
+   */
+  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
+
+  /**
+   * The id for to save account metadata in ambry.
+   */
+  public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
+
   // account member variables
   private final short id;
   private final String name;
+  private AccountStatus status;
   private final int snapshotVersion;
   private final long lastModifiedTime;
+  private boolean aclInheritedByContainer;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
-  private final AccountStatus status;
-  private final boolean aclInheritedByContainer;
-  private final boolean quotaAggregatedInAccount;
 
   /**
    * Constructing an {@link Account} object from account metadata.
@@ -133,8 +134,6 @@ public class Account {
         lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
         aclInheritedByContainer =
             metadata.optBoolean(ACL_INHERITED_BY_CONTAINER_KEY, ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE);
-        quotaAggregatedInAccount =
-            metadata.optBoolean(QUOTA_AGGREGATED_IN_ACCOUNT_KEY, QUOTA_AGGREGATED_IN_ACCOUNT_DEFAULT_VALUE);
         checkRequiredFieldsForBuild();
         JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
         if (containerArray != null) {
@@ -159,27 +158,9 @@ public class Account {
    * @param aclInheritedByContainer Whether account's acl is inherited by container.
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
-   * @param quotaAggregatedInAccount Flag to determine whether quota is aggregated at container or account level.
    */
-  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, boolean quotaAggregatedInAccount) {
-    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-        quotaAggregatedInAccount);
-  }
-
-  /**
-   * Constructor that takes individual arguments.
-   * @param id The id of the account. Cannot be null.
-   * @param name The name of the account. Cannot be null.
-   * @param status The status of the account. Cannot be null.
-   * @param aclInheritedByContainer Whether account's acl is inherited by container.
-   * @param snapshotVersion the expected snapshot version for the account record.
-   * @param containers A collection of {@link Container}s to be part of this account.
-   */
-  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers) {
-    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-        QUOTA_AGGREGATED_IN_ACCOUNT_DEFAULT_VALUE);
+  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion, Collection<Container> containers) {
+    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE);
   }
 
   /**
@@ -191,31 +172,19 @@ public class Account {
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
    * @param lastModifiedTime created/modified time of this Account
-   * @param quotaAggregatedInAccount Flag to determine whether quota is aggregated at container or account level.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, long lastModifiedTime, boolean quotaAggregatedInAccount) {
+      Collection<Container> containers, long lastModifiedTime) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.snapshotVersion = snapshotVersion;
     this.lastModifiedTime = lastModifiedTime;
     this.aclInheritedByContainer = aclInheritedByContainer;
-    this.quotaAggregatedInAccount = quotaAggregatedInAccount;
     checkRequiredFieldsForBuild();
     if (containers != null) {
       updateContainerMap(containers);
     }
-  }
-
-  /**
-   * Deserializes a {@link JSONObject} to an account object.
-   * @param json The {@link JSONObject} to deserialize.
-   * @return An account object deserialized from the {@link JSONObject}.
-   * @throws JSONException If parsing the {@link JSONObject} fails.
-   */
-  public static Account fromJson(JSONObject json) throws JSONException {
-    return new Account(json);
   }
 
   /**
@@ -234,13 +203,22 @@ public class Account {
     metadata.put(SNAPSHOT_VERSION_KEY, incrementSnapshotVersion ? snapshotVersion + 1 : snapshotVersion);
     metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
     metadata.put(ACL_INHERITED_BY_CONTAINER_KEY, aclInheritedByContainer);
-    metadata.put(QUOTA_AGGREGATED_IN_ACCOUNT_KEY, quotaAggregatedInAccount);
     JSONArray containerArray = new JSONArray();
     for (Container container : containerIdToContainerMap.values()) {
       containerArray.put(container.toJson());
     }
     metadata.put(CONTAINERS_KEY, containerArray);
     return metadata;
+  }
+
+  /**
+   * Deserializes a {@link JSONObject} to an account object.
+   * @param json The {@link JSONObject} to deserialize.
+   * @return An account object deserialized from the {@link JSONObject}.
+   * @throws JSONException If parsing the {@link JSONObject} fails.
+   */
+  public static Account fromJson(JSONObject json) throws JSONException {
+    return new Account(json);
   }
 
   /**
@@ -325,13 +303,6 @@ public class Account {
   }
 
   /**
-   * @return whether the quota is aggregated at account level.
-   */
-  public boolean isQuotaAggregatedInAccount() {
-    return quotaAggregatedInAccount;
-  }
-
-  /**
    * Generates a String representation that uniquely identifies this account. The string is in the format of
    * {@code Account[id]}.
    * @return The String representation of this account.
@@ -366,7 +337,15 @@ public class Account {
 
   @Override
   public int hashCode() {
-    return id;
+    return (int) id;
+  }
+
+  /**
+   * The status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
+   * the account has been deactivated.
+   */
+  public enum AccountStatus {
+    ACTIVE, INACTIVE
   }
 
   /**
@@ -428,13 +407,5 @@ public class Account {
               .toString();
       throw new IllegalStateException(errorMessage);
     }
-  }
-
-  /**
-   * The status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
-   * the account has been deactivated.
-   */
-  public enum AccountStatus {
-    ACTIVE, INACTIVE
   }
 }
