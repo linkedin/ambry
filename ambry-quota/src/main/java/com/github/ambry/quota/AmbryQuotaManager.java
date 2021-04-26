@@ -29,8 +29,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -72,10 +72,7 @@ public class AmbryQuotaManager implements QuotaManager {
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = new QuotaMetrics(metricRegistry);
-    Consumer<Collection<Account>> accountUpdateQuotaConsumer = (accounts) -> {
-      onAccountUpdateNotification(accounts);
-    };
-    accountService.addAccountUpdateConsumer(accountUpdateQuotaConsumer);
+    accountService.addAccountUpdateConsumer(this::onAccountUpdateNotification);
   }
 
   @Override
@@ -158,12 +155,14 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param updatedAccounts {@link Collection} of {@link Account}s updated.
    */
   protected void onAccountUpdateNotification(Collection<Account> updatedAccounts) {
-    requestQuotaEnforcers.stream().map(QuotaEnforcer::getQuotaSource).forEach(quotaSource -> {
-      quotaSource.updateNewQuotaResources(updatedAccounts.stream()
-          .flatMap(account -> account.getAllContainers().stream())
-          .map(QuotaResource::fromContainer)
-          .collect(Collectors.toList()));
-    });
+    Set<QuotaResource> updatedQuotaResources = updatedAccounts.stream()
+        .flatMap(account -> account.getAllContainers().stream())
+        .map(QuotaResource::fromContainer)
+        .collect(Collectors.toSet());
+    requestQuotaEnforcers.stream()
+        .map(QuotaEnforcer::getQuotaSource)
+        .filter(Objects::nonNull)
+        .forEach(quotaSource -> quotaSource.updateNewQuotaResources(updatedQuotaResources));
   }
 
   /**

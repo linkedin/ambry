@@ -19,14 +19,14 @@ import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.Set;
 
 
 /**
  * An implementation of {@link QuotaSource} that always returns a max value for {@link Quota} for all resources.
  */
 public class UnlimitedQuotaSource implements QuotaSource {
-  private final List<QuotaResource> quotaResourceList = new ArrayList<>();
+  private final Set<QuotaResource> quotaResourceList = new ArrayList<>();
 
   @Override
   public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) {
@@ -41,7 +41,7 @@ public class UnlimitedQuotaSource implements QuotaSource {
   /**
    * @return List of {@link QuotaResource}s updated to the {@link QuotaSource}.
    */
-  public List<QuotaResource> getQuotaResourceList() {
+  public Set<QuotaResource> getQuotaResourceList() {
     return quotaResourceList;
   }
 }

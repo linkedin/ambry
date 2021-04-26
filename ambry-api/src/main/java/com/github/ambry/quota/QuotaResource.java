@@ -15,6 +15,7 @@ package com.github.ambry.quota;
 
 import com.github.ambry.account.Container;
 
+
 /**
  * Resource for which quota is specified for enforced.
  */
@@ -40,7 +41,7 @@ public class QuotaResource {
    */
   public static QuotaResource fromContainer(Container container) {
     return new QuotaResource(
-        String.join(DELIM, String.valueOf(container.getId()), String.valueOf(container.getParentAccountId())),
+        String.join(DELIM, String.valueOf(container.getParentAccountId()), String.valueOf(container.getId())),
         QuotaResourceType.CONTAINER);
   }
 
