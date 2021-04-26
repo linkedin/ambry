@@ -22,6 +22,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -29,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class StoreMetrics {
   private static final String SEPARATOR = ".";
-
+  private static final Logger logger = LoggerFactory.getLogger(StoreMetrics.class);
   public final Timer getResponse;
   public final Timer putResponse;
   public final Timer deleteResponse;
@@ -247,6 +249,7 @@ public class StoreMetrics {
         invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSize(
             new TimeRange(System.currentTimeMillis(), blobStoreStats.getBucketSpanTimeInMs())).getSecond();
       } catch (StoreException e) {
+        logger.error("Failed to get invalidDataSize on store: {},", storeId, e);
       }
       return invalidDataSize;
     };
