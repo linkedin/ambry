@@ -114,6 +114,7 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -131,7 +132,7 @@ public class FrontendRestRequestServiceTest {
     try {
       QUOTA_MANAGER =
           new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              new MaxThrottlePolicy(), null, null, new MetricRegistry());
+              new MaxThrottlePolicy(), Mockito.mock(AccountService.class), null, new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
