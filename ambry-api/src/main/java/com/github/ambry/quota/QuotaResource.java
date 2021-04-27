@@ -59,6 +59,17 @@ public class QuotaResource {
     return quotaResourceType;
   }
 
+  @Override
+  public boolean equals(Object obj) {
+    QuotaResource other = (QuotaResource) obj;
+    return other.getResourceId().equals(resourceId) && other.getQuotaResourceType().equals(quotaResourceType);
+  }
+
+  @Override
+  public int hashCode() {
+    return 89 * quotaResourceType.hashCode() + resourceId.hashCode();
+  }
+
   /**
    * Type of Ambry resource for which quota can be applied.
    */
