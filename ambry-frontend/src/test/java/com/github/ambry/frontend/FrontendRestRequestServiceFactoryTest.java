@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -47,7 +48,7 @@ public class FrontendRestRequestServiceFactoryTest {
     try {
       QUOTA_MANAGER =
           new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              new MaxThrottlePolicy(), null, null, new MetricRegistry());
+              new MaxThrottlePolicy(), Mockito.mock(AccountService.class), null, new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }

@@ -13,6 +13,10 @@
  */
 package com.github.ambry.quota;
 
+import java.util.Collection;
+import java.util.List;
+
+
 /**
  * Interface representing the backend source from which quota for a resource can be fetched, and to which the current
  * usage of a resource can be saved.
@@ -24,4 +28,10 @@ public interface QuotaSource {
    * @param quotaName {@link QuotaName} object.
    */
   Quota getQuota(QuotaResource quotaResource, QuotaName quotaName);
+
+  /**
+   * Update the quota for newly created {@link List} of {@link QuotaResource}s.
+   * @param quotaResources {@link List} of new created {@link QuotaResource}s.
+   */
+  void updateNewQuotaResources(Collection<QuotaResource> quotaResources);
 }

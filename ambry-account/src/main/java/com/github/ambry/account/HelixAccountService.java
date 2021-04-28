@@ -90,7 +90,7 @@ import static com.github.ambry.utils.Utils.*;
  *   back to zookeeper.
  * </p>
  */
-public class HelixAccountService extends AbstractAccountService implements AccountService {
+public class HelixAccountService extends AbstractAccountService {
 
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final BackupFileManager backupFileManager;

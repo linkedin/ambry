@@ -16,6 +16,7 @@ package com.github.ambry.quota;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
@@ -28,6 +29,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
@@ -70,6 +72,7 @@ public class AmbryQuotaManager implements QuotaManager {
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = new QuotaMetrics(metricRegistry);
+    accountService.addAccountUpdateConsumer(this::onAccountUpdateNotification);
   }
 
   @Override
@@ -145,6 +148,22 @@ public class AmbryQuotaManager implements QuotaManager {
   @Override
   public QuotaConfig getQuotaConfig() {
     return quotaConfig;
+  }
+
+  /**
+   * Notify {@link QuotaSource}s about creation of new Ambry {@link Account} or {@link com.github.ambry.account.Container}.
+   * Note that this method can also get notification about changes to account or container unrelated to quota.
+   * @param updatedAccounts {@link Collection} of {@link Account}s updated.
+   */
+  protected void onAccountUpdateNotification(Collection<Account> updatedAccounts) {
+    Set<QuotaResource> updatedQuotaResources = updatedAccounts.stream()
+        .flatMap(account -> account.getAllContainers().stream())
+        .map(QuotaResource::fromContainer)
+        .collect(Collectors.toSet());
+    requestQuotaEnforcers.stream()
+        .map(QuotaEnforcer::getQuotaSource)
+        .filter(Objects::nonNull)
+        .forEach(quotaSource -> quotaSource.updateNewQuotaResources(updatedQuotaResources));
   }
 
   /**
