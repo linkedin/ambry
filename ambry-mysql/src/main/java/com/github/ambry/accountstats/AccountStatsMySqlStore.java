@@ -78,17 +78,20 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public final Histogram deleteStatementSize;
     public final Histogram aggregatedBatchSize;
     public final Histogram aggregatedPublishTimeMs;
+    public final Histogram deleteAggregatedAccountStatsTimeMs;
     public final Histogram queryStatsTimeMs;
     public final Histogram queryAggregatedStatsTimeMs;
     public final Histogram queryMonthlyAggregatedStatsTimeMs;
     public final Histogram queryMonthTimeMs;
     public final Histogram takeSnapshotTimeMs;
+    public final Histogram deleteSnapshotTimeMs;
 
     public final Histogram queryPartitionNameAndIdTimeMs;
     public final Histogram storePartitionClassStatsTimeMs;
     public final Histogram queryPartitionClassStatsTimeMs;
     public final Histogram storeAggregatedPartitionClassStatsTimeMs;
     public final Histogram queryAggregatedPartitionClassStatsTimeMs;
+    public final Histogram deleteAggregatedPartitionClassStatsTimeMs;
 
     public final Counter missingPartitionClassNameErrorCount;
 
@@ -109,6 +112,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedBatchSize"));
       aggregatedPublishTimeMs =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "AggregatedPublishTimeMs"));
+      deleteAggregatedAccountStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteAggregatedAccountStatsTimeMs"));
       queryStatsTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryStatsTimeMs"));
       queryAggregatedStatsTimeMs =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryAggregatedStatsTimeMs"));
@@ -116,6 +121,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryMonthlyAggregatedStatsTimeMs"));
       queryMonthTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryMonthTimeMs"));
       takeSnapshotTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "TakeSnapshotTimeMs"));
+      deleteSnapshotTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteSnapshotTimeMs"));
       queryPartitionNameAndIdTimeMs =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryPartitionNameAndIdsTimeMs"));
       storePartitionClassStatsTimeMs =
@@ -126,6 +133,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           MetricRegistry.name(AccountStatsMySqlStore.class, "StoreAggregatedPartitionClassStatsTimeMs"));
       queryAggregatedPartitionClassStatsTimeMs = registry.histogram(
           MetricRegistry.name(AccountStatsMySqlStore.class, "QueryAggregatedPartitionClassStatsTimeMs"));
+      deleteAggregatedPartitionClassStatsTimeMs = registry.histogram(
+          MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteAggregatedPartitionClassStatsTimeMs"));
 
       missingPartitionClassNameErrorCount =
           registry.counter(MetricRegistry.name(AccountStatsMySqlStore.class, "MissingPartitionClassNameErrorCount"));
@@ -366,6 +375,13 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     storeMetrics.aggregatedBatchSize.update(batchSize);
   }
 
+  @Override
+  public void deleteAggregatedAccountStatsForContainer(short accountId, short containerId) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    aggregatedAccountReportsDao.deleteStorageUsage(clusterName, accountId, containerId);
+    storeMetrics.deleteAggregatedAccountStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
   /**
    * Query mysql database to get all the aggregated container storage usage for given {@code clusterName} and construct
    * a map from those data. The map is structured as such:
@@ -445,6 +461,13 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
     aggregatedAccountReportsDao.updateMonth(clusterName, monthValue);
     storeMetrics.takeSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
+  public void deleteSnapshotOfAggregatedAccountStats() throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    aggregatedAccountReportsDao.deleteAggregatedUsageFromMonthlyAggregatedTableForCluster(clusterName);
+    storeMetrics.deleteSnapshotTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
   @Override
@@ -531,6 +554,16 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     }
     batch.flush();
     storeMetrics.storeAggregatedPartitionClassStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
+  public void deleteAggregatedPartitionClassStatsForAccountContainer(String partitionClassName,
+      String accountContainerKey) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    short[] accountContainerId = Utils.accountContainerIdFromPartitionClassStatsKey(accountContainerKey);
+    partitionClassReportsDao.deleteAggregatedStorageUsage(clusterName, partitionClassName, accountContainerId[0],
+        accountContainerId[1]);
+    storeMetrics.deleteAggregatedPartitionClassStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
   @Override

@@ -279,8 +279,12 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertTwoStatsSnapshots(obtainedStats.getSnapshot(), stats2.getSnapshot());
   }
 
+  /**
+   * Test the methods for storing, deleting and fetch aggregated account stats.
+   * @throws Exception
+   */
   @Test
-  public void testAggregatedStats() throws Exception {
+  public void testAggregatedAccountStats() throws Exception {
     Map<String, Map<String, Long>> containerStorageUsages = TestUtils.makeStorageMap(10, 10, 100000, 1000);
     StatsSnapshot snapshot = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(containerStorageUsages);
     mySqlStore.storeAggregatedAccountStats(snapshot);
@@ -304,8 +308,28 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storeAggregatedAccountStats(newSnapshot);
     obtainedContainerStorageUsages = mySqlStore.queryAggregatedAccountStats();
     assertEquals(containerStorageUsages, obtainedContainerStorageUsages);
+
+    // Delete account and container
+    newSnapshot = new StatsSnapshot(newSnapshot);
+    newSnapshot.getSubMap().remove(Utils.statsAccountKey((short) 1));
+    newSnapshot.getSubMap()
+        .get(Utils.statsAccountKey((short) 2))
+        .getSubMap()
+        .remove(Utils.statsContainerKey((short) 1));
+    newSnapshot.updateValue();
+    // Now remove all containers for account 1 and container 1 of account 2
+    for (String containerId : containerStorageUsages.get(String.valueOf(1)).keySet()) {
+      mySqlStore.deleteAggregatedAccountStatsForContainer((short) 1, Short.valueOf(containerId));
+    }
+    mySqlStore.deleteAggregatedAccountStatsForContainer((short) 2, (short) 1);
+    obtainedSnapshot = mySqlStore.queryAggregatedAccountStatsByClusterName(clusterName1);
+    assertEquals(newSnapshot, obtainedSnapshot);
   }
 
+  /**
+   * Test methods to store, delete and fetch monthly aggregated stats
+   * @throws Exception
+   */
   @Test
   public void testMonthlyAggregatedStats() throws Exception {
     String monthValue = "2020-01";
@@ -334,8 +358,16 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertEquals(currentContainerStorageUsages, monthlyContainerStorageUsages);
     obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
+
+    // Delete the snapshots
+    mySqlStore.deleteSnapshotOfAggregatedAccountStats();
+    assertTrue(mySqlStore.queryMonthlyAggregatedAccountStats().isEmpty());
   }
 
+  /**
+   * Test methods to store and fetch partition class, partition name partition id and partition class stats.
+   * @throws Exception
+   */
   @Test
   public void testHostPartitionClassStats() throws Exception {
     // First write some stats to account reports
@@ -387,6 +419,10 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertEquals(partitionClassStats3.getSnapshot(), obtainedStats3.getSnapshot());
   }
 
+  /**
+   * Test methods to store, delete and fetch aggregated partition class stats.
+   * @throws Exception
+   */
   @Test
   public void testAggregatedPartitionClassStats() throws Exception {
     testHostPartitionClassStats();
@@ -422,6 +458,19 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storeAggregatedPartitionClassStats(aggregated);
     obtained = mySqlStore.queryAggregatedPartitionClassStats();
     assertEquals(aggregated, obtained);
+
+    // Delete some account and container
+    newSnapshot = new StatsSnapshot(newSnapshot);
+    short accountId = (short) 1;
+    short containerId = (short) 1;
+    String accountContainerKey = Utils.partitionClassStatsAccountContainerKey(accountId, containerId);
+    for (String partitionClassName: partitionNameAndIds.keySet()) {
+      mySqlStore.deleteAggregatedPartitionClassStatsForAccountContainer(partitionClassName, accountContainerKey);
+      newSnapshot.getSubMap().get(partitionClassName).getSubMap().remove(accountContainerKey);
+    }
+    newSnapshot.updateValue();
+    obtained = mySqlStore.queryAggregatedPartitionClassStats();
+    assertEquals(newSnapshot, obtained);
   }
 
   private AccountStatsMySqlStore createAccountStatsMySqlStore(String clusterName, String hostname, int port)

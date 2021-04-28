@@ -15,19 +15,21 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -126,8 +128,14 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         logger.info("Aggregating stats from " + statsWrappers.size() + " hosts");
         results = clusterAggregator.doWorkOnStatsWrapperMap(statsWrappers, statsReportType);
         if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
+          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+            removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
+          }
           accountStatsStore.storeAggregatedAccountStats(results.getSecond());
         } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
+          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+            removeInvalidAggregatedPartitionClassStats(results.getSecond());
+          }
           accountStatsStore.storeAggregatedPartitionClassStats(results.getSecond());
         }
 
@@ -141,6 +149,9 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
           String recordedMonthValue = accountStatsStore.queryRecordedMonth();
           if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
               recordedMonthValue)) {
+            if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+              accountStatsStore.deleteSnapshotOfAggregatedAccountStats();
+            }
             logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
             accountStatsStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonthValue);
           }
@@ -159,6 +170,69 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         }
       }
     }
+  }
+
+  private boolean removeInvalidAggregatedAccountAndContainerStats(StatsSnapshot currentStats) throws Exception {
+    Map<String, Map<String, Long>> existingStats = accountStatsStore.queryAggregatedAccountStats();
+    List<Pair<Short, Short>> toBeDeletedAccountAndContainers = new ArrayList<>();
+    for (Map.Entry<String, Map<String, Long>> accountEntry : existingStats.entrySet()) {
+      short accountId = Short.valueOf(accountEntry.getKey());
+      for (String containerIdStr : accountEntry.getValue().keySet()) {
+        short containerId = Short.valueOf(containerIdStr);
+        if (!accountAndContainerExistsInStatsSnapshot(currentStats, accountId, containerId)) {
+          toBeDeletedAccountAndContainers.add(new Pair<>(accountId, containerId));
+        }
+      }
+    }
+    // delete the account/container stats that are no longer valid
+    for (Pair<Short, Short> accountContainer : toBeDeletedAccountAndContainers) {
+      accountStatsStore.deleteAggregatedAccountStatsForContainer(accountContainer.getFirst(),
+          accountContainer.getSecond());
+    }
+    return !toBeDeletedAccountAndContainers.isEmpty();
+  }
+
+  private boolean removeInvalidAggregatedPartitionClassStats(StatsSnapshot currentStats) throws Exception {
+    List<Pair<String, String>> toBeDeletedPartitionClassNameAndAccountContainer = new ArrayList<>();
+    StatsSnapshot existingStats = accountStatsStore.queryAggregatedPartitionClassStats();
+    for (Map.Entry<String, StatsSnapshot> partitionClassEntry : existingStats.getSubMap().entrySet()) {
+      String partitionClassName = partitionClassEntry.getKey();
+      for (String accountContainerKey : partitionClassEntry.getValue().getSubMap().keySet()) {
+        if (!partitionClassNameAndAccountContainerExistsInStatsSnapshot(currentStats, partitionClassName,
+            accountContainerKey)) {
+          toBeDeletedPartitionClassNameAndAccountContainer.add(new Pair<>(partitionClassName, accountContainerKey));
+        }
+      }
+    }
+    for (Pair<String, String> pair : toBeDeletedPartitionClassNameAndAccountContainer) {
+      accountStatsStore.deleteAggregatedPartitionClassStatsForAccountContainer(pair.getFirst(), pair.getSecond());
+    }
+    return !toBeDeletedPartitionClassNameAndAccountContainer.isEmpty();
+  }
+
+  private boolean accountAndContainerExistsInStatsSnapshot(StatsSnapshot snapshot, short accountId, short containerId) {
+    if (snapshot == null || snapshot.getSubMap() == null) {
+      return false;
+    }
+    if (!snapshot.getSubMap().containsKey(Utils.statsAccountKey(accountId))) {
+      return false;
+    }
+    StatsSnapshot containerSnapshot = snapshot.getSubMap().get(Utils.statsAccountKey(accountId));
+    return containerSnapshot.getSubMap() != null && containerSnapshot.getSubMap()
+        .containsKey(Utils.statsContainerKey(containerId));
+  }
+
+  private boolean partitionClassNameAndAccountContainerExistsInStatsSnapshot(StatsSnapshot snapshot,
+      String partitionClassName, String accountContainerKey) {
+    if (snapshot == null || snapshot.getSubMap() == null) {
+      return false;
+    }
+    if (!snapshot.getSubMap().containsKey(partitionClassName)) {
+      return false;
+    }
+    StatsSnapshot accountContainerSnapshot = snapshot.getSubMap().get(partitionClassName);
+    return accountContainerSnapshot.getSubMap() != null && accountContainerSnapshot.getSubMap()
+        .containsKey(accountContainerKey);
   }
 
   /**

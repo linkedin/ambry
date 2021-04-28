@@ -99,6 +99,18 @@ public class PartitionClassReportsDao {
       NAME_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
 
   /**
+   * eg : DELETE FROM AggregatedPartitionClassReports
+   *      WHERE
+   *      PartitionClassId IN (SELECT id FROM PartitionClassNames WHERE clusterName = "ambry-test" AND name = "default")
+   *      AND accountId = 101
+   *      AND containerId = 201;
+   */
+  private static final String deleteAggregatedSql =
+      String.format("DELETE FROM %s WHERE %s IN (SELECT %s FROM %s WHERE %s=? AND %s=?) AND %s=? AND %s=?",
+          AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE,
+          CLUSTER_NAME_COLUMN, NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
+
+  /**
    * eg: SELECT TableA.name, accountId, containerId, storageUsage, updatedAt
    *     FROM AggregatedPartitionClassReport INNER JOIN (
    *         SELECT * FROM PartitionClassNames WHERE clusterName="ambry-test"
@@ -292,6 +304,33 @@ public class PartitionClassReportsDao {
   }
 
   /**
+   * Delete storage usage from aggregated partition class reports.
+   * @param clusterName The clusterName.
+   * @param partitionClassName The partition class name
+   * @param accountId The account id
+   * @param containerId The container id
+   * @throws SQLException
+   */
+  void deleteAggregatedStorageUsage(String clusterName, String partitionClassName, short accountId, short containerId)
+      throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteAggregatedSql, true);
+      deleteStatement.setString(1, clusterName);
+      deleteStatement.setString(2, partitionClassName);
+      deleteStatement.setInt(3, accountId);
+      deleteStatement.setInt(4, containerId);
+      deleteStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      logger.error("Failed to execute of {}, with parameter {} {} {} {}", deleteAggregatedSql, clusterName,
+          partitionClassName, accountId, containerId, e);
+      throw e;
+    }
+  }
+
+  /**
    * A batch updater to update aggregated partition class container storage usage.
    */
   class StorageBatchUpdater extends BatchUpdater {
@@ -302,7 +341,7 @@ public class PartitionClassReportsDao {
      * @throws SQLException
      */
     public StorageBatchUpdater(int maxBatchSize) throws SQLException {
-      super(dataAccessor, insertAggregatedSql, "AggregatedPartitionClassReports", maxBatchSize);
+      super(dataAccessor, insertAggregatedSql, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, maxBatchSize);
     }
 
     /**
