@@ -460,6 +460,7 @@ project(':ambry-quota') {
             exclude group: "log4j", module: "log4j"
         }
         testCompile project(':ambry-test-utils')
+        testCompile project(':ambry-account')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
 }
