@@ -152,6 +152,7 @@ public class AmbryQuotaManager implements QuotaManager {
 
   /**
    * Notify {@link QuotaSource}s about creation of new Ambry {@link Account} or {@link com.github.ambry.account.Container}.
+   * Note that this method can also get notification about changes to account or container unrelated to quota.
    * @param updatedAccounts {@link Collection} of {@link Account}s updated.
    */
   protected void onAccountUpdateNotification(Collection<Account> updatedAccounts) {

@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.account.Container;
+import java.util.Objects;
 
 
 /**
@@ -30,8 +31,8 @@ public class QuotaResource {
    * @param quotaResourceType {@link QuotaResourceType} object specifying the type of resource.
    */
   public QuotaResource(String resourceId, QuotaResourceType quotaResourceType) {
-    this.resourceId = resourceId;
-    this.quotaResourceType = quotaResourceType;
+    this.resourceId = Objects.requireNonNull(resourceId);
+    this.quotaResourceType = Objects.requireNonNull(quotaResourceType);
   }
 
   /**
@@ -61,6 +62,12 @@ public class QuotaResource {
 
   @Override
   public boolean equals(Object obj) {
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    if (this == obj) {
+      return true;
+    }
     QuotaResource other = (QuotaResource) obj;
     return other.getResourceId().equals(resourceId) && other.getQuotaResourceType().equals(quotaResourceType);
   }

@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
@@ -128,7 +129,7 @@ public class AmbrySecurityServiceTest {
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
       QUOTA_MANAGER =
           new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              new MaxThrottlePolicy(), null, null, new MetricRegistry());
+              new MaxThrottlePolicy(), mock(AccountService.class), null, new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
