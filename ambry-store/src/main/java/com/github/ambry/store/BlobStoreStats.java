@@ -462,6 +462,10 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
   }
 
+  public long getBucketSpanTimeInMs() {
+    return bucketSpanTimeInMs;
+  }
+
   private void enqueueNewValue(StoreKey key, IndexValue newValue, IndexValue originalPutValue,
       IndexValue previousValue) {
     if (recentEntryQueueEnabled) {

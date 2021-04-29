@@ -333,7 +333,7 @@ public class CompactionLogTest {
       generatedSegmentNames.add(segmentName);
       segmentsUnderCompaction.add(segmentName);
     }
-    return new CompactionDetails(referenceTime, segmentsUnderCompaction);
+    return new CompactionDetails(referenceTime, segmentsUnderCompaction, null);
   }
 
   /**
@@ -375,7 +375,7 @@ public class CompactionLogTest {
     for (CompactionDetails details : detailsList) {
       allSegmentNames.addAll(details.getLogSegmentsUnderCompaction());
     }
-    return new CompactionDetails(detailsList.get(0).getReferenceTimeMs(), allSegmentNames);
+    return new CompactionDetails(detailsList.get(0).getReferenceTimeMs(), allSegmentNames, null);
   }
 
   // phaseTransitionEnforcementTest() helpers

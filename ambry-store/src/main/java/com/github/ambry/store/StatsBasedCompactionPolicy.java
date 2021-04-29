@@ -64,7 +64,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
                 blobStoreStats.getMaxBlobSize());
         if (bestCandidateToCompact != null) {
           details = new CompactionDetails(validDataSizeByLogSegment.getFirst(),
-              bestCandidateToCompact.getSegmentsToCompact());
+              bestCandidateToCompact.getSegmentsToCompact(), bestCandidateToCompact);
           logger.info("Best candidate to compact {}", bestCandidateToCompact);
         } else {
           logger.trace("No best candidate found");

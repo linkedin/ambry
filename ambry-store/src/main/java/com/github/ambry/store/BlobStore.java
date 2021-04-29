@@ -250,7 +250,6 @@ public class BlobStore implements Store {
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
-        metrics.initializeIndexGauges(storeId, index, capacityInBytes);
         long logSegmentForecastOffsetMs = TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours);
         long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
         long queueProcessingPeriodInMs =
@@ -261,6 +260,7 @@ public class BlobStore implements Store {
               config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
               diskIOScheduler, metrics);
         }
+        metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();

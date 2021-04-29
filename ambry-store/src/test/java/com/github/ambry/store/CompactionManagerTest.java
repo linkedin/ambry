@@ -466,7 +466,7 @@ public class CompactionManagerTest {
    */
   private CompactionDetails generateRandomCompactionDetails(int count) {
     List<LogSegmentName> logSegmentsNames = CompactionPolicyTest.generateRandomLogSegmentName(count);
-    return new CompactionDetails(time.milliseconds(), logSegmentsNames);
+    return new CompactionDetails(time.milliseconds(), logSegmentsNames, null);
   }
 
   // testDifferentTriggers() helpers

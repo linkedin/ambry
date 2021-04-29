@@ -54,7 +54,7 @@ public class CompactAllPolicyTest {
   public void testGetCompactionDetailsTest() throws StoreException, InterruptedException {
     blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName(1);
     CompactionPolicyTest.verifyCompactionDetails(
-        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.logSegmentsNotInJournal),
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.logSegmentsNotInJournal, null),
         blobStore, compactionPolicy);
 
     // random no of valid logSegments
@@ -62,7 +62,7 @@ public class CompactAllPolicyTest {
       int logSegmentCount = TestUtils.RANDOM.nextInt(10) + 1;
       blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName(logSegmentCount);
       CompactionPolicyTest.verifyCompactionDetails(
-          new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.logSegmentsNotInJournal),
+          new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.logSegmentsNotInJournal, null),
           blobStore, compactionPolicy);
     }
   }

@@ -44,6 +44,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +101,7 @@ class BlobStoreCompactor {
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
+  private final AtomicReference<CompactionDetails> currentCompactionDetails = new AtomicReference();
 
   /**
    * Constructs the compactor component.
@@ -162,7 +164,7 @@ class BlobStoreCompactor {
     isActive = true;
     logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
         System.getProperty("os.name"), useDirectIO);
-    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress);
+    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -206,6 +208,7 @@ class BlobStoreCompactor {
     }
     checkSanity(details);
     logger.info("Compaction of {} started with details {}", storeId, details);
+    currentCompactionDetails.set(details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details, config);
     resumeCompaction(bundleReadBuffer);
   }

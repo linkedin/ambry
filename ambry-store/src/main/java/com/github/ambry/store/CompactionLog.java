@@ -268,8 +268,9 @@ class CompactionLog implements Closeable {
         newList.add(segmentUnderCompaction);
       }
     }
-    getCurrentCycleLog().compactionDetails = new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList);
-    cycleLogs.add(new CycleLog(new CompactionDetails(currentDetails.getReferenceTimeMs(), newList)));
+    getCurrentCycleLog().compactionDetails = new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList,
+        null);
+    cycleLogs.add(new CycleLog(new CompactionDetails(currentDetails.getReferenceTimeMs(), newList, null)));
     flush();
     logger.trace("{}: Split current cycle into two lists: {} and {}", file, updatedList, newList);
   }
