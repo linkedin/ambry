@@ -373,6 +373,13 @@ public class StoreConfig {
   public final boolean storeContainerDeletionEnabled;
 
   /**
+   * True to enable close last log segment automatically and journal size will be set to zero.
+   */
+  @Config("store.auto.close.last.log.segment.enabled")
+  @Default("false")
+  public final boolean storeAutoCloseLastLogSegmentEnabled;
+
+  /**
    * Whether to set local partition state through InstanceConfig in Helix. If true, store is allowed to enable/disable
    * partition on local node by calling InstanceConfig API.
    */
@@ -474,6 +481,7 @@ public class StoreConfig {
     storeBloomFilterMaximumPageCount =
         verifiableProperties.getIntInRange("store.bloom.filter.maximum.page.count", 128, 1, Integer.MAX_VALUE);
     storeContainerDeletionEnabled = verifiableProperties.getBoolean("store.container.deletion.enabled", false);
+    storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean("store.auto.close.last.log.segment.enabled", false);
     storeSetLocalPartitionStateEnabled =
         verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
     storeEnableBucketForLogSegmentReports =

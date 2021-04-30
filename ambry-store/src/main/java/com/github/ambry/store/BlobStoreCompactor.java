@@ -377,7 +377,7 @@ class BlobStoreCompactor {
       }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
-      if (segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
+      if (srcIndex.journal.getFirstOffset() != null && segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
         throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
       }
       prevSegmentName = segment.getName();
@@ -519,7 +519,7 @@ class BlobStoreCompactor {
         targetLogTotalCapacity, storeId, existingTargetLogSegments, targetSegmentNamesAndFilenames);
     tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, diskSpaceAllocator, config, tgtMetrics, true,
         existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
-    Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
+    Journal journal = new Journal(dataDir.getAbsolutePath(), config.storeAutoCloseLastLogSegmentEnabled ? 0 : 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
     tgtIndex =
         new PersistentIndex(dataDir.getAbsolutePath(), storeId, null, tgtLog, config, storeKeyFactory, null, null,

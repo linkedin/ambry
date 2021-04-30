@@ -288,7 +288,9 @@ class CuratedLogIndexState {
       endOffsetOfPrevMsg = fileSpan.getEndOffset();
     }
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
-    assertEquals("Journal's last offset not as expected", expectedJournalLastOffset, index.journal.getLastOffset());
+    if (index.journal.getLastOffset() != null) {
+      assertEquals("Journal's last offset not as expected", expectedJournalLastOffset, index.journal.getLastOffset());
+    }
     return indexEntries;
   }
 

@@ -145,7 +145,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void initCloseTest() throws Exception {
     refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     compactor.close(0);
   }
@@ -157,7 +157,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void closeWithoutInitTest() throws Exception {
     refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.close(0);
   }
 
@@ -168,7 +168,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void useServiceWithoutInitTest() throws Exception {
     refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     LogSegmentName firstSegmentName = state.log.getFirstSegment().getName();
     CompactionDetails details =
         new CompactionDetails(state.time.milliseconds(), Collections.singletonList(firstSegmentName), null);
@@ -228,7 +228,7 @@ public class BlobStoreCompactorTest {
 
     // create a compaction log in order to mimic a compaction being in progress
     try (CompactionLog cLog = new CompactionLog(tempDirStr, STORE_ID, state.time, details, config)) {
-      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
       compactor.initialize(state.index);
       compactor.compact(details, bundleReadBuffer);
       fail("compact() should have failed because a compaction is already in progress");
@@ -247,7 +247,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void resumeCompactionWithoutAnyInProgressTest() throws Exception {
     refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
     assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse().length);
@@ -271,7 +271,7 @@ public class BlobStoreCompactorTest {
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
         state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
-    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true, false);
   }
 
   /**
@@ -314,7 +314,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
         peerReplica2.getReplicaPath());
     // initiate compaction
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -364,7 +364,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
         peerReplica2.getReplicaPath());
     // initiate compaction
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -386,7 +386,7 @@ public class BlobStoreCompactorTest {
     // initiate compaction
     segmentsUnderCompaction = getLogSegments(0, 2);
     details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -409,7 +409,7 @@ public class BlobStoreCompactorTest {
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
         state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
-    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true, false);
   }
 
   /**
@@ -432,7 +432,7 @@ public class BlobStoreCompactorTest {
     state.reloadIndex(true, false);
     long deleteReferenceTimeMs = state.time.milliseconds();
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, false);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, false, false);
   }
 
   /**
@@ -458,7 +458,33 @@ public class BlobStoreCompactorTest {
     state.reloadIndex(true, false);
     long deleteReferenceTimeMs = state.time.milliseconds();
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true, false);
+  }
+
+  /**
+   * Set Journal size to zero and compacts the whole log (except the last log segment) and a changed size is expected i.e. there is some invalid
+   * data.
+   * @throws Exception
+   */
+  @Test
+  public void compactWholeLogWithChangeExpectedAndSetJournalSizeToZeroTest() throws Exception {
+    refreshState(false, true);
+    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 2;
+    writeDataToMeetRequiredSegmentCount(requiredCount,
+        Arrays.asList(state.time.milliseconds() / 2, state.time.milliseconds(), state.time.milliseconds() * 2));
+    // do some random deleting.
+    int deleteCount =
+        Math.min(state.liveKeys.size() / 3, (int) (1.8 * state.log.getSegmentCapacity() / DELETE_RECORD_SIZE));
+    List<MockId> allLiveKeys = new ArrayList<>(state.liveKeys);
+    for (int i = 0; i < deleteCount; i++) {
+      MockId idToDelete = allLiveKeys.remove(TestUtils.RANDOM.nextInt(allLiveKeys.size()));
+      state.addDeleteEntry(idToDelete);
+    }
+    // reload index to make sure journal is on only the latest log segment
+    state.reloadIndex(true, false);
+    long deleteReferenceTimeMs = state.time.milliseconds();
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true, true);
   }
 
   /**
@@ -485,7 +511,7 @@ public class BlobStoreCompactorTest {
       long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
       CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
       compactor.initialize(state.index);
       long logSegmentsBeforeCompaction = state.index.getLogSegmentCount();
       try {
@@ -559,7 +585,7 @@ public class BlobStoreCompactorTest {
     state.advanceTime(deleteReferenceTimeMs - state.time.milliseconds());
     assertEquals("Valid size in the segments under compaction should be 0", 0,
         getValidDataSize(segmentsUnderCompaction, deleteReferenceTimeMs, purgeDeleteTombstone));
-    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true, false);
   }
 
   /**
@@ -572,20 +598,20 @@ public class BlobStoreCompactorTest {
     // no change before expiry time
     Pair<Long, List<LogSegmentName>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(expiryTimeAndSegmentsUnderCompaction.getSecond());
-    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), false);
+    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), false, false);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
     // no change at expiry time.
     expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     oldSegmentNamesAndEndOffsets = getEndOffsets(expiryTimeAndSegmentsUnderCompaction.getSecond());
     state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() - state.time.milliseconds());
-    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), false);
+    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), false, false);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
     // there will be changes past expiration time
     expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
-    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true);
+    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true, false);
   }
 
   /**
@@ -599,20 +625,20 @@ public class BlobStoreCompactorTest {
     Pair<Long, List<LogSegmentName>> deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
     long deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst() - Time.MsPerSec;
     Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
-    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
+    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false, false);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
     // no change at delete time.
     deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
     deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst();
     oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
-    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
+    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false, false);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
     // there will be changes past delete time
     deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
     state.advanceTime(Time.MsPerSec);
-    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true);
+    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true, false);
   }
 
   /**
@@ -641,7 +667,7 @@ public class BlobStoreCompactorTest {
     // reload index to make sure journal is on only the latest log segment
     state.reloadIndex(true, false);
     // compact with deleteReferenceTimeMs < the earliest delete time. None of the deleted keys count as deleted.
-    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, true);
+    compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, true, false);
     // ensure that idsToExamine can still be fetched
     state.reloadIndex(true, false);
     for (MockId id : idsToExamine) {
@@ -731,7 +757,7 @@ public class BlobStoreCompactorTest {
     List<LogSegmentName> segmentsUnderCompaction = Collections.singletonList(logSegmentName);
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
@@ -1011,7 +1037,7 @@ public class BlobStoreCompactorTest {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
@@ -1167,7 +1193,7 @@ public class BlobStoreCompactorTest {
     LogSegmentName compactedLogSegmentName = logSegmentName.getNextGenerationName();
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     int indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
 
@@ -1221,7 +1247,7 @@ public class BlobStoreCompactorTest {
 
     state.reloadIndex(true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 1);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true, false);
 
     // make sure the delete still exists
     checkIndexValue(orphanedId);
@@ -1242,37 +1268,37 @@ public class BlobStoreCompactorTest {
     assertTrue("Current time should be beyond expiry time of blobs",
         state.time.milliseconds() > idsAndExpiryTimeMs.getSecond());
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false, false);
 
     // compact everything
     // using expire time as the ref time
     long expiryTimeMs = createStateWithPutTtlUpdateAndDelete();
     segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, expiryTimeMs, true);
+    compactAndVerify(segmentsUnderCompaction, expiryTimeMs, true, false);
 
     // using delete time as the ref time
     createStateWithPutTtlUpdateAndDelete();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
     segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true, false);
 
     // compact everything except the first log segment (all the TTL updates and deletes will be retained - no change)
     // using expire time as the ref time
     expiryTimeMs = createStateWithPutTtlUpdateAndDelete();
     segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
-    compactAndVerify(segmentsUnderCompaction, expiryTimeMs, false);
+    compactAndVerify(segmentsUnderCompaction, expiryTimeMs, false, false);
 
     // using delete time as the ref time
     createStateWithPutTtlUpdateAndDelete();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
     segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false, false);
 
     // segment that has only ttl updates and deletes (no corresponding puts). All the ttl updates should be cleaned up
     Set<MockId> ids = createStateWithTtlUpdatesAndDeletes();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
     segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true, false);
 
     // there should be no ttl updates in the final index (but the deletes should be there)
     Set<MockId> seenIds = new HashSet<>();
@@ -1405,7 +1431,7 @@ public class BlobStoreCompactorTest {
     long deleteReferenceTimeMs = state.time.milliseconds();
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1511,7 +1537,7 @@ public class BlobStoreCompactorTest {
     endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1679,7 +1705,7 @@ public class BlobStoreCompactorTest {
     long deleteReferenceTimeMs = state.time.milliseconds();
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1835,7 +1861,7 @@ public class BlobStoreCompactorTest {
     endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1962,7 +1988,7 @@ public class BlobStoreCompactorTest {
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     // Use 0 as delete reference time so all the deletes are still with in the retention date
     CompactionDetails details = new CompactionDetails(0, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -2118,7 +2144,7 @@ public class BlobStoreCompactorTest {
     LogSegmentName logSegmentName = segmentsUnderCompaction.get(0);
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -2267,7 +2293,7 @@ public class BlobStoreCompactorTest {
     // Here we have several PUTs in the first log segments and half of the DELETEs in the first log segment
     // and the other half in the second. Then we have all the UNDELETEs in the third log segment.
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true, false);
 
     // For all the keys, in entries, there should only have two index value left, one Put, one Undelete.
     for (IndexEntry entry : entries) {
@@ -2317,7 +2343,7 @@ public class BlobStoreCompactorTest {
 
       List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
       long realDeleteReferenceTime = deleteReferenceTime < 0 ? state.time.milliseconds() : deleteReferenceTime;
-      compactAndVerify(segmentsUnderCompaction, realDeleteReferenceTime, true);
+      compactAndVerify(segmentsUnderCompaction, realDeleteReferenceTime, true, false);
 
       for (IndexEntry entry : entries) {
         List<IndexValue> values = state.index.findAllIndexValuesForKey(entry.getKey(), null);
@@ -2358,7 +2384,7 @@ public class BlobStoreCompactorTest {
     long realBytesBeforeCompaction =
         logSegmentSizeSumBeforeCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, 0, true);
+    compactAndVerify(segmentsUnderCompaction, 0, true, false);
     long compactedBytes = numPuts * (DELETE_RECORD_SIZE + UNDELETE_RECORD_SIZE);
     long logSegmentSizeSumAfterCompaction = getSumOfLogSegmentEndOffsets();
     long realBytesAfterCompaction =
@@ -2381,7 +2407,7 @@ public class BlobStoreCompactorTest {
     realBytesBeforeCompaction =
         logSegmentSizeSumBeforeCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
     segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true, false);
     compactedBytes = numPuts * (DELETE_RECORD_SIZE + UNDELETE_RECORD_SIZE + PUT_RECORD_SIZE);
     logSegmentSizeSumAfterCompaction = getSumOfLogSegmentEndOffsets();
     realBytesAfterCompaction =
@@ -2403,7 +2429,7 @@ public class BlobStoreCompactorTest {
     realBytesBeforeCompaction =
         logSegmentSizeSumBeforeCompaction - LogSegment.HEADER_SIZE * state.index.getLogSegmentCount();
     segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
-    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true, false);
     // there is one put at the beginning of the second log segment.
     compactedBytes = numPuts * (DELETE_RECORD_SIZE + UNDELETE_RECORD_SIZE) + PUT_RECORD_SIZE;
     logSegmentSizeSumAfterCompaction = getSumOfLogSegmentEndOffsets();
@@ -2440,7 +2466,7 @@ public class BlobStoreCompactorTest {
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(1, 1);
     state.advanceTime(p1Expiration - state.time.milliseconds() + 1000);
     long deleteReferenceTimeMs = state.time.milliseconds();
-    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, false);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, false, false);
 
     state.reloadIndex(true, false);
     List<IndexValue> values = state.index.findAllIndexValuesForKey(p1.getKey(), null);
@@ -2481,7 +2507,7 @@ public class BlobStoreCompactorTest {
 
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 1);
     long deleteReferenceTimeMs = state.time.milliseconds() + 1000;
-    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true, false);
 
     state.reloadIndex(true, false);
     List<IndexValue> values = state.index.findAllIndexValuesForKey(p1.getKey(), null);
@@ -2555,7 +2581,7 @@ public class BlobStoreCompactorTest {
     long deleteReferenceTimeMs = state.time.milliseconds();
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     long duplicateCount = compactor.getTgtMetrics().compactionTargetIndexDuplicateOnNonRecoveryCount.getCount();
@@ -2594,17 +2620,20 @@ public class BlobStoreCompactorTest {
    * @param log the {@link Log} instance to use.
    * @param ioScheduler the {@link DiskIOScheduler} instance to use.
    * @param remoteTokenTracker the {@link RemoteTokenTracker} instance to use.
+   * @param enableAutoCloseLastLogSegment the {@link Boolean} to enable setting journal size to zero.
    * @return an instance of {@link BlobStoreCompactor}.
    * @throws IOException
    * @throws StoreException
    */
-  private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler, RemoteTokenTracker remoteTokenTracker)
+  private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler, RemoteTokenTracker remoteTokenTracker,
+      boolean enableAutoCloseLastLogSegment)
       throws IOException, StoreException {
     closeOrExceptionInduced = false;
     state.properties.put("store.compaction.enable.direct.io", Boolean.toString(doDirectIO));
     if (withUndelete) {
       state.properties.put("store.compaction.filter", "IndexSegmentValidEntryWithUndelete");
     }
+    state.properties.put("store.auto.close.last.log.segment.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
     state.properties.put("store.compaction.purge.delete.tombstone", Boolean.toString(purgeDeleteTombstone));
     state.properties.put(StoreConfig.storeAlwaysEnableTargetIndexDuplicateCheckingName,
         Boolean.toString(alwaysEnableTargetIndexDuplicateChecking));
@@ -2728,10 +2757,11 @@ public class BlobStoreCompactorTest {
    * @param segmentsUnderCompaction the names of the log segments under compaction.
    * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
    * @param changeExpected {@code true} if compaction will cause a change in size of data. {@code false} otherwise.
+   * @param enableAutoCloseLastLogSegment the {@link Boolean} to enable setting journal size to zero.
    * @throws Exception
    */
   private void compactAndVerify(List<LogSegmentName> segmentsUnderCompaction, long deleteReferenceTimeMs,
-      boolean changeExpected) throws Exception {
+      boolean changeExpected, boolean enableAutoCloseLastLogSegment) throws Exception {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     long indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
@@ -2748,7 +2778,7 @@ public class BlobStoreCompactorTest {
     Set<MockId> compactedDeletes = expiredDeletes.getFirst();
     Set<MockId> deletesWithPuts = expiredDeletes.getSecond();
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, enableAutoCloseLastLogSegment);
     compactor.initialize(state.index);
 
     try {
@@ -2793,7 +2823,7 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Similar to {@link #compactAndVerify(List, long, boolean)} but expects an interruption and performs recovery before
+   * Similar to {@link #compactAndVerify(List, long, boolean, boolean)} but expects an interruption and performs recovery before
    * resuming compaction.
    * @param log the {@link Log} instance to use for the compaction before interruption.
    * @param diskIOScheduler the {@link DiskIOScheduler} instance to use for the compaction before interruption.
@@ -2824,7 +2854,7 @@ public class BlobStoreCompactorTest {
     Set<MockId> compactedDeletes = expiredDeletes.getFirst();
     Set<MockId> deletesWithPuts = expiredDeletes.getSecond();
     Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
-    compactor = getCompactor(log, diskIOScheduler, null);
+    compactor = getCompactor(log, diskIOScheduler, null, false);
     compactor.initialize(index);
 
     try {
@@ -2848,7 +2878,7 @@ public class BlobStoreCompactorTest {
     // have to reload log since the instance changed by the old compactor is different.
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     state.initIndex(null);
     compactor.initialize(state.index);
     assertEquals("Wrong number of swap segments in use",
@@ -3305,7 +3335,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private void ensureArgumentFailure(CompactionDetails details, String msg) throws Exception {
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -3647,7 +3677,7 @@ public class BlobStoreCompactorTest {
       compactWithRecoveryAndVerify(log, diskIOScheduler, state.index, segmentsUnderCompaction,
           state.time.milliseconds(), true, true);
     } else {
-      compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+      compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true, false);
     }
     assertTrue("Hard delete should be running", state.index.hardDeleter.isRunning());
   }

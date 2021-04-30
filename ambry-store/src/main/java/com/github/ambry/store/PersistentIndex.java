@@ -150,7 +150,7 @@ class PersistentIndex {
     to be created that doesn't squash entries.
      */
     this(datadir, storeId, scheduler, log, config, factory, recovery, hardDelete, diskIOScheduler, metrics,
-        new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
+        new Journal(datadir, config.storeAutoCloseLastLogSegmentEnabled ? 0 : 2 * config.storeIndexMaxNumberOfInmemElements,
             config.storeMaxNumberOfEntriesToReturnFromJournal), time, sessionId, incarnationId,
         CLEAN_SHUTDOWN_FILENAME);
   }
@@ -431,7 +431,7 @@ class PersistentIndex {
 
     for (Offset offset : segmentsToRemove) {
       IndexSegment segmentToRemove = validIndexSegments.get(offset);
-      if (segmentToRemove.getEndOffset().compareTo(journalFirstOffset) >= 0) {
+      if (journalFirstOffset != null && segmentToRemove.getEndOffset().compareTo(journalFirstOffset) >= 0) {
         throw new IllegalArgumentException(
             "End Offset of the one of the segments to remove [" + segmentToRemove.getFile() + "] is"
                 + " higher than the first offset in the journal");
