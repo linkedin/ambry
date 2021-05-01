@@ -1210,9 +1210,12 @@ class BlobStoreCompactor {
    */
   class IndexSegmentValidEntryFilterWithoutUndelete implements IndexSegmentValidEntryFilter {
 
+    private int numKeysFoundInDuplicateChecking;
+
     @Override
     public List<IndexEntry> getValidEntry(IndexSegment indexSegment, FileSpan duplicateSearchSpan,
         boolean checkAlreadyCopied) throws StoreException {
+      numKeysFoundInDuplicateChecking = 0;
       List<IndexEntry> allIndexEntries = new ArrayList<>();
       // get all entries. We get one entry per key
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), allIndexEntries,
@@ -1229,6 +1232,23 @@ class BlobStoreCompactor {
       copyCandidates.removeIf(copyCandidate ->
           isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
               config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
+      if (duplicateSearchSpan != null && validEntriesSize == copyCandidates.size()
+          && config.storeCompactionEnableBasicInfoOnMissingDuplicate) {
+        // When duplicate search span is not null, which mean it's highly likely that we would see duplicates from
+        // source. If we are here, then there is no duplicate at all, this might be an error.
+        logger.info(
+            "Processing IndexSegment {} with duplicate search span {} in {}, we probably should have duplicates.",
+            indexSegment, duplicateSearchSpan, storeId);
+        logger.info("IndexSegments in source persistent index with {}", storeId);
+        srcIndex.getIndexSegments().values().forEach(seg -> logger.info("{}", seg.getFile()));
+        Map<PersistentIndex.IndexEntryType, Long> collect = copyCandidates.stream()
+            .collect(Collectors.groupingBy(entry -> entry.getValue().getIndexValueType(), Collectors.counting()));
+        logger.info("{} with {}", collect.entrySet()
+            .stream()
+            .map(ent -> String.format("{} {}", ent.getValue(), ent.getKey()))
+            .collect(Collectors.joining(",")), storeId);
+        logger.info("Valid entry size {}, number of keys found: {}", validEntriesSize, numKeysFoundInDuplicateChecking);
+      }
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1449,6 +1469,7 @@ class BlobStoreCompactor {
       IndexValue value = idx.findKey(key, searchSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
       boolean exists = false;
       if (value != null) {
+        numKeysFoundInDuplicateChecking++;
         if (value.isDelete()) {
           exists = true;
         } else if (value.isTtlUpdate()) {
