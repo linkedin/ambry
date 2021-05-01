@@ -394,29 +394,33 @@ class BlobStoreCompactor {
    */
   private void copy() throws IOException, StoreException {
     setupState();
-    List<LogSegmentName> logSegmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
+    List<LogSegmentName> logSegmentsUnderCompaction =
+        compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
       // only records in the the very first log segment in the cycle could have been copied in a previous cycle
+      logger.info("Continue compaction at cycle {} with {}", compactionLog.getCurrentIdx(), storeId);
       LogSegment firstLogSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
       LogSegment prevSegment = srcLog.getPrevSegment(firstLogSegment);
+      logger.info("First log segment at this cycle is {}, previous log segment is {} with {}",
+          firstLogSegment.getName(), prevSegment.getName(), storeId);
       if (prevSegment != null) {
         // duplicate data, if it exists, can only be in the log segment just before the first log segment in the cycle.
         Offset startOffset = new Offset(prevSegment.getName(), prevSegment.getStartOffset());
         Offset endOffset = new Offset(prevSegment.getName(), prevSegment.getEndOffset());
         duplicateSearchSpan = new FileSpan(startOffset, endOffset);
       }
-      logger.trace("Duplicate search span is {} for {}", duplicateSearchSpan, storeId);
+      logger.info("Duplicate search span is {} for {}", duplicateSearchSpan, storeId);
     }
 
     for (LogSegmentName logSegmentName : logSegmentsUnderCompaction) {
-      logger.debug("Processing {} in {}", logSegmentName, storeId);
+      logger.info("Processing {} in {}", logSegmentName, storeId);
       LogSegment srcLogSegment = srcLog.getSegment(logSegmentName);
       Offset logSegmentEndOffset = new Offset(srcLogSegment.getName(), srcLogSegment.getEndOffset());
       if (needsCopying(logSegmentEndOffset) && !copyDataByLogSegment(srcLogSegment, duplicateSearchSpan)) {
         if (isActive) {
           // split the cycle only if there is no shutdown in progress
-          logger.debug("Splitting current cycle with segments {} at {} for {}", logSegmentsUnderCompaction,
+          logger.info("Splitting current cycle with segments {} at {} for {}", logSegmentsUnderCompaction,
               logSegmentName, storeId);
           compactionLog.splitCurrentCycle(logSegmentName);
         }
@@ -504,8 +508,7 @@ class BlobStoreCompactor {
     for (LogSegmentName segmentName : details.getLogSegmentsUnderCompaction()) {
       long pos = segmentName.getPosition();
       LogSegmentName targetSegmentName = LogSegmentName.fromPositionAndGeneration(pos, highestGeneration + 1);
-      String targetSegmentFileName =
-          targetSegmentName.toFilename() + TEMP_LOG_SEGMENT_NAME_SUFFIX;
+      String targetSegmentFileName = targetSegmentName.toFilename() + TEMP_LOG_SEGMENT_NAME_SUFFIX;
       File targetSegmentFile = new File(dataDir, targetSegmentFileName);
       if (targetSegmentFile.exists()) {
         existingTargetLogSegments.add(new LogSegment(targetSegmentName, targetSegmentFile, config, tgtMetrics));
@@ -560,17 +563,17 @@ class BlobStoreCompactor {
    */
   private boolean copyDataByLogSegment(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan)
       throws IOException, StoreException {
-    logger.info("Copying data from {}", logSegmentToCopy);
+    logger.debug("Copying data from {}", logSegmentToCopy);
     long logSegmentStartTime = time.milliseconds();
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
-      logger.info("Processing index segment {}", indexSegmentToCopy.getFile());
+      logger.info("Processing index segment {} with {}", indexSegmentToCopy.getFile(), storeId);
       long startTime = SystemTime.getInstance().milliseconds();
       if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyDataByIndexSegment(logSegmentToCopy,
           indexSegmentToCopy, duplicateSearchSpan)) {
         // there is a shutdown in progress or there was no space to copy all entries.
-        logger.info("Did not copy all entries in {} (either because there is no space or there is a shutdown)",
-            indexSegmentToCopy.getFile());
+        logger.info("Did not copy all entries in {} with {} (either because there is no space or there is a shutdown)",
+            indexSegmentToCopy.getFile(), storeId);
         return false;
       }
       srcMetrics.compactionCopyDataByIndexSegmentTimeInMs.update(SystemTime.getInstance().milliseconds() - startTime,
@@ -602,7 +605,9 @@ class BlobStoreCompactor {
 
     List<IndexEntry> indexEntriesToCopy =
         validEntryFilter.getValidEntry(indexSegmentToCopy, duplicateSearchSpan, checkAlreadyCopied);
-    logger.debug("{} entries need to be copied in {}", indexEntriesToCopy.size(), indexSegmentToCopy.getFile());
+    long dataSize = indexEntriesToCopy.stream().mapToLong(entry -> entry.getValue().getSize()).sum();
+    logger.info("{} entries/{} bytes need to be copied in {} with {}", indexEntriesToCopy.size(), dataSize,
+        indexSegmentToCopy.getFile(), storeId);
 
     if (indexEntriesToCopy.isEmpty()) {
       return true;
@@ -731,6 +736,7 @@ class BlobStoreCompactor {
     boolean copiedAll = true;
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
+    long totalCopiedBytes = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
       // byte[] for both general IO and direct IO.
       byte[] byteArrayToUse;
@@ -946,7 +952,8 @@ class BlobStoreCompactor {
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
    * @throws StoreException if there were any store exception creating a log segment
    */
-  private void addNewLogSegmentsToSrcLog(List<LogSegmentName> logSegmentNames, boolean recovering) throws StoreException {
+  private void addNewLogSegmentsToSrcLog(List<LogSegmentName> logSegmentNames, boolean recovering)
+      throws StoreException {
     logger.debug("Adding {} in {} to the application log", logSegmentNames, storeId);
     for (LogSegmentName logSegmentName : logSegmentNames) {
       File segmentFile = new File(dataDir, logSegmentName.toFilename());
@@ -1013,7 +1020,8 @@ class BlobStoreCompactor {
     if (isActive) {
       long singleWaitMs = Math.min(500, WAIT_TIME_FOR_CLEANUP_MS);
       long waitSoFar = 0;
-      List<LogSegmentName> segmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
+      List<LogSegmentName> segmentsUnderCompaction =
+          compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
       for (LogSegmentName segmentName : segmentsUnderCompaction) {
         while (srcLog.getSegment(segmentName).refCount() > 0 && waitSoFar < WAIT_TIME_FOR_CLEANUP_MS) {
           time.sleep(singleWaitMs);
@@ -1202,9 +1210,12 @@ class BlobStoreCompactor {
    */
   class IndexSegmentValidEntryFilterWithoutUndelete implements IndexSegmentValidEntryFilter {
 
+    private int numKeysFoundInDuplicateChecking;
+
     @Override
     public List<IndexEntry> getValidEntry(IndexSegment indexSegment, FileSpan duplicateSearchSpan,
         boolean checkAlreadyCopied) throws StoreException {
+      numKeysFoundInDuplicateChecking = 0;
       List<IndexEntry> allIndexEntries = new ArrayList<>();
       // get all entries. We get one entry per key
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), allIndexEntries,
@@ -1221,6 +1232,23 @@ class BlobStoreCompactor {
       copyCandidates.removeIf(copyCandidate ->
           isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
               config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
+      if (duplicateSearchSpan != null && validEntriesSize == copyCandidates.size()
+          && config.storeCompactionEnableBasicInfoOnMissingDuplicate) {
+        // When duplicate search span is not null, which mean it's highly likely that we would see duplicates from
+        // source. If we are here, then there is no duplicate at all, this might be an error.
+        logger.info(
+            "Processing IndexSegment {} with duplicate search span {} in {}, we probably should have duplicates.",
+            indexSegment, duplicateSearchSpan, storeId);
+        logger.info("IndexSegments in source persistent index with {}", storeId);
+        srcIndex.getIndexSegments().values().forEach(seg -> logger.info("{}", seg.getFile()));
+        Map<PersistentIndex.IndexEntryType, Long> collect = copyCandidates.stream()
+            .collect(Collectors.groupingBy(entry -> entry.getValue().getIndexValueType(), Collectors.counting()));
+        logger.info("{} with {}", collect.entrySet()
+            .stream()
+            .map(ent -> String.format("{} {}", ent.getValue(), ent.getKey()))
+            .collect(Collectors.joining(",")), storeId);
+        logger.info("Valid entry size {}, number of keys found: {}", validEntriesSize, numKeysFoundInDuplicateChecking);
+      }
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1286,8 +1314,7 @@ class BlobStoreCompactor {
           } else {
             // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
             // tombstone is removable.
-            if (config.storeCompactionPurgeDeleteTombstone && isDeleteTombstoneRemovable(indexEntry,
-                indexSegment)) {
+            if (config.storeCompactionPurgeDeleteTombstone && isDeleteTombstoneRemovable(indexEntry, indexSegment)) {
               logger.debug(
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   indexEntry.getKey(), value.getExpiresAtMs());
@@ -1442,6 +1469,7 @@ class BlobStoreCompactor {
       IndexValue value = idx.findKey(key, searchSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
       boolean exists = false;
       if (value != null) {
+        numKeysFoundInDuplicateChecking++;
         if (value.isDelete()) {
           exists = true;
         } else if (value.isTtlUpdate()) {
