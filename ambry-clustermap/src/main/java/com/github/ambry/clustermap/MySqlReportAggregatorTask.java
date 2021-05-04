@@ -172,7 +172,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     }
   }
 
-  private boolean removeInvalidAggregatedAccountAndContainerStats(StatsSnapshot currentStats) throws Exception {
+  private void removeInvalidAggregatedAccountAndContainerStats(StatsSnapshot currentStats) throws Exception {
     Map<String, Map<String, Long>> existingStats = accountStatsStore.queryAggregatedAccountStats();
     List<Pair<Short, Short>> toBeDeletedAccountAndContainers = new ArrayList<>();
     for (Map.Entry<String, Map<String, Long>> accountEntry : existingStats.entrySet()) {
@@ -189,10 +189,9 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       accountStatsStore.deleteAggregatedAccountStatsForContainer(accountContainer.getFirst(),
           accountContainer.getSecond());
     }
-    return !toBeDeletedAccountAndContainers.isEmpty();
   }
 
-  private boolean removeInvalidAggregatedPartitionClassStats(StatsSnapshot currentStats) throws Exception {
+  private void removeInvalidAggregatedPartitionClassStats(StatsSnapshot currentStats) throws Exception {
     List<Pair<String, String>> toBeDeletedPartitionClassNameAndAccountContainer = new ArrayList<>();
     StatsSnapshot existingStats = accountStatsStore.queryAggregatedPartitionClassStats();
     for (Map.Entry<String, StatsSnapshot> partitionClassEntry : existingStats.getSubMap().entrySet()) {
@@ -207,7 +206,6 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     for (Pair<String, String> pair : toBeDeletedPartitionClassNameAndAccountContainer) {
       accountStatsStore.deleteAggregatedPartitionClassStatsForAccountContainer(pair.getFirst(), pair.getSecond());
     }
-    return !toBeDeletedPartitionClassNameAndAccountContainer.isEmpty();
   }
 
   private boolean accountAndContainerExistsInStatsSnapshot(StatsSnapshot snapshot, short accountId, short containerId) {
