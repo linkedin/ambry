@@ -92,6 +92,7 @@ class AmbrySecurityService implements SecurityService {
     }
     restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, frontendConfig.attachTrackingInfo);
     if (exception == null && urlSigningService.isRequestSigned(restRequest)) {
+      restRequest.setArg(InternalKeys.IS_SIGNED_URL, true);
       urlSigningService.verifySignedRequest(restRequest, (r, e) -> {
         frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
         callback.onCompletion(r, e);
@@ -139,7 +140,10 @@ class AmbrySecurityService implements SecurityService {
                 quotaHeaderMap);
           }
         }
-        if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
+        if (RestUtils.isSignedUrlRequest(restRequest) && RestUtils.isRequestOnlyReturnSignedUrlDecodedHeaders(
+            restRequest)) {
+          // Doing nothing here
+        } else if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
           accountAndContainerNamePreconditionCheck(restRequest);
         } else if (restRequest.getRestMethod() == RestMethod.GET) {
           RequestPath requestPath = getRequestPath(restRequest);

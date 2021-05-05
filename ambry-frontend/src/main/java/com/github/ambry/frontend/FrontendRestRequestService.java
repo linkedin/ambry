@@ -78,7 +78,6 @@ class FrontendRestRequestService implements RestRequestService {
   private final ClusterMap clusterMap;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
-  private final GetReplicasHandler getReplicasHandler;
   private final UrlSigningService urlSigningService;
   private final IdSigningService idSigningService;
   private final NamedBlobDb namedBlobDb;
@@ -92,6 +91,7 @@ class FrontendRestRequestService implements RestRequestService {
   private RestResponseHandler responseHandler;
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
+  private GetReplicasHandler getReplicasHandler;
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private NamedBlobListHandler listNamedBlobsHandler;
@@ -103,6 +103,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetAccountsHandler getAccountsHandler;
   private PostAccountsHandler postAccountsHandler;
   private GetStatsReportHandler getStatsReportHandler;
+  private DecodeSignedUrlHandler decodeSignedUrlHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
 
@@ -146,7 +147,6 @@ class FrontendRestRequestService implements RestRequestService {
     this.hostname = hostname;
     this.quotaManager = quotaManager;
     this.clusterName = clusterName.toLowerCase();
-    getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
     logger.trace("Instantiated FrontendRestRequestService");
   }
 
@@ -167,6 +167,7 @@ class FrontendRestRequestService implements RestRequestService {
     quotaManager.init();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
+    getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     getSignedUrlHandler =
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
@@ -189,6 +190,7 @@ class FrontendRestRequestService implements RestRequestService {
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
+    decodeSignedUrlHandler = new DecodeSignedUrlHandler(securityService, frontendMetrics);
     isUp = true;
     logger.info("FrontendRestRequestService has started");
     frontendMetrics.restRequestServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -241,6 +243,10 @@ class FrontendRestRequestService implements RestRequestService {
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
         listNamedBlobsHandler.handle(restRequest, restResponseChannel,
             ((result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception)));
+      } else if (RestUtils.isSignedUrlRequest(restRequest) && RestUtils.isRequestOnlyReturnSignedUrlDecodedHeaders(
+          restRequest)) {
+        decodeSignedUrlHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         SubResource subResource = requestPath.getSubResource();
         GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,
@@ -269,6 +275,10 @@ class FrontendRestRequestService implements RestRequestService {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
       if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         postAccountsHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (RestUtils.isSignedUrlRequest(restRequest) && RestUtils.isRequestOnlyReturnSignedUrlDecodedHeaders(
+          restRequest)) {
+        decodeSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         postBlobHandler.handle(restRequest, restResponseChannel,

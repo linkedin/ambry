@@ -36,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -264,6 +265,13 @@ public class RestUtils {
      * Request header to carry {@link StatsReportType} for GetStatsReport request.
      */
     public final static String GET_STATS_REPORT_TYPE = "x-ambry-stats-type";
+
+    /**
+     * Set to any value in the signed url request header, so ambry would return all the encoded header in the signed url
+     * along with other request headers in the response header.
+     */
+    public final static String ONLY_RETURN_SIGNED_URL_DECODED_HEADERS =
+        "x-ambry-only-return-signed-url-decoded-headers";
   }
 
   public static final class TrackingHeaders {
@@ -376,6 +384,11 @@ public class RestUtils {
      * To be set to {@code true} if failures reason should be attached to frontend responses.
      */
     public static final String SEND_FAILURE_REASON = KEY_PREFIX + "send-failure-reason";
+
+    /**
+     * To be set to {@code tru} if the request is a signed url request. (Not a GET_SIGNED_URL request, that's different)
+     */
+    public static final String IS_SIGNED_URL = "is-signed-url";
   }
 
   /**
@@ -469,6 +482,15 @@ public class RestUtils {
       ttl = ttlFromHeader;
     }
     return ttl;
+  }
+
+  /**
+   * Return true if the {@coce restRequest} only askes to return the signed url decoded headers.
+   * @param restRequest The {@link RestRequest}.
+   * @return True if the request only askes to return signed url decoded headers.
+   */
+  public static boolean isRequestOnlyReturnSignedUrlDecodedHeaders(RestRequest restRequest) {
+    return restRequest.getArgs().containsKey(Headers.ONLY_RETURN_SIGNED_URL_DECODED_HEADERS);
   }
 
   /**
@@ -784,6 +806,26 @@ public class RestUtils {
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
+  }
+
+  public static boolean isSignedUrlRequest(RestRequest restRequest) throws RestServiceException {
+    return getBooleanHeader(restRequest.getArgs(), InternalKeys.IS_SIGNED_URL, false);
+  }
+
+  public static void copyRequestStringHeadersToResponse(RestRequest restRequest, RestResponseChannel responseChannel) {
+    Map<String, Object> args = new HashMap<>(restRequest.getArgs());
+    List<String> internalKeys = Collections.unmodifiableList(
+        Utils.getStaticFieldValuesAsStrings(InternalKeys.class).collect(Collectors.toList()));
+    for (String key : internalKeys) {
+      args.remove(key);
+    }
+    List<String> avoidHeaders = Arrays.asList(Headers.CONTENT_ENCODING, Headers.CONTENT_LENGTH, Headers.CONTENT_TYPE);
+    for (Map.Entry<String, Object> entry : args.entrySet()) {
+      if ((entry.getValue() instanceof String) && !avoidHeaders.contains(entry.getKey())) {
+        responseChannel.setHeader(entry.getKey(), entry.getValue());
+      }
+    }
+    responseChannel.setHeader(Headers.CONTENT_LENGTH, "0");
   }
 
   /**

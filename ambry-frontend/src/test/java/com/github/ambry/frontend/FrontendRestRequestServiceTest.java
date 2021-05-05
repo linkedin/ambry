@@ -1114,6 +1114,25 @@ public class FrontendRestRequestServiceTest {
     String signedPostUrl = restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed POST URL", signedPostUrl);
 
+    // Decode POST signed url request headers
+    JSONObject decodeSignedUrlHeader = new JSONObject();
+    decodeSignedUrlHeader.put(RestUtils.Headers.ONLY_RETURN_SIGNED_URL_DECODED_HEADERS, String.valueOf(true));
+    RestRequest decodeSignedUrlRequest = createRestRequest(RestMethod.POST, signedPostUrl, decodeSignedUrlHeader, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(decodeSignedUrlRequest, restResponseChannel);
+    assertEquals("value1", restResponseChannel.getHeader(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1"));
+    assertEquals("value2", restResponseChannel.getHeader(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2"));
+    assertEquals(refAccount.getName(), restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME));
+    assertEquals(refContainer.getName(), restResponseChannel.getHeader(RestUtils.Headers.TARGET_CONTAINER_NAME));
+    assertEquals(ownerId, restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
+    assertNotNull(restResponseChannel.getHeader(RestUtils.Headers.MAX_UPLOAD_SIZE));
+    // AmbrySigningService LinkExpiryTime
+    assertNotNull(restResponseChannel.getHeader("et"));
+    assertEquals(String.valueOf(blobTtl), restResponseChannel.getHeader(RestUtils.Headers.TTL));
+    assertEquals(serviceId, restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
+    assertEquals(contentType, restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
+    assertEquals(RestMethod.POST.name(), restResponseChannel.getHeader(RestUtils.Headers.URL_TYPE));
+
     // Use signed URL to POST
     List<ByteBuffer> contents = new LinkedList<>();
     contents.add(content);
@@ -1144,6 +1163,17 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     String signedGetUrl = restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
+
+    // Decode GET signed url request headers
+    decodeSignedUrlHeader = new JSONObject();
+    decodeSignedUrlHeader.put(RestUtils.Headers.ONLY_RETURN_SIGNED_URL_DECODED_HEADERS, String.valueOf(true));
+    decodeSignedUrlRequest = createRestRequest(RestMethod.GET, signedGetUrl, decodeSignedUrlHeader, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(decodeSignedUrlRequest, restResponseChannel);
+    // AmbrySigningService LinkExpiryTime
+    assertNotNull(restResponseChannel.getHeader("et"));
+    assertEquals(blobId, restResponseChannel.getHeader(RestUtils.Headers.BLOB_ID));
+    assertEquals(RestMethod.GET.name(), restResponseChannel.getHeader(RestUtils.Headers.URL_TYPE));
 
     // Use URL to GET blob
     RestRequest getSignedRequest = createRestRequest(RestMethod.GET, signedGetUrl, null, null);

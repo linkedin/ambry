@@ -40,6 +40,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
   public final RestRequestMetricsGroup getAccountsMetricsGroup;
   public final RestRequestMetricsGroup getStatsReportMetricsGroup;
+  public final RestRequestMetricsGroup decodeSignedUrlMetricsGroup;
   // HEAD
   public final RestRequestMetricsGroup headBlobMetricsGroup;
   // OPTIONS
@@ -94,6 +95,9 @@ public class FrontendMetrics {
 
   public final AsyncOperationTracker.Metrics getStatsReportSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getStatsReportSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics decodeSignedUrlSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics decodeSignedUrlSecurityPostProcessRequestMetrics;
 
   public final AsyncOperationTracker.Metrics postAccountsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postAccountsSecurityPostProcessRequestMetrics;
@@ -241,6 +245,8 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, false, metricRegistry);
     getStatsReportMetricsGroup =
         new RestRequestMetricsGroup(GetStatsReportHandler.class, "GetStatsReport", false, false, metricRegistry);
+    decodeSignedUrlMetricsGroup =
+        new RestRequestMetricsGroup(DecodeSignedUrlHandler.class, "DecodeSignedUrl", false, false, metricRegistry);
     // HEAD
     headBlobMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "HeadBlob", false, false, metricRegistry);
@@ -332,6 +338,11 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityProcessRequest", metricRegistry);
     getStatsReportSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityPostProcessRequest", metricRegistry);
+
+    decodeSignedUrlSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(DecodeSignedUrlHandler.class, "SecurityProcessRequest", metricRegistry);
+    decodeSignedUrlSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(DecodeSignedUrlHandler.class, "SecurityPostProcessRequest", metricRegistry);
 
     postAccountsSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostAccountsHandler.class, "SecurityProcessRequest", metricRegistry);
