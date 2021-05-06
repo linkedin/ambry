@@ -40,9 +40,11 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
    * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
    * @param partitionId The partition on which the operation is performed.
    * @param originatingDcName name of originating DC whose replicas should be tried first.
+   * @param routerMetrics
    */
-  UndeleteOperationTracker(RouterConfig routerConfig, PartitionId partitionId, String originatingDcName) {
-    super(routerConfig, RouterOperation.UndeleteOperation, partitionId, originatingDcName, false);
+  UndeleteOperationTracker(RouterConfig routerConfig, PartitionId partitionId, String originatingDcName,
+      NonBlockingRouterMetrics routerMetrics) {
+    super(routerConfig, RouterOperation.UndeleteOperation, partitionId, originatingDcName, false, routerMetrics);
     List<? extends ReplicaId> replicas = partitionId.getReplicaIds();
     for (ReplicaId replica : replicas) {
       String dcName = replica.getDataNodeId().getDatacenterName();

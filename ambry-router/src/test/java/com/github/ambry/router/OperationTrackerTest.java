@@ -973,7 +973,8 @@ public class OperationTrackerTest {
       switch (operationTrackerType) {
         case SIMPLE_OP_TRACKER:
           operationTracker =
-              new SimpleOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName, true);
+              new SimpleOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName, true,
+                  routerMetrics);
           break;
         case ADAPTIVE_OP_TRACKER:
           try {
@@ -1269,7 +1270,8 @@ public class OperationTrackerTest {
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker = new SimpleOperationTracker(routerConfig, routerOperation, mockPartition, originatingDcName, true);
+        tracker = new SimpleOperationTracker(routerConfig, routerOperation, mockPartition, originatingDcName, true,
+            routerMetrics);
         break;
       case ADAPTIVE_OP_TRACKER:
         // for now adaptive operation tracker only applies to GetOperation.

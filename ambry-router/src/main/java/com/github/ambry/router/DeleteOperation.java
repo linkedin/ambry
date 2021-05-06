@@ -100,7 +100,7 @@ class DeleteOperation {
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.DeleteOperation, blobId.getPartition(),
-            originatingDcName, false);
+            originatingDcName, false, routerMetrics);
   }
 
   /**

@@ -91,7 +91,7 @@ class TtlUpdateOperation {
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
-            originatingDcName, false);
+            originatingDcName, false, routerMetrics);
   }
 
   /**

@@ -84,8 +84,10 @@ class SimpleOperationTracker implements OperationTracker {
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
   private final OpTrackerIterator otIterator;
   private final RouterOperation routerOperation;
+  private final PartitionId partitionId;
   private final RouterConfig routerConfig;
   private final boolean crossColoEnabled;
+  protected final NonBlockingRouterMetrics routerMetrics;
   protected int inflightCount = 0;
   protected int diskReplicaSuccessCount = 0;
   protected int cloudReplicaSuccessCount = 0;
@@ -133,13 +135,16 @@ class SimpleOperationTracker implements OperationTracker {
    * @param partitionId The partition on which the operation is performed.
    * @param originatingDcName The original DC where blob was put.
    * @param shuffleReplicas Indicates if the replicas need to be shuffled.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to use.
    */
   SimpleOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
-      String originatingDcName, boolean shuffleReplicas) {
+      String originatingDcName, boolean shuffleReplicas, NonBlockingRouterMetrics routerMetrics) {
     // populate tracker parameters based on operation type
     this.routerConfig = routerConfig;
     this.routerOperation = routerOperation;
     this.originatingDcName = originatingDcName;
+    this.partitionId = partitionId;
+    this.routerMetrics = routerMetrics;
     datacenterName = routerConfig.routerDatacenterName;
     cloudReplicaSuccessTarget = routerConfig.routerCloudSuccessTarget;
     cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
@@ -351,14 +356,25 @@ class SimpleOperationTracker implements OperationTracker {
     }
     if (originatingDcNotFoundFailureThreshold > 0
         && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) {
+      logger.info(
+          "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {}",
+          routerOperation, partitionId, originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold);
+      routerMetrics.failedOnOriginatingDcNotFoundCount.inc();
       return true;
     }
     // To account for GET operation, the threshold should be  >= totalReplicaCount - (success target - 1)
     // Right now, this only applies for disk replica only partitions and may not be completely accurate if there are
     // failures responses other than not found.
     // TODO support cloud replicas in this condition, also account for failures other than not found
-    return (crossColoEnabled && !cloudReplicasPresent
-        && diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget);
+    if (crossColoEnabled && !cloudReplicasPresent
+        && diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget) {
+      logger.info(
+          "Terminating {} on {} due to disk down count and total Not_Found count. DiskDownCount: {}, TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}",
+          routerOperation, partitionId, diskDownCount, totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget);
+      routerMetrics.failedOnTotalNotFoundCount.inc();
+      return true;
+    }
+    return false;
   }
 
   @Override
@@ -529,7 +545,7 @@ class SimpleOperationTracker implements OperationTracker {
 
   /**
    * Helper function to catch a potential race condition in
-   * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean)}.
+   * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean, NonBlockingRouterMetrics)}.
    *  @param partitionId The partition on which the operation is performed.
    * @param examinedReplicas All replicas examined.
    * @param replicaPool Replicas added to replicaPool.
