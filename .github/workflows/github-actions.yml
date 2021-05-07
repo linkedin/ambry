@@ -13,7 +13,7 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  setup:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -36,19 +36,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-  unit-test:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-      - name: Running unit tests excluding ambry-store
-        run: ./gradlew build -x :ambry-store:test
-  store-test:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      - name: Running unit tests excluding ambry-store
-        run: ./gradlew build :ambry-store:test
+      - name: Build with Gradle
+        run: ./gradlew build
