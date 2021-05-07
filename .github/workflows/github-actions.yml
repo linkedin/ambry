@@ -30,19 +30,19 @@ jobs:
       - name: Set up MySQL
         run: |
           sudo /etc/init.d/mysql start
-          mysql -e 'CREATE DATABASE AccountMetadata;'
-          mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
-          mysql -e 'CREATE DATABASE ambry_container_storage_stats;'
-          mysql -e 'USE ambry_container_storage_stats; SOURCE ./ambry-mysql/src/main/resources/AmbryContainerStorageStats.ddl;'
-          mysql -e 'CREATE DATABASE AmbryNamedBlobs;'
-          mysql -e 'USE AmbryNamedBlobs; SOURCE ./ambry-named-mysql/src/main/resources/NamedBlobsSchema.ddl;'
+          mysql -e 'CREATE DATABASE AccountMetadata;' -uroot -proot
+          mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;' -uroot -proot
+          mysql -e 'CREATE DATABASE ambry_container_storage_stats;' -uroot -proot
+          mysql -e 'USE ambry_container_storage_stats; SOURCE ./ambry-mysql/src/main/resources/AmbryContainerStorageStats.ddl;' -uroot -proot
+          mysql -e 'CREATE DATABASE AmbryNamedBlobs;' -uroot -proot
+          mysql -e 'USE AmbryNamedBlobs; SOURCE ./ambry-named-mysql/src/main/resources/NamedBlobsSchema.ddl;' -uroot -proot
       
       - name: Add custom MySQL user 
           # Temporary settings to use same username and password as travis ci
         run: |
-          mysql -e 'CREATE USER 'travis'@'localhost' IDENTIFIED BY '';'
-          mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';'
-          mysql -e 'FLUSH PRIVILEGES;'
+          mysql -e 'CREATE USER 'travis'@'localhost' IDENTIFIED BY '';' -uroot -proot
+          mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
+          mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
       
       - name: Cleanup Gradle Cache
           # Remove some files from the Gradle cache which might have cached by earlier builds.
