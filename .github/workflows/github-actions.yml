@@ -40,11 +40,15 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     steps:
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
       - name: Running unit tests excluding ambry-store
-        run: ./gradlew build --scan -x :ambry-store:test
+        run: ./gradlew build -x :ambry-store:test
   store-test:
     needs: setup
     runs-on: ubuntu-latest
     steps:
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
       - name: Running unit tests excluding ambry-store
-        run: ./gradlew build --scan :ambry-store:test
+        run: ./gradlew build :ambry-store:test
