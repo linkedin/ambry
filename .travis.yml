@@ -1,6 +1,5 @@
 language: java
-dist: xenial
-sudo: required
+dist: focal
 jdk:
   - openjdk11
 before_cache:
@@ -10,22 +9,9 @@ cache:
   directories:
     - $HOME/.gradle/caches/
     - $HOME/.gradle/wrapper/
-addons:
-  apt:
-    packages:
-      #- oracle-java8-installer
-      #- oracle-java8-unlimited-jce-policy
 services:
   - mysql
 before_install:
-  - mysql --version
-  - wget https://repo.mysql.com//mysql-apt-config_0.8.10-1_all.deb
-  - sudo dpkg -i mysql-apt-config_0.8.10-1_all.deb
-  - sudo apt-get update -q
-  - sudo apt-get install -q -y --allow-unauthenticated -o Dpkg::Options::=--force-confnew mysql-server
-  - sudo systemctl restart mysql
-  - sudo mysql_upgrade
-  - mysql --version
   - mysql -e 'CREATE DATABASE AccountMetadata;'
   - mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;'
   - mysql -e 'CREATE DATABASE ambry_container_storage_stats;'
