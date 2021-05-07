@@ -40,7 +40,7 @@ jobs:
       - name: Add custom MySQL user 
           # Temporary settings to use same username and password as travis ci
         run: |
-          mysql -e 'CREATE USER 'travis'@'localhost' IDENTIFIED BY '';' -uroot -proot
+          mysql -e 'CREATE USER 'travis'@'localhost';' -uroot -proot
           mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
           mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
       
