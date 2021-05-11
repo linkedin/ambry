@@ -16,8 +16,10 @@ package com.github.ambry.store;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -27,6 +29,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
@@ -36,6 +39,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,6 +48,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
@@ -53,6 +58,7 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -61,6 +67,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
 import static com.github.ambry.store.StoreTestUtils.*;
@@ -73,6 +81,7 @@ import static org.junit.Assume.*;
  */
 @RunWith(Parameterized.class)
 public class BlobStoreCompactorTest {
+  private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactorTest.class);
 
   private static final String STORE_ID = "compactor_example_store";
   private static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
@@ -85,6 +94,9 @@ public class BlobStoreCompactorTest {
   private final boolean purgeDeleteTombstone;
   private final StoreConfig config;
   private boolean alwaysEnableTargetIndexDuplicateChecking = false;
+  private final Time time = new MockTime();
+  private static final String COMPACT_POLICY_INFO_PATH = File.separator + "compactionPolicyInfo.json";
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private CuratedLogIndexState state = null;
   private BlobStoreCompactor compactor = null;
@@ -147,8 +159,8 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void initCloseTest() throws Exception {
-    refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    refreshState(false, true, false);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     compactor.close(0);
   }
@@ -159,8 +171,8 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void closeWithoutInitTest() throws Exception {
-    refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    refreshState(false, true, false);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.close(0);
   }
 
@@ -170,8 +182,8 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void useServiceWithoutInitTest() throws Exception {
-    refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    refreshState(false, true, false);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     LogSegmentName firstSegmentName = state.log.getFirstSegment().getName();
     CompactionDetails details =
         new CompactionDetails(state.time.milliseconds(), Collections.singletonList(firstSegmentName), null);
@@ -198,7 +210,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void badInputTest() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     // compaction range contains a log segment that is still in the journal
     LogSegmentName firstLogSegmentName = state.referenceIndex.firstKey().getName();
     LogSegmentName secondLogSegmentName = state.log.getNextSegment(state.log.getSegment(firstLogSegmentName)).getName();
@@ -228,7 +240,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void statsBasedCompactionStrategyWithInvalidLogSegment() throws Exception {
     assumeTrue(!withUndelete);
-    refreshState(false, true);
+    refreshState(false, true, false);
     // Current log segment is setup like this:
     // three log segment: 0_0, 1_0, 2_0
     // Now set the log segments so that we have:
@@ -281,13 +293,13 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void compactWithCompactionInProgressTest() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     CompactionDetails details = new CompactionDetails(0, segmentsUnderCompaction, null);
 
     // create a compaction log in order to mimic a compaction being in progress
     try (CompactionLog cLog = new CompactionLog(tempDirStr, STORE_ID, state.time, details, config)) {
-      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
       compactor.initialize(state.index);
       compactor.compact(details, bundleReadBuffer);
       fail("compact() should have failed because a compaction is already in progress");
@@ -305,8 +317,8 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void resumeCompactionWithoutAnyInProgressTest() throws Exception {
-    refreshState(false, true);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    refreshState(false, true, false);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
     assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse().length);
@@ -326,7 +338,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void basicTest() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
         state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
@@ -340,7 +352,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void deleteTombstoneCleanupTest() throws Exception {
     assumeTrue(purgeDeleteTombstone);
-    refreshState(false, true);
+    refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
@@ -373,7 +385,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
         peerReplica2.getReplicaPath());
     // initiate compaction
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -394,7 +406,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void compactDeleteTombstoneTwice() throws Exception {
     assumeTrue(purgeDeleteTombstone);
-    refreshState(false, true);
+    refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
@@ -423,7 +435,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
         peerReplica2.getReplicaPath());
     // initiate compaction
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -445,7 +457,7 @@ public class BlobStoreCompactorTest {
     // initiate compaction
     segmentsUnderCompaction = getLogSegments(0, 2);
     details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -464,7 +476,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void basicTestNoBundleReadBuffer() throws Exception {
     bundleReadBuffer = null;
-    refreshState(false, true);
+    refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
         state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
@@ -479,7 +491,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void compactWholeLogWithNoChangeExpectedTest() throws Exception {
     long delayBeforeLastLogSegmentWrite = 20 * Time.MsPerSec;
-    refreshState(false, false);
+    refreshState(false, false, false);
     // write data until the very last segment is reached
     long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity();
     // write entries with an expiry time such that no records are actually expired at the time of compaction
@@ -501,7 +513,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void compactWholeLogWithChangeExpectedTest() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 2;
     writeDataToMeetRequiredSegmentCount(requiredCount,
         Arrays.asList(state.time.milliseconds() / 2, state.time.milliseconds(), state.time.milliseconds() * 2));
@@ -526,7 +538,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void compactWholeLogMultipleTimesTest() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 3;
     long expiryTimeMs = getInvalidationTime(requiredCount);
     List<Long> expiryTimesMs = Arrays.asList(state.time.milliseconds() / 2, expiryTimeMs, expiryTimeMs * 2);
@@ -544,7 +556,7 @@ public class BlobStoreCompactorTest {
       long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
       CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+      compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
       compactor.initialize(state.index);
       long logSegmentsBeforeCompaction = state.index.getLogSegmentCount();
       try {
@@ -719,7 +731,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void interspersedDeletedAndExpiredBlobsTest() throws Exception {
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
 
@@ -792,7 +804,7 @@ public class BlobStoreCompactorTest {
     List<LogSegmentName> segmentsUnderCompaction = Collections.singletonList(logSegmentName);
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
@@ -953,7 +965,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void interruptionDuringLastCommitTest() throws Exception {
     // keep hard delete enabled
-    refreshState(true, true);
+    refreshState(true, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
         state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
@@ -996,7 +1008,7 @@ public class BlobStoreCompactorTest {
     // index entry variables will be named as puttype,deletetype
     // for example, index entry for type p4 that will have a delete record of type d2 will be named p4d2
 
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.setProperty("store.index.max.number.of.inmem.elements", "5");
     state.reloadIndex(true, false);
     long notExpiredMs = state.time.milliseconds() + TimeUnit.SECONDS.toMillis(Short.MAX_VALUE);
@@ -1072,7 +1084,7 @@ public class BlobStoreCompactorTest {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
@@ -1148,7 +1160,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void containerDeletionTest() throws Exception {
-    refreshState(false, false);
+    refreshState(false, false, false);
 
     state.properties.setProperty("store.container.deletion.enabled", "true");
     state.properties.setProperty("store.index.max.number.of.inmem.elements", "5");
@@ -1228,7 +1240,7 @@ public class BlobStoreCompactorTest {
     LogSegmentName compactedLogSegmentName = logSegmentName.getNextGenerationName();
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     int indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
 
@@ -1266,7 +1278,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void orphanedPutRecordsTest() throws Exception {
-    refreshState(false, false);
+    refreshState(false, false, false);
     // write a PUT record that will be "lost"
     MockId orphanedId = (MockId) state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getKey();
     // add a delete entry for  orphanedId
@@ -1376,7 +1388,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void undeleteSameIndexSegmentTest_NoTtlUpdate() throws Exception {
     assumeTrue(withUndelete);
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
 
@@ -1466,7 +1478,7 @@ public class BlobStoreCompactorTest {
     long deleteReferenceTimeMs = state.time.milliseconds();
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1572,7 +1584,7 @@ public class BlobStoreCompactorTest {
     endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1626,7 +1638,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void undeleteSameIndexSegmentTest_WithTtlUpdate() throws Exception {
     assumeTrue(withUndelete);
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
 
@@ -1740,7 +1752,7 @@ public class BlobStoreCompactorTest {
     long deleteReferenceTimeMs = state.time.milliseconds();
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1896,7 +1908,7 @@ public class BlobStoreCompactorTest {
     endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -1990,7 +2002,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void undeleteSameIndexSegmentTest_DeleteNotInEffect() throws Exception {
     assumeTrue(withUndelete);
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
 
@@ -2023,7 +2035,7 @@ public class BlobStoreCompactorTest {
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     // Use 0 as delete reference time so all the deletes are still with in the retention date
     CompactionDetails details = new CompactionDetails(0, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -2101,7 +2113,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void undeleteSameIndexSegmentTest_NoPut() throws Exception {
     assumeTrue(withUndelete);
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
 
@@ -2179,7 +2191,7 @@ public class BlobStoreCompactorTest {
     LogSegmentName logSegmentName = segmentsUnderCompaction.get(0);
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -2311,7 +2323,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void undeleteCrossLogSegmentTest_UndeleteAsFinal() throws Exception {
     assumeTrue(withUndelete);
-    refreshState(false, false);
+    refreshState(false, false, false);
     int numPuts = (int) Math.floorDiv(state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE,
         PUT_RECORD_SIZE + (DELETE_RECORD_SIZE) / 2) - 1;
     List<IndexEntry> entries = state.addPutEntries(numPuts, PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -2359,7 +2371,7 @@ public class BlobStoreCompactorTest {
   public void undeleteCrossLogSegmentTest_DeleteAsFinal() throws Exception {
     assumeTrue(withUndelete);
     for (long deleteReferenceTime : new long[]{-1, 0}) {
-      refreshState(false, false);
+      refreshState(false, false, false);
       int numPuts = (int) Math.floorDiv(state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE,
           PUT_RECORD_SIZE + (DELETE_RECORD_SIZE) / 2) - 1;
       List<IndexEntry> entries = state.addPutEntries(numPuts, PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -2479,7 +2491,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void undeleteTargetIndexOnlyHasTtlUpdateTest() throws Exception {
     assumeTrue(withUndelete);
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
 
@@ -2523,7 +2535,7 @@ public class BlobStoreCompactorTest {
   @Test
   public void undeletePutCompactedTest() throws Exception {
     assumeTrue(withUndelete);
-    refreshState(false, false);
+    refreshState(false, false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
     state.initIndex(null);
 
@@ -2577,7 +2589,7 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void testGetDesiredSpeedPerSecond() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     int storeCompactionOperationsBytesPerSec = 1000;
     int storeCompactionMinOperationBytesPerSec = 500;
     double storeCompactionOperationsAdjustK = 1.5;
@@ -2588,7 +2600,7 @@ public class BlobStoreCompactorTest {
         Integer.toString(storeCompactionMinOperationBytesPerSec));
     state.properties.put("store.compaction.operations.adjust.k", Double.toString(storeCompactionOperationsAdjustK));
     state.properties.put("store.disk.io.reservoir.time.window.ms", Integer.toString(storeDiskIoReservoirTimeWindowMs));
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     int latencyThreshold = 20;
 
@@ -2646,7 +2658,7 @@ public class BlobStoreCompactorTest {
 
   private void testDuplicatePutsHelper() throws Exception {
     // Construct a blob store, where there is a duplicate PUT indexValue in different log segment.
-    refreshState(false, false);
+    refreshState(false, false, false);
     writeDataToMeetRequiredSegmentCount(1, Collections.singletonList(Utils.Infinite_Time));
     // we know all the IndexEntries are PUT entries.
     TreeMap<MockId, TreeSet<IndexValue>> lastEntry = state.referenceIndex.lastEntry().getValue();
@@ -2666,7 +2678,7 @@ public class BlobStoreCompactorTest {
     long deleteReferenceTimeMs = state.time.milliseconds();
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     long duplicateCount = compactor.getTgtMetrics().compactionTargetIndexDuplicateOnNonRecoveryCount.getCount();
@@ -2691,13 +2703,16 @@ public class BlobStoreCompactorTest {
    * Refreshes the state by destroying any existing state and creating a new one.
    * @param hardDeleteEnabled {@code true} if hard delete needs to be enabled. {@code false} otherwise.
    * @param initState {@code true} if some test state has to be created. {@code false} otherwise.
+   * @param enableAutoCloseLastLogSegment
    * @throws Exception
    */
-  private void refreshState(boolean hardDeleteEnabled, boolean initState) throws Exception {
+  private void refreshState(boolean hardDeleteEnabled, boolean initState, boolean enableAutoCloseLastLogSegment)
+      throws Exception {
     if (state != null) {
       state.destroy();
     }
-    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, withUndelete, false);
+    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true, withUndelete, false,
+        enableAutoCloseLastLogSegment);
   }
 
   /**
@@ -2705,16 +2720,23 @@ public class BlobStoreCompactorTest {
    * @param log the {@link Log} instance to use.
    * @param ioScheduler the {@link DiskIOScheduler} instance to use.
    * @param remoteTokenTracker the {@link RemoteTokenTracker} instance to use.
+   * @param enableAutoCloseLastLogSegment
    * @return an instance of {@link BlobStoreCompactor}.
    * @throws IOException
    * @throws StoreException
    */
-  private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler, RemoteTokenTracker remoteTokenTracker)
-      throws IOException, StoreException {
+  private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler, RemoteTokenTracker remoteTokenTracker,
+      boolean enableAutoCloseLastLogSegment) throws IOException, StoreException {
     closeOrExceptionInduced = false;
     state.properties.put("store.compaction.enable.direct.io", Boolean.toString(doDirectIO));
     if (withUndelete) {
       state.properties.put("store.compaction.filter", "IndexSegmentValidEntryWithUndelete");
+    }
+    state.properties.put("store.auto.close.last.log.segment.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
+    if (enableAutoCloseLastLogSegment) {
+      state.properties.put("store.compaction.policy.factory", "com.github.ambry.store.HybridCompactionPolicyFactory");
+      state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(0));
+      state.properties.put("store.container.deletion.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
     }
     state.properties.put("store.compaction.purge.delete.tombstone", Boolean.toString(purgeDeleteTombstone));
     state.properties.put(StoreConfig.storeAlwaysEnableTargetIndexDuplicateCheckingName,
@@ -2808,6 +2830,21 @@ public class BlobStoreCompactorTest {
     }
   }
 
+  private void writeDataToMeetRequiredSegmentCountForAutoCloseLogSegmentTest(long countRequired) throws StoreException {
+    long capacityLimit = countRequired * state.log.getSegmentCapacity();
+    int blobsPut = 0;
+    while (state.index.getLogUsedCapacity() + PUT_RECORD_SIZE <= capacityLimit) {
+      long expiresAtMs = Utils.Infinite_Time;
+      state.addPutEntries(1, PUT_RECORD_SIZE, expiresAtMs);
+      blobsPut++;
+    }
+    logger.info("The number of blobs put in the log: {}.", blobsPut);
+//    LogSegment activeLogSegment = state.log.getActiveSegment();
+//    File[] indexSegmentFiles =
+//        PersistentIndex.getIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), activeLogSegment.getName());
+//    return indexSegmentFiles;
+  }
+
   /**
    * Reduces the valid data size in {@code logSegmentsToReduceFrom} to <= {@code ceilingSize} by deleting keys in these
    * segments.
@@ -2836,15 +2873,61 @@ public class BlobStoreCompactorTest {
     return state.time.milliseconds();
   }
 
-  /**
-   * Compacts the {@code segmentsUnderCompaction} and verifies sanity of store and data. Also verifies that no change
-   * occurred if no change was expected and vice versa. Ensures that reloading the log does not have effects on the
-   * integrity of the store and data.
-   * @param segmentsUnderCompaction the names of the log segments under compaction.
-   * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
-   * @param changeExpected {@code true} if compaction will cause a change in size of data. {@code false} otherwise.
-   * @throws Exception
-   */
+  private void compactAndVerifyForContainerDeletion(List<LogSegmentName> segmentsUnderCompaction, long deleteReferenceTimeMs,
+      boolean changeExpected) throws Exception {
+    long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
+    long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
+    long indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
+
+    CompactionPolicy compactionPolicy = new HybridCompactionPolicy(config, time);
+    CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
+
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      if (changeExpected) {
+        compactor.close(0);
+      }
+    }
+
+    compactor.closeLastLogSegmentIfQualified(state.index.journal);
+
+    long logSegmentSizeAfterCompaction = getSumOfLogSegmentEndOffsets();
+    long logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
+    long indexSegmentCountAfterCompaction = state.index.getIndexSegments().size();
+
+    if (changeExpected) {
+      assertTrue("Last index segment should be compacted", logSegmentSizeSumBeforeCompaction - logSegmentSizeAfterCompaction > 0);
+    }
+
+  }
+
+
+
+  private void backUpCompactionPolicyInfo(String tempDir, CompactionPolicySwitchInfo compactionPolicySwitchInfo) {
+    if (tempDir != null) {
+      File tempFile = new File(Paths.get(tempDir.toString(), COMPACT_POLICY_INFO_PATH + ".temp").toString());
+      try {
+        tempFile.createNewFile();
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, compactionPolicySwitchInfo);
+        tempFile.renameTo(new File(Paths.get(tempDir.toString(), COMPACT_POLICY_INFO_PATH).toString()));
+      } catch (IOException e) {
+        logger.error("Exception while store compaction policy info for local report. Output file path - {}",
+            tempFile.getAbsolutePath(), e);
+      }
+    }
+  }
+
+
+    /**
+     * Compacts the {@code segmentsUnderCompaction} and verifies sanity of store and data. Also verifies that no change
+     * occurred if no change was expected and vice versa. Ensures that reloading the log does not have effects on the
+     * integrity of the store and data.
+     * @param segmentsUnderCompaction the names of the log segments under compaction.
+     * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
+     * @param changeExpected {@code true} if compaction will cause a change in size of data. {@code false} otherwise.
+     * @throws Exception
+     */
   private void compactAndVerify(List<LogSegmentName> segmentsUnderCompaction, long deleteReferenceTimeMs,
       boolean changeExpected) throws Exception {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
@@ -2876,7 +2959,7 @@ public class BlobStoreCompactorTest {
     Set<MockId> compactedDeletes = expiredDeletes.getFirst();
     Set<MockId> deletesWithPuts = expiredDeletes.getSecond();
 
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
 
     try {
@@ -2952,7 +3035,7 @@ public class BlobStoreCompactorTest {
     Set<MockId> compactedDeletes = expiredDeletes.getFirst();
     Set<MockId> deletesWithPuts = expiredDeletes.getSecond();
     Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
-    compactor = getCompactor(log, diskIOScheduler, null);
+    compactor = getCompactor(log, diskIOScheduler, null, false);
     compactor.initialize(index);
 
     try {
@@ -2976,7 +3059,7 @@ public class BlobStoreCompactorTest {
     // have to reload log since the instance changed by the old compactor is different.
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     state.initIndex(null);
     compactor.initialize(state.index);
     assertEquals("Wrong number of swap segments in use",
@@ -3434,7 +3517,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private void ensureArgumentFailure(CompactionDetails details, String msg) throws Exception {
-    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
     compactor.initialize(state.index);
     try {
       compactor.compact(details, bundleReadBuffer);
@@ -3456,7 +3539,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private Pair<Long, List<LogSegmentName>> setupStateWithExpiredBlobsAtSpecificTime() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     // we want at least 3 log segments that are outside the journal and with no invalid records
     long extraSegmentCountRequired = 4;
     // send +1 to account for half filled segments from curated log-index state.
@@ -3480,7 +3563,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private Pair<Long, List<LogSegmentName>> setupStateWithDeletedBlobsAtSpecificTime() throws Exception {
-    refreshState(false, true);
+    refreshState(false, true, false);
     // we want at least 3 log segments that are outside the journal and with no invalid records
     long extraSegmentCountRequired = 4;
     // send +1 to account for half filled segments from curated log-index state.
@@ -3741,7 +3824,69 @@ public class BlobStoreCompactorTest {
     }
   }
 
-  // compactWholeLogWithHardDeleteEnabledTest() helpers
+
+  @Test
+  public void testCloseLastLogSegmentIfQualified() throws Exception {
+    //create first active log segment
+    refreshState(false, false, true);
+    //leave two log segment space for auto close last log segment purpose
+    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 2;
+    writeDataToMeetRequiredSegmentCountForAutoCloseLogSegmentTest(requiredCount);
+
+    //delete blobs in last index segment.
+    ConcurrentSkipListMap<Offset, IndexSegment> AllIndexSegments = state.index.getIndexSegments();
+    IndexSegment indexSegment = AllIndexSegments.floorEntry(state.log.getEndOffset()).getValue();
+    ListIterator<IndexEntry> segmentListIter = indexSegment.listIterator(indexSegment.size());
+
+    Set<Container> deleteInProgressSet = new HashSet<>();
+    int cnt = 0;
+    while (segmentListIter.hasNext()) {
+      IndexEntry indexEntry = segmentListIter.next();
+      MockId mockId = (MockId) indexEntry.getKey();
+      Container container = new ContainerBuilder(mockId.getContainerId(), "containerName" + cnt++,
+          Container.ContainerStatus.DELETE_IN_PROGRESS, null, mockId.getAccountId()).build();
+      deleteInProgressSet.add(container);
+    }
+
+    Mockito.when(accountService.getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS))
+        .thenReturn(deleteInProgressSet);
+
+    // reload index to make sure journal is on only the latest log segment
+    state.reloadIndex(true, false);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    int preLogSegmentSize = segmentsUnderCompaction.size();
+
+    // Prepare the compactionPolicyInfo before compaction.
+    CompactionPolicyCounter compactionPolicyCounter = new CompactionPolicyCounter(config.storeCompactionPolicySwitchCounterDays);
+    compactionPolicyCounter.setCounter(config.storeCompactionPolicySwitchCounterDays - 1);
+    CompactionPolicySwitchInfo compactionPolicySwitchInfo =
+        new CompactionPolicySwitchInfo(compactionPolicyCounter, System.currentTimeMillis());
+    backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
+
+    //instantiate compactor.
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, true);
+    compactor.initialize(state.index);
+
+    compactAndVerifyForContainerDeletion(segmentsUnderCompaction, state.time.milliseconds(), false);
+
+    //increment the counter
+    compactionPolicySwitchInfo.getCompactionPolicyCounter().increment();
+
+    // reload index to make sure journal is on only the latest log segment
+    backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
+//    state.reloadIndex(true, false);
+//    state.reloadLog(true);
+    segmentsUnderCompaction = getLogSegments(0, state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - state.log.getRemainingUnallocatedSegments() - 1);
+    int postLogSegmentSize = segmentsUnderCompaction.size();
+
+
+    compactAndVerifyForContainerDeletion(segmentsUnderCompaction, state.time.milliseconds(), true);
+
+
+    state.reloadLog(true);
+    //state.reloadIndex(true, false);
+
+  }
 
   /**
    * Does compaction of the whole log with hard delete enabled.
@@ -3753,7 +3898,7 @@ public class BlobStoreCompactorTest {
   private void doCompactWholeLogWithHardDeleteEnabledTest(boolean shouldInduceInterruption,
       boolean interruptionDuringCopy) throws Exception {
     bundleReadBuffer = null;
-    refreshState(true, true);
+    refreshState(true, true, false);
     long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 2;
     writeDataToMeetRequiredSegmentCount(requiredCount, null);
     // do some random deleting.
@@ -3793,7 +3938,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private Pair<List<MockId>, Long> createStateWithPutAndTtlUpdate() throws Exception {
-    refreshState(false, false);
+    refreshState(false, false, false);
     int numPuts = (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / (2 * PUT_RECORD_SIZE));
     long expiryTimeMs = getInvalidationTime(1);
     List<IndexEntry> entries = state.addPutEntries(numPuts, PUT_RECORD_SIZE, expiryTimeMs);
@@ -3821,7 +3966,7 @@ public class BlobStoreCompactorTest {
     // updates for all but two PUTs and deletes for all PUTs. The key is that the first log segment contains some TTL
     // updates at least so that the the removal of the two PUTs without TTL updates will cause some TTL updates that
     // were originally in the second segment to move to the first.
-    refreshState(false, false);
+    refreshState(false, false, false);
     // this code is trying to determine how many put records there should be (close is good enough). It aims to have
     // just enough PUT records such that a quarter of the TTL updates for these PUT records fits in the first log
     // segment along with the PUTs themselves
@@ -3862,7 +4007,7 @@ public class BlobStoreCompactorTest {
    */
   private Set<MockId> createStateWithTtlUpdatesAndDeletes() throws Exception {
     Set<MockId> ids = new HashSet<>();
-    refreshState(false, false);
+    refreshState(false, false, false);
     int numEntries = (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / (TTL_UPDATE_RECORD_SIZE
         + DELETE_RECORD_SIZE));
     for (int i = 0; i < numEntries; i++) {
@@ -3996,7 +4141,7 @@ public class BlobStoreCompactorTest {
   }
 
   private List<IndexEntry> createDeleteWithOlderVersion() throws Exception {
-    refreshState(false, false);
+    refreshState(false, false, false);
     int numPuts = (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / PUT_RECORD_SIZE + 1);
     List<IndexEntry> entries = state.addPutEntries(numPuts, PUT_RECORD_SIZE, Utils.Infinite_Time);
     assertEquals(2, state.index.getLogSegmentCount());
@@ -4015,7 +4160,7 @@ public class BlobStoreCompactorTest {
   }
 
   private List<MockId> createLogSegmentWithDuplicateOfUndelete() throws Exception {
-    refreshState(false, false);
+    refreshState(false, false, false);
     int numPuts = (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / (PUT_RECORD_SIZE));
     List<IndexEntry> entries = state.addPutEntries(numPuts, PUT_RECORD_SIZE, Utils.Infinite_Time);
     // We will construct log such as

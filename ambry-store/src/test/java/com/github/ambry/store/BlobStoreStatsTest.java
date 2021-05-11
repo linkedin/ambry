@@ -747,7 +747,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false, false);
     int bucketCount = bucketingEnabled ? 1 : 0;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -767,7 +767,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false, false);
     MockThrottler mockThrottler = new MockThrottler(new CountDownLatch(0), new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int bucketCount = 50;

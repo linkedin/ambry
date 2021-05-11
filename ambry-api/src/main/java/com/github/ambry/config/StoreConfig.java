@@ -340,6 +340,13 @@ public class StoreConfig {
   public final boolean storeSetFilePermissionEnabled;
 
   /**
+   * Whether to enable auto close last log segment during compaction.
+   */
+  @Config("store.auto.close.last.log.segment.enabled")
+  @Default("false")
+  public final boolean storeAutoCloseLastLogSegmentEnabled;
+
+  /**
    * Specifies the permissions for data files in store. (Data files are user data related files for example, log segment,
    * index segment and bloom filter etc)
    */
@@ -515,6 +522,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
+    storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean("store.auto.close.last.log.segment.enabled", false);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
     String storeOperationFilePermissionStr =

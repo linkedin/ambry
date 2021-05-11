@@ -214,6 +214,17 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Closes the last log segment periodically if replica is in sealed status.
+   * @param journal The {@link Journal} needs to be clean up after log segment closed.
+   * @throws StoreException if any store exception occurred as part of ensuring capacity.
+   */
+  void closeLastLogSegmentIfQualified(Journal journal) throws StoreException {
+    if (config.storeAutoCloseLastLogSegmentEnabled) {
+      srcLog.autoCloseLastLogSegmentIfQualified(journal);
+    }
+  }
+
+  /**
    * Filters deprecated {@link Container}s for compaction purpose. Deprecated containers include DELETE_IN_PROGRESS
    * containers met with retention time and all INACTIVE containers.
    */
@@ -385,7 +396,7 @@ class BlobStoreCompactor {
       }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
-      if (segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
+      if (srcIndex.journal.getFirstOffset() != null && segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
         throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
       }
       prevSegmentName = segment.getName();

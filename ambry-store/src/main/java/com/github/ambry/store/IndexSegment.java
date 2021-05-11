@@ -743,7 +743,11 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   void writeIndexSegmentToFile(Offset safeEndPoint) throws FileNotFoundException, StoreException {
     if (sealed.get()) {
-      throw new StoreException("Cannot persist sealed index segment", StoreErrorCodes.Illegal_Index_Operation);
+      if (config.storeAutoCloseLastLogSegmentEnabled) {
+        logger.trace("Index Segment : {} is sealed", indexFile.getAbsolutePath());
+      } else {
+        throw new StoreException("Cannot persist sealed index segment", StoreErrorCodes.Illegal_Index_Operation);
+      }
     }
     if (safeEndPoint.compareTo(startOffset) <= 0) {
       return;
@@ -783,17 +787,19 @@ class IndexSegment implements Iterable<IndexEntry> {
         if (getVersion() >= PersistentIndex.VERSION_2) {
           maxPaddingBytes = new byte[persistedEntrySize - valueSize];
         }
-        for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
-          for (IndexValue value : entry.getValue()) {
-            if (value.getOffset().getOffset() + value.getSize() <= safeEndPoint.getOffset()) {
-              writer.write(entry.getKey().toBytes());
-              writer.write(value.getBytes().array());
-              if (getVersion() >= PersistentIndex.VERSION_2) {
-                // Add padding if necessary
-                writer.write(maxPaddingBytes, 0, persistedEntrySize - (entry.getKey().sizeInBytes() + valueSize));
+        if (index != null) {
+          for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
+            for (IndexValue value : entry.getValue()) {
+              if (value.getOffset().getOffset() + value.getSize() <= safeEndPoint.getOffset()) {
+                writer.write(entry.getKey().toBytes());
+                writer.write(value.getBytes().array());
+                if (getVersion() >= PersistentIndex.VERSION_2) {
+                  // Add padding if necessary
+                  writer.write(maxPaddingBytes, 0, persistedEntrySize - (entry.getKey().sizeInBytes() + valueSize));
+                }
+                logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
+                    getFile().getAbsolutePath(), entry.getKey(), value.getOffset(), value.getSize(), safeEndPoint);
               }
-              logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
-                  getFile().getAbsolutePath(), entry.getKey(), value.getOffset(), value.getSize(), safeEndPoint);
             }
           }
         }

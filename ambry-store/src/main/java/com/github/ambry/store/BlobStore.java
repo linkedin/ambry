@@ -331,6 +331,10 @@ public class BlobStore implements Store {
     }
   }
 
+  ReplicaId getReplicaId() {
+    return this.replicaId;
+  }
+
   /**
    * Checks the state of the messages in the given {@link MessageWriteSet} in the given {@link FileSpan}.
    * @param messageSetToWrite Non-empty set of messages to write to the store.
@@ -1222,6 +1226,14 @@ public class BlobStore implements Store {
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
     logger.info("One cycle of compaction is completed on the store {}", storeId);
+  }
+
+  /**
+   * Closes the last log segment periodically if replica is in sealed status.
+   * @throws StoreException if any store exception occurred as part of ensuring capacity.
+   */
+  void closeLastLogSegmentIfQualified() throws StoreException {
+    compactor.closeLastLogSegmentIfQualified(index.journal);
   }
 
   /**

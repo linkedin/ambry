@@ -96,7 +96,7 @@ class Journal {
    * @param key The key that the entry in the journal refers to.
    * @param crc The crc of the object. This may be null if crc is not available.
    */
-  void addEntry(Offset offset, StoreKey key, Long crc) {
+  synchronized void addEntry(Offset offset, StoreKey key, Long crc) {
     if (key == null || offset == null) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
     }
@@ -114,6 +114,24 @@ class Journal {
       logger.trace("Journal : {} offset {} key {}", dataDir, offset, key);
       currentNumberOfEntries.incrementAndGet();
       logger.trace("Journal : {} number of entries {}", dataDir, currentNumberOfEntries.get());
+    }
+  }
+
+  /**
+   * This method should only be called when replica gets sealed. Remove all entries belongs to the auto closed log segment.
+   * It will delay the addEntry method for sealed replica, so the replication performance will be hold while running this method.
+   * @param activeLogSegmentName journal should remove all entries not belongs to active log segment.
+   */
+  synchronized void cleanUpJournal(LogSegmentName activeLogSegmentName) {
+    while (!inBootstrapMode) {
+      Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
+      if (earliestEntry != null && earliestEntry.getKey().getName().compareTo(activeLogSegmentName) < 0) {
+        journal.remove(earliestEntry.getKey());
+        recentCrcs.remove(earliestEntry.getValue());
+        currentNumberOfEntries.decrementAndGet();
+      } else {
+        break;
+      }
     }
   }
 
