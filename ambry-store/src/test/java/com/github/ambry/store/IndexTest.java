@@ -617,7 +617,7 @@ public class IndexTest {
   public void expirationTest() throws StoreException {
     // add a PUT entry that will expire if time advances
     // advance time so that time moves to whole second with no residual milliseconds
-    state.time.sleep(TimeUnit.SECONDS.toMicros(1) - state.time.milliseconds());
+    state.time.sleep(TimeUnit.SECONDS.toMillis(1) - state.time.milliseconds());
     long expiresAtMs = state.time.milliseconds() + CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS + 1000;
     state.addPutEntries(1, 1, expiresAtMs);
     MockId id = state.logOrder.lastEntry().getValue().getFirst();

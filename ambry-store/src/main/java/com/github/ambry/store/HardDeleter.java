@@ -52,7 +52,7 @@ public class HardDeleter implements Runnable {
   public static final short Cleanup_Token_Version_V1 = 1;
   private static final String Cleanup_Token_Filename = "cleanuptoken";
   //how long to sleep if token does not advance.
-  static final long HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS = 60 * TimeUnit.SECONDS.toMicros(1);
+  static final long HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS = TimeUnit.SECONDS.toMillis(60);
 
   final AtomicBoolean enabled = new AtomicBoolean(true);
   private volatile boolean awaitingAfterCaughtUp = false;

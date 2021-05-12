@@ -25,10 +25,12 @@ public abstract class Time {
   /**
    * Some common constants
    */
-  public static final int MsPerSec = Math.toIntExact(TimeUnit.SECONDS.toMicros(1));
-  public static final int NsPerMs = Math.toIntExact(TimeUnit.MICROSECONDS.toNanos(1));
-  public static final int NsPerSec = Math.toIntExact(TimeUnit.SECONDS.toNanos(1));
-  public static final int SecsPerMin = Math.toIntExact(TimeUnit.MINUTES.toSeconds(1));
+  public static final int NsPerUs = 1000;
+  public static final int UsPerMs = 1000;
+  public static final int MsPerSec = 1000;
+  public static final int NsPerMs = NsPerUs * UsPerMs;
+  public static final int NsPerSec = NsPerMs * MsPerSec;
+  public static final int SecsPerMin = 60;
 
   public abstract long milliseconds();
 

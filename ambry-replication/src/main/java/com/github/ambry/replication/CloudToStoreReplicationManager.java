@@ -177,7 +177,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         tokenHelper.getFindTokenFactoryFromReplicaType(peerCloudReplica.getReplicaType());
     RemoteReplicaInfo remoteReplicaInfo =
         new RemoteReplicaInfo(peerCloudReplica, localReplica, store, findTokenFactory.getNewFindToken(),
-            storeConfig.storeDataFlushIntervalSeconds * TimeUnit.SECONDS.toMicros(1) * Replication_Delay_Multiplier,
+            storeConfig.storeDataFlushIntervalSeconds * TimeUnit.SECONDS.toMillis(1) * Replication_Delay_Multiplier,
             SystemTime.getInstance(), peerCloudReplica.getDataNodeId().getPortToConnectTo());
     replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);
 

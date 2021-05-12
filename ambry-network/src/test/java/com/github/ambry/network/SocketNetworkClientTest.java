@@ -38,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -399,7 +400,7 @@ public class SocketNetworkClientTest {
     responseInfoList.forEach(ResponseInfo::release);
 
     // 4. one of the connection lost in sendAndPoll 3 should be replenished
-    time.setCurrentMilliseconds(time.milliseconds() + TimeUnit.SECONDS.toMicros(1));
+    time.setCurrentMilliseconds(time.milliseconds() + TimeUnit.SECONDS.toMillis(1));
     selector.setState(MockSelectorState.Good);
     responseInfoList = networkClient.sendAndPoll(requestGen.apply(0), Collections.emptySet(), POLL_TIMEOUT_MS);
     expectedConnectCalls.addAndGet(1);

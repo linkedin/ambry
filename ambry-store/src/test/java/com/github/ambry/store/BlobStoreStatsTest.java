@@ -65,7 +65,7 @@ import static org.junit.Assume.*;
 @RunWith(Parameterized.class)
 public class BlobStoreStatsTest {
   private static final long TEST_TIME_INTERVAL_IN_MS = DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / 2;
-  private static final long BUCKET_SPAN_IN_MS = TimeUnit.SECONDS.toMicros(1);
+  private static final long BUCKET_SPAN_IN_MS = TimeUnit.SECONDS.toMillis(1);
   private static final long QUEUE_PROCESSOR_PERIOD_IN_Ms = 100;
   private static final StoreMetrics METRICS = new StoreMetrics(new MetricRegistry());
   private static final long DEFAULT_WAIT_TIMEOUT_SECS = TimeUnit.MINUTES.toSeconds(1);
@@ -427,7 +427,7 @@ public class BlobStoreStatsTest {
     }
     // advance time to let the added puts to expire
     long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
-    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMicros(1));
+    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMillis(1));
     for (long i = state.beginningTime; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
         i += TEST_TIME_INTERVAL_IN_MS) {
       verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(i, 0L));
@@ -435,7 +435,7 @@ public class BlobStoreStatsTest {
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     // advance time near the end of log segment forecast time
     state.advanceTime(logSegmentForecastEndTimeInMs - state.time.milliseconds() - 1);
-    verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), TimeUnit.SECONDS.toMicros(1)));
+    verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), TimeUnit.SECONDS.toMillis(1)));
     // advance time near the end of container forecast time
     state.advanceTime(containerForecastEndTimeInMs - state.time.milliseconds() - 1);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -585,7 +585,7 @@ public class BlobStoreStatsTest {
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     // advance time beyond expiration of the blobs and verify no double counting for expiration and delete
     long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
-    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMicros(1));
+    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMillis(1));
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0L));
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     assertEquals("Throttle count mismatch from expected value", throttleCountBeforeRequests,
@@ -671,7 +671,7 @@ public class BlobStoreStatsTest {
     }
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
-    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMicros(1));
+    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMillis(1));
     advanceTimeToNextSecond();
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     blobStoreStats.close();
@@ -787,7 +787,7 @@ public class BlobStoreStatsTest {
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
     long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
-    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMicros(1));
+    state.advanceTime(timeToLiveInMs + TimeUnit.SECONDS.toMillis(1));
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
     blobStoreStats.close();
@@ -866,30 +866,30 @@ public class BlobStoreStatsTest {
     // ensure the scan is complete before proceeding
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     int throttleCountBeforeRequests = mockThrottler.throttleCount.get();
-    TimeRange timeRange = new TimeRange(logSegmentForecastStartTimeMs, TimeUnit.SECONDS.toMicros(1));
+    TimeRange timeRange = new TimeRange(logSegmentForecastStartTimeMs, TimeUnit.SECONDS.toMillis(1));
     assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
         blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
-    timeRange = new TimeRange(logSegmentForecastEndTimeMs, TimeUnit.SECONDS.toMicros(1));
+    timeRange = new TimeRange(logSegmentForecastEndTimeMs, TimeUnit.SECONDS.toMillis(1));
     assertEquals("Unexpected collection time", logSegmentForecastEndTimeMs - BUCKET_SPAN_IN_MS,
         blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
-    timeRange = new TimeRange((logSegmentForecastStartTimeMs + logSegmentForecastEndTimeMs) / 2, TimeUnit.SECONDS.toMicros(1));
+    timeRange = new TimeRange((logSegmentForecastStartTimeMs + logSegmentForecastEndTimeMs) / 2, TimeUnit.SECONDS.toMillis(1));
     assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
         blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
     // time range end time is equal to the start of forecast range
-    timeRange = new TimeRange(logSegmentForecastStartTimeMs - TimeUnit.SECONDS.toMicros(1), TimeUnit.SECONDS.toMicros(1));
+    timeRange = new TimeRange(logSegmentForecastStartTimeMs - TimeUnit.SECONDS.toMillis(1), TimeUnit.SECONDS.toMillis(1));
     assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
         blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
     // all previous time range are inside the forecast range
     assertEquals("Throttle count mismatch from expected value", throttleCountBeforeRequests,
         mockThrottler.throttleCount.get());
     // time range start time is equal the end of forecast range (considered to be outside of forecast range)
-    timeRange = new TimeRange(logSegmentForecastEndTimeMs + TimeUnit.SECONDS.toMicros(1), TimeUnit.SECONDS.toMicros(1));
+    timeRange = new TimeRange(logSegmentForecastEndTimeMs + TimeUnit.SECONDS.toMillis(1), TimeUnit.SECONDS.toMillis(1));
     assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
         blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
-    timeRange = new TimeRange(logSegmentForecastEndTimeMs + TimeUnit.SECONDS.toMillis(5), TimeUnit.SECONDS.toMicros(1));
+    timeRange = new TimeRange(logSegmentForecastEndTimeMs + TimeUnit.SECONDS.toMillis(5), TimeUnit.SECONDS.toMillis(1));
     assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
         blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
-    timeRange = new TimeRange(logSegmentForecastStartTimeMs - TimeUnit.SECONDS.toMillis(5), TimeUnit.SECONDS.toMicros(1));
+    timeRange = new TimeRange(logSegmentForecastStartTimeMs - TimeUnit.SECONDS.toMillis(5), TimeUnit.SECONDS.toMillis(1));
     assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
         blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
     blobStoreStats.close();
@@ -1150,7 +1150,7 @@ public class BlobStoreStatsTest {
    */
   private void advanceTimeToNextSecond() {
     long currentTimeInMs = state.time.milliseconds();
-    state.advanceTime(TimeUnit.SECONDS.toMicros(1) - currentTimeInMs % TimeUnit.SECONDS.toMicros(1));
+    state.advanceTime(TimeUnit.SECONDS.toMillis(1) - currentTimeInMs % TimeUnit.SECONDS.toMillis(1));
   }
 
   /**

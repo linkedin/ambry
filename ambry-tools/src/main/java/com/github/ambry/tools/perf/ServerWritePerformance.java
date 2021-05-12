@@ -371,7 +371,7 @@ public class ServerWritePerformance {
             blobIdWriter.write("Blob-" + blobId + "\n");
             totalWrites.incrementAndGet();
             if (enableVerboseLogging) {
-              System.out.println("Time taken to put blob id " + blobId + " in ms " + latencyPerBlob / TimeUnit.MICROSECONDS.toNanos(1)
+              System.out.println("Time taken to put blob id " + blobId + " in ms " + latencyPerBlob / TimeUnit.MILLISECONDS.toNanos(1)
                   + " for blob of size " + blob.length);
             }
             numberOfPuts++;

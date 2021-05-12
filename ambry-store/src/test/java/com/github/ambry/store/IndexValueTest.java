@@ -352,10 +352,10 @@ public class IndexValueTest {
         value.putLong(size);
         value.putLong(offset.getOffset());
         value.put(flags);
-        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / TimeUnit.SECONDS.toMicros(1)) : (int) expiresAtMs);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / TimeUnit.SECONDS.toMillis(1)) : (int) expiresAtMs);
         value.putLong(originalMessageOffset);
         value.putInt(
-            operationTimeMs != Utils.Infinite_Time ? (int) (operationTimeMs / TimeUnit.SECONDS.toMicros(1)) : (int) operationTimeMs);
+            operationTimeMs != Utils.Infinite_Time ? (int) (operationTimeMs / TimeUnit.SECONDS.toMillis(1)) : (int) operationTimeMs);
         value.putShort(accountId);
         value.putShort(containerId);
         value.position(0);
@@ -367,10 +367,10 @@ public class IndexValueTest {
         value.putLong(size);
         value.putLong(offset.getOffset());
         value.put(flags);
-        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / TimeUnit.SECONDS.toMicros(1)) : (int) expiresAtMs);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / TimeUnit.SECONDS.toMillis(1)) : (int) expiresAtMs);
         value.putLong(originalMessageOffset);
         value.putInt(
-            operationTimeMs != Utils.Infinite_Time ? (int) (operationTimeMs / TimeUnit.SECONDS.toMicros(1)) : (int) operationTimeMs);
+            operationTimeMs != Utils.Infinite_Time ? (int) (operationTimeMs / TimeUnit.SECONDS.toMillis(1)) : (int) operationTimeMs);
         value.putShort(accountId);
         value.putShort(containerId);
         value.putShort(lifeVersion);

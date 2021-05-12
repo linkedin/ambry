@@ -875,7 +875,7 @@ public class IndexSegmentTest {
       NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex = new TreeMap<>();
       // advance time so that last modified time for VERSION_1 has different last modified times for different index
       // segments
-      time.sleep(10 * TimeUnit.SECONDS.toMicros(1));
+      time.sleep(TimeUnit.SECONDS.toMillis(10));
       PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
       IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
       StoreKey resetKey = null;

@@ -572,7 +572,7 @@ public class BlobStoreTest {
   public void basicTest() throws InterruptedException, IOException, StoreException {
     // PUT a key that is slated to expire when time advances by 1s
     MockId addedId = put(1, PUT_RECORD_SIZE, time.seconds() + 1).get(0);
-    time.sleep(2 * TimeUnit.SECONDS.toMicros(1));
+    time.sleep(2 * TimeUnit.SECONDS.toMillis(1));
     liveKeys.remove(addedId);
     expiredKeys.add(addedId);
 
@@ -1439,7 +1439,7 @@ public class BlobStoreTest {
     id = put(1, PUT_RECORD_SIZE, time.seconds()).get(0);
     verifyUndeleteFailure(id, StoreErrorCodes.ID_Not_Deleted);
     delete(id);
-    time.sleep(2 * TimeUnit.SECONDS.toMicros(1));
+    time.sleep(2 * TimeUnit.SECONDS.toMillis(1));
     verifyUndeleteFailure(id, StoreErrorCodes.TTL_Expired);
   }
 
@@ -2535,7 +2535,7 @@ public class BlobStoreTest {
     store.start();
     // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
-    time.sleep(TimeUnit.SECONDS.toMicros(1));
+    time.sleep(TimeUnit.SECONDS.toMillis(1));
     long expectedStoreSize;
     assertTrue("Expected empty store", store.isEmpty());
     if (!isLogSegmented) {

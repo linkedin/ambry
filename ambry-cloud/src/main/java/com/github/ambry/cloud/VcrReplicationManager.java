@@ -189,7 +189,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             tokenHelper.getFindTokenFactoryFromReplicaType(peerReplica.getReplicaType());
         RemoteReplicaInfo remoteReplicaInfo =
             new RemoteReplicaInfo(peerReplica, cloudReplica, store, findTokenFactory.getNewFindToken(),
-                storeConfig.storeDataFlushIntervalSeconds * TimeUnit.SECONDS.toMicros(1) * Replication_Delay_Multiplier,
+                storeConfig.storeDataFlushIntervalSeconds * TimeUnit.SECONDS.toMillis(1) * Replication_Delay_Multiplier,
                 SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
         replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);
         remoteReplicaInfos.add(remoteReplicaInfo);

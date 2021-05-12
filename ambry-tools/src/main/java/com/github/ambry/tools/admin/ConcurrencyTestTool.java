@@ -536,7 +536,7 @@ public class ConcurrencyTestTool {
      */
     synchronized void updateTimePassedSoFar(long timePassedInMs) {
       this.timePassedInMs.addAndGet(timePassedInMs);
-      if (this.timePassedInMs.get() >= measurementIntervalInSecs * TimeUnit.SECONDS.toMicros(1)) {
+      if (this.timePassedInMs.get() >= measurementIntervalInSecs * TimeUnit.SECONDS.toMillis(1)) {
         reportMetrics();
         numberOfOperations.set(0);
         this.timePassedInMs.set(0);

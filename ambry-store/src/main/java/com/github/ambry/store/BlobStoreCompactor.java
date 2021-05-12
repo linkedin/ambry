@@ -72,7 +72,7 @@ class BlobStoreCompactor {
     }
   };
 
-  private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * TimeUnit.SECONDS.toMicros(1);
+  private static final long WAIT_TIME_FOR_CLEANUP_MS = TimeUnit.SECONDS.toMillis(5);
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final File dataDir;
   private final String storeId;
