@@ -42,6 +42,7 @@ public class ContainerBuilder {
   private boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
   private boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
   private boolean overrideAccountAcl = OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE;
+  private NamedBlobMode namedBlobMode = NAMED_BLOB_MODE_DEFAULT_VALUE;
   private Set<String> contentTypeWhitelistForFilenamesOnDownload =
       CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
@@ -72,6 +73,7 @@ public class ContainerBuilder {
     parentAccountId = origin.getParentAccountId();
     securePathRequired = origin.isSecurePathRequired();
     overrideAccountAcl = origin.isAccountAclOverridden();
+    namedBlobMode = origin.getNamedBlobMode();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
     lastModifiedTime = origin.getLastModifiedTime();
@@ -255,6 +257,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the named blob API mode for the container.
+   * @param namedBlobMode the {@link NamedBlobMode} to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setNamedBlobMode(NamedBlobMode namedBlobMode) {
+    this.namedBlobMode = namedBlobMode;
+    return this;
+  }
+
+  /**
    * Sets the created/modified time of the {@link Container}
    * @param lastModifiedTime epoch time in milliseconds.
    * @return This builder.
@@ -283,7 +295,7 @@ public class ContainerBuilder {
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
-        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, parentAccountId, deleteTriggerTime, lastModifiedTime,
-        snapshotVersion);
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode, parentAccountId,
+        deleteTriggerTime, lastModifiedTime, snapshotVersion);
   }
 }

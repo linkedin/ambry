@@ -19,6 +19,7 @@ import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.utils.Pair;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -138,6 +139,67 @@ public class AmbryStorageQuotaEnforcer implements StorageQuotaEnforcer {
     }
     metrics.shouldThrottleTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return mode == QuotaMode.THROTTLING && exceedQuota.get();
+  }
+
+  /**
+   * Return quota and current usage for the account/container carried in the given {@code restRequest}.
+   * If there is no account and container found in the {@code restRequest}, this method would return -1
+   * for quota. If there is no quota found for the account/container, this method would return -1 for
+   * quota as well.
+   * @param restRequest the {@link RestRequest} that carries account and container in the header.
+   * @return A {@link Pair} whose first element is quota the second element is current storage usage.
+   */
+  Pair<Long, Long> getQuotaAndUsage(RestRequest restRequest) {
+    long quotaValue = -1L;
+    long currentUsage = 0L;
+    try {
+      short accountId = RestUtils.getAccountFromArgs(restRequest.getArgs()).getId();
+      short containerId = RestUtils.getContainerFromArgs(restRequest.getArgs()).getId();
+      quotaValue = storageQuota.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
+          .getOrDefault(String.valueOf(containerId), -1L);
+      if (quotaValue != -1L) {
+        currentUsage = storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
+            .getOrDefault(String.valueOf(containerId), 0L);
+      }
+    } catch (Exception e) {
+      logger.error("Failed to getQuotaAndUsage logic to RestRequest {}", restRequest, e);
+    }
+    return new Pair<>(quotaValue, currentUsage);
+  }
+
+  /**
+   * Add given {@code usage} to the current storage usage of account/container carried in {@code restRequest} even
+   * if the result exceeds quota for the target account/container. If there is no account and container found in
+   * {@code restRequest}, then this is a no-op. If there is no quota found for the account/container, then this is
+   * a no-op. A {@link Pair} whose first element is quota and second element is the storage usage after charge.
+   * @param restRequest the {@link RestRequest} that carries account and container in the header.
+   * @param usage the usage to charge
+   * @return A {@link Pair} whose first element is quota and second element is the storage usage after charge.
+   */
+  Pair<Long, Long> charge(RestRequest restRequest, long usage) {
+    long quotaValue = -1L;
+    long usageAfterCharge = 0L;
+    try {
+      short accountId = RestUtils.getAccountFromArgs(restRequest.getArgs()).getId();
+      short containerId = RestUtils.getContainerFromArgs(restRequest.getArgs()).getId();
+      quotaValue = storageQuota.getOrDefault(String.valueOf(accountId), new HashMap<>())
+          .getOrDefault(String.valueOf(containerId), -1L);
+      if (quotaValue != -1L) {
+        AtomicLong existingUsage = new AtomicLong();
+        storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
+            .compute(String.valueOf(containerId), (k, v) -> {
+              existingUsage.set(v == null ? 0 : v);
+              if (v == null) {
+                return usage;
+              }
+              return v + usage;
+            });
+        usageAfterCharge = existingUsage.addAndGet(usage);
+      }
+    } catch (Exception e) {
+      logger.error("Failed to getQuotaAndUsage logic to RestRequest {}", restRequest, e);
+    }
+    return new Pair<>(quotaValue, usageAfterCharge);
   }
 
   /**

@@ -750,14 +750,15 @@ public class DumpIndexTool {
     return fileToIndexEntries;
   }
 
-  public List<IndexEntry> getAllEntriesFromIndexSegment(File segmentFile) throws IOException, StoreException {
+  public List<IndexEntry> getAllEntriesFromIndexSegment(File segmentFile) throws StoreException {
     verifyPath(segmentFile, false);
     IndexSegment segment = new IndexSegment(segmentFile, false, storeKeyFactory, storeConfig, storeMetrics,
         new Journal(segmentFile.getParent(), 0, 0), time);
     List<IndexEntry> entries = new ArrayList<>();
     final Timer.Context context = metrics.findAllEntriesPerIndexTimeMs.time();
     try {
-      segment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), false);
+      segment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), false,
+          false);
     } finally {
       context.stop();
     }

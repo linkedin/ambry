@@ -90,17 +90,13 @@ import static com.github.ambry.utils.Utils.*;
  *   back to zookeeper.
  * </p>
  */
-public class HelixAccountService extends AbstractAccountService implements AccountService {
-  static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
-  static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
+public class HelixAccountService extends AbstractAccountService {
 
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final BackupFileManager backupFileManager;
   private final HelixPropertyStore<ZNRecord> helixStore;
-  private final Notifier<String> notifier;
   private final ScheduledExecutorService scheduler;
   private final HelixAccountServiceConfig config;
-  private final TopicListener<String> changeTopicListener = this::onAccountChangeMessage;
   private final AccountMetadataStore accountMetadataStore;
   private static final Logger logger = LoggerFactory.getLogger(HelixAccountService.class);
   private final AtomicReference<Router> router = new AtomicReference<>();
@@ -127,9 +123,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, AccountServiceMetrics accountServiceMetrics,
       Notifier<String> notifier, ScheduledExecutorService scheduler, HelixAccountServiceConfig config)
       throws IOException {
-    super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"));
+    super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"), notifier);
     this.helixStore = Objects.requireNonNull(helixStore, "helixStore cannot be null");
-    this.notifier = notifier;
     this.scheduler = scheduler;
     this.config = config;
     this.backupFileManager =
@@ -156,14 +151,6 @@ public class HelixAccountService extends AbstractAccountService implements Accou
     } else if (config.useNewZNodePath) {
       initialFetchAndSchedule();
     }
-  }
-
-  /**
-   * Return the {@link Notifier}.
-   * @return The {@link Notifier}
-   */
-  Notifier<String> getNotifier() {
-    return notifier;
   }
 
   /**
@@ -236,13 +223,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
           initialDelay, config.updaterPollingIntervalMs);
     }
 
-    if (notifier != null) {
-      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
-    } else {
-      logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
-          + "be in sync with remote account data.");
-      accountServiceMetrics.nullNotifierCount.inc();
-    }
+    maybeSubscribeChangeTopic(true);
   }
 
   /**
@@ -321,9 +302,7 @@ public class HelixAccountService extends AbstractAccountService implements Accou
   @Override
   public void close() {
     if (open.compareAndSet(true, false)) {
-      if (notifier != null) {
-        notifier.unsubscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
-      }
+      maybeUnsubscribeChangeTopic();
       if (scheduler != null) {
         shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
       }
@@ -337,7 +316,8 @@ public class HelixAccountService extends AbstractAccountService implements Accou
    * @param topic The topic.
    * @param message The message for the topic.
    */
-  private void onAccountChangeMessage(String topic, String message) {
+  @Override
+  protected void onAccountChangeMessage(String topic, String message) {
     if (!open.get()) {
       // take no action instead of throwing an exception to silence noisy log messages when a message is received while
       // closing the AccountService.

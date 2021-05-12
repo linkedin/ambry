@@ -19,7 +19,7 @@ import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
@@ -141,8 +141,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
     }
-    for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
-      manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
+    if (clusterMapConfig.clustermapEnableHelixHealthReport) {
+      for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
+        manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
+      }
     }
     logger.info("Completed participation in cluster {} at {}", clusterName, zkConnectStr);
   }
@@ -448,17 +450,19 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryHealthReport healthReport : healthReports) {
       if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
-        // register cluster wide aggregation task for the health report
-        taskFactoryMap.put(
-            String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
-            new TaskFactory() {
-              @Override
-              public Task createNewTask(TaskCallbackContext context) {
-                return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
-                    healthReport.getReportName(), healthReport.getStatsFieldName(), healthReport.getStatsReportType(),
-                    callback, clusterMapConfig);
-              }
-            });
+        if (clusterMapConfig.clustermapEnableHelixAggregationTask) {
+          // register cluster wide aggregation task for the health report
+          taskFactoryMap.put(
+              String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
+              new TaskFactory() {
+                @Override
+                public Task createNewTask(TaskCallbackContext context) {
+                  return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
+                      healthReport.getReportName(), healthReport.getStatsFieldName(), healthReport.getStatsReportType(),
+                      callback, clusterMapConfig);
+                }
+              });
+        }
         if (clusterMapConfig.clustermapEnableMySqlAggregationTask && accountStatsStore != null) {
           taskFactoryMap.put(
               String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),

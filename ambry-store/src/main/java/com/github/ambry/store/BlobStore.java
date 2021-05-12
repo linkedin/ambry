@@ -50,6 +50,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
+
 
 /**
  * The blob store that controls the log and index
@@ -82,6 +84,7 @@ public class BlobStore implements Store {
   private final long thresholdBytesHigh;
   private final long thresholdBytesLow;
   private final long ttlUpdateBufferTimeMs;
+  private final RemoteTokenTracker remoteTokenTracker;
   private final AtomicInteger errorCount;
   private final AccountService accountService;
 
@@ -200,6 +203,7 @@ public class BlobStore implements Store {
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
+    remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
@@ -242,11 +246,10 @@ public class BlobStore implements Store {
         log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
-            accountService);
+            accountService, remoteTokenTracker);
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
-        metrics.initializeIndexGauges(storeId, index, capacityInBytes);
         long logSegmentForecastOffsetMs = TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours);
         long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
         long queueProcessingPeriodInMs =
@@ -257,6 +260,7 @@ public class BlobStore implements Store {
               config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
               diskIOScheduler, metrics);
         }
+        metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
@@ -892,10 +896,15 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname,
+      String remoteReplicaPath) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.findEntriesSinceResponse.time();
     try {
+      if (hostname != null && !hostname.startsWith(Cloud_Replica_Keyword) && remoteTokenTracker != null) {
+        // only tokens from disk-backed replicas are tracked
+        remoteTokenTracker.updateTokenFromPeerReplica(token, hostname, remoteReplicaPath);
+      }
       FindInfo findInfo = index.findEntriesSince(token, maxTotalSizeOfEntries);
       onSuccess();
       return findInfo;
@@ -1210,6 +1219,9 @@ public class BlobStore implements Store {
    */
   void compact(CompactionDetails details, byte[] bundleReadBuffer) throws IOException, StoreException {
     checkStarted();
+    if (remoteTokenTracker != null) {
+      remoteTokenTracker.refreshPeerReplicaTokens();
+    }
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
     logger.info("One cycle of compaction is completed on the store {}", storeId);
@@ -1224,6 +1236,9 @@ public class BlobStore implements Store {
     checkStarted();
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
+      if(remoteTokenTracker != null) {
+        remoteTokenTracker.refreshPeerReplicaTokens();
+      }
       compactor.resumeCompaction(bundleReadBuffer);
       checkCapacityAndUpdateReplicaStatusDelegate();
     }

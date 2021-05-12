@@ -56,6 +56,8 @@ import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
+
 
 /**
  * Abstract class to handle replication for given partitions. Responsible for the following
@@ -231,7 +233,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         break;
       }
     }
-    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(CloudReplica.Cloud_Replica_Keyword)) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
@@ -343,9 +345,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     for (int i = 0; i < numberOfThreads; i++) {
       boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);
-      String threadIdentity =
-          (startThread ? "Vcr" : "") + "ReplicaThread-" + (dataNodeId.getDatacenterName().equals(datacenter) ? "Intra-"
-              : "Inter-") + i + "-" + datacenter;
+      String threadIdentity = getReplicaThreadName(datacenter, i);
       try {
         StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
         Transformer threadSpecificTransformer =
@@ -368,6 +368,17 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     replicationMetrics.trackLiveThreadsCount(replicaThreads, datacenter);
     replicationMetrics.populateSingleColoMetrics(datacenter);
     return replicaThreads;
+  }
+
+  /**
+   * Chooses a name for a new replica thread.
+   * @param datacenterToReplicateFrom The datacenter that we replicate from in this thread.
+   * @param threadIndexWithinPool The index of the thread within the thread pool.
+   * @return The name of the thread.
+   */
+  protected String getReplicaThreadName(String datacenterToReplicateFrom, int threadIndexWithinPool) {
+    return "ReplicaThread-" + (dataNodeId.getDatacenterName().equals(datacenterToReplicateFrom) ? "Intra-"
+            : "Inter-") + threadIndexWithinPool + "-" + datacenterToReplicateFrom;
   }
 
   /**

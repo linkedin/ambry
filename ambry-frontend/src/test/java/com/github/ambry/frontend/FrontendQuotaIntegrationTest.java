@@ -32,6 +32,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
@@ -82,13 +83,15 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   private static Container CONTAINER;
   private static RestServer ambryRestServer = null;
   private final boolean throttleRequest;
+  private final QuotaMode quotaMode;
 
   /**
    * @param throttleRequest {@code true} if quota manager should reject quota requests.
    */
-  public FrontendQuotaIntegrationTest(boolean throttleRequest) {
+  public FrontendQuotaIntegrationTest(boolean throttleRequest, QuotaMode quotaMode) {
     super(null, null);
     this.throttleRequest = throttleRequest;
+    this.quotaMode = quotaMode;
   }
 
   /**
@@ -96,7 +99,9 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{true}, {false}});
+    return Arrays.asList(
+        new Object[][]{{true, QuotaMode.TRACKING}, {false, QuotaMode.TRACKING}, {true, QuotaMode.THROTTLING},
+            {false, QuotaMode.THROTTLING}});
   }
 
   /**
@@ -153,6 +158,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
+    properties.setProperty("clustermap.port", String.valueOf(PORT));
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
     return properties;
   }
@@ -186,7 +192,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
         SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     String quotaEnforcerSourceInfoPairConfig = buildDefaultQuotaEnforcerSourceInfoPairConfig(throttleRequest);
     VerifiableProperties quotaProps =
-        buildFrontendVPropsForQuota(TRUST_STORE_FILE, quotaEnforcerSourceInfoPairConfig, true, QuotaMode.THROTTLING);
+        buildFrontendVPropsForQuota(TRUST_STORE_FILE, quotaEnforcerSourceInfoPairConfig, true, quotaMode);
     ambryRestServer = new RestServer(quotaProps, CLUSTER_MAP, new LoggingNotificationSystem(),
         SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     ambryRestServer.start();
@@ -220,17 +226,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
         !CONTAINER.isCacheable(), ACCOUNT.getName(), CONTAINER.getName(), false);
   }
 
-  /**
-   * Posts a blob with the given {@code headers} and {@code content}.
-   * @param headers the headers required.
-   * @param content the content of the blob.
-   * @return the blob ID of the blob.
-   * @throws ExecutionException
-   * @throws InterruptedException
-   */
+  @Override
   String postBlobAndVerify(HttpHeaders headers, ByteBuffer content, long contentSize)
       throws ExecutionException, InterruptedException {
-    if (!throttleRequest) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       return super.postBlobAndVerify(headers, content, contentSize);
     } else {
       FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
@@ -257,28 +256,17 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     assertEquals("No blob size should be returned in response", null,
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     verifyTrackingHeaders(response);
+    verifyUserQuotaHeaders(response);
     return new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 0, ACCOUNT.getId(), CONTAINER.getId(),
         new Partition(0L, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, 1073741824), false,
         BlobId.BlobDataType.SIMPLE).getID();
   }
 
-  /**
-   * Verifies the GET blob response.
-   * @param responseParts the response received from the server.
-   * @param range the {@link ByteRange} for the request.
-   * @param resolveRangeOnEmptyBlob {@code true} if the {@link RestUtils.Headers#RESOLVE_RANGE_ON_EMPTY_BLOB} header was
-   *                                sent.
-   * @param expectedHeaders the expected headers in the response.
-   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
-   * @param expectedContent the expected content of the blob.
-   * @param accountName the account name that should be in the response
-   * @param containerName the container name that should be in the response
-   * @throws RestServiceException
-   */
+  @Override
   void verifyGetBlobResponse(NettyClient.ResponseParts responseParts, ByteRange range, boolean resolveRangeOnEmptyBlob,
       HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
       String containerName) throws RestServiceException {
-    if (!throttleRequest) {
+    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate,
           expectedContent, accountName, containerName);
     } else {
@@ -301,12 +289,14 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       verifyBlobPropertiesHeadersAbsent(response);
       verifyAccountAndContainerHeaders(null, null, response);
       verifyUserMetadataHeadersAbsent(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
+  @Override
   void verifyGetHeadResponse(HttpResponse response, HttpHeaders expectedHeaders, ByteRange range, boolean isPrivate,
       String accountName, String containerName, NettyClient.ResponseParts responseParts) throws RestServiceException {
-    if (!throttleRequest) {
+    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetHeadResponse(response, expectedHeaders, range, isPrivate, accountName, containerName,
           responseParts);
     } else {
@@ -327,12 +317,14 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
+  @Override
   void verifyGetNotModifiedBlobResponse(HttpResponse response, boolean isPrivate,
       NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest) {
+    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetNotModifiedBlobResponse(response, isPrivate, responseParts);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
@@ -350,9 +342,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  @Override
   void verifyUserMetadataResponse(HttpResponse response, HttpHeaders expectedHeaders, byte[] usermetadata,
       NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest) {
+    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
       super.verifyUserMetadataResponse(response, expectedHeaders, usermetadata, responseParts);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
@@ -366,12 +359,14 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
         assertNoContent(responseParts.queue, 1);
       }
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+      verifyUserQuotaHeaders(response);
     }
   }
 
+  @Override
   void verifyGetBlobInfoResponse(HttpResponse response, HttpHeaders expectedHeaders, boolean isPrivate,
       String accountName, String containerName, byte[] usermetadata, NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetBlobInfoResponse(response, expectedHeaders, isPrivate, accountName, containerName, usermetadata,
           responseParts);
     } else {
@@ -390,15 +385,13 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       assertFalse(RestUtils.Headers.LIFE_VERSION + " should not be present",
           response.headers().contains(RestUtils.Headers.LIFE_VERSION));
+      verifyUserQuotaHeaders(response);
     }
   }
 
-  /**
-   * Verifies the response received after updating the TTL of a blob
-   * @param responseParts the parts of the response received
-   */
+  @Override
   void verifyUpdateBlobTtlResponse(NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyUpdateBlobTtlResponse(responseParts);
     } else {
       HttpResponse response = getHttpResponse(responseParts);
@@ -408,19 +401,14 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
-  /**
-   * Verifies that a request returns the right response code  once the blob has been deleted.
-   * @param httpRequest the {@link FullHttpRequest} to send to the server.
-   * @param expectedStatusCode the expected {@link HttpResponseStatus}.
-   * @throws ExecutionException
-   * @throws InterruptedException
-   */
+  @Override
   void verifyDeleted(FullHttpRequest httpRequest, HttpResponseStatus expectedStatusCode)
       throws ExecutionException, InterruptedException {
-    if (!throttleRequest) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyDeleted(httpRequest, expectedStatusCode);
     } else {
       NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -430,11 +418,13 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
+  @Override
   void verifyUndeleteBlobResponse(NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyUndeleteBlobResponse(responseParts);
     } else {
       HttpResponse response = getHttpResponse(responseParts);
@@ -444,9 +434,14 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       assertNoContent(responseParts.queue, 1);
       assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
       verifyTrackingHeaders(response);
+      verifyUserQuotaHeaders(response);
     }
   }
 
+  /**
+   * Verify tht cache headers are absent.
+   * @param response {@link HttpResponse} object to get cache headers from.
+   */
   private void verifyCacheHeadersAbsent(HttpResponse response) {
     assertNull("Cache-Control value should be null", response.headers().get(RestUtils.Headers.CACHE_CONTROL));
     assertFalse("Pragma value should not be present", response.headers().contains(RestUtils.Headers.PRAGMA));
@@ -454,10 +449,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   }
 
   /**
-   * Verifies blob properties from output, to that sent in during input
+   * Verifies blob properties from output, to that sent in during input.
    * @param response the {@link HttpResponse} that contains the headers.
    */
-  void verifyBlobPropertiesHeadersAbsent(HttpResponse response) {
+  private void verifyBlobPropertiesHeadersAbsent(HttpResponse response) {
     assertFalse("Blob size should not be present", response.headers().contains(RestUtils.Headers.BLOB_SIZE));
     assertFalse("There should be no " + RestUtils.Headers.PRIVATE,
         response.headers().contains(RestUtils.Headers.PRIVATE));
@@ -474,13 +469,27 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    * Verifies User metadata headers from output, to that sent in during input
    * @param response the {@link HttpResponse} which contains the headers of the response.
    */
-  void verifyUserMetadataHeadersAbsent(HttpResponse response) {
+  private void verifyUserMetadataHeadersAbsent(HttpResponse response) {
     for (Map.Entry<String, String> header : response.headers()) {
       String key = header.getKey();
       if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
         fail("Key " + key + " should not be present in headers");
       }
     }
+  }
+
+  /**
+   * Verifies user quota headers from output.
+   * @param response the {@link HttpResponse} which contains the headers of the response.
+   */
+  private void verifyUserQuotaHeaders(HttpResponse response) {
+    assertTrue(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_USAGE));
+    assertTrue(response.headers().contains(RestUtils.RequestQuotaHeaders.RETRY_AFTER_MS));
+    assertTrue(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_WARNING));
+    Map<String, String> quotaUsageHeader = RestUtils.KVHeaderValueEncoderDecoder.decodeKVHeaderValue(
+        response.headers().get(RestUtils.RequestQuotaHeaders.USER_QUOTA_USAGE));
+    assertTrue(quotaUsageHeader.containsKey(QuotaName.READ_CAPACITY_UNIT.name()) || quotaUsageHeader.containsKey(
+        QuotaName.WRITE_CAPACITY_UNIT.name()));
   }
 
   static {

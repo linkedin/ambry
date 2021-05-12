@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
+import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
 
 
 /**
@@ -27,7 +28,6 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 public class CloudReplica implements ReplicaId {
   private final PartitionId partitionId;
   private final DataNodeId dataNodeId;
-  public static final String Cloud_Replica_Keyword = "vcr";
 
   /**
    * Instantiate an CloudReplica instance.

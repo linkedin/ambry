@@ -13,6 +13,8 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.commons.Notifier;
+import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.AccountServiceConfig;
 import com.github.ambry.server.StatsSnapshot;
 import java.util.ArrayList;
@@ -38,20 +40,27 @@ import org.slf4j.LoggerFactory;
  * for all the implementations. The only thing the implementations (usually) differ in is what the source is of the
  * accounts (Zookeeper / Helix, MySql, local JSON file, etcd, Consul, etc).
  */
-abstract class AbstractAccountService implements AccountService {
+public abstract class AbstractAccountService implements AccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(AbstractAccountService.class);
+  static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
+  static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
   protected final AtomicReference<AccountInfoMap> accountInfoMapRef;
   protected final ReentrantLock lock = new ReentrantLock();
   protected final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers =
       new CopyOnWriteArraySet<>();
   protected final AccountServiceMetrics accountServiceMetrics;
+  protected final Notifier<String> notifier;
+  protected final TopicListener<String> changeTopicListener;
   private final AccountServiceConfig config;
 
-  public AbstractAccountService(AccountServiceConfig config, AccountServiceMetrics accountServiceMetrics) {
+  public AbstractAccountService(AccountServiceConfig config, AccountServiceMetrics accountServiceMetrics,
+      Notifier<String> notifier) {
     this.config = config;
     this.accountServiceMetrics = accountServiceMetrics;
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
+    this.notifier = notifier;
+    changeTopicListener = this::onAccountChangeMessage;
   }
 
   /**
@@ -59,6 +68,51 @@ abstract class AbstractAccountService implements AccountService {
    * {@link IllegalStateException}) if the account service is not ready to process requests.
    */
   abstract protected void checkOpen();
+
+  /**
+   * To be used to subscribe to a {@link Notifier} topic. Upon receiving a change message,
+   * it will check for any account updates.
+   * @param topic The topic.
+   * @param message The message for the topic.
+   */
+  abstract protected void onAccountChangeMessage(String topic, String message);
+
+  /**
+   * Return the {@link Notifier}.
+   * @return The {@link Notifier}
+   */
+  Notifier<String> getNotifier() {
+    return notifier;
+  }
+
+  protected void maybeSubscribeChangeTopic(boolean reportNull) {
+    if (notifier != null) {
+      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
+      logger.info("Subscribed to {} for change notifications.", ACCOUNT_METADATA_CHANGE_TOPIC);
+    } else if (reportNull) {
+      logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
+          + "be in sync with remote account data.");
+      accountServiceMetrics.nullNotifierCount.inc();
+    }
+  }
+
+  protected void maybeUnsubscribeChangeTopic() {
+    if (notifier != null) {
+      notifier.unsubscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
+    }
+  }
+
+  protected void publishChangeNotice() {
+    // notify account changes after successfully update.
+    if (notifier == null) {
+      logger.warn("Notifier is not provided. Cannot notify other entities interested in account data change.");
+    } else if (notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE)) {
+      logger.trace("Successfully published message for account metadata change");
+    } else {
+      logger.error("Failed to send notification for account metadata change");
+      accountServiceMetrics.notifyAccountDataChangeErrorCount.inc();
+    }
+  }
 
   @Override
   public Account getAccountByName(String accountName) {

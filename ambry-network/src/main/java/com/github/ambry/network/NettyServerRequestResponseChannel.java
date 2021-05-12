@@ -57,10 +57,13 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     ChannelHandlerContext ctx = ((NettyServerRequest) originalRequest).getCtx();
     http2ServerMetrics.requestTotalProcessingTime.update(
         System.currentTimeMillis() - originalRequest.getStartTimeInMs());
+    long sendStartTime = System.currentTimeMillis();
     ChannelFutureListener channelFutureListener = new ChannelFutureListener() {
       @Override
       public void operationComplete(ChannelFuture future) throws Exception {
-        http2ServerMetrics.responseFlushTime.update(System.currentTimeMillis() - originalRequest.getStartTimeInMs());
+        long responseFlushTime = System.currentTimeMillis() - sendStartTime;
+        http2ServerMetrics.responseFlushTime.update(responseFlushTime);
+        metrics.updateSendTime(responseFlushTime);
         if (!future.isSuccess()) {
           ReferenceCountUtil.safeRelease(payloadToSend);
         }

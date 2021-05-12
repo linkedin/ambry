@@ -13,10 +13,15 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.Container;
+import java.util.Objects;
+
+
 /**
  * Resource for which quota is specified for enforced.
  */
 public class QuotaResource {
+  private final static String DELIM = "_";
   private final String resourceId; // unique identifier for Ambry account, container or host.
   private final QuotaResourceType quotaResourceType;
 
@@ -26,8 +31,19 @@ public class QuotaResource {
    * @param quotaResourceType {@link QuotaResourceType} object specifying the type of resource.
    */
   public QuotaResource(String resourceId, QuotaResourceType quotaResourceType) {
-    this.resourceId = resourceId;
-    this.quotaResourceType = quotaResourceType;
+    this.resourceId = Objects.requireNonNull(resourceId);
+    this.quotaResourceType = Objects.requireNonNull(quotaResourceType);
+  }
+
+  /**
+   * Create {@link QuotaResource} from {@link Container}.
+   * @param container {@link Container} object.
+   * @return QuotaResource object.
+   */
+  public static QuotaResource fromContainer(Container container) {
+    return new QuotaResource(
+        String.join(DELIM, String.valueOf(container.getParentAccountId()), String.valueOf(container.getId())),
+        QuotaResourceType.CONTAINER);
   }
 
   /**
@@ -44,10 +60,27 @@ public class QuotaResource {
     return quotaResourceType;
   }
 
+  @Override
+  public boolean equals(Object obj) {
+    if (obj == null || getClass() != obj.getClass()) {
+      return false;
+    }
+    if (this == obj) {
+      return true;
+    }
+    QuotaResource other = (QuotaResource) obj;
+    return other.getResourceId().equals(resourceId) && other.getQuotaResourceType().equals(quotaResourceType);
+  }
+
+  @Override
+  public int hashCode() {
+    return 89 * quotaResourceType.hashCode() + resourceId.hashCode();
+  }
+
   /**
    * Type of Ambry resource for which quota can be applied.
    */
-  enum QuotaResourceType {
-    AMBRY_ACCOUNT, AMBRY_CONTAINER
+  public enum QuotaResourceType {
+    ACCOUNT, CONTAINER
   }
 }

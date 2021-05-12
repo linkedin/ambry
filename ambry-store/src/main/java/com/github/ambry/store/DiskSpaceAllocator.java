@@ -101,6 +101,12 @@ class DiskSpaceAllocator {
         prepareDirectory(swapReserveDir);
         inventoryExistingReserveFiles();
         poolState = PoolState.INVENTORIED;
+      } else {
+        // Clean up reserve directory if previously created.
+        if (reserveDir != null) {
+          Utils.deleteFileOrDirectory(reserveDir);
+          Utils.deleteFileOrDirectory(swapReserveDir);
+        }
       }
     } catch (Exception e) {
       inventoryException = e;

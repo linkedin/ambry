@@ -460,6 +460,7 @@ project(':ambry-quota') {
             exclude group: "log4j", module: "log4j"
         }
         testCompile project(':ambry-test-utils')
+        testCompile project(':ambry-account')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
 }
@@ -538,6 +539,9 @@ task codeCoverageReport(type: JacocoReport) {
     subprojects.each {
         sourceSets it.sourceSets.main
     }
+
+    // always rerun task when requested to get new execution data
+    outputs.upToDateWhen { false }
 
     reports {
         xml.enabled true

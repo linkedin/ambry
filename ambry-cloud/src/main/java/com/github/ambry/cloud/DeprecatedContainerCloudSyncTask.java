@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
  */
 public class DeprecatedContainerCloudSyncTask implements Task {
   private static final Logger logger = LoggerFactory.getLogger(DeprecatedContainerCloudSyncTask.class);
+  public static String COMMAND = DeprecatedContainerCloudSyncTask.class.getSimpleName();
   private final AccountService accountService;
   private final long containerDeletionRetentionDays;
   private final CloudDestination cloudDestination;

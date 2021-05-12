@@ -18,7 +18,8 @@ import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -37,11 +38,11 @@ public class AmbryStorageQuotaService implements StorageQuotaService {
   private final StorageQuotaConfig config;
   private final StorageQuotaServiceMetrics metrics;
 
-  public AmbryStorageQuotaService(VerifiableProperties verifiableProperties, AccountStatsStore accountStatsStore,
+  public AmbryStorageQuotaService(StorageQuotaConfig config, AccountStatsStore accountStatsStore,
       MetricRegistry metricRegistry) throws Exception {
     this.metrics = new StorageQuotaServiceMetrics(metricRegistry);
     this.scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
-    this.config = new StorageQuotaConfig(verifiableProperties);
+    this.config = config;
     this.storageUsageRefresher =
         new MySqlStorageUsageRefresher(accountStatsStore, this.scheduler, this.config, metrics);
     this.storageQuotaSource =

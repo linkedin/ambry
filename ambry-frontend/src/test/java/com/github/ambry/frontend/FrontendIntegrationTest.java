@@ -36,6 +36,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
@@ -117,7 +118,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
   private static NettyClient sslNettyClient = null;
   private final boolean useSSL;
   private final boolean addClusterPrefix;
-
 
   static {
     try {
@@ -408,7 +408,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     URI uri = new URI(signedPostUrl);
     httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    String blobId = verifyPostAndReturnBlobId(responseParts, content.capacity());
+    String blobId = verifyPostAndReturnBlobId(responseParts, content.capacity(), false);
 
     // verify POST
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
@@ -436,8 +436,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     uri = new URI(signedGetUrl);
     httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    verifyGetBlobResponse(responseParts, null, false, headers, !container.isCacheable(), content,
-        account.getName(), container.getName());
+    verifyGetBlobResponse(responseParts, null, false, headers, !container.isCacheable(), content, account.getName(),
+        container.getName());
   }
 
   /**
@@ -566,8 +566,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
    * @param sslServerPort server port number to support ssl protocol
    * @return a {@link Properties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete, int plaintextServerPort,
-      int sslServerPort) throws IOException, GeneralSecurityException {
+  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
+      int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
@@ -630,7 +630,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
       // Use signed URL to POST
       httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
       responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-      String signedId = verifyPostAndReturnBlobId(responseParts, chunkSize);
+      String signedId = verifyPostAndReturnBlobId(responseParts, chunkSize, false);
       assertTrue("Blob ID for chunk upload must be signed", idSigningService.isIdSigned(signedId.substring(1)));
       Pair<String, Map<String, String>> idAndMetadata = idSigningService.parseSignedId(signedId.substring(1));
       // Inspect metadata fields
@@ -674,7 +674,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     HttpRequest httpRequest = buildRequest(HttpMethod.POST, Operations.STITCH, stitchHeaders,
         ByteBuffer.wrap(StitchRequestSerDe.toJson(signedChunkIds).toString().getBytes(StandardCharsets.UTF_8)));
     ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    String stitchedBlobId = verifyPostAndReturnBlobId(responseParts, stitchedBlobSize);
+    String stitchedBlobId = verifyPostAndReturnBlobId(responseParts, stitchedBlobSize, true);
     HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(stitchHeaders);
     // Test different request types on stitched blob ID
     // (getBlobInfo, getBlob, getBlob w/ range, head, updateBlobTtl, deleteBlob)

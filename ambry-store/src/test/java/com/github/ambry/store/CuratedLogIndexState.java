@@ -136,6 +136,7 @@ class CuratedLogIndexState {
   MetricRegistry metricRegistry = new MetricRegistry();
   // The deleted key with associated PUT record in the same log segment
   MockId deletedKeyWithPutInSameSegment = null;
+  List<MockId> permanentDeleteTombstones = new ArrayList<>();
 
   // Variables that represent the folder where the data resides
   private final File tempDir;
@@ -160,7 +161,12 @@ class CuratedLogIndexState {
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes)
       throws IOException, StoreException {
-    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes);
+    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, false);
+  }
+
+  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey)
+      throws IOException, StoreException {
+    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, enableResetKey);
   }
 
   /**
@@ -175,11 +181,12 @@ class CuratedLogIndexState {
    * @param initState sets up a diverse set of entries if {@code true}. Leaves the log and index empty if {@code false}.
    * @param addTtlUpdates if {@code true}, adds entries that update TTL.
    * @param addUndeletes if {@code true}, adds undelete entries.
+   * @param enableResetKey if {@code true}, use reset key to rebuild find token (if it's been invalidated due to compaction).
    * @throws IOException
    * @throws StoreException
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean hardDeleteEnabled, boolean initState,
-      boolean addTtlUpdates, boolean addUndeletes) throws IOException, StoreException {
+      boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     // advance time here so when we set delete's operation time to 0, it will fall within retention day.
     advanceTime(TimeUnit.HOURS.toMillis(CuratedLogIndexState.deleteRetentionHour));
@@ -197,6 +204,7 @@ class CuratedLogIndexState {
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     // set the delete retention day
     properties.put("store.deleted.message.retention.hours", Integer.toString(CuratedLogIndexState.deleteRetentionHour));
+    properties.put("store.rebuild.token.based.on.reset.key", Boolean.toString(enableResetKey));
     // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
     time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
     initIndex(null);
@@ -971,7 +979,7 @@ class CuratedLogIndexState {
 
       List<IndexEntry> indexEntries = new ArrayList<>();
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), indexEntries, new AtomicLong(0),
-          false);
+          false, false);
       for (IndexEntry entry : indexEntries) {
         MockId id = (MockId) entry.getKey();
         IndexValue value = entry.getValue();
@@ -984,7 +992,7 @@ class CuratedLogIndexState {
         } else if (value.isUndelete()) {
           Short prevLifeVersion = keyToLifeVersionMap.put(id, value.getLifeVersion());
           short currentLifeVersion = value.getLifeVersion();
-          if (PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 && prevLifeVersion != null) {
+          if (PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3 && prevLifeVersion != null) {
             assertTrue("Undelete's lifeVersion should be greater than previous one, Undelete: " + currentLifeVersion
                 + " Previous: " + prevLifeVersion, prevLifeVersion < currentLifeVersion);
           }
@@ -1412,6 +1420,7 @@ class CuratedLogIndexState {
       }
       // 1 DELETE that has the TTL update flag set but has no corresponding TTL update or PUT entries
       uniqueId = getUniqueId();
+      permanentDeleteTombstones.add(uniqueId);
       addDeleteEntry(uniqueId,
           new MessageInfo(uniqueId, Integer.MAX_VALUE, true, true, Utils.Infinite_Time, uniqueId.getAccountId(),
               uniqueId.getContainerId(), time.milliseconds()));

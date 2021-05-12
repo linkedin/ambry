@@ -134,9 +134,9 @@ public class StoreConfig {
   /**
    * Whether to purge expired delete tombstone in compaction.
    */
-  @Config("store.compaction.purge.expired.delete.tombstone")
+  @Config("store.compaction.purge.delete.tombstone")
   @Default("false")
-  public final boolean storeCompactionPurgeExpiredDeleteTombstone;
+  public final boolean storeCompactionPurgeDeleteTombstone;
 
   /**
    * The minimum buffer size for compaction copy phase.
@@ -253,6 +253,14 @@ public class StoreConfig {
   public final int storeIndexPersistedEntryMinBytes;
 
   /**
+   * Whether to rebuild replication token (if it's been invalidated) based on reset key. If {@code false}, the token
+   * will be reset to the very beginning of whole log.
+   */
+  @Config("store.rebuild.token.based.on.reset.key")
+  @Default("false")
+  public final boolean storeRebuildTokenBasedOnResetKey;
+
+  /**
    * Enables or disables accountId and containerId validation for GET/DELETE request.
    */
   @Config("store.validate.authorization")
@@ -349,6 +357,15 @@ public class StoreConfig {
   public final boolean storeIndexRebuildBloomFilterEnabled;
 
   /**
+   * Maximum page count to invalidate some corrupted bloom files that may compute super large value for number of pages
+   * and cause OutOfMemory issue. If computed page count is larger this value, an exception will be thrown to either
+   * rebuild bloom file or terminate store startup.
+   */
+  @Config("store.bloom.filter.maximum.page.count")
+  @Default("128")
+  public final int storeBloomFilterMaximumPageCount;
+
+  /**
    * True to enable container deletion in store.
    */
   @Config("store.container.deletion.enabled")
@@ -375,6 +392,12 @@ public class StoreConfig {
   public final boolean storeAlwaysEnableTargetIndexDuplicateChecking;
   public static final String storeAlwaysEnableTargetIndexDuplicateCheckingName =
       "store.always.enable.target.index.duplicate.checking";
+
+  @Config(storeCompactionEnableBasicInfoOnMissingDuplicateName)
+  @Default("false")
+  public final boolean storeCompactionEnableBasicInfoOnMissingDuplicate;
+  public static final String storeCompactionEnableBasicInfoOnMissingDuplicateName =
+      "store.compaction.enable.basic.info.on.missing.duplicate";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -403,8 +426,8 @@ public class StoreConfig {
     storeCompactionThrottlerCheckIntervalMs =
         verifiableProperties.getIntInRange("store.compaction.throttler.check.interval.ms", -1, -1, Integer.MAX_VALUE);
     storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
-    storeCompactionPurgeExpiredDeleteTombstone =
-        verifiableProperties.getBoolean("store.compaction.purge.expired.delete.tombstone", false);
+    storeCompactionPurgeDeleteTombstone =
+        verifiableProperties.getBoolean("store.compaction.purge.delete.tombstone", false);
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);
     storeCompactionFilter =
@@ -454,6 +477,8 @@ public class StoreConfig {
     storeUuidBasedBloomFilterEnabled = verifiableProperties.getBoolean("store.uuid.based.bloom.filter.enabled", false);
     storeIndexRebuildBloomFilterEnabled =
         verifiableProperties.getBoolean("store.index.rebuild.bloom.filter.enabled", false);
+    storeBloomFilterMaximumPageCount =
+        verifiableProperties.getIntInRange("store.bloom.filter.maximum.page.count", 128, 1, Integer.MAX_VALUE);
     storeContainerDeletionEnabled = verifiableProperties.getBoolean("store.container.deletion.enabled", false);
     storeSetLocalPartitionStateEnabled =
         verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
@@ -461,5 +486,8 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.enable.bucket.for.log.segment.reports", false);
     storeAlwaysEnableTargetIndexDuplicateChecking =
         verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
+    storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);
+    storeCompactionEnableBasicInfoOnMissingDuplicate =
+        verifiableProperties.getBoolean(storeCompactionEnableBasicInfoOnMissingDuplicateName, false);
   }
 }

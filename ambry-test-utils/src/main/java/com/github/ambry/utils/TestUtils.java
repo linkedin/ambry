@@ -451,22 +451,21 @@ public class TestUtils {
     Map<String, StatsSnapshot> subMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < accountCount; i++) {
-      String accountIdStr = "A[" + i + "]";
       Map<String, StatsSnapshot> containerMap = new HashMap<>();
       long subTotalSize = 0;
       for (int j = 0; j < containerCount; j++) {
-        String containerIdStr = "C[" + j + "]";
         long validSize = random.nextInt(2501) + 500;
         subTotalSize += validSize;
         if (type == StatsReportType.ACCOUNT_REPORT) {
-          containerMap.put(containerIdStr, new StatsSnapshot(validSize, null));
+          containerMap.put(Utils.statsContainerKey((short) j), new StatsSnapshot(validSize, null));
         } else if (type == StatsReportType.PARTITION_CLASS_REPORT) {
-          subMap.put(accountIdStr + "_" + containerIdStr, new StatsSnapshot(validSize, null));
+          subMap.put(Utils.partitionClassStatsAccountContainerKey((short) i, (short) j),
+              new StatsSnapshot(validSize, null));
         }
       }
       totalSize += subTotalSize;
       if (type == StatsReportType.ACCOUNT_REPORT) {
-        subMap.put(accountIdStr, new StatsSnapshot(subTotalSize, containerMap));
+        subMap.put(Utils.statsAccountKey((short) i), new StatsSnapshot(subTotalSize, containerMap));
       }
     }
     return new StatsSnapshot(totalSize, subMap);
@@ -488,7 +487,7 @@ public class TestUtils {
     Map<String, StatsSnapshot> partitionClassMap = new HashMap<>();
     String[] PARTITION_CLASS = new String[]{"PartitionClass1", "PartitionClass2"};
     for (int i = 0; i < numbOfPartitions; i++) {
-      String partitionIdStr = "Partition[" + i + "]";
+      String partitionIdStr = Utils.statsPartitionKey(i);
       StatsSnapshot partitionSnapshot = storeSnapshots.get(i);
       partitionMap.put(partitionIdStr, partitionSnapshot);
       total += partitionSnapshot.getValue();
@@ -513,6 +512,16 @@ public class TestUtils {
     return new StatsWrapper(header, nodeSnapshot);
   }
 
+  /**
+   * Create a container storage map. This map will have to levels. First level's key is the account id. Second level's
+   * key is the container id. Account ids and container ids are both ranging from 1. The value would the storage usage,
+   * which will be greater than or equal to {@code minValue} and less than {@code maxValue}.
+   * @param numAccounts The number of accounts in the returned map.
+   * @param numContainerPerAccount The number of container under each account
+   * @param maxValue The maximum value for storage usage.
+   * @param minValue The minimum value for storage usage.
+   * @return A map representing the container storage usage.
+   */
   public static Map<String, Map<String, Long>> makeStorageMap(int numAccounts, int numContainerPerAccount,
       long maxValue, long minValue) {
     Random random = new Random();
@@ -535,31 +544,11 @@ public class TestUtils {
   }
 
   /**
-   * Compare two storage maps and fail the test when they are not equal.
-   * @param expected The expected storage map.
-   * @param obtained The obtained storage map.
+   * Generating an account stats snapshot from the given container storage map.
+   * @param containerStorageMap The container storage map.
+   * @return An account {@link StatsSnapshot}.
    */
-  public static void assertContainerMap(Map<String, Map<String, Long>> expected,
-      Map<String, Map<String, Long>> obtained) {
-    assertEquals(expected.size(), obtained.size());
-    for (Map.Entry<String, Map<String, Long>> expectedEntry : expected.entrySet()) {
-      String accountId = expectedEntry.getKey();
-      Map<String, Long> expectedContainer = expectedEntry.getValue();
-      assertTrue("Obtained map does contain account id " + accountId, obtained.containsKey(accountId));
-      Map<String, Long> obtainedContainer = obtained.get(accountId);
-      assertEquals("Size doesn't match for account id " + accountId, expectedContainer.size(),
-          obtainedContainer.size());
-      for (Map.Entry<String, Long> expectedContainerEntry : expectedContainer.entrySet()) {
-        String containerId = expectedContainerEntry.getKey();
-        assertTrue("Obtained map doesn't contain container id " + containerId + " in account id " + accountId,
-            obtainedContainer.containsKey(containerId));
-        assertEquals("Usage doesn't match for account id " + accountId + " container id " + containerId,
-            expectedContainerEntry.getValue().longValue(), obtainedContainer.get(containerId).longValue());
-      }
-    }
-  }
-
-  public static StatsSnapshot makeStatsSnapshotFromContainerStorageMap(
+  public static StatsSnapshot makeAccountStatsSnapshotFromContainerStorageMap(
       Map<String, Map<String, Long>> containerStorageMap) {
     Map<String, StatsSnapshot> accountSnapshots = new HashMap<>();
     long sumOfAccountUsage = 0;
@@ -571,11 +560,41 @@ public class TestUtils {
         String containerId = containerStorageUsageEntry.getKey();
         long usage = containerStorageUsageEntry.getValue();
         sumOfContainerUsage += usage;
-        containerSnapshots.put("C[" + containerId + "]", new StatsSnapshot(usage, null));
+        containerSnapshots.put(Utils.statsContainerKey(Short.valueOf(containerId)), new StatsSnapshot(usage, null));
       }
-      accountSnapshots.put("A[" + accountId + "]", new StatsSnapshot(sumOfContainerUsage, containerSnapshots));
+      accountSnapshots.put(Utils.statsAccountKey(Short.valueOf(accountId)),
+          new StatsSnapshot(sumOfContainerUsage, containerSnapshots));
       sumOfAccountUsage += sumOfContainerUsage;
     }
     return new StatsSnapshot(sumOfAccountUsage, accountSnapshots);
+  }
+
+  /**
+   * Generating an aggregated partition class stats. {@code partitionClassNames} provides a list of partition class names
+   * and for each partition class name, {@code numAccount} * {@code numContainer} container will be created.
+   * @param partitionClassNames The list of partition class names.
+   * @param numAccount The number of accounts.
+   * @param numContainer The number of containers per account.
+   * @return An aggregated partition class {@link StatsSnapshot}.
+   */
+  public static StatsSnapshot makeAggregatedPartitionClassStats(String[] partitionClassNames, int numAccount,
+      int numContainer) {
+    Random random = new Random();
+    long maxValue = 10000;
+    StatsSnapshot finalStats = new StatsSnapshot(0L, new HashMap<>());
+    for (String className : partitionClassNames) {
+      StatsSnapshot classNameStats = new StatsSnapshot(0L, new HashMap<>());
+      finalStats.getSubMap().put(className, classNameStats);
+      for (int ia = 0; ia < numAccount; ia++) {
+        for (int ic = 0; ic < numContainer; ic++) {
+          String key = Utils.partitionClassStatsAccountContainerKey((short) ia, (short) ic);
+          classNameStats.getSubMap().put(key, new StatsSnapshot(random.nextLong() % maxValue, null));
+        }
+      }
+      long classNameValue = classNameStats.getSubMap().values().stream().mapToLong(StatsSnapshot::getValue).sum();
+      classNameStats.setValue(classNameValue);
+    }
+    finalStats.setValue(finalStats.getSubMap().values().stream().mapToLong(StatsSnapshot::getValue).sum());
+    return finalStats;
   }
 }

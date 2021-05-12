@@ -1543,7 +1543,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       restResponseChannel.setHeader(RestUtils.Headers.ALLOW, METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE);
     }
     restResponseChannel.onResponseComplete(
-        new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
+        new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse, false,
+            Collections.emptyMap()));
     assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
         restResponseChannel.getStatus());
     assertFalse("Request channel is not closed", request.isOpen());

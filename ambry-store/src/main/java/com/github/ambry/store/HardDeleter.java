@@ -191,7 +191,7 @@ public class HardDeleter implements Runnable {
   /**
    * Resumes hard deletes, if {@link #pause()} has been called prior to this.
    */
-  void resume() {
+  void resume() throws StoreException {
     hardDeleteLock.lock();
     try {
       if (paused.compareAndSet(true, false)) {
@@ -858,8 +858,8 @@ public class HardDeleter implements Runnable {
      * Compare two StoreFindTokens and return the result as an integer like compareTo interface.
      * These two tokens have to be IndexBased tokens.
      * @param token1 The first token to compare.
-     * @param token2 The second tokent to compare.
-     * @return 0 means they are equal. negative number means token1 is less than token2. postive number means the opposite.
+     * @param token2 The second token to compare.
+     * @return 0 means they are equal. negative number means token1 is less than token2. positive number means the opposite.
      */
     int compareTwoTokens(StoreFindToken token1, StoreFindToken token2) {
       if (token1.getType() != FindTokenType.IndexBased || token2.getType() != FindTokenType.IndexBased) {

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.accountstats.AccountStatsStoreFactory;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.router.GetBlobOptions;
@@ -42,6 +43,7 @@ public class FrontendConfig {
   public static final String STORAGE_QUOTA_SERVICE_FACTORY = PREFIX + "storage.quota.service.factory";
   public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
   public static final String CONTAINER_METRICS_EXCLUDED_ACCOUNTS = PREFIX + "container.metrics.excluded.accounts";
+  public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -50,6 +52,9 @@ public class FrontendConfig {
 
   private static final String DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY =
       "com.github.ambry.quota.storage.AmbryStorageQuotaServiceFactory";
+
+  private static final String DEFAULT_ACCOUNT_STATS_STORE_FACTORY =
+      "com.github.ambry.accountstats.InmemoryAccountStatsStoreFactory";
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -214,6 +219,13 @@ public class FrontendConfig {
   public final boolean enableUndelete;
 
   /**
+   * The {@link AccountStatsStoreFactory}.
+   */
+  @Config(ACCOUNT_STATS_STORE_FACTORY)
+  @Default(DEFAULT_ACCOUNT_STATS_STORE_FACTORY)
+  public final String accountStatsStoreFactory;
+
+  /**
    * Set to true to enable storage quota in frontend.
    */
   @Config(ENABLE_STORAGE_QUOTA_SERVICE)
@@ -241,7 +253,6 @@ public class FrontendConfig {
   @Config(CONTAINER_METRICS_EXCLUDED_ACCOUNTS)
   @Default("")
   public final List<String> containerMetricsExcludedAccounts;
-
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -291,6 +302,8 @@ public class FrontendConfig {
     maxJsonRequestSizeBytes =
         verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Integer.MAX_VALUE);
     enableUndelete = verifiableProperties.getBoolean(ENABLE_UNDELETE, false);
+    accountStatsStoreFactory =
+        verifiableProperties.getString(ACCOUNT_STATS_STORE_FACTORY, DEFAULT_ACCOUNT_STATS_STORE_FACTORY);
     enableStorageQuotaService = verifiableProperties.getBoolean(ENABLE_STORAGE_QUOTA_SERVICE, false);
     storageQuotaServiceFactory =
         verifiableProperties.getString(STORAGE_QUOTA_SERVICE_FACTORY, DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY);

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.quota;
 
+import io.netty.handler.codec.http.HttpResponseStatus;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,23 +23,53 @@ import java.util.Map;
 /**
  * An implementation of {@link ThrottlePolicy} that creates a {@link ThrottlingRecommendation} to throttle if any one of
  * {@link QuotaRecommendation} recommendation is to throttle, and takes the max of retry after time interval. Also
- * groups the quota usage and request cost for all the quotas.
+ * groups the quota usage for all the quotas.
  */
 public class MaxThrottlePolicy implements ThrottlePolicy {
+  static final long DEFAULT_RETRY_AFTER_MS = ThrottlingRecommendation.NO_RETRY_AFTER_MS;
+  static final int DEFAULT_RECOMMENDED_HTTP_STATUS = HttpResponseStatus.OK.code();
+  static final QuotaUsageLevel DEFAULT_QUOTA_USAGE_LEVEL = QuotaUsageLevel.HEALTHY;
+
+  // Percentage usage at or below this limit is healthy.
+  static final int HEALTHY_USAGE_LEVEL_LIMIT = 80;
+  // Percentage usage level at or below this limit and above healthy limit will generate warning.
+  static final int WARNING_USAGE_LEVEL_LIMIT = 95;
+  // Percentage usage level at or below this limit and above warning limit will generate critical warning. Anything above will be fatal.
+  static final int CRITICAL_USAGE_LEVEL_LIMIT = 100;
+
   @Override
   public ThrottlingRecommendation recommend(List<QuotaRecommendation> quotaRecommendations) {
     boolean shouldThrottle = false;
     Map<QuotaName, Float> quotaUsagePercentage = new HashMap<>();
-    int recommendedHttpStatus = 200;
-    Map<QuotaName, Double> requestCost = new HashMap<>();
-    long retryAfterMs = -1;
+    int recommendedHttpStatus = DEFAULT_RECOMMENDED_HTTP_STATUS;
+    long retryAfterMs = DEFAULT_RETRY_AFTER_MS;
     for (QuotaRecommendation recommendation : quotaRecommendations) {
       shouldThrottle = shouldThrottle | recommendation.shouldThrottle();
       quotaUsagePercentage.put(recommendation.getQuotaName(), recommendation.getQuotaUsagePercentage());
       recommendedHttpStatus = Math.max(recommendation.getRecommendedHttpStatus(), recommendedHttpStatus);
-      requestCost.put(recommendation.getQuotaName(), recommendation.getRequestCost());
       retryAfterMs = Math.max(recommendation.getRetryAfterMs(), retryAfterMs);
     }
-    return new ThrottlingRecommendation(shouldThrottle, quotaUsagePercentage, recommendedHttpStatus, retryAfterMs);
+    QuotaUsageLevel quotaUsageLevel = quotaUsagePercentage.isEmpty() ? DEFAULT_QUOTA_USAGE_LEVEL
+        : computeWarningLevel(Collections.max(quotaUsagePercentage.values()));
+    return new ThrottlingRecommendation(shouldThrottle, quotaUsagePercentage, recommendedHttpStatus, retryAfterMs,
+        quotaUsageLevel);
+  }
+
+  /**
+   * Compute the warning level from usage percentage.
+   * @param usagePercentage usage of quota.
+   * @return QuotaWarningLevel object.
+   */
+  private QuotaUsageLevel computeWarningLevel(float usagePercentage) {
+    if (usagePercentage >= CRITICAL_USAGE_LEVEL_LIMIT) {
+      return QuotaUsageLevel.EXCEEDED;
+    }
+    if (usagePercentage >= WARNING_USAGE_LEVEL_LIMIT) {
+      return QuotaUsageLevel.CRITICAL;
+    }
+    if (usagePercentage >= HEALTHY_USAGE_LEVEL_LIMIT) {
+      return QuotaUsageLevel.WARNING;
+    }
+    return QuotaUsageLevel.HEALTHY;
   }
 }

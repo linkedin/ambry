@@ -22,10 +22,10 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
-import com.github.ambry.quota.storage.StorageQuotaService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -63,19 +63,16 @@ class AmbrySecurityService implements SecurityService {
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
   private final HostLevelThrottler hostLevelThrottler;
-  private final StorageQuotaService storageQuotaService;
   private final QuotaManager quotaManager;
   private final RequestCostPolicy requestCostPolicy;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler,
-      StorageQuotaService storageQuotaService, QuotaManager quotaManager) {
+      UrlSigningService urlSigningService, HostLevelThrottler hostLevelThrottler, QuotaManager quotaManager) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
-    this.storageQuotaService = storageQuotaService;
     this.quotaManager = quotaManager;
     this.requestCostPolicy = new UserQuotaRequestCostPolicy();
     isOpen = true;
@@ -133,13 +130,14 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
-      } else if (storageQuotaService != null && storageQuotaService.shouldThrottle(restRequest)) {
-        exception = new RestServiceException("StorageQuotaExceeded", RestServiceErrorCode.TooManyRequests);
       } else {
         if (quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
-          if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()) {
-            throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests);
+          if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
+              && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
+            Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
+            throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests, true, true,
+                quotaHeaderMap);
           }
         }
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
@@ -169,7 +167,13 @@ class AmbrySecurityService implements SecurityService {
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
     setRequestCostHeader(requestCost, responseChannel);
     if (quotaManager != null) {
-      quotaManager.charge(restRequest, blobInfo, requestCost);
+      ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, blobInfo, requestCost);
+      if (throttlingRecommendation != null) {
+        RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)
+            .entrySet()
+            .stream()
+            .forEach(headerEntry -> responseChannel.setHeader(headerEntry.getKey(), headerEntry.getValue()));
+      }
     }
   }
 

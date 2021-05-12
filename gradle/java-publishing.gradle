@@ -1,7 +1,7 @@
 assert plugins.hasPlugin("java")
 
 apply plugin: 'maven-publish'
-apply plugin: 'com.jfrog.bintray'
+apply plugin: 'com.jfrog.artifactory'
 
 tasks.withType(Jar) {
     from "$rootDir/LICENSE"
@@ -54,38 +54,28 @@ publishing {
         }
     }
 }
+// Artifactory publishing
+artifactory {
+    //docs: https://www.jfrog.com/confluence/display/rtf/gradle+artifactory+plugin
+    contextUrl = 'https://linkedin.jfrog.io/artifactory'
+    publish {
+        repository {
+            repoKey = 'ambry'
+            username = System.getenv('ARTIFACTORY_USER')
+            password = System.getenv('ARTIFACTORY_API_KEY')
+            maven = true
+        }
 
-bintray { //docs: https://github.com/bintray/gradle-bintray-plugin
-    user = System.getenv("BINTRAY_USER")
-    key = System.getenv("BINTRAY_API_KEY")
-
-    publish = true
-    dryRun = project.hasProperty("bintray.dryRun") //useful for testing
-
-    publications = ['maven']
-
-    pkg {
-        repo = 'maven'
-        userOrg = 'linkedin'
-        name = 'ambry'
-
-        licenses = ['Apache-2.0']
-        labels = ['blob storage']
-        version {
-            // disable gpg signing to speed up publishing
-            gpg {
-                sign = false
-            }
-            // disable upload to maven central
-            mavenCentralSync {
-                sync = false
-            }
+        defaults {
+            publications('maven')
         }
     }
 }
 
-bintrayUpload {
+artifactoryPublish {
+    skip = project.hasProperty('artifactory.dryRun')
+
     doFirst {
-        println "Publishing $jar.baseName to Bintray (dryRun: $dryRun, repo: $repoName, publish: $publish)"
+        println "Publishing $jar.baseName to Artifactory (dryRun: $skip)"
     }
 }

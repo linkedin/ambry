@@ -16,13 +16,18 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.FilterFactory;
+import com.github.ambry.utils.IFilter;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -101,7 +106,7 @@ public class IndexSegmentTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     short[] versions = new short[]{PersistentIndex.VERSION_0, PersistentIndex.VERSION_1, PersistentIndex.VERSION_2,
-        PersistentIndex.VERSION_3};
+        PersistentIndex.VERSION_3, PersistentIndex.VERSION_4};
     List<Object[]> parametersList = new ArrayList<>();
     for (short version : versions) {
       for (IndexMemState state : IndexMemState.values()) {
@@ -234,11 +239,16 @@ public class IndexSegmentTest {
               : EnumSet.noneOf(IndexValue.Flags.class);
       verifyValues(fromDisk, id, valueCount, flags);
     }
+    // verify reset key
+    if (formatVersion >= PersistentIndex.VERSION_1) {
+      verifyResetKeyInfo(id3, value1, fromDisk.getResetKey(), fromDisk.getResetKeyType(),
+          fromDisk.getResetKeyLifeVersion());
+    }
   }
 
   /**
    * Tests some corner cases with
-   * {@link IndexSegment#getIndexEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)}
+   * {@link IndexSegment#getIndexEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean, boolean)}
    * - tests that all values of a key are returned even if the find entries condition max size expires when the first
    * value is loaded
    * @throws StoreException
@@ -295,12 +305,12 @@ public class IndexSegmentTest {
       // getIndexEntriesSince with maxSize = 0 should not return anything
       FindEntriesCondition condition = new FindEntriesCondition(0);
       assertFalse("getIndexEntriesSince() should not return anything",
-          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
       assertEquals("There should be no entries returned", 0, entries.size());
       // getIndexEntriesSince with maxSize <= 1000 should return only the first key (id1)
       condition = new FindEntriesCondition(1000);
       assertTrue("getIndexEntriesSince() should return one entry",
-          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
       assertEquals("There should be one entry returned", 1, entries.size());
       assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
       assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
@@ -309,7 +319,7 @@ public class IndexSegmentTest {
       for (int maxSize : new int[]{1001, 2050, 2150}) {
         condition = new FindEntriesCondition(maxSize);
         assertTrue("getIndexEntriesSince() should return entries",
-            fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+            fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
         assertEquals("There should be four entries returned", 4, entries.size());
         assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
         assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
@@ -324,7 +334,7 @@ public class IndexSegmentTest {
       // getIndexEntriesSince with maxSize > 2150 should return five entries
       condition = new FindEntriesCondition(2151);
       assertTrue("getIndexEntriesSince() should return entries",
-          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false, false));
       assertEquals("There should be five entries returned", 5, entries.size());
       assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
       assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
@@ -341,7 +351,7 @@ public class IndexSegmentTest {
       for (int maxSize : new int[]{1, 1050, 1150}) {
         condition = new FindEntriesCondition(maxSize);
         assertTrue("getIndexEntriesSince() should return entries",
-            fromDisk.getIndexEntriesSince(id1, condition, entries, new AtomicLong(0), false));
+            fromDisk.getIndexEntriesSince(id1, condition, entries, new AtomicLong(0), false, false));
         assertEquals("There should be three entries returned", 3, entries.size());
         assertEquals("Key in entry is incorrect", id2, entries.get(0).getKey());
         assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(0).getValue().getBytes());
@@ -350,6 +360,10 @@ public class IndexSegmentTest {
         assertEquals("Key in entry is incorrect", id2, entries.get(2).getKey());
         assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(2).getValue().getBytes());
         entries.clear();
+      }
+      if (formatVersion >= PersistentIndex.VERSION_1) {
+        verifyResetKeyInfo(id3, value1, fromDisk.getResetKey(), fromDisk.getResetKeyType(),
+            fromDisk.getResetKeyLifeVersion());
       }
     }
   }
@@ -437,7 +451,7 @@ public class IndexSegmentTest {
     // with default config, bloom filter will be populated by whole blob id bytes array
     LogSegmentName logSegmentName1 = LogSegmentName.fromPositionAndGeneration(0, 0);
     int indexValueSize =
-        PersistentIndex.CURRENT_VERSION == PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3
+        PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4
             : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
     IndexSegment indexSegment1 =
         new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName1, 0), STORE_KEY_FACTORY,
@@ -527,6 +541,52 @@ public class IndexSegmentTest {
     } finally {
       assertTrue("Could not make writable", tempDir.setWritable(true));
     }
+  }
+
+  /**
+   * Test failure on loading bloom filter file and verify that bloom filter is rebuilt.
+   * @throws Exception
+   */
+  @Test
+  public void loadBloomFileFailureTest() throws Exception{
+    assumeTrue(formatVersion > PersistentIndex.VERSION_1);
+    LogSegmentName logSegmentName1 = LogSegmentName.fromPositionAndGeneration(0, 0);
+    int indexValueSize =
+        PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4
+            : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
+    IndexSegment indexSegment1 =
+        new IndexSegment(tempDir.getAbsolutePath(), new Offset(logSegmentName1, 0), STORE_KEY_FACTORY,
+            KEY_SIZE + indexValueSize, indexValueSize, config, metrics, time);
+    Random random = new Random();
+    short accountId1 = getRandomShort(random);
+    short containerId1= getRandomShort(random);
+    MockId id1 = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE), accountId1, containerId1);
+    IndexValue value1 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
+            accountId1, containerId1, (short) 0, formatVersion);
+    indexSegment1.addEntry(new IndexEntry(id1, value1), new Offset(logSegmentName1, 1000));
+    indexSegment1.writeIndexSegmentToFile(new Offset(logSegmentName1, 1000));
+    indexSegment1.seal();
+    File bloomFile =
+        new File(tempDir, generateIndexSegmentFilenamePrefix(new Offset(logSegmentName1, 0)) + BLOOM_FILE_NAME_SUFFIX);
+    assertTrue("The bloom file should exist", bloomFile.exists());
+    CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
+    IFilter bloomFilter;
+    try (DataInputStream stream = new DataInputStream(crcBloom)) {
+      bloomFilter = FilterFactory.deserialize(stream, config.storeBloomFilterMaximumPageCount);
+      long crcValue = crcBloom.getValue();
+      assertEquals("Crc mismatch", crcValue, stream.readLong());
+    }
+    // induce crc mismatch during serialization
+    CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
+    DataOutputStream stream = new DataOutputStream(crcStream);
+    FilterFactory.serialize(bloomFilter, stream);
+    long crcValue = crcStream.getValue() + 1;
+    stream.writeLong(crcValue);
+    stream.close();
+    // load from file, which should trigger bloom filter rebuild as crc value doesn't match
+    new IndexSegment(indexSegment1.getFile(), true, STORE_KEY_FACTORY, config, metrics, null, time);
+    assertEquals("Bloom filter rebuild count mismatch", 1, metrics.bloomRebuildOnLoadFailureCount.getCount());
   }
 
   /**
@@ -688,6 +748,10 @@ public class IndexSegmentTest {
       IndexEntry obtained = segmentListIter.previous();
       assertIndexEntryEquals(expected, obtained);
     }
+    if (formatVersion >= PersistentIndex.VERSION_1) {
+      verifyResetKeyInfo(id3, value1, indexSegment.getResetKey(), indexSegment.getResetKeyType(),
+          indexSegment.getResetKeyLifeVersion());
+    }
   }
 
   /**
@@ -758,10 +822,25 @@ public class IndexSegmentTest {
   // helpers
 
   /**
+   * Verify reset key info in the index segment.
+   * @param expectedId the expected store key of reset key.
+   * @param indexValue the initial {@link IndexValue} associated with reset key.
+   * @param actualResetKey actual reset key.
+   * @param actualResetKeyType actual reset key type.
+   * @param actualResetKeyLifeVersion actual reset key life version got from index segment.
+   */
+  private void verifyResetKeyInfo(MockId expectedId, IndexValue indexValue, StoreKey actualResetKey,
+      PersistentIndex.IndexEntryType actualResetKeyType, short actualResetKeyLifeVersion) {
+    assertEquals("Mismatch in reset key", expectedId, actualResetKey);
+    assertEquals("Mismatch in reset key type", indexValue.getIndexValueType(), actualResetKeyType);
+    assertEquals("Mismatch in life version", indexValue.getLifeVersion(), actualResetKeyLifeVersion);
+  }
+
+  /**
    * Comprehensive tests for {@link IndexSegment}.
    * 1. Creates a segment and checks the getters to make sure they return the right values
    * 2. Adds some put entries with random sizes, checks getters again and exercises {@link IndexSegment#find(StoreKey)}
-   * and {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)}.
+   * and {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)}.
    * 3. Adds some delete entries (deletes some existing put entries and creates deletes for puts not in this segment)
    * and does the same checks as #2.
    * 4. Writes index to a file and loads it sealed and not sealed and does all the checks in #2 once again along with
@@ -783,7 +862,8 @@ public class IndexSegmentTest {
         valueSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
         break;
       case PersistentIndex.VERSION_3:
-        valueSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3;
+      case PersistentIndex.VERSION_4:
+        valueSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4;
         break;
       default:
         fail("Unknown PersistentIndex formatVersion");
@@ -798,9 +878,11 @@ public class IndexSegmentTest {
       time.sleep(10 * TimeUnit.SECONDS.toMicros(1));
       PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
       IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
+      StoreKey resetKey = null;
+      PersistentIndex.IndexEntryType resetKeyType = null;
+      short resetKeyLifeVersion = StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION;
       verifyIndexSegmentDetails(indexSegment, startOffset, 0, 0, false, startOffset.getOffset(), time.milliseconds(),
-          null);
+          null, null, resetKeyLifeVersion);
       int numItems = 10;
       int numSmallKeys = 0;
       int numLargeKeys = 0;
@@ -823,13 +905,15 @@ public class IndexSegmentTest {
       List<IndexEntry> newEntries =
           addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex, includeSmallKeys, includeLargeKeys);
       if (version != PersistentIndex.VERSION_0) {
-        resetKey = new Pair<>(newEntries.get(0).getKey(), PersistentIndex.IndexEntryType.PUT);
+        resetKey = newEntries.get(0).getKey();
+        resetKeyType = PersistentIndex.IndexEntryType.PUT;
+        resetKeyLifeVersion = newEntries.get(0).getValue().getLifeVersion();
       }
       int expectedSizeWritten =
           SMALLER_KEY_SIZE * numSmallKeys + LARGER_KEY_SIZE * numLargeKeys + KEY_SIZE * (numItems - numSmallKeys
               - numLargeKeys) + numItems * valueSize;
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       int extraIdsToTtlUpdate = 5;
       Set<MockId> idsToTtlUpdate = getIdsToTtlUpdate(referenceIndex, extraIdsToTtlUpdate);
@@ -840,10 +924,10 @@ public class IndexSegmentTest {
         expectedSizeWritten += valueSize + id.sizeInBytes();
       }
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey);
+          time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       int extraIdsToDelete = 5;
       Set<MockId> idsToDelete = getIdsToDelete(referenceIndex, extraIdsToDelete);
@@ -854,10 +938,10 @@ public class IndexSegmentTest {
         expectedSizeWritten += valueSize + id.sizeInBytes();
       }
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey);
+          time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       // all combinations
       offsets = new ArrayList<>();
@@ -887,10 +971,10 @@ public class IndexSegmentTest {
       numItems += 7;
       expectedSizeWritten += 7 * (KEY_SIZE + valueSize);
       verifyAllForIndexSegmentFromFile(referenceIndex, indexSegment, startOffset, numItems, expectedSizeWritten, false,
-          endOffset, time.milliseconds(), resetKey);
+          endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey);
+          time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
 
       // verify that flipping StoreConfig.storeIndexMemStateName does not break anything
       IndexMemState saved = config.storeIndexMemState;
@@ -898,7 +982,7 @@ public class IndexSegmentTest {
         if (!state.equals(saved)) {
           setIndexMemState(state);
           verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten,
-              endOffset, time.milliseconds(), resetKey);
+              endOffset, time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
         }
       }
       setIndexMemState(saved);
@@ -915,22 +999,30 @@ public class IndexSegmentTest {
    */
   private IndexSegment generateIndexSegment(Offset startOffset, StoreKeyFactory storeKeyFactory) {
     IndexSegment indexSegment;
-    if (formatVersion == PersistentIndex.VERSION_0) {
-      indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, config, metrics,
-          time, PersistentIndex.VERSION_0);
-    } else if (formatVersion == PersistentIndex.VERSION_1) {
-      indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
-          metrics, time, formatVersion);
-    } else if (formatVersion == PersistentIndex.VERSION_2) {
-      indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
-          metrics, time);
-    } else {
-      indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
-          KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3, config, metrics,
-          time, formatVersion);
+    switch (formatVersion) {
+      case PersistentIndex.VERSION_0:
+        indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0, config,
+            metrics, time, formatVersion);
+        break;
+      case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
+        indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2, config,
+            metrics, time, formatVersion);
+        break;
+      case PersistentIndex.VERSION_3:
+        indexSegment = new MockIndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, config,
+            metrics, time, formatVersion);
+        break;
+      case PersistentIndex.VERSION_4:
+        indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, storeKeyFactory,
+            KEY_SIZE + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4, config,
+            metrics, time);
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported index version: " + formatVersion);
     }
     return indexSegment;
   }
@@ -999,10 +1091,12 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time in ms
    * @param resetKey the reset key for the index segment
+   * @param resetKeyType the reset key type
+   * @param resetKeyLifeVersion the life version of reset key
    */
   private void verifyIndexSegmentDetails(IndexSegment indexSegment, Offset startOffset, int numItems, int sizeWritten,
-      boolean sealed, long endOffset, long lastModifiedTimeInMs,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) {
+      boolean sealed, long endOffset, long lastModifiedTimeInMs, StoreKey resetKey,
+      PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion) throws StoreException {
     LogSegmentName logSegmentName = startOffset.getName();
     int valueSize;
     switch (formatVersion) {
@@ -1014,7 +1108,8 @@ public class IndexSegmentTest {
         valueSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
         break;
       case PersistentIndex.VERSION_3:
-        valueSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3;
+      case PersistentIndex.VERSION_4:
+        valueSize = IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4;
         break;
       default:
         fail("Unknown PersistentIndex formatVersion");
@@ -1029,10 +1124,12 @@ public class IndexSegmentTest {
         indexSegment.getPersistedEntrySize());
     assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
     assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
+    assertEquals("Reset key type mismatch ", resetKeyType, indexSegment.getResetKeyType());
+    assertEquals("Reset key life version mismatch", resetKeyLifeVersion, indexSegment.getResetKeyLifeVersion());
     if (formatVersion != PersistentIndex.VERSION_0) {
       assertEquals("Last modified time is incorrect", lastModifiedTimeInMs, indexSegment.getLastModifiedTimeMs());
     }
-    // incase of formatVersion 0, last modified time is calculated based on SystemTime and hence cannot verify for equivalency
+    // in case of formatVersion 0, last modified time is calculated based on SystemTime and hence cannot verify for equivalency
     if (!sealed) {
       assertEquals("Size written not as expected", sizeWritten, indexSegment.getSizeWritten());
       assertEquals("Number of items not as expected", numItems, indexSegment.getNumberOfItems());
@@ -1075,7 +1172,7 @@ public class IndexSegmentTest {
   }
 
   /**
-   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)} to make sure that
+   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)} to make sure that
    * it returns the right values for all keys in {@code referenceIndex} and for all conditions.
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
@@ -1087,7 +1184,7 @@ public class IndexSegmentTest {
     FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE, segment.getLastModifiedTimeSecs() - 1);
     List<MessageInfo> entries = new ArrayList<>();
     assertFalse("Should not have fetched entries since segment is too recent",
-        segment.getEntriesSince(null, condition, entries, new AtomicLong(0)));
+        segment.getEntriesSince(null, condition, entries, new AtomicLong(0), false));
     assertEquals("Should not have fetched entries since segment is too recent", 0, entries.size());
 
     long sizeLeftInSegment = segment.getEndOffset().getOffset() - segment.getStartOffset().getOffset();
@@ -1104,7 +1201,7 @@ public class IndexSegmentTest {
   }
 
   /**
-   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)} to make sure that
+   * Verifies {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)} to make sure that
    * it returns the right values for {@code idToCheck} for all size conditions.
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
@@ -1144,7 +1241,7 @@ public class IndexSegmentTest {
   }
 
   /**
-   * Does the {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong)} and checks that
+   * Does the {@link IndexSegment#getEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)} and checks that
    * all the returned entries are as expected and that all the entries expected have been returned.
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
@@ -1162,7 +1259,7 @@ public class IndexSegmentTest {
 
     List<MessageInfo> entries = new ArrayList<>();
     assertEquals("Unexpected return value from getEntriesSince()", highestExpectedId != null,
-        segment.getEntriesSince(idToCheck, condition, entries, new AtomicLong(existingSize)));
+        segment.getEntriesSince(idToCheck, condition, entries, new AtomicLong(existingSize), false));
     if (highestExpectedId != null) {
       assertEquals("Highest ID not as expected", highestExpectedId, entries.get(entries.size() - 1).getStoreKey());
       MockId nextExpectedId = idToCheck == null ? referenceIndex.firstKey() : referenceIndex.higherKey(idToCheck);
@@ -1179,7 +1276,7 @@ public class IndexSegmentTest {
       List<IndexEntry> indexEntries = new ArrayList<>();
       assertEquals("Unexpected return value from getIndexEntriesSince()", highestExpectedId != null,
           segment.getIndexEntriesSince(idToCheck, condition, indexEntries, new AtomicLong(existingSize),
-              oneEntryPerKey));
+              oneEntryPerKey, false));
       if (highestExpectedId != null) {
         assertEquals("Highest ID not as expected", highestExpectedId,
             indexEntries.get(indexEntries.size() - 1).getKey());
@@ -1369,16 +1466,18 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
    * @param resetKey the resetKey of the index segment
+   * @param resetKeyType the reset key type
+   * @param resetKeyLifeVersion the life version of reset key
    * @throws StoreException
    */
   private void verifyReadFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, File file,
       Offset startOffset, int numItems, int expectedSizeWritten, long endOffset, long lastModifiedTimeInMs,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws StoreException {
+      StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion) throws StoreException {
     // read from file (not sealed) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, false,
-        endOffset, lastModifiedTimeInMs, resetKey);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     // journal should contain all the entries
     verifyJournal(referenceIndex, journal);
     File bloomFile = new File(file.getParent(),
@@ -1386,13 +1485,13 @@ public class IndexSegmentTest {
     fromDisk.seal();
     assertTrue("Bloom file does not exist", bloomFile.exists());
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-        endOffset, lastModifiedTimeInMs, resetKey);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
 
     // read from file (sealed) and verify that everything is ok
     journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     fromDisk = createIndexSegmentFromFile(file, true, journal);
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-        endOffset, lastModifiedTimeInMs, resetKey);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     // journal should not contain any entries
     assertNull("Journal should not have any entries", journal.getFirstOffset());
 
@@ -1405,7 +1504,7 @@ public class IndexSegmentTest {
     fromDisk = createIndexSegmentFromFile(file, true, journal);
     assertTrue("Bloom file does not exist", bloomFile.exists());
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
-        endOffset, lastModifiedTimeInMs, resetKey);
+        endOffset, lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     // journal should not contain any entries
     assertNull("Journal should not have any entries", journal.getFirstOffset());
   }
@@ -1435,14 +1534,17 @@ public class IndexSegmentTest {
    * @param sealed the expected sealed state of the {@code indexSegment}
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
-   * @param resetKey the resetKey of the index segment
+   * @param resetKey the reset key of the index segment
+   * @param resetKeyType the reset key type
+   * @param resetKeyLifeVersion the life version of reset key
    * @throws StoreException
    */
   private void verifyAllForIndexSegmentFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
       IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean sealed, long endOffset,
-      long lastModifiedTimeInMs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws StoreException {
+      long lastModifiedTimeInMs, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion)
+      throws StoreException {
     verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, sealed, endOffset,
-        lastModifiedTimeInMs, resetKey);
+        lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
   }
@@ -1544,11 +1646,29 @@ class MockIndexSegment extends IndexSegment {
   }
 
   @Override
-  Pair<StoreKey, PersistentIndex.IndexEntryType> getResetKey() {
+  StoreKey getResetKey() {
     if (getVersion() == PersistentIndex.VERSION_0) {
       return null;
     } else {
       return super.getResetKey();
+    }
+  }
+
+  @Override
+  PersistentIndex.IndexEntryType getResetKeyType() {
+    if (getVersion() == PersistentIndex.VERSION_0) {
+      return null;
+    } else {
+      return super.getResetKeyType();
+    }
+  }
+
+  @Override
+  short getResetKeyLifeVersion() throws StoreException {
+    if (getVersion() >= PersistentIndex.VERSION_1) {
+      return super.getResetKeyLifeVersion();
+    } else {
+      return StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION;
     }
   }
 }

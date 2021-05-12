@@ -14,13 +14,23 @@
 package com.github.ambry.quota.storage;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -39,7 +49,7 @@ public class AmbryStorageQuotaEnforcerTest {
   public void testInitEmptyStorageUsage() {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    TestUtils.assertContainerMap(Collections.EMPTY_MAP, enforcer.getStorageUsage());
+    assertEquals(Collections.EMPTY_MAP, enforcer.getStorageUsage());
   }
 
   /**
@@ -50,7 +60,7 @@ public class AmbryStorageQuotaEnforcerTest {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     Map<String, Map<String, Long>> containerUsage = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageUsage(containerUsage);
-    TestUtils.assertContainerMap(containerUsage, enforcer.getStorageUsage());
+    assertEquals(containerUsage, enforcer.getStorageUsage());
   }
 
   /**
@@ -60,7 +70,7 @@ public class AmbryStorageQuotaEnforcerTest {
   public void testInitEmptyStorageQuota() {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     enforcer.initStorageQuota(Collections.EMPTY_MAP);
-    TestUtils.assertContainerMap(Collections.EMPTY_MAP, enforcer.getStorageQuota());
+    assertEquals(Collections.EMPTY_MAP, enforcer.getStorageQuota());
   }
 
   /**
@@ -71,7 +81,7 @@ public class AmbryStorageQuotaEnforcerTest {
     AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
     Map<String, Map<String, Long>> containerQuota = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageQuota(containerQuota);
-    TestUtils.assertContainerMap(containerQuota, enforcer.getStorageQuota());
+    assertEquals(containerQuota, enforcer.getStorageQuota());
   }
 
   /**
@@ -83,7 +93,7 @@ public class AmbryStorageQuotaEnforcerTest {
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
-    TestUtils.assertContainerMap(expectedQuota, enforcer.getStorageQuota());
+    assertEquals(expectedQuota, enforcer.getStorageQuota());
 
     StorageQuotaSource.Listener listener = enforcer.getQuotaSourceListener();
     int numUpdates = 10;
@@ -91,7 +101,7 @@ public class AmbryStorageQuotaEnforcerTest {
       Map<String, Map<String, Long>> additionalUsage = TestUtils.makeStorageMap(1, 10, 10000, 1000);
       expectedQuota.put(String.valueOf(initNumAccounts + i), additionalUsage.remove("1"));
       listener.onNewContainerStorageQuota(expectedQuota);
-      TestUtils.assertContainerMap(expectedQuota, enforcer.getStorageQuota());
+      assertEquals(expectedQuota, enforcer.getStorageQuota());
     }
   }
 
@@ -104,7 +114,7 @@ public class AmbryStorageQuotaEnforcerTest {
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedUsage = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageUsage(expectedUsage);
-    TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+    assertEquals(expectedUsage, enforcer.getStorageUsage());
 
     // Adding extra account and container usage
     enforcer.getStorageUsage().put("1000", new ConcurrentHashMap<String, Long>());
@@ -128,7 +138,7 @@ public class AmbryStorageQuotaEnforcerTest {
       listener.onNewContainerStorageUsage(expectedUsage);
       expectedUsage.put("1000", new HashMap<String, Long>());
       expectedUsage.get("1000").put("1", new Long(10000));
-      TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+      assertEquals(expectedUsage, enforcer.getStorageUsage());
       expectedUsage.remove("1000");
     }
   }
@@ -163,7 +173,7 @@ public class AmbryStorageQuotaEnforcerTest {
       assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
     }
 
-    TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+    assertEquals(expectedUsage, enforcer.getStorageUsage());
   }
 
   /**
@@ -213,7 +223,7 @@ public class AmbryStorageQuotaEnforcerTest {
           });
       assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
     }
-    TestUtils.assertContainerMap(expectedUsage, enforcer.getStorageUsage());
+    assertEquals(expectedUsage, enforcer.getStorageUsage());
   }
 
   /**
@@ -241,5 +251,88 @@ public class AmbryStorageQuotaEnforcerTest {
         assertTrue(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, 1));
       }
     }
+  }
+
+  /**
+   * Test {@link AmbryStorageQuotaEnforcer#getQuotaAndUsage} and {@link AmbryStorageQuotaEnforcer#charge} methods.
+   * @throws Exception
+   */
+  @Test
+  public void testGetQuotaAndUsageAndCharge() throws Exception {
+    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+    int initNumAccounts = 10;
+    Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
+    enforcer.initStorageQuota(expectedQuota);
+    enforcer.initStorageUsage(Collections.EMPTY_MAP);
+    enforcer.setQuotaMode(QuotaMode.THROTTLING);
+
+    for (Map.Entry<String, Map<String, Long>> accountEntry : expectedQuota.entrySet()) {
+      short accountId = Short.valueOf(accountEntry.getKey());
+      for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+        short containerId = Short.valueOf(containerEntry.getKey());
+        long quota = containerEntry.getValue();
+        RestRequest restRequest = createRestRequest(accountId, containerId);
+        Pair<Long, Long> quotaAndUsage = enforcer.getQuotaAndUsage(restRequest);
+        assertEquals(quota, quotaAndUsage.getFirst().longValue());
+        assertEquals(0L, quotaAndUsage.getSecond().longValue());
+
+        quotaAndUsage = enforcer.charge(restRequest, quota / 2);
+        assertEquals(quota, quotaAndUsage.getFirst().longValue());
+        assertEquals(quota / 2, quotaAndUsage.getSecond().longValue());
+
+        quotaAndUsage = enforcer.charge(restRequest, quota);
+        assertEquals(quota, quotaAndUsage.getFirst().longValue());
+        assertEquals(quota / 2 + quota, quotaAndUsage.getSecond().longValue());
+      }
+    }
+
+    // Now create a restRequest that doesn't carry account and container
+    RestRequest restRequest = createRestRequest();
+    Pair<Long, Long> quotaAndUsage = enforcer.getQuotaAndUsage(restRequest);
+    assertEquals(-1L, quotaAndUsage.getFirst().longValue());
+    assertEquals(0L, quotaAndUsage.getSecond().longValue());
+    quotaAndUsage = enforcer.charge(restRequest, 100L);
+    assertEquals(-1L, quotaAndUsage.getFirst().longValue());
+    assertEquals(0L, quotaAndUsage.getSecond().longValue());
+
+    restRequest = createRestRequest((short) 1000, (short) 10000);
+    quotaAndUsage = enforcer.getQuotaAndUsage(restRequest);
+    assertEquals(-1L, quotaAndUsage.getFirst().longValue());
+    assertEquals(0L, quotaAndUsage.getSecond().longValue());
+    quotaAndUsage = enforcer.charge(restRequest, 100L);
+    assertEquals(-1L, quotaAndUsage.getFirst().longValue());
+    assertEquals(0L, quotaAndUsage.getSecond().longValue());
+  }
+
+  /**
+   * Create a {@link MockRestRequest} without any header.
+   * @return a {@link MockRestRequest} without any header.
+   * @throws Exception
+   */
+  private RestRequest createRestRequest() throws Exception {
+    JSONObject data = new JSONObject();
+    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
+    data.put(MockRestRequest.URI_KEY, "/");
+    return new MockRestRequest(data, null);
+  }
+
+  /**
+   * Create a {@link MockRestRequest} with account and container headers.
+   * @param accountId the account id.
+   * @param containerId the container id.
+   * @return a {@link MockRestRequest} with account and container headers.
+   * @throws Exception
+   */
+  private RestRequest createRestRequest(short accountId, short containerId) throws Exception {
+    JSONObject data = new JSONObject();
+    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
+    data.put(MockRestRequest.URI_KEY, "/");
+    JSONObject headers = new JSONObject();
+    headers.put(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY,
+        new AccountBuilder(accountId, "accountName", Account.AccountStatus.ACTIVE).build());
+    headers.put(RestUtils.InternalKeys.TARGET_CONTAINER_KEY,
+        new ContainerBuilder(containerId, "containerName", Container.ContainerStatus.ACTIVE, "", accountId).build());
+    data.put(MockRestRequest.HEADERS_KEY, headers);
+    return new MockRestRequest(data, null);
   }
 }

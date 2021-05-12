@@ -18,11 +18,11 @@ import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
-import com.github.ambry.mysql.MySqlMetrics;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -47,8 +47,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Container.*;
-import static com.github.ambry.mysql.MySqlUtils.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
+import static com.github.ambry.mysql.MySqlUtils.*;
 import static com.github.ambry.utils.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -63,8 +63,9 @@ public class MySqlAccountServiceIntegrationTest {
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountServiceIntegrationTest.class);
   private static final String DESCRIPTION = "Indescribable";
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
-  private MySqlAccountStore mySqlAccountStore;
   private final Properties mySqlConfigProps;
+  private final MockNotifier<String> mockNotifier = new MockNotifier();
+  private MySqlAccountStore mySqlAccountStore;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
 
@@ -87,7 +88,8 @@ public class MySqlAccountServiceIntegrationTest {
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // Don't initialize account store here as it may have preinitialized data
-    return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+    return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory,
+        mockNotifier);
   }
 
   @Test
@@ -214,7 +216,8 @@ public class MySqlAccountServiceIntegrationTest {
     // constructor does initial fetch which will fail on first endpoint and succeed on second
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     mySqlAccountService =
-        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory,
+            mockNotifier);
     MySqlMetrics storeMetrics = mySqlAccountStore.getMySqlDataAccessor().getMetrics();
     // At this point, should have at least one connection failure (bad endpoint) and one success
     long expectedConnectionFail = storeMetrics.connectionFailureCount.getCount();
@@ -289,7 +292,8 @@ public class MySqlAccountServiceIntegrationTest {
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     MySqlAccountService consumerAccountService =
-        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory,
+            mockNotifier);
 
     // Add account with 3 containers
     short accountId = 101;
@@ -308,7 +312,7 @@ public class MySqlAccountServiceIntegrationTest {
       return accountInfo.getAccount().equals(finalA) && accountInfo.getAddedContainers().equals(containers)
           && accountInfo.isAdded() && !accountInfo.isUpdated() && accountInfo.getUpdatedContainers().isEmpty();
     }));
-    consumerAccountService.fetchAndUpdateCache();
+    // Note: because consumer is notified of changes, its cache should already be in sync with DB
     long lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
 
@@ -322,7 +326,6 @@ public class MySqlAccountServiceIntegrationTest {
       return accountInfo.getAccount().equals(finalA1) && accountInfo.getAddedContainers().isEmpty()
           && !accountInfo.isAdded() && accountInfo.isUpdated() && accountInfo.getUpdatedContainers().isEmpty();
     }));
-    consumerAccountService.fetchAndUpdateCache();
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(newAccountName));
@@ -340,7 +343,6 @@ public class MySqlAccountServiceIntegrationTest {
         argThat(accountsInfo -> accountsInfo.get(0).getUpdatedContainers().size() == 1));
     assertEquals("Expected one result", 1, result.size());
     assertEquals("Container mismatch", c1Mod, result.iterator().next());
-    consumerAccountService.fetchAndUpdateCache();
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
     assertEquals("Container mismatch", c1Mod, consumerAccountService.getContainerByName(accountName, "c1"));
@@ -356,12 +358,13 @@ public class MySqlAccountServiceIntegrationTest {
     cNew = result.iterator().next();
     containers.add(cNew);
     a1 = new AccountBuilder(a1).containers(containers).build();
-    consumerAccountService.fetchAndUpdateCache();
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
     assertEquals("Container mismatch", cNew, consumerAccountService.getContainerByName(accountName, "c4"));
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
 
+    // For this section, consumer must get out of date so need to unsubscribe its notifier
+    mockNotifier.unsubscribeAll();
     // TODO:
     // Add container in AS1, call AS2.getContainer() to force fetch
     // Add C1 in AS1, add C1 in AS2 (should succeed and return existing id)
@@ -403,8 +406,9 @@ public class MySqlAccountServiceIntegrationTest {
     MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
     AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    // Note: for these tests, consumer must NOT be notified of changes
     MySqlAccountService consumerAccountService =
-        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory);
+        new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory, null);
 
     // Add new account "a1" on producer account service
     short accountId = 101;

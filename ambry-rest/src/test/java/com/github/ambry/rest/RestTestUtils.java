@@ -129,4 +129,18 @@ public class RestTestUtils {
       return new JSONObject(new String(Utils.readBytesFromStream(is, (int) asyncWritableChannel.getBytesWritten())));
     }
   }
+
+  /**
+   * Reads the response received from the {@code channel}.
+   * @param channel the {@link ReadableStreamChannel} that contains the response
+   * @return the response in byte array.
+   * @throws Exception
+   */
+  public static byte[] getResponseBody(ReadableStreamChannel channel) throws Exception {
+    RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel((int) channel.getSize());
+    channel.readInto(asyncWritableChannel, null).get();
+    byte[] result = new byte[(int) asyncWritableChannel.getBytesWritten()];
+    asyncWritableChannel.consumeContentAsByteBuf().readBytes(result);
+    return result;
+  }
 }

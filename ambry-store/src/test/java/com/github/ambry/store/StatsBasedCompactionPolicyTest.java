@@ -80,7 +80,7 @@ public class StatsBasedCompactionPolicyTest {
           mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
           if ((j - i) >= config.storeMinLogSegmentCountToReclaimToTriggerCompaction) {
             CompactionPolicyTest.verifyCompactionDetails(
-                new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates), blobStore,
+                new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates, null), blobStore,
                 compactionPolicy);
             Pair<Integer, Integer> bestCandidateIndexes = new Pair<>(i, j);
             Pair<Integer, Integer> secondBestCandidateIndexes =
@@ -96,7 +96,7 @@ public class StatsBasedCompactionPolicyTest {
               mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
               // ensure that the best remains the best as it has the lowest cost benefit ratio
               CompactionPolicyTest.verifyCompactionDetails(
-                  new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates), blobStore,
+                  new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates, null), blobStore,
                   compactionPolicy);
               // set cost benefit of 2nd best to 1 less than the best candidate's cost benefit ratio
               CompactionPolicyTest.updateValidDataSize(validDataSize,
@@ -105,7 +105,7 @@ public class StatsBasedCompactionPolicyTest {
               mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
               // ensure that the 2nd best is now the best candidate to compact
               CompactionPolicyTest.verifyCompactionDetails(
-                  new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, secondBestCandidate), blobStore,
+                  new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, secondBestCandidate, null), blobStore,
                   compactionPolicy);
             }
           } else {
@@ -134,7 +134,7 @@ public class StatsBasedCompactionPolicyTest {
                 maxLogSegmentCapacity);
         mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
         CompactionPolicyTest.verifyCompactionDetails(
-            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates), blobStore,
+            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates, null), blobStore,
             compactionPolicy);
       }
     }
@@ -159,7 +159,7 @@ public class StatsBasedCompactionPolicyTest {
             maxLogSegmentCapacity);
     mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
     CompactionPolicyTest.verifyCompactionDetails(
-        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates), blobStore,
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates, null), blobStore,
         compactionPolicy);
     Pair<Integer, Integer> bestCandidateIndexes = new Pair<>(0, 3);
     Pair<Integer, Integer> secondBestCandidateIndexes =
@@ -174,7 +174,7 @@ public class StatsBasedCompactionPolicyTest {
     // ensure that the 1st best is now the best candidate to compact even though 2nd best's cost benefit ratio
     // is the lowest
     CompactionPolicyTest.verifyCompactionDetails(
-        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates), blobStore,
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates, null), blobStore,
         compactionPolicy);
 
     // case 2: only one potential candidate(index_5 to index_7) to compact which is overlaps with the journal
@@ -201,7 +201,7 @@ public class StatsBasedCompactionPolicyTest {
     blobStore.logSegmentsNotInJournal = blobStore.logSegmentsNotInJournal.subList(0, 5);
     // expected best candidate = index2 to index_4 which is first 3 entries in the actual best candidate
     CompactionPolicyTest.verifyCompactionDetails(
-        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates.subList(0, 3)), blobStore,
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates.subList(0, 3), null), blobStore,
         compactionPolicy);
   }
 

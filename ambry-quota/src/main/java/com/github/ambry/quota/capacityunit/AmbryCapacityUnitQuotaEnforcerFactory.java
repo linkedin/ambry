@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaSource;
@@ -29,8 +30,10 @@ public class AmbryCapacityUnitQuotaEnforcerFactory implements QuotaEnforcerFacto
    * Constructor for {@link AmbryCapacityUnitQuotaEnforcerFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param quotaSource {@link QuotaSource} object.
+   * @param accountStatsStore the {@link AccountStatsStore}.
    */
-  public AmbryCapacityUnitQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource) {
+  public AmbryCapacityUnitQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
+      AccountStatsStore accountStatsStore) {
     quotaEnforcer = new AmbryCapacityUnitQuotaEnforcer(quotaSource);
   }
 

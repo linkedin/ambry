@@ -14,27 +14,27 @@
 package com.github.ambry.quota.storage;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStore;
 
 
 /**
- * An factory implementation for {@link StorageQuotaService}.
+ * A factory implementation for {@link StorageQuotaService}.
  */
 public class AmbryStorageQuotaServiceFactory implements StorageQuotaServiceFactory {
   private final StorageQuotaService storageQuotaService;
 
   /**
    * Constructor to create {@link AmbryStorageQuotaServiceFactory}.
-   * @param verifiableProperties The {@link VerifiableProperties} to create {@link StorageQuotaConfig}.
+   * @param config The {@link StorageQuotaConfig}.
+   * @param accountStatsStore The {@link AccountStatsStore}.
    * @param metricRegistry The {@link MetricRegistry} to register new metrics.
    * @throws Exception
    */
-  public AmbryStorageQuotaServiceFactory(VerifiableProperties verifiableProperties, AccountStatsStore accountStatsStore,
+  public AmbryStorageQuotaServiceFactory(StorageQuotaConfig config, AccountStatsStore accountStatsStore,
       MetricRegistry metricRegistry) throws Exception {
-    storageQuotaService = new AmbryStorageQuotaService(verifiableProperties, accountStatsStore, metricRegistry);
+    storageQuotaService = new AmbryStorageQuotaService(config, accountStatsStore, metricRegistry);
   }
 
   @Override

@@ -22,3 +22,5 @@ build/
 logs/
 null/
 .DS_Store
+
+.remote*

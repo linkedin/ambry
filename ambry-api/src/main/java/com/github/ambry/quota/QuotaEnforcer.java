@@ -26,7 +26,7 @@ public interface QuotaEnforcer {
   /**
    * Method to initialize the {@link QuotaEnforcer}.
    */
-  void init();
+  void init() throws Exception;
 
   /**
    * Makes an {@link QuotaRecommendation} using the information in {@link BlobInfo} and {@link RestRequest}. This

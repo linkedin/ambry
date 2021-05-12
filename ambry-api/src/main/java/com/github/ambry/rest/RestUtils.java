@@ -15,13 +15,16 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
+import com.github.ambry.server.StatsReportType;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -251,6 +254,16 @@ public class RestUtils {
      * (0 byte) blob instead of returning a 416 error.
      */
     public final static String RESOLVE_RANGE_ON_EMPTY_BLOB = "x-ambry-resolve-range-on-empty-blob";
+
+    /**
+     * Request header to carry clusterName.
+     */
+    public final static String CLUSTER_NAME = "x-ambry-cluster-name";
+
+    /**
+     * Request header to carry {@link StatsReportType} for GetStatsReport request.
+     */
+    public final static String GET_STATS_REPORT_TYPE = "x-ambry-stats-type";
   }
 
   public static final class TrackingHeaders {
@@ -283,12 +296,36 @@ public class RestUtils {
     }
   }
 
+  /**
+   * Headers with information about cost incurred in serving a request.
+   */
   public static final class RequestCostHeaders {
 
     /**
      * Response header indicating cost incurred by the request against capacity unit and storage quotas.
      */
     public static final String REQUEST_COST = "x-ambry-request-cost";
+  }
+
+  /**
+   * Headers with information about request quota and usage.
+   */
+  public static final class RequestQuotaHeaders {
+
+    /**
+     * Response header indicating user quota usage information.
+     */
+    public static final String USER_QUOTA_USAGE = "x-ambry-user-quota-usage";
+
+    /**
+     * Response header indicating user quota warning.
+     */
+    public static final String USER_QUOTA_WARNING = "x-ambry-user-quota-warning";
+
+    /**
+     * Response header indicating retry after interval in milliseconds.
+     */
+    public static final String RETRY_AFTER_MS = "x-ambry-retry-after-ms";
   }
 
   /**
@@ -636,6 +673,42 @@ public class RestUtils {
   }
 
   /**
+   * Return true if this request is uploading a blob. We now have two ways of uploading a blob
+   * 1. A POST request to root path
+   * 2. A PUT request to namedBlob path
+   * Notice that stitch requests are not uploads since chunks are uploaded through signed url post.
+   * @param restRequest The {@link RestRequest}.
+   * @return
+   */
+  public static boolean isUploadRequest(RestRequest restRequest) {
+    RequestPath requestPath = RestUtils.getRequestPath(restRequest);
+    RestMethod method = restRequest.getRestMethod();
+    // For POST request, when the operation is "", it's upload
+    // For PUT request, when the operation is named blob, it's named upload upload. However, we have to exclude the
+    // case for stitch named blob.
+    return method == RestMethod.POST && requestPath.getOperationOrBlobId(true).isEmpty()
+        || method == RestMethod.PUT && requestPath.matchesOperation(Operations.NAMED_BLOB) && !isNamedBlobStitchRequest(
+        restRequest);
+  }
+
+  /**
+   * Return true when the given named blob request is a stitch request. The {@code restRequest} has to be a named blob upload
+   * request, which means it's PUT request and the operation in requestPath is namedBlob.
+   * Notice that this method doesn't enforce this precondition.
+   * @param restRequest
+   * @return
+   */
+  public static boolean isNamedBlobStitchRequest(RestRequest restRequest) {
+    // This request has to be NamedBlob Request, which means it's PUT request and the operation in requestPath is namedBlob.
+    final String STITCH = "STITCH";
+    try {
+      return STITCH.equals(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false));
+    } catch (RestServiceException e) {
+      return false;
+    }
+  }
+
+  /**
    * Fetch time in ms for the {@code dateString} passed in, since epoch
    * @param dateString the String representation of the date that needs to be parsed
    * @return Time in ms since epoch. Note http time is kept in Seconds so last three digits will be 000.
@@ -957,6 +1030,35 @@ public class RestUtils {
   }
 
   /**
+   * Build the user quota headers map.
+   * @param throttlingRecommendation {@link ThrottlingRecommendation} object.
+   * @return Map of request headers key-value pair related to request quota.
+   */
+  public static Map<String, String> buildUserQuotaHeadersMap(ThrottlingRecommendation throttlingRecommendation) {
+    if (throttlingRecommendation.getQuotaUsagePercentage().isEmpty()) {
+      return Collections.emptyMap();
+    }
+
+    Map<String, String> quotaHeadersMap = new HashMap<>();
+    // set usage headers.
+    quotaHeadersMap.put(RequestQuotaHeaders.USER_QUOTA_USAGE, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
+        throttlingRecommendation.getQuotaUsagePercentage()
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
+
+    // set retry header if present.
+    if (throttlingRecommendation.getRetryAfterMs() != ThrottlingRecommendation.NO_RETRY_AFTER_MS) {
+      quotaHeadersMap.put(RequestQuotaHeaders.RETRY_AFTER_MS,
+          String.valueOf(throttlingRecommendation.getRetryAfterMs()));
+    }
+
+    // set the warning header.
+    quotaHeadersMap.put(RequestQuotaHeaders.USER_QUOTA_WARNING, throttlingRecommendation.getQuotaUsageLevel().name());
+    return quotaHeadersMap;
+  }
+
+  /**
    * Verify that the session ID in the chunk metadata matches the expected session.
    * @param chunkMetadata the metadata map parsed from a signed chunk ID.
    * @param expectedSession the session that the chunk should match. This can be null for the first chunk (where any
@@ -1076,14 +1178,14 @@ public class RestUtils {
       if (value.isEmpty()) {
         return valueMap;
       }
-      if (!value.contains(DELIM)) {
-        throw new IllegalArgumentException("Invalid kv header value: " + value);
-      }
       for (String kvStr : value.split(DELIM)) {
         if (!kvStr.contains(KV_SEPERATOR)) {
           throw new IllegalArgumentException("Invalid kv header value: " + value);
         }
         String[] kv = kvStr.split(KV_SEPERATOR);
+        if (kv.length == 0) {
+          throw new IllegalArgumentException("Invalid kv header value: " + value);
+        }
         valueMap.put(kv[0], kv[1]);
       }
       if (valueMap.isEmpty()) {

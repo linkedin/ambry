@@ -33,16 +33,19 @@ class CompactionDetails {
 
   private final long referenceTimeMs;
   private final List<LogSegmentName> logSegmentsUnderCompaction;
+  private final CostBenefitInfo costBenefitInfo;
 
   /**
    * Construct a representation of all the details required for a compaction cycle.
    * @param referenceTimeMs the epoch time to use to get the same results from the {@link BlobStore} as when these
    *                        details were created.
    * @param logSegmentsUnderCompaction the names of the {@link LogSegment} under compaction.
+   * @param costBenefitInfo the {@link CostBenefitInfo} based on current Compaction Details
    * @throws IllegalArgumentException if {@code referenceTimeMs} < 0 or if {@code logSegmentsUnderCompaction} has no
    * elements.
    */
-  CompactionDetails(long referenceTimeMs, List<LogSegmentName> logSegmentsUnderCompaction) {
+  CompactionDetails(long referenceTimeMs, List<LogSegmentName> logSegmentsUnderCompaction,
+      CostBenefitInfo costBenefitInfo) {
     if (referenceTimeMs < 0 || logSegmentsUnderCompaction.size() == 0) {
       throw new IllegalArgumentException(
           "Illegal arguments provided. Ref time: [" + referenceTimeMs + "]. " + "Segments under compaction size: ["
@@ -50,6 +53,7 @@ class CompactionDetails {
     }
     this.referenceTimeMs = referenceTimeMs;
     this.logSegmentsUnderCompaction = logSegmentsUnderCompaction;
+    this.costBenefitInfo = costBenefitInfo;
   }
 
   /**
@@ -69,7 +73,7 @@ class CompactionDetails {
         for (int i = 0; i < segmentCount; i++) {
           logSegmentsUnderCompaction.add(LogSegmentName.fromString(Utils.readIntString(stream)));
         }
-        details = new CompactionDetails(referenceTime, logSegmentsUnderCompaction);
+        details = new CompactionDetails(referenceTime, logSegmentsUnderCompaction, null);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized version: " + version);
@@ -129,6 +133,10 @@ class CompactionDetails {
       bufWrap.put(segmentNameBytes);
     }
     return buf;
+  }
+
+  CostBenefitInfo getCostBenefitInfo() {
+    return costBenefitInfo;
   }
 
   @Override

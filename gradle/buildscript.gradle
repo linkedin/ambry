@@ -9,7 +9,7 @@
 // CONDITIONS OF ANY KIND, either express or implied.
 repositories {
     repositories {
-        // For license plugin.
+        // For various gradle plugins.
         maven {
             url "https://plugins.gradle.org/m2/"
         }
@@ -17,7 +17,8 @@ repositories {
 }
 
 dependencies {
-    classpath "gradle.plugin.com.hierynomus.gradle.plugins:license-gradle-plugin:0.15.0"    
+    classpath "gradle.plugin.com.hierynomus.gradle.plugins:license-gradle-plugin:0.15.0"
     classpath "org.shipkit:shipkit-auto-version:0.0.30"
-    classpath "com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.4"
+    // this is actually the artifactory plugin
+    classpath "org.jfrog.buildinfo:build-info-extractor-gradle:4.21.0"
 }

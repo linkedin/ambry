@@ -31,7 +31,7 @@ import static com.github.ambry.mysql.MySqlUtils.*;
 /**
  * Factory to create a {@link AccountStatsMySqlStore}.
  */
-public class AccountStatsMySqlStoreFactory {
+public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
   private static final Logger logger = LoggerFactory.getLogger(AccountStatsMySqlStoreFactory.class);
   private static final String REWRITE_BATCHED_STATEMENTS_LITERAL = "rewriteBatchedStatements";
 
@@ -66,7 +66,8 @@ public class AccountStatsMySqlStoreFactory {
    * @return
    * @throws SQLException
    */
-  public AccountStatsMySqlStore getAccountStatsMySqlStore() throws SQLException {
+  @Override
+  public AccountStatsStore getAccountStatsStore() throws SQLException {
     Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountStatsMySqlConfig.dbInfo);
     List<DbEndpoint> dbEndpoints = dcToMySqlDBEndpoints.get(localDC);
     if (dbEndpoints == null || dbEndpoints.size() == 0) {

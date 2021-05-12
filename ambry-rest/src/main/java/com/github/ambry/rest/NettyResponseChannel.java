@@ -534,6 +534,7 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpResponseStatus status;
     RestServiceErrorCode restServiceErrorCode = null;
     String errReason = null;
+    Map<String, String> errHeaders = null;
     if (cause instanceof RestServiceException) {
       RestServiceException restServiceException = (RestServiceException) cause;
       restServiceErrorCode = restServiceException.getErrorCode();
@@ -543,6 +544,9 @@ class NettyResponseChannel implements RestResponseChannel {
         errReason = new String(
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
+      }
+      if (restServiceException.shouldIncludeExceptionMetadataInResponse()) {
+        errHeaders = restServiceException.getExceptionHeadersMap();
       }
     } else if (Utils.isPossibleClientTermination(cause)) {
       nettyMetrics.clientEarlyTerminationCount.inc();
@@ -559,6 +563,9 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpUtil.setContentLength(response, 0);
     if (errReason != null) {
       response.headers().set(FAILURE_REASON_HEADER, errReason);
+    }
+    if(errHeaders != null) {
+      errHeaders.forEach((errHeaderKey, errHeaderVal) -> response.headers().set(errHeaderKey, errHeaderVal));
     }
     if (restServiceErrorCode != null && HttpStatusClass.CLIENT_ERROR.contains(status.code())) {
       response.headers().set(ERROR_CODE_HEADER, restServiceErrorCode.name());

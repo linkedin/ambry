@@ -1687,7 +1687,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests {@link BlobStore#findEntriesSince(FindToken, long)}.
+   * Tests {@link Store#findEntriesSince(FindToken, long, String, String)}.
    * <p/>
    * This test is minimal for two reasons
    * 1. The BlobStore simply calls into the index for this function and the index has extensive tests for this.
@@ -1697,7 +1697,7 @@ public class BlobStoreTest {
    */
   @Test
   public void findEntriesSinceTest() throws StoreException {
-    FindInfo findInfo = store.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE);
+    FindInfo findInfo = store.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE, null, null);
     Set<StoreKey> keysPresent = new HashSet<>();
     for (MessageInfo info : findInfo.getMessageEntries()) {
       keysPresent.add(info.getStoreKey());
@@ -1707,7 +1707,7 @@ public class BlobStoreTest {
     // Extra Test: findEntriesSince method can correctly capture disk related IO error and shutdown store if needed.
     store.shutdown();
     catchStoreExceptionAndVerifyErrorCode(
-        (blobStore) -> blobStore.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE));
+        (blobStore) -> blobStore.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE, null, null));
     reloadStore();
   }
 
@@ -3232,7 +3232,7 @@ public class BlobStoreTest {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
     try {
-      blobStore.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE);
+      blobStore.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE, null, null);
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());

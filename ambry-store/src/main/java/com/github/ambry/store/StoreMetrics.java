@@ -21,6 +21,9 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -28,7 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class StoreMetrics {
   private static final String SEPARATOR = ".";
-
+  private static final Logger logger = LoggerFactory.getLogger(StoreMetrics.class);
   public final Timer getResponse;
   public final Timer putResponse;
   public final Timer deleteResponse;
@@ -51,6 +54,7 @@ public class StoreMetrics {
   public final Counter unsealDoneCount;
   public final Counter indexBasedTokenResetCount;
   public final Counter journalBasedTokenResetCount;
+  public final Counter resetKeyFoundInCurrentIndex;
   public final Timer recoveryTime;
   public final Timer findTime;
   public final Timer indexFlushTime;
@@ -61,6 +65,8 @@ public class StoreMetrics {
   public final Counter bloomAccessedCount;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
+  public final Counter bloomRebuildOnLoadFailureCount;
+  public final Counter bloomPersistFailureCount;
   public final Counter mappedSegmentIsLoadedDuringFindCount;
   public final Counter mappedSegmentIsNotLoadedDuringFindCount;
   public final Counter keySizeMismatchCount;
@@ -88,6 +94,7 @@ public class StoreMetrics {
   public final Counter compactionBundleReadBufferUsed;
   public final Counter compactionBundleReadBufferIoCount;
   public final Counter compactionTargetIndexDuplicateOnNonRecoveryCount;
+  public final Counter permanentDeleteTombstonePurgeCount;
   public final Timer compactionCopyRecordTimeInMs;
   public final Timer compactionCopyDataByIndexSegmentTimeInMs;
   public final Timer compactionCopyDataByLogSegmentTimeInMs;
@@ -140,6 +147,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IndexBasedTokenResetCount"));
     journalBasedTokenResetCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "JournalBasedTokenResetCount"));
+    resetKeyFoundInCurrentIndex =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "ResetKeyFoundInCurrentIndex"));
     recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexRecoveryTime"));
     findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFindTime"));
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));
@@ -153,6 +162,10 @@ public class StoreMetrics {
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomFalsePositiveCount"));
+    bloomRebuildOnLoadFailureCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomRebuildOnLoadFailureCount"));
+    bloomPersistFailureCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPersistFailureCount"));
     mappedSegmentIsLoadedDuringFindCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "MappedSegmentIsLoadedDuringFindCount"));
     mappedSegmentIsNotLoadedDuringFindCount =
@@ -194,6 +207,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferIoCount"));
     compactionTargetIndexDuplicateOnNonRecoveryCount = registry.counter(
         MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionTargetIndexDuplicateOnNonRecoveryCount"));
+    permanentDeleteTombstonePurgeCount =
+        registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "PermanentDeleteTombstonePurgeCount"));
     compactionCopyRecordTimeInMs =
         registry.timer(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionCopyRecordTimeInMs"));
     compactionCopyDataByIndexSegmentTimeInMs = registry.timer(
@@ -225,7 +240,8 @@ public class StoreMetrics {
         byteBufferForAppendTotalCountGauge);
   }
 
-  void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes) {
+  void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes,
+      BlobStoreStats blobStoreStats) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> currentCapacityUsed = index::getLogUsedCapacity;
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"), currentCapacityUsed);
@@ -233,6 +249,17 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity"), percentageUsedCapacity);
     Gauge<Long> currentSegmentCount = index::getLogSegmentCount;
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"), currentSegmentCount);
+    Gauge<Long> currentInvalidDataSize = () -> {
+      long invalidDataSize = -1;
+      try {
+        invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSize(
+            new TimeRange(System.currentTimeMillis(), blobStoreStats.getBucketSpanTimeInMs())).getSecond();
+      } catch (StoreException e) {
+        logger.error("Failed to get invalidDataSize on store: {},", storeId, e);
+      }
+      return invalidDataSize;
+    };
+    registry.register(MetricRegistry.name(Log.class, prefix + "CurrentInvalidDataSize"), currentInvalidDataSize);
   }
 
   /**
@@ -244,6 +271,7 @@ public class StoreMetrics {
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity"));
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"));
+    registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentInvalidDataSize"));
     registry.remove(MetricRegistry.name(Log.class, "ByteBufferForAppendTotalCount"));
     registry.remove(MetricRegistry.name(Log.class, "UnderCompaction" + SEPARATOR + "ByteBufferForAppendTotalCount"));
   }
@@ -279,11 +307,30 @@ public class StoreMetrics {
     registry.remove(MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteCaughtUp"));
   }
 
-  void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress) {
+  void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress,
+      AtomicReference<CompactionDetails> compactionDetailsAtomicReference) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
         compactionInProgressGauge);
+    Gauge<Long> compactionCost = () -> {
+      CompactionDetails compactionDetails = compactionDetailsAtomicReference.get();
+      if (compactionDetails == null || compactionDetails.getCostBenefitInfo() == null) {
+        return -1L;
+      } else {
+        return compactionDetails.getCostBenefitInfo().getCost();
+      }
+    };
+    registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionCost"), compactionCost);
+    Gauge<Integer> compactionBenefit = () -> {
+      CompactionDetails compactionDetails = compactionDetailsAtomicReference.get();
+      if (compactionDetails == null || compactionDetails.getCostBenefitInfo() == null) {
+        return -1;
+      } else {
+        return compactionDetails.getCostBenefitInfo().getBenefit();
+      }
+    };
+    registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionBenefit"), compactionBenefit);
   }
 
   /**
@@ -293,6 +340,8 @@ public class StoreMetrics {
   private void deregisterCompactorGauges(String storeId) {
     String prefix = storeId + SEPARATOR;
     registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"));
+    registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionCost"));
+    registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionBenefit"));
   }
 
   /**
