@@ -838,12 +838,15 @@ public class OperationTrackerTest {
 
     sendRequests(ot, 3, false);
     assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
-    // Only send two not found response, it will terminate the operation.
-    for (int i = 0; i < 2; i++) {
+    // Send three not found response from originating dc, it will terminate the operation.
+    for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local replicas
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
       assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
+      if (i < 2) {
+        assertFalse("Operation should not have failed on NOT_FOUND", ot.hasFailedOnNotFound());
+      }
     }
     assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
     assertTrue("Operation should be done", ot.isDone());

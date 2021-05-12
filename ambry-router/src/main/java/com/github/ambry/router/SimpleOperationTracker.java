@@ -275,10 +275,14 @@ class SimpleOperationTracker implements OperationTracker {
       // ambry servers are still up.
       if (routerOperation == RouterOperation.GetBlobOperation
           || routerOperation == RouterOperation.GetBlobInfoOperation) {
-        Set<ReplicaId> offlineReplicas =
-            new HashSet<>(getEligibleReplicas(partitionId, null, EnumSet.of(ReplicaState.OFFLINE)));
+        Set<ReplicaId> replicasInPool = new HashSet<>(replicas);
+        Set<ReplicaId> replicasIncludingOffline = new HashSet<>(getEligibleReplicas(partitionId, null,
+            EnumSet.of(ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
+                ReplicaState.INACTIVE)));
+        // This is to address race condition where some original OFFLINE replicas transit to BOOTSTRAP or STANDBY state
+        replicasIncludingOffline.removeAll(replicasInPool);
         List<ReplicaId> remoteOfflineReplicas = new ArrayList<>();
-        for (ReplicaId replica : offlineReplicas) {
+        for (ReplicaId replica : replicasIncludingOffline) {
           if (replica.getDataNodeId().getDatacenterName().equals(this.originatingDcName)) {
             numReplicasInOriginatingDc++;
           }
@@ -309,8 +313,10 @@ class SimpleOperationTracker implements OperationTracker {
     }
     if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && numReplicasInOriginatingDc > 0) {
       // we relax this condition to account for intermediate state of moving replicas (there could be 6 replicas in
-      // originating dc temporarily)
-      originatingDcNotFoundFailureThreshold = Math.max(numReplicasInOriginatingDc - 1, 0);
+      // originating dc temporarily). Also we force frontend to check all originating dc replicas in case one replica is
+      // rebuilt from scratch, one replica is in error state and only one replica that holds the blob. This guarantees
+      // frontend will try fetching blob from the last replica.
+      originatingDcNotFoundFailureThreshold = numReplicasInOriginatingDc;
     } else {
       originatingDcNotFoundFailureThreshold = 0;
     }
