@@ -1165,6 +1165,30 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test cases where some replicas have changed their state in the middle of constructing operation tracker. The code
+   * should be able to get correct number of replicas even with concurrent state transition. The most common case is
+   * replica changes from OFFLINE to BOOTSTRAP/STANDBY while the replica pool is being populated in the tracker.
+   */
+  @Test
+  public void buildOperationTrackerWithStateTransitionTest() {
+    assumeTrue(replicasStateEnabled);
+    initialize();
+    // pick one replica and set it to OFFLINE initially
+    ReplicaId originatingReplica = mockPartition.replicaIds.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(localDcName))
+        .findAny()
+        .get();
+    mockPartition.replicaAndState.put(originatingReplica, ReplicaState.OFFLINE);
+    // induce concurrent state transition between 1st and 2nd "getEligibleReplicas()"
+    mockPartition.resetReplicaStateCount = 5;
+    mockPartition.resetAllReplicasToStandbyState = true;
+    SimpleOperationTracker ot =
+        (SimpleOperationTracker) getOperationTracker(true, 2, 3, RouterOperation.GetBlobOperation, true);
+    assertEquals("Mismatch in replica count in the pool", 12, ot.getReplicaPoolSize());
+    mockPartition.resetAllReplicasToStandbyState = false;
+  }
+
+  /**
    * Initialize 4 DCs, each DC has 1 data node, which has 3 replicas.
    */
   private void initialize() {

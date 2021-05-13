@@ -487,6 +487,14 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
+   * Exposed for testing only.
+   * @return the number of replicas in current replica pool.
+   */
+  int getReplicaPoolSize() {
+    return replicaPool.size();
+  }
+
+  /**
    * Add a replica to the beginning of the replica pool linked list.
    * @param replicaId the replica to add.
    */
