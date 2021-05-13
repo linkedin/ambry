@@ -90,7 +90,14 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     CostBenefitInfo bestCandidateToCompact = null;
     while (firstEntry != null) {
       Map.Entry<LogSegmentName, Long> endEntry = lastEntry;
-      while (endEntry != null && firstEntry.getKey().compareTo(endEntry.getKey()) <= 0) {
+      // Make sure we are not computing the cost benefit of compacting one log segment.
+      // If we have ong log segment that has 0 valid data, then this log segment would easily
+      // win the cost benefit comparison. However, our compaction logic won't just remove the
+      // log segment, it will basically create an empty log segment with only header.
+      // To avoid this case, always make sure we don't sole log segment in the list.
+      // However this doesn't solve the case when several log segments have 0 valid data at the
+      // same time. We need to fix this later.
+      while (endEntry != null && firstEntry.getKey().compareTo(endEntry.getKey()) < 0) {
         CostBenefitInfo costBenefitInfo =
             getCostBenefitInfo(firstEntry.getKey(), endEntry.getKey(), validDataPerLogSegments, segmentCapacity,
                 segmentHeaderSize, maxBlobSize);

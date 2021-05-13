@@ -76,6 +76,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   private final long logSegmentForecastOffsetMs;
   private final long waitTimeoutInSecs;
   private final boolean enableBucketForLogSegmentReports;
+  private final boolean fillupLogSegmentNames;
   private final StoreMetrics metrics;
   private final ReentrantLock scanLock = new ReentrantLock();
   private final Condition waitCondition = scanLock.newCondition();
@@ -142,6 +143,16 @@ class BlobStoreStats implements StoreStats, Closeable {
       long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
       boolean enableBucketForLogSegmentReports, Time time, ScheduledExecutorService longLiveTaskScheduler,
       ScheduledExecutorService shortLiveTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
+    this(storeId, index, bucketCount, bucketSpanTimeInMs, logSegmentForecastOffsetMs, queueProcessingPeriodInMs,
+        waitTimeoutInSecs, enableBucketForLogSegmentReports, true, time, longLiveTaskScheduler, shortLiveTaskScheduler,
+        diskIOScheduler, metrics);
+  }
+
+  BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
+      long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
+      boolean enableBucketForLogSegmentReports, boolean fillupLogSegmentNames, Time time,
+      ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
     this.storeId = storeId;
     this.index = index;
     this.time = time;
@@ -152,6 +163,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     this.waitTimeoutInSecs = waitTimeoutInSecs;
     this.metrics = metrics;
     this.enableBucketForLogSegmentReports = enableBucketForLogSegmentReports;
+    this.fillupLogSegmentNames = fillupLogSegmentNames;
 
     if (bucketCount > 0) {
       indexScanner = new IndexScanner();
@@ -338,6 +350,13 @@ class BlobStoreStats implements StoreStats, Closeable {
       referenceTimeInMs = timeRange.getEndTimeInMs();
       retValue =
           new Pair<>(referenceTimeInMs, collectValidDataSizeByLogSegment(referenceTimeInMs, expiryReferenceTime));
+    }
+    if (fillupLogSegmentNames) {
+      // Before return the value, make sure all the log segments are in the final map
+      for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
+        LogSegmentName logSegmentName = indexSegment.getLogSegmentName();
+        retValue.getSecond().putIfAbsent(logSegmentName, 0L);
+      }
     }
     return retValue;
   }
@@ -549,7 +568,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
       if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
-        logger.info("Compaction Stats: Index segment {} processing complete (on-demand scanning) for store {}",
+        logger.debug("Compaction Stats: Index segment {} processing complete (on-demand scanning) for store {}",
             indexSegment.getFile().getName(), storeId);
       }
     }

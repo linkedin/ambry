@@ -50,6 +50,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -210,9 +211,75 @@ public class BlobStoreCompactorTest {
     ensureArgumentFailure(details, "Should have failed because segments are in the wrong order");
 
     // compaction contains segments that don't exist
-    details = new CompactionDetails(0,
-        Collections.singletonList(lastLogSegmentName.getNextPositionName()), null);
+    details = new CompactionDetails(0, Collections.singletonList(lastLogSegmentName.getNextPositionName()), null);
     ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
+
+    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity();
+    writeDataToMeetRequiredSegmentCount(requiredCount, null);
+    LogSegmentName thirdLogSegmentName = state.log.getNextSegment(state.log.getSegment(secondLogSegmentName)).getName();
+    // compaction range is not consecutive
+    details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
+        Arrays.asList(firstLogSegmentName, thirdLogSegmentName), null);
+    ensureArgumentFailure(details, "Should have failed because segments are not consecutive");
+  }
+
+  @Test
+  public void statsBasedCompactionStrategyWithInvalidLogSegment() throws Exception {
+    refreshState(false, true);
+    // Current log segment is setup like this:
+    // three log segment: 0_0, 1_0, 2_0
+    // Now set the log segments so that we have:
+    // 3_0 doesn't have any valid index values (all expired put)
+    // 4_0 has only one valid index value (the rest are expired put)
+    // 5_0 has data so 4_0 won't be in the journal
+    // This setup would make sure that:
+    // 3_0 has value 0 in the result from BlobStoreStats
+    // 2_0, 4_0 would be the best candidate to compact if we ignore 3_0
+    long requiredCount = state.index.getLogSegmentCount();
+    long requiredBytes = requiredCount * state.log.getSegmentCapacity();
+    long numPuts = (requiredBytes - state.index.getLogUsedCapacity()) / PUT_RECORD_SIZE;
+    state.addPutEntries((int) numPuts, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    requiredBytes = (requiredCount + 1) * state.log.getSegmentCapacity();
+    numPuts = (requiredBytes - state.index.getLogUsedCapacity()) / PUT_RECORD_SIZE;
+    state.addPutEntries((int) numPuts, PUT_RECORD_SIZE, 0);
+    requiredBytes = (requiredCount + 2) * state.log.getSegmentCapacity();
+    numPuts = (requiredBytes - state.index.getLogUsedCapacity()) / PUT_RECORD_SIZE - 1;
+    state.addPutEntries((int) numPuts, PUT_RECORD_SIZE, 0L);
+    state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    requiredBytes = (requiredCount + 3) * state.log.getSegmentCapacity();
+    numPuts = (requiredBytes - state.index.getLogUsedCapacity()) / PUT_RECORD_SIZE;
+    state.addPutEntries((int) numPuts, PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    state.time.setCurrentMilliseconds(System.currentTimeMillis());
+    Properties properties = new Properties();
+    properties.setProperty("store.min.used.capacity.to.trigger.compaction.in.percentage", "1");
+    StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
+    StatsBasedCompactionPolicy policy = new StatsBasedCompactionPolicy(storeConfig, state.time);
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
+
+    // Create stats, so the fillupLogSegment is false
+    BlobStoreStats stats =
+        new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, false, state.time,
+            scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
+    CompactionDetails details =
+        policy.getCompactionDetails(state.log.getCapacityInBytes(), state.index.getLogUsedCapacity(),
+            state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), stats,
+            "/tmp");
+    List<LogSegmentName> logSegmentNames = details.getLogSegmentsUnderCompaction();
+    assertEquals(2, logSegmentNames.size());
+    assertEquals("2" + BlobStore.SEPARATOR + "0", logSegmentNames.get(0).toString());
+    assertEquals("4" + BlobStore.SEPARATOR + "0", logSegmentNames.get(1).toString());
+
+    // Create stats, so the fillupLogSegment is true
+    stats = new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, true, state.time,
+        scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
+    details = policy.getCompactionDetails(state.log.getCapacityInBytes(), state.index.getLogUsedCapacity(),
+        state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), stats,
+        "/tmp");
+    logSegmentNames = details.getLogSegmentsUnderCompaction();
+    assertEquals(2, logSegmentNames.size());
+    assertEquals("3" + BlobStore.SEPARATOR + "0", logSegmentNames.get(0).toString());
+    assertEquals("4" + BlobStore.SEPARATOR + "0", logSegmentNames.get(1).toString());
   }
 
   /**
@@ -571,7 +638,8 @@ public class BlobStoreCompactorTest {
   public void expirationTimeEnforcementTest() throws Exception {
     // no change before expiry time
     Pair<Long, List<LogSegmentName>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
-    Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(expiryTimeAndSegmentsUnderCompaction.getSecond());
+    Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets =
+        getEndOffsets(expiryTimeAndSegmentsUnderCompaction.getSecond());
     compactAndVerify(expiryTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), false);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
@@ -598,7 +666,8 @@ public class BlobStoreCompactorTest {
     // no change before delete time
     Pair<Long, List<LogSegmentName>> deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
     long deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst() - Time.MsPerSec;
-    Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
+    Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets =
+        getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
     compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
@@ -2658,7 +2727,8 @@ public class BlobStoreCompactorTest {
    * @param invalidateExpiredDelete whether to invalidate expired delete.
    * @return the sum of size of valid data in {@code logSegments} at {@code deleteReferenceTimeMs}.
    */
-  private long getValidDataSize(List<LogSegmentName> logSegments, long deleteReferenceTimeMs, boolean invalidateExpiredDelete) {
+  private long getValidDataSize(List<LogSegmentName> logSegments, long deleteReferenceTimeMs,
+      boolean invalidateExpiredDelete) {
     long size = 0;
     Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
@@ -2958,7 +3028,8 @@ public class BlobStoreCompactorTest {
    */
   private void verifyCompaction(List<LogSegmentName> segmentsCompacted, List<LogSegmentName> unaffectedSegments,
       long targetSegmentsExpectedValidSize, List<LogEntry> validLogEntriesInOrder,
-      Set<MockId> idsInCompactedLogSegments, long deleteReferenceTimeMs, Set<MockId> compactedDeletes) throws IOException, StoreException {
+      Set<MockId> idsInCompactedLogSegments, long deleteReferenceTimeMs, Set<MockId> compactedDeletes)
+      throws IOException, StoreException {
     verifyStorePostCompaction(segmentsCompacted, unaffectedSegments, targetSegmentsExpectedValidSize,
         validLogEntriesInOrder);
     verifyDataPostCompaction(idsInCompactedLogSegments, compactedDeletes, deleteReferenceTimeMs);
@@ -2982,8 +3053,9 @@ public class BlobStoreCompactorTest {
    *                               have all of these entries and in the same order.
    * @throws StoreException
    */
-  private void verifyStorePostCompaction(List<LogSegmentName> segmentsCompacted, List<LogSegmentName> unaffectedSegments,
-      long targetSegmentsExpectedValidSize, List<LogEntry> validLogEntriesInOrder) throws StoreException {
+  private void verifyStorePostCompaction(List<LogSegmentName> segmentsCompacted,
+      List<LogSegmentName> unaffectedSegments, long targetSegmentsExpectedValidSize,
+      List<LogEntry> validLogEntriesInOrder) throws StoreException {
     long highestGeneration = 0;
     for (LogSegmentName segmentCompacted : segmentsCompacted) {
       highestGeneration = Math.max(highestGeneration, segmentCompacted.getGeneration());
@@ -3059,8 +3131,7 @@ public class BlobStoreCompactorTest {
    * @throws StoreException
    */
   private void verifyDataPostCompaction(Set<MockId> idsInCompactedLogSegments, Set<MockId> compactedDeletes,
-      long deleteReferenceTimeMs)
-      throws IOException, StoreException {
+      long deleteReferenceTimeMs) throws IOException, StoreException {
     for (MockId id : state.allKeys.keySet()) {
       if (state.liveKeys.contains(id)) {
         BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
@@ -3104,7 +3175,7 @@ public class BlobStoreCompactorTest {
         } catch (StoreException e) {
           StoreErrorCodes expectedErrorCode =
               compactedDeletes.contains(id) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.ID_Deleted;
-          if(expectedErrorCode != e.getErrorCode()) {
+          if (expectedErrorCode != e.getErrorCode()) {
             assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
           }
         }
@@ -3336,7 +3407,8 @@ public class BlobStoreCompactorTest {
     long currentLogSegmentCount = state.index.getLogSegmentCount();
     writeDataToMeetRequiredSegmentCount(currentLogSegmentCount + extraSegmentCountRequired,
         Collections.singletonList(expiryTimeMs));
-    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(currentLogSegmentCount, extraSegmentCountRequired - 1);
+    List<LogSegmentName> segmentsUnderCompaction =
+        getLogSegments(currentLogSegmentCount, extraSegmentCountRequired - 1);
     // reload index to make sure journal is on only the latest log segment
     state.reloadIndex(true, false);
     return new Pair<>(expiryTimeMs, segmentsUnderCompaction);
@@ -3361,7 +3433,8 @@ public class BlobStoreCompactorTest {
 
     // advance time and delete some data (some of the data will get deleted at deleteTimeMs + delta).
     state.advanceTime(deleteTimeMs - state.time.milliseconds());
-    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(currentLogSegmentCount, extraSegmentCountRequired - 1);
+    List<LogSegmentName> segmentsUnderCompaction =
+        getLogSegments(currentLogSegmentCount, extraSegmentCountRequired - 1);
     // we need enough data to fill two log segments after compaction
     // to allow for non alignment of log segment boundaries, reduce valid size required by the put record size
     long validSizeRequired = 2 * (state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE - PUT_RECORD_SIZE);
@@ -3522,7 +3595,8 @@ public class BlobStoreCompactorTest {
     bundleReadBuffer = null;
     for (int interruptAt : Arrays.asList(1, 2, 7, -3)) {
       // no change before expiry time
-      Pair<Long, List<LogSegmentName>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
+      Pair<Long, List<LogSegmentName>> expiryTimeAndSegmentsUnderCompaction =
+          setupStateWithExpiredBlobsAtSpecificTime();
       List<LogSegmentName> segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
       Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(segmentsUnderCompaction);
       // if negative, set crash count starting from the end
@@ -3574,7 +3648,8 @@ public class BlobStoreCompactorTest {
     bundleReadBuffer = null;
     for (long interruptAt : Arrays.asList(PUT_RECORD_SIZE, -2 * PUT_RECORD_SIZE)) {
       // no change before expiry time
-      Pair<Long, List<LogSegmentName>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
+      Pair<Long, List<LogSegmentName>> expiryTimeAndSegmentsUnderCompaction =
+          setupStateWithExpiredBlobsAtSpecificTime();
       List<LogSegmentName> segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
       Map<LogSegmentName, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(segmentsUnderCompaction);
       // if negative, set crash count starting from the end
