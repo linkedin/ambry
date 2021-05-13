@@ -428,7 +428,7 @@ public class GetBlobInfoOperationTest {
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
     // localReplica now becomes remote replica.
-    Assert.assertEquals("The number of data points in remote colo latency histogram is not expected", 2,
+    Assert.assertEquals("The number of data points in remote colo latency histogram is not expected", 3,
         tracker.getLatencyHistogram(localReplica).getCount());
 
     props = getNonBlockingRouterProperties(true);
