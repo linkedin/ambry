@@ -277,6 +277,8 @@ public class BlobStoreCompactorTest {
     // Create stats, so the fillupLogSegment is true
     stats = new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, true, state.time,
         scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
+    spyStats = Mockito.spy(stats);
+    Mockito.doReturn(PUT_RECORD_SIZE).when(spyStats).getMaxBlobSize();
     details = policy.getCompactionDetails(state.log.getCapacityInBytes(), state.index.getLogUsedCapacity(),
         state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), spyStats,
         "/tmp");
