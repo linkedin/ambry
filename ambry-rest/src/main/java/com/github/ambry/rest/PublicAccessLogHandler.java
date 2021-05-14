@@ -92,6 +92,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
     long startTimeInMs = System.currentTimeMillis();
     boolean shouldReset = msg instanceof LastHttpContent;
+    boolean isHttpContent = msg instanceof HttpContent;
     if (request != null) {
       if (msg instanceof HttpResponse) {
         HttpResponse response = (HttpResponse) msg;
@@ -108,8 +109,8 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         logger.error(
             "Sending response that is not of type HttpResponse or HttpContent. Sending response to {}. Request is of type {}. No action being taken other than logging this unexpected state.",
             ctx.channel().remoteAddress(), msg.getClass());
-      } else {
-        // msg instance of HttpContent
+      }
+      if (isHttpContent) {
         HttpContent httpContent = (HttpContent) msg;
         responseBytesSent += httpContent.content().readableBytes();
       }
@@ -163,7 +164,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
    */
   private void logDurations() {
     long nowMs = System.currentTimeMillis();
-    logMessage.append("bytes sent=").append(responseBytesSent).append(", ");
+    logMessage.append("bytes sent=").append(responseBytesSent).append(" ");
     logMessage.append("duration=").append(nowMs - requestArrivalTimeInMs).append("ms ");
     if (requestLastChunkArrivalTimeInMs != INIT_TIME) {
       logMessage.append("(chunked request receive=")
