@@ -123,14 +123,29 @@ class Journal {
    * @param activeLogSegmentName journal should remove all entries not belongs to active log segment.
    */
   synchronized void cleanUpJournal(LogSegmentName activeLogSegmentName) {
-    while (!inBootstrapMode) {
-      Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
-      if (earliestEntry != null && earliestEntry.getKey().getName().compareTo(activeLogSegmentName) < 0) {
+    Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
+    while (!inBootstrapMode && earliestEntry != null
+        && earliestEntry.getKey().getName().compareTo(activeLogSegmentName) < 0) {
+      journal.remove(earliestEntry.getKey());
+      recentCrcs.remove(earliestEntry.getValue());
+      currentNumberOfEntries.decrementAndGet();
+      earliestEntry = journal.firstEntry();
+    }
+  }
+
+  /**
+   * This method is used to test the impact of performance between release lock after journal finish clean up and release lock each time entry gets removed.
+   * @param activeLogSegmentName journal should remove all entries not belongs to active log segment.
+   */
+  void cleanUpJournalWithSynchronizeInside(LogSegmentName activeLogSegmentName) {
+    Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
+    while (!inBootstrapMode && earliestEntry != null
+        && earliestEntry.getKey().getName().compareTo(activeLogSegmentName) < 0) {
+      synchronized (this) {
         journal.remove(earliestEntry.getKey());
         recentCrcs.remove(earliestEntry.getValue());
         currentNumberOfEntries.decrementAndGet();
-      } else {
-        break;
+        earliestEntry = journal.firstEntry();
       }
     }
   }

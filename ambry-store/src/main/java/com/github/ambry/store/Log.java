@@ -460,7 +460,11 @@ class Log implements Write {
         ensureCapacity(0);
         setActiveSegment();
         //refresh journal.
-        journal.cleanUpJournal(activeSegment.getName());
+        if (config.storeSynchronizerInsideWhileLoopEnabled) {
+          journal.cleanUpJournalWithSynchronizeInside(activeSegment.getName());
+        } else {
+          journal.cleanUpJournal(activeSegment.getName());
+        }
       } catch (IllegalStateException e) {
         //if there is no more capacity left in data dir to create new log segment, just bypass this logic.
         //no-op

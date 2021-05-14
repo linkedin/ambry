@@ -347,6 +347,13 @@ public class StoreConfig {
   public final boolean storeAutoCloseLastLogSegmentEnabled;
 
   /**
+   * Whether to enable add synchronizer inside while loop for journal clean up.
+   */
+  @Config("store.synchronizer.inside.while.loop.enabled")
+  @Default("false")
+  public final boolean storeSynchronizerInsideWhileLoopEnabled;
+
+  /**
    * Specifies the permissions for data files in store. (Data files are user data related files for example, log segment,
    * index segment and bloom filter etc)
    */
@@ -523,6 +530,7 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
     storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean("store.auto.close.last.log.segment.enabled", false);
+    storeSynchronizerInsideWhileLoopEnabled = verifiableProperties.getBoolean("store.synchronizer.inside.while.loop.enabled", false);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
     String storeOperationFilePermissionStr =
