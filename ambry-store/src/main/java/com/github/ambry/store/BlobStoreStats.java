@@ -257,7 +257,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * Returns the max blob size that is encountered while generating stats
    * @return the max blob size that is encountered while generating stats
    */
-  long getMaxBlobSize() {
+  static long getMaxBlobSize() {
     return MAX_BLOB_SIZE;
   }
 

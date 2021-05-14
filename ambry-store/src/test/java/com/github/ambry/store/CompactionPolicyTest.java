@@ -513,11 +513,6 @@ class MockBlobStoreStats extends BlobStoreStats {
     }
   }
 
-  @Override
-  long getMaxBlobSize() {
-    return maxBlobSize;
-  }
-
   String getStoreId() {
     return this.storeId;
   }

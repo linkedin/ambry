@@ -127,7 +127,7 @@ public class StatsBasedCompactionPolicyTest {
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
     blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
     for (int i = 0; i < logSegmentCount; i++) {
-      for (int j = i + 1; j < logSegmentCount; j++) {
+      for (int j = i; j < logSegmentCount; j++) {
         List<LogSegmentName> bestCandidates = blobStore.logSegmentsNotInJournal.subList(i, j + 1);
         NavigableMap<LogSegmentName, Long> validDataSize =
             CompactionPolicyTest.generateValidDataSize(blobStore.logSegmentsNotInJournal, bestCandidates, 0,

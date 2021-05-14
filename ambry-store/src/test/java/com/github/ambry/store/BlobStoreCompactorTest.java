@@ -225,6 +225,7 @@ public class BlobStoreCompactorTest {
 
   @Test
   public void statsBasedCompactionStrategyWithInvalidLogSegment() throws Exception {
+    assumeTrue(!withUndelete);
     refreshState(false, true);
     // Current log segment is setup like this:
     // three log segment: 0_0, 1_0, 2_0
@@ -234,7 +235,7 @@ public class BlobStoreCompactorTest {
     // 5_0 has data so 4_0 won't be in the journal
     // This setup would make sure that:
     // 3_0 has value 0 in the result from BlobStoreStats
-    // 2_0, 4_0 would be the best candidate to compact if we ignore 3_0
+    // 1_0, 2_0, 4_0 would be the best candidate to compact if we ignore 3_0
     long requiredCount = state.index.getLogSegmentCount();
     long requiredBytes = requiredCount * state.log.getSegmentCapacity();
     long numPuts = (requiredBytes - state.index.getLogUsedCapacity()) / PUT_RECORD_SIZE;
@@ -254,7 +255,7 @@ public class BlobStoreCompactorTest {
     Properties properties = new Properties();
     properties.setProperty("store.min.used.capacity.to.trigger.compaction.in.percentage", "1");
     StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
-    StatsBasedCompactionPolicy policy = new StatsBasedCompactionPolicy(storeConfig, state.time);
+    StatsBasedCompactionPolicy policy = new StatsBasedCompactionPolicy(storeConfig, state.time, PUT_RECORD_SIZE);
     ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
 
     // Create stats, so the fillupLogSegment is false
@@ -266,9 +267,10 @@ public class BlobStoreCompactorTest {
             state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), stats,
             "/tmp");
     List<LogSegmentName> logSegmentNames = details.getLogSegmentsUnderCompaction();
-    assertEquals(2, logSegmentNames.size());
-    assertEquals("2" + BlobStore.SEPARATOR + "0", logSegmentNames.get(0).toString());
-    assertEquals("4" + BlobStore.SEPARATOR + "0", logSegmentNames.get(1).toString());
+    assertEquals(3, logSegmentNames.size());
+    assertEquals("1" + BlobStore.SEPARATOR + "0", logSegmentNames.get(0).toString());
+    assertEquals("2" + BlobStore.SEPARATOR + "0", logSegmentNames.get(1).toString());
+    assertEquals("4" + BlobStore.SEPARATOR + "0", logSegmentNames.get(2).toString());
 
     // Create stats, so the fillupLogSegment is true
     stats = new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, true, state.time,
@@ -277,9 +279,8 @@ public class BlobStoreCompactorTest {
         state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), stats,
         "/tmp");
     logSegmentNames = details.getLogSegmentsUnderCompaction();
-    assertEquals(2, logSegmentNames.size());
+    assertEquals(1, logSegmentNames.size());
     assertEquals("3" + BlobStore.SEPARATOR + "0", logSegmentNames.get(0).toString());
-    assertEquals("4" + BlobStore.SEPARATOR + "0", logSegmentNames.get(1).toString());
   }
 
   /**
