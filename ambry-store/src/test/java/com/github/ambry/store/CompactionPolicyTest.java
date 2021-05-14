@@ -222,9 +222,9 @@ public class CompactionPolicyTest {
           * blobStore.capacityInBytes)) {
         verifyCompactionDetails(null, blobStore, compactionPolicy);
       } else {
-        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates,
-                null),
-            blobStore, compactionPolicy);
+        verifyCompactionDetails(
+            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates, null), blobStore,
+            compactionPolicy);
       }
     }
   }
@@ -252,9 +252,9 @@ public class CompactionPolicyTest {
           * blobStore.capacityInBytes)) {
         verifyCompactionDetails(null, blobStore, compactionPolicy);
       } else {
-        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates,
-                null),
-            blobStore, compactionPolicy);
+        verifyCompactionDetails(
+            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates, null), blobStore,
+            compactionPolicy);
       }
     }
   }
@@ -281,8 +281,7 @@ public class CompactionPolicyTest {
       }
       verifyCompactionDetails(
           new CompactionDetails(time.milliseconds() - TimeUnit.HOURS.toMillis(messageRetentionHours), bestCandidates,
-              null),
-          blobStore, compactionPolicy);
+              null), blobStore, compactionPolicy);
     }
   }
 
@@ -402,9 +401,8 @@ public class CompactionPolicyTest {
    * @param validDataSizeForBest valid data size to be set for best candidate
    * @return a {@link NavigableMap} of log segment name to valid data size
    */
-  static NavigableMap<LogSegmentName, Long> generateValidDataSize(
-      List<LogSegmentName> logSegmentNames, List<LogSegmentName> bestCandidates,
-      long validDataSizeForBest, long maxLogSegmentCapacity) {
+  static NavigableMap<LogSegmentName, Long> generateValidDataSize(List<LogSegmentName> logSegmentNames,
+      List<LogSegmentName> bestCandidates, long validDataSizeForBest, long maxLogSegmentCapacity) {
     NavigableMap<LogSegmentName, Long> validDataSize = new TreeMap<>();
     for (LogSegmentName logSegmentName : logSegmentNames) {
       if (bestCandidates.contains(logSegmentName)) {
@@ -487,9 +485,9 @@ class MockBlobStore extends BlobStore {
  * Mock {@link BlobStoreStats} for test purposes
  */
 class MockBlobStoreStats extends BlobStoreStats {
+  private final long maxBlobSize;
 
   NavigableMap<LogSegmentName, Long> validDataSizeByLogSegments;
-  private long maxBlobSize;
   private String storeId = "";
 
   MockBlobStoreStats(long maxBlobSize) {
@@ -499,8 +497,13 @@ class MockBlobStoreStats extends BlobStoreStats {
 
   MockBlobStoreStats(long maxBlobSize, int i) {
     super("storeId" + i, null, 0, 0, 0, 0, 0, true, null, null, null, null, null);
-    this.maxBlobSize = maxBlobSize;
     this.storeId = "storeId" + i;
+    this.maxBlobSize = maxBlobSize;
+  }
+
+  @Override
+  public long getMaxBlobSize() {
+    return maxBlobSize;
   }
 
   @Override

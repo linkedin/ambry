@@ -255,16 +255,18 @@ public class BlobStoreCompactorTest {
     Properties properties = new Properties();
     properties.setProperty("store.min.used.capacity.to.trigger.compaction.in.percentage", "1");
     StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
-    StatsBasedCompactionPolicy policy = new StatsBasedCompactionPolicy(storeConfig, state.time, PUT_RECORD_SIZE);
+    StatsBasedCompactionPolicy policy = new StatsBasedCompactionPolicy(storeConfig, state.time);
     ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
 
     // Create stats, so the fillupLogSegment is false
     BlobStoreStats stats =
         new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, false, state.time,
             scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
+    BlobStoreStats spyStats = Mockito.spy(stats);
+    Mockito.doReturn(PUT_RECORD_SIZE).when(spyStats).getMaxBlobSize();
     CompactionDetails details =
         policy.getCompactionDetails(state.log.getCapacityInBytes(), state.index.getLogUsedCapacity(),
-            state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), stats,
+            state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), spyStats,
             "/tmp");
     List<LogSegmentName> logSegmentNames = details.getLogSegmentsUnderCompaction();
     assertEquals(3, logSegmentNames.size());
@@ -276,7 +278,7 @@ public class BlobStoreCompactorTest {
     stats = new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, true, state.time,
         scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
     details = policy.getCompactionDetails(state.log.getCapacityInBytes(), state.index.getLogUsedCapacity(),
-        state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), stats,
+        state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), spyStats,
         "/tmp");
     logSegmentNames = details.getLogSegmentsUnderCompaction();
     assertEquals(1, logSegmentNames.size());
