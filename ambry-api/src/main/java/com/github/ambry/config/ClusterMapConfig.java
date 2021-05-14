@@ -34,6 +34,8 @@ public class ClusterMapConfig {
   public static final String ENABLE_HELIX_HEALTH_REPORT = "clustermap.enable.helix.health.report";
   public static final String ENABLE_HELIX_AGGREGATION_TASK = "clustermap.enable.helix.aggregation.task";
   public static final String ENABLE_MYSQL_AGGREGATION_TASK = "clustermap.enable.mysql.aggregation.task";
+  public static final String ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK =
+      "clustermap.enable.delete.invalid.data.in.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
@@ -324,6 +326,13 @@ public class ClusterMapConfig {
   public final boolean clustermapEnableMySqlAggregationTask;
 
   /**
+   * True to enable deleting invalid aggregated data in mysql aggregation task.
+   */
+  @Config(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK)
+  @Default("false")
+  public final boolean clustermapEnableDeleteInvalidDataInMysqlAggregationTask;
+
+  /**
    * True to enable aggregation task of stats data in helix. Set default to true to be backward compatible.
    */
   @Config(ENABLE_HELIX_AGGREGATION_TASK)
@@ -407,6 +416,8 @@ public class ClusterMapConfig {
     clustermapEnableMySqlAggregationTask = verifiableProperties.getBoolean(ENABLE_MYSQL_AGGREGATION_TASK, false);
     clustermapEnableAggregatedMonthlyAccountReport =
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
+    clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
+        verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
     clustermapEnableHelixAggregationTask = verifiableProperties.getBoolean(ENABLE_HELIX_AGGREGATION_TASK, true);
     clustermapEnableHelixHealthReport = verifiableProperties.getBoolean(ENABLE_HELIX_AGGREGATION_TASK, true);
   }
