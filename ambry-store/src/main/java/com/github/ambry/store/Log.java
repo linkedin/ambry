@@ -237,6 +237,13 @@ class Log implements Write {
   }
 
   /**
+   * @return the last {@link LogSegment} instance in the log.
+   */
+  LogSegment getLastSegment() {
+    return segmentsByName.lastEntry().getValue();
+  }
+
+  /**
    * Returns the {@link LogSegment} that is logically after the given {@code segment}.
    * @param segment the {@link LogSegment} whose "next" segment is required.
    * @return the {@link LogSegment} that is logically after the given {@code segment}.

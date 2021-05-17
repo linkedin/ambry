@@ -14,7 +14,6 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -132,7 +131,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       this.tokenHelper = findTokenHelper;
     }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();
-    this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
+    this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds, replicationConfig);
     this.mountPathToPartitionInfos = new ConcurrentHashMap<>();
     this.partitionToPartitionInfo = new ConcurrentHashMap<>();
     this.clusterMap = clusterMap;

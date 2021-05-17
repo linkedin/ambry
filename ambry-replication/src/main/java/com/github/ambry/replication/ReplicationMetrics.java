@@ -23,11 +23,13 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.config.ReplicationConfig;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -143,6 +145,7 @@ public class ReplicationMetrics {
   private Map<PartitionId, Long> cloudReplicaCatchUpPoint = new ConcurrentHashMap<>();
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
   private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
+  private final ReplicationConfig replicationConfig;
 
   // Metric to track number of cross colo replication get requests sent by standby replicas. This is applicable during
   // leader-based replication.
@@ -158,7 +161,8 @@ public class ReplicationMetrics {
   // This metric tracks cross colo get requests bytes rate for Standby replicas.
   public final Map<String, Meter> interColoReplicationFetchBytesRateForStandbyReplicas = new ConcurrentHashMap<>();
 
-  public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
+  public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds,
+      ReplicationConfig replicationConfig) {
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
     plainTextIntraColoReplicationBytesRate =
@@ -264,6 +268,7 @@ public class ReplicationMetrics {
     cloudTokenReloadWarnCount =
         registry.counter(MetricRegistry.name(CloudToStoreReplicationManager.class, "CloudTokenReloadWarnCount"));
     this.registry = registry;
+    this.replicationConfig = Objects.requireNonNull(replicationConfig);
     populateInvalidMessageMetricForReplicas(replicaIds);
   }
 
@@ -454,9 +459,10 @@ public class ReplicationMetrics {
     if (!partitionLags.containsKey(partitionId)) {
       partitionLags.put(partitionId, new HashMap<>());
       // Set up metrics if and only if no mapping for this partition before.
-      Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
-      registry.register(MetricRegistry.name(ReplicaThread.class,
-          String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())), replicaLag);
+      if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
+        Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
+        registry.register(MetricRegistry.name(ReplicaThread.class, String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())), replicaLag);
+      }
     }
   }
 

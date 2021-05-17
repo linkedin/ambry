@@ -110,7 +110,7 @@ public class CloudTokenPersistorTest {
             AzureCloudDestinationFactory.getReplicationFeedType(new VerifiableProperties(props)), clusterMap);
     ReplicationConfig replicationConfig = new ReplicationConfig(new VerifiableProperties(props));
     CloudTokenPersistor cloudTokenPersistor = new CloudTokenPersistor("replicaTokens", mountPathToPartitionInfoList,
-        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap,
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList(), replicationConfig), clusterMap,
         new FindTokenHelper(blobIdFactory, replicationConfig), cloudDestination);
     cloudTokenPersistor.persist(cloudReplicaId.getMountPath(), replicaTokenInfos);
     List<RemoteReplicaInfo.ReplicaTokenInfo> retrievedReplicaTokenInfos =

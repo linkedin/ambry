@@ -316,6 +316,7 @@ project(':ambry-replication') {
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-protocol'),
+                project(':ambry-store'),
                 project(':ambry-network')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-store')

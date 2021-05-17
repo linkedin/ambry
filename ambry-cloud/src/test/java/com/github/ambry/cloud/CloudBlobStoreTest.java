@@ -867,7 +867,7 @@ public class CloudBlobStoreTest {
     cloudBlobStore.start();
 
     // Create ReplicaThread and add RemoteReplicaInfo to it.
-    ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
+    ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList(), replicationConfig);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,

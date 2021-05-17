@@ -332,7 +332,7 @@ public class ReplicationTestHelper {
       StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener,
       ReplicaSyncUpManager replicaSyncUpManager) throws ReflectiveOperationException {
     ReplicationMetrics replicationMetrics =
-        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
+        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId), replicationConfig);
     replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
     List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, listener);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate =

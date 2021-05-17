@@ -342,9 +342,19 @@ public class StoreConfig {
   /**
    * Whether to enable auto close last log segment during compaction.
    */
-  @Config("store.auto.close.last.log.segment.enabled")
+  @Config(storeAutoCloseLastLogSegmentEnabledName)
   @Default("false")
   public final boolean storeAutoCloseLastLogSegmentEnabled;
+  public static final String storeAutoCloseLastLogSegmentEnabledName = "store.auto.close.last.log.segment.enabled";
+
+  /**
+   * Specifies the minimum value for maxLagForPartition which can unseal replica.
+   */
+  @Config(storeUnsealReplicaMinimumLagName)
+  @Default("10485760")
+  public final long storeUnsealReplicaMinimumLag;
+  public static final String storeUnsealReplicaMinimumLagName = "store.unseal.replica.minimum.lag";
+
 
   /**
    * Whether to enable add synchronizer inside while loop for journal clean up.
@@ -530,6 +540,7 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
     storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean("store.auto.close.last.log.segment.enabled", false);
+    storeUnsealReplicaMinimumLag = verifiableProperties.getLongInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 10485760, 0, Long.MAX_VALUE);
     storeSynchronizerInsideWhileLoopEnabled = verifiableProperties.getBoolean("store.synchronizer.inside.while.loop.enabled", false);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);

@@ -105,7 +105,7 @@ public class DiskTokenPersistorTest {
   @Test
   public void basicTest() throws Exception {
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
-        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList(), findTokenHelper.getReplicationConfig()), clusterMap, findTokenHelper,
         mockStoreManager);
 
     //Simple persist and retrieve should pass
@@ -138,7 +138,7 @@ public class DiskTokenPersistorTest {
       }
     }
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
-        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList(), findTokenHelper.getReplicationConfig()), clusterMap, findTokenHelper,
         mockStoreManager);
     // mock I/O exception for 1st mount path and all stores are down on that disk (Disk_Unavailable)
     Iterator<String> pathItor = mountPathToReplicaTokenInfos.keySet().iterator();
@@ -202,7 +202,7 @@ public class DiskTokenPersistorTest {
   @Test
   public void version0AndCurrentVersionRetrieveTest() throws Exception {
     DiskTokenPersistor diskTokenPersistor = new DiskTokenPersistor(REPLICA_TOKEN_FILENAME, mountPathToPartitionInfoList,
-        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList()), clusterMap, findTokenHelper,
+        new ReplicationMetrics(new MetricRegistry(), Collections.emptyList(), findTokenHelper.getReplicationConfig()), clusterMap, findTokenHelper,
         mockStoreManager);
     List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList =
         mountPathToReplicaTokenInfos.get(replicaId.getMountPath());

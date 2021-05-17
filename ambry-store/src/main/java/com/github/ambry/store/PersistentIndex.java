@@ -204,8 +204,15 @@ class PersistentIndex {
         if (config.storeAutoCloseLastLogSegmentEnabled) {
           //if journal.getFirstOffset() is null, it means active log segment has been created
           //due to auto last log segment closed during compaction.And no entry has been added yet.
-          if (journal.getFirstOffset() == null) {
-            sealed = i < indexFiles.size();
+          if (i == indexFiles.size() - 1) {
+            LogSegmentName logSegmentName =
+                IndexSegment.getIndexSegmentStartOffset(indexFiles.get(i).getName()).getName();
+            LogSegmentName lastLogSegmentName = log.getLastSegment().getName();
+            if (logSegmentName.compareTo(lastLogSegmentName) < 0) {
+              sealed = true;
+            } else {
+              sealed = false;
+            }
           } else {
             sealed = i < indexFiles.size() - 1;
           }

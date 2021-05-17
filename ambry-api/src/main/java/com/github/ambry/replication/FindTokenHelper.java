@@ -65,4 +65,11 @@ public class FindTokenHelper {
     }
     return findTokenFactoryMap.get(replicaType);
   }
+
+  /**
+   * @return the {@link ReplicationConfig} for the FindTokenHelper.
+   */
+  public ReplicationConfig getReplicationConfig() {
+    return this.replicationConfig;
+  }
 }

@@ -87,7 +87,7 @@ public class BlobStore implements Store {
   private final RemoteTokenTracker remoteTokenTracker;
   private final AtomicInteger errorCount;
   private final AccountService accountService;
-
+  private long maxLagForPartition;
   private Log log;
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
@@ -336,6 +336,14 @@ public class BlobStore implements Store {
   }
 
   /**
+   * Set max lag for blob store.
+   * @param maxLagForPartition the partition's maximum lag between local and its remote replicas.
+   */
+  public void setMaxLagForPartition(long maxLagForPartition) {
+    this.maxLagForPartition = maxLagForPartition;
+  }
+
+  /**
    * Checks the state of the messages in the given {@link MessageWriteSet} in the given {@link FileSpan}.
    * @param messageSetToWrite Non-empty set of messages to write to the store.
    * @param fileSpan The fileSpan on which the check for existence of the messages have to be made.
@@ -408,7 +416,13 @@ public class BlobStore implements Store {
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && (replicaId.isSealed() || (
           replicaStatusDelegates.size() > 1 && isSealed.getAndSet(false)))) {
         for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
-          if (!replicaStatusDelegate.unseal(replicaId)) {
+          if (config.storeAutoCloseLastLogSegmentEnabled && replicaId.isSealed()
+              && maxLagForPartition > config.storeUnsealReplicaMinimumLag) {
+            logger.info(
+                "In order to wait until store catch up with peer replica, it should remain sealed due to the max lag : {} for partition : {} is larger than {} , current used capacity : {} bytes.",
+                maxLagForPartition, replicaId.getPartitionId(), config.storeUnsealReplicaMinimumLag,
+                index.getLogUsedCapacity());
+          } else if (!replicaStatusDelegate.unseal(replicaId)) {
             metrics.unsealSetError.inc();
             logger.warn("Could not set the partition as read-write status on {}", replicaId);
             isSealed.set(true);
