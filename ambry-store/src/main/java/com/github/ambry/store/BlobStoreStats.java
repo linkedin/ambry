@@ -166,7 +166,8 @@ class BlobStoreStats implements StoreStats, Closeable {
   public Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException {
     long start = SystemTime.getInstance().milliseconds();
     Pair<Long, NavigableMap<LogSegmentName, Long>> logSegmentValidSizeResult = getValidDataSizeByLogSegment(timeRange);
-    logger.debug("Time to getValidDataSizeByLogSegment: {} ms", SystemTime.getInstance().milliseconds() - start);
+    logger.debug("Time to getValidDataSizeByLogSegment on store {} : {} ms", storeId,
+        SystemTime.getInstance().milliseconds() - start);
     Long totalValidSize = 0L;
     for (Long value : logSegmentValidSizeResult.getSecond().values()) {
       totalValidSize += value;

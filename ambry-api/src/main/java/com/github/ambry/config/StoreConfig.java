@@ -387,9 +387,9 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeEnableBucketForLogSegmentReports;
 
-  @Config("store.enable.per.store.gauges")
+  @Config("store.enable.current.invalid.size.metric")
   @Default("false")
-  public final boolean storeEnablePerStoreGauges;
+  public final boolean storeEnableCurrentInvalidSizeMetric;
 
   @Config(storeAlwaysEnableTargetIndexDuplicateCheckingName)
   @Default("false")
@@ -488,7 +488,8 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.set.local.partition.state.enabled", false);
     storeEnableBucketForLogSegmentReports =
         verifiableProperties.getBoolean("store.enable.bucket.for.log.segment.reports", false);
-    storeEnablePerStoreGauges = verifiableProperties.getBoolean("store.enable.per.store.gauges", false);
+    storeEnableCurrentInvalidSizeMetric =
+        verifiableProperties.getBoolean("store.enable.current.invalid.size.metric", false);
     storeAlwaysEnableTargetIndexDuplicateChecking =
         verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
     storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);

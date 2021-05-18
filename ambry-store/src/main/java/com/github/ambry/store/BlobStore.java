@@ -260,9 +260,8 @@ public class BlobStore implements Store {
               config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
               diskIOScheduler, metrics);
         }
-        if (config.storeEnablePerStoreGauges) {
-          metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats);
-        }
+        metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
+            config.storeEnableCurrentInvalidSizeMetric);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
