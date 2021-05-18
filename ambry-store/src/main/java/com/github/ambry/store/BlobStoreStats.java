@@ -17,6 +17,7 @@ package com.github.ambry.store;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
@@ -163,7 +164,9 @@ class BlobStoreStats implements StoreStats, Closeable {
 
   @Override
   public Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException {
+    long start = SystemTime.getInstance().milliseconds();
     Pair<Long, NavigableMap<LogSegmentName, Long>> logSegmentValidSizeResult = getValidDataSizeByLogSegment(timeRange);
+    logger.debug("Time to getValidDataSizeByLogSegment: {} ms", SystemTime.getInstance().milliseconds() - start);
     Long totalValidSize = 0L;
     for (Long value : logSegmentValidSizeResult.getSecond().values()) {
       totalValidSize += value;
