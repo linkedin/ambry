@@ -260,7 +260,8 @@ public class BlobStore implements Store {
               config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
               diskIOScheduler, metrics);
         }
-        metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats);
+        metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
+            config.storeEnableCurrentInvalidSizeMetric);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess();
@@ -1150,8 +1151,7 @@ public class BlobStore implements Store {
       logger.error("Shutting down BlobStore {} because IO error count exceeds threshold", storeId);
       shutdown(true);
       // Explicitly disable replica to trigger Helix state transition: LEADER -> STANDBY -> INACTIVE -> OFFLINE
-      if (config.storeSetLocalPartitionStateEnabled && !isDisabled.getAndSet(true)
-          && replicaStatusDelegates != null) {
+      if (config.storeSetLocalPartitionStateEnabled && !isDisabled.getAndSet(true) && replicaStatusDelegates != null) {
         try {
           replicaStatusDelegates.forEach(delegate -> delegate.disableReplica(replicaId));
         } catch (Exception e) {
@@ -1236,7 +1236,7 @@ public class BlobStore implements Store {
     checkStarted();
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
-      if(remoteTokenTracker != null) {
+      if (remoteTokenTracker != null) {
         remoteTokenTracker.refreshPeerReplicaTokens();
       }
       compactor.resumeCompaction(bundleReadBuffer);
