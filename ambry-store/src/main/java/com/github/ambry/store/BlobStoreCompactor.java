@@ -366,10 +366,9 @@ class BlobStoreCompactor {
     List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
     // 1. all segments should be available
     // 2. all segments should be in order
-    // 3. all segments should be consecutive
+    // 3. all segments should be a list of continuous log segments without skipping any one in the middle
     // 4. all segments should not have anything in the journal
     LogSegmentName prevSegmentName = null;
-    LogSegment currentSegmentFromLog = null;
     for (LogSegmentName segmentName : segmentsUnderCompaction) {
       LogSegment segment = srcLog.getSegment(segmentName);
       if (segment == null) {
@@ -378,10 +377,12 @@ class BlobStoreCompactor {
       if (prevSegmentName != null && prevSegmentName.compareTo(segmentName) >= 0) {
         throw new IllegalArgumentException("Ordering of " + segmentsUnderCompaction + " is incorrect");
       }
-      if (currentSegmentFromLog != null && !currentSegmentFromLog.getName().equals(segmentName)) {
-        throw new IllegalArgumentException(segmentsUnderCompaction + " is incorrect because it's not consecutive");
+      if (prevSegmentName != null && !prevSegmentName.equals(srcLog.getPrevSegment(segment).getName())) {
+        throw new IllegalArgumentException(
+            segmentsUnderCompaction + " is incorrect because it's not continuous. " + segment.getName()
+                + "'s previous log segment should be " + srcLog.getPrevSegment(segment).getName() + " not "
+                + prevSegmentName);
       }
-      currentSegmentFromLog = srcLog.getNextSegment(segment);
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
       if (segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {

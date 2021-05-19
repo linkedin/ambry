@@ -258,10 +258,10 @@ public class BlobStoreCompactorTest {
     StatsBasedCompactionPolicy policy = new StatsBasedCompactionPolicy(storeConfig, state.time);
     ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
 
-    // Create stats, so the fillupLogSegment is false
+    // Create stats, so the fillupLogSegment is true
     BlobStoreStats stats =
-        new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, false, state.time,
-            scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
+        new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, state.time, scheduler,
+            scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
     BlobStoreStats spyStats = Mockito.spy(stats);
     Mockito.doReturn(PUT_RECORD_SIZE).when(spyStats).getMaxBlobSize();
     CompactionDetails details =
@@ -269,20 +269,6 @@ public class BlobStoreCompactorTest {
             state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), spyStats,
             "/tmp");
     List<LogSegmentName> logSegmentNames = details.getLogSegmentsUnderCompaction();
-    assertEquals(3, logSegmentNames.size());
-    assertEquals("1" + BlobStore.SEPARATOR + "0", logSegmentNames.get(0).toString());
-    assertEquals("2" + BlobStore.SEPARATOR + "0", logSegmentNames.get(1).toString());
-    assertEquals("4" + BlobStore.SEPARATOR + "0", logSegmentNames.get(2).toString());
-
-    // Create stats, so the fillupLogSegment is true
-    stats = new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, true, state.time,
-        scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
-    spyStats = Mockito.spy(stats);
-    Mockito.doReturn(PUT_RECORD_SIZE).when(spyStats).getMaxBlobSize();
-    details = policy.getCompactionDetails(state.log.getCapacityInBytes(), state.index.getLogUsedCapacity(),
-        state.log.getSegmentCapacity(), LogSegment.HEADER_SIZE, state.index.getLogSegmentsNotInJournal(), spyStats,
-        "/tmp");
-    logSegmentNames = details.getLogSegmentsUnderCompaction();
     assertEquals(1, logSegmentNames.size());
     assertEquals("3" + BlobStore.SEPARATOR + "0", logSegmentNames.get(0).toString());
   }
