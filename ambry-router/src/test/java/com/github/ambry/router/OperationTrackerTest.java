@@ -838,12 +838,15 @@ public class OperationTrackerTest {
 
     sendRequests(ot, 3, false);
     assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
-    // Only send two not found response, it will terminate the operation.
-    for (int i = 0; i < 2; i++) {
+    // Send three not found response from originating dc, it will terminate the operation.
+    for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local replicas
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
       assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
+      if (i < 2) {
+        assertFalse("Operation should not have failed on NOT_FOUND", ot.hasFailedOnNotFound());
+      }
     }
     assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
     assertTrue("Operation should be done", ot.isDone());
@@ -973,7 +976,8 @@ public class OperationTrackerTest {
       switch (operationTrackerType) {
         case SIMPLE_OP_TRACKER:
           operationTracker =
-              new SimpleOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName, true);
+              new SimpleOperationTracker(routerConfig, entry.getKey(), mockPartition, originatingDcName, true,
+                  routerMetrics);
           break;
         case ADAPTIVE_OP_TRACKER:
           try {
@@ -1161,6 +1165,30 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test cases where some replicas have changed their state in the middle of constructing operation tracker. The code
+   * should be able to get correct number of replicas even with concurrent state transition. The most common case is
+   * replica changes from OFFLINE to BOOTSTRAP/STANDBY while the replica pool is being populated in the tracker.
+   */
+  @Test
+  public void buildOperationTrackerWithStateTransitionTest() {
+    assumeTrue(replicasStateEnabled);
+    initialize();
+    // pick one replica and set it to OFFLINE initially
+    ReplicaId originatingReplica = mockPartition.replicaIds.stream()
+        .filter(r -> r.getDataNodeId().getDatacenterName().equals(localDcName))
+        .findAny()
+        .get();
+    mockPartition.replicaAndState.put(originatingReplica, ReplicaState.OFFLINE);
+    // induce concurrent state transition between 1st and 2nd "getEligibleReplicas()"
+    mockPartition.resetReplicaStateCount = 5;
+    mockPartition.resetAllReplicasToStandbyState = true;
+    SimpleOperationTracker ot =
+        (SimpleOperationTracker) getOperationTracker(true, 2, 3, RouterOperation.GetBlobOperation, true);
+    assertEquals("Mismatch in replica count in the pool", 12, ot.getReplicaPoolSize());
+    mockPartition.resetAllReplicasToStandbyState = false;
+  }
+
+  /**
    * Initialize 4 DCs, each DC has 1 data node, which has 3 replicas.
    */
   private void initialize() {
@@ -1269,7 +1297,8 @@ public class OperationTrackerTest {
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker = new SimpleOperationTracker(routerConfig, routerOperation, mockPartition, originatingDcName, true);
+        tracker = new SimpleOperationTracker(routerConfig, routerOperation, mockPartition, originatingDcName, true,
+            routerMetrics);
         break;
       case ADAPTIVE_OP_TRACKER:
         // for now adaptive operation tracker only applies to GetOperation.

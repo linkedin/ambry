@@ -44,7 +44,6 @@ import static com.github.ambry.router.NonBlockingRouterMetrics.*;
  */
 class AdaptiveOperationTracker extends SimpleOperationTracker {
   private final RouterConfig routerConfig;
-  private final NonBlockingRouterMetrics routerMetrics;
   private final Time time;
   private final CachedHistogram localDcHistogram;
   private final CachedHistogram crossDcHistogram;
@@ -71,9 +70,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    */
   AdaptiveOperationTracker(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       RouterOperation routerOperation, PartitionId partitionId, String originatingDcName, Time time) {
-    super(routerConfig, routerOperation, partitionId, originatingDcName, true);
+    super(routerConfig, routerOperation, partitionId, originatingDcName, true, routerMetrics);
     this.routerConfig = routerConfig;
-    this.routerMetrics = routerMetrics;
     this.time = time;
     this.localDcHistogram = getWholeDcTracker(routerOperation, true);
     this.crossDcHistogram = getWholeDcTracker(routerOperation, false);

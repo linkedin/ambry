@@ -428,7 +428,7 @@ public class GetBlobInfoOperationTest {
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
     // localReplica now becomes remote replica.
-    Assert.assertEquals("The number of data points in remote colo latency histogram is not expected", 2,
+    Assert.assertEquals("The number of data points in remote colo latency histogram is not expected", 3,
         tracker.getLatencyHistogram(localReplica).getCount());
 
     props = getNonBlockingRouterProperties(true);
@@ -535,8 +535,9 @@ public class GetBlobInfoOperationTest {
         .forEach(server -> server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
     assertOperationFailure(RouterErrorCode.BlobDoesNotExist);
     // Blob is created by putBlob function so the local datacenter will be the origin datecenter.
-    // Thus only need two Blob_Not_Found to terminate the operation.
-    Assert.assertEquals("Must have attempted sending requests to all replicas", 2, correlationIdToGetOperation.size());
+    // It requires at least 3 Blob_Not_Found responses to terminate the operation.
+    Assert.assertTrue("Must have attempted sending at least 3 requests to all originating dc replicas",
+        correlationIdToGetOperation.size() >= 3);
   }
 
   /**

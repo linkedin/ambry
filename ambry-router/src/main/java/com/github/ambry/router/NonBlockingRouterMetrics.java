@@ -194,7 +194,7 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobGetCount;
   public final Counter rawBlobGetCount;
 
-  // AdaptiveOperationTracker metrics
+  // SimpleOperationTracker and AdaptiveOperationTracker metrics
   public final CachedHistogram getBlobLocalDcLatencyMs;
   public final CachedHistogram getBlobCrossDcLatencyMs;
   public final Counter getBlobPastDueCount;
@@ -202,6 +202,8 @@ public class NonBlockingRouterMetrics {
   public final CachedHistogram getBlobInfoLocalDcLatencyMs;
   public final CachedHistogram getBlobInfoCrossDcLatencyMs;
   public final Counter getBlobInfoPastDueCount;
+  public final Counter failedOnOriginatingDcNotFoundCount;
+  public final Counter failedOnTotalNotFoundCount;
 
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
@@ -475,6 +477,10 @@ public class NonBlockingRouterMetrics {
         (CachedHistogram) metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossDcLatencyMs"),
             () -> createHistogram(routerConfig, true));
     getBlobInfoPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "PastDueCount"));
+    failedOnOriginatingDcNotFoundCount =
+        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class, "FailedOnOriginatingDcNotFoundCount"));
+    failedOnTotalNotFoundCount =
+        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class, "FailedOnTotalNotFoundCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");

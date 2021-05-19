@@ -89,7 +89,7 @@ public class UndeleteOperation {
     this.time = time;
     this.operationTimeMs = operationTimeMs;
     this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
-        clusterMap.getDatacenterName(blobId.getDatacenterId()));
+        clusterMap.getDatacenterName(blobId.getDatacenterId()), routerMetrics);
   }
 
   /**

@@ -378,7 +378,8 @@ public class UndeleteOperationTrackerTest {
         Boolean.toString(replicasStateEnabled));
     props.setProperty(RouterConfig.ROUTER_UNDELETE_REQUEST_PARALLELISM, Integer.toString(parallelism));
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
-    return new UndeleteOperationTracker(routerConfig, mockPartition, originatingDcName);
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+    return new UndeleteOperationTracker(routerConfig, mockPartition, originatingDcName, routerMetrics);
   }
 
   /**

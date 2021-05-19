@@ -1127,7 +1127,7 @@ class PutOperation {
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename());
         operationTracker =
-            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true);
+            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true, routerMetrics);
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
