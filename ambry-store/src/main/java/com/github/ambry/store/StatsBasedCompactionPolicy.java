@@ -63,8 +63,9 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
             getBestCandidateToCompact(potentialLogSegmentValidSizeMap, segmentCapacity, segmentHeaderSize,
                 blobStoreStats.getMaxBlobSize());
         if (bestCandidateToCompact != null) {
-          details = new CompactionDetails(validDataSizeByLogSegment.getFirst(),
-              bestCandidateToCompact.getSegmentsToCompact(), bestCandidateToCompact);
+          details =
+              new CompactionDetails(validDataSizeByLogSegment.getFirst(), bestCandidateToCompact.getSegmentsToCompact(),
+                  bestCandidateToCompact);
           logger.info("Best candidate to compact {}", bestCandidateToCompact);
         } else {
           logger.trace("No best candidate found");
@@ -80,7 +81,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
    * valid data sizes.
    * @param segmentCapacity Segment capacity of one {@link LogSegment}
    * @param segmentHeaderSize Segment header size of a {@link LogSegment}
-   * @param maxBlobSize max blob size to factor in when calculating the cost benefit ratio
+   * @param maxBlobSize The max blob size
    * @return the {@link CostBenefitInfo} for the best candidate to compact. {@code null} if there isn't any.
    */
   private CostBenefitInfo getBestCandidateToCompact(NavigableMap<LogSegmentName, Long> validDataPerLogSegments,
@@ -115,7 +116,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
    * valid data sizes.
    * @param segmentCapacity Segment capacity of one {@link LogSegment}
    * @param segmentHeaderSize Segment header size of a {@link LogSegment}
-   * @param maxBlobSize max blob size to factor in when calculating the cost benefit ratio
+   * @param maxBlobSize The max blob size.
    * @return the {@link CostBenefitInfo} for the candidate to compact.
    */
   private CostBenefitInfo getCostBenefitInfo(LogSegmentName firstLogSegmentName, LogSegmentName lastLogSegmentName,
@@ -137,7 +138,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     totalSegmentsToBeCompacted++;
     long maxCapacityPerSegment = segmentCapacity - segmentHeaderSize - maxBlobSize;
     int benefit = totalSegmentsToBeCompacted - (int) Math.ceil(totalCost / (maxCapacityPerSegment * 1.0));
-    return new CostBenefitInfo(new ArrayList<LogSegmentName>(
+    return new CostBenefitInfo(new ArrayList<>(
         validDataSizePerLogSegment.subMap(firstLogSegmentName, true, lastLogSegmentName, true).keySet()), totalCost,
         benefit);
   }

@@ -339,6 +339,11 @@ class BlobStoreStats implements StoreStats, Closeable {
       retValue =
           new Pair<>(referenceTimeInMs, collectValidDataSizeByLogSegment(referenceTimeInMs, expiryReferenceTime));
     }
+    // Before return the value, make sure all the log segments are in the final map
+    for (LogSegment segment : index.getLogSegments()) {
+      LogSegmentName logSegmentName = segment.getName();
+      retValue.getSecond().putIfAbsent(logSegmentName, 0L);
+    }
     return retValue;
   }
 
@@ -549,7 +554,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
       if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
-        logger.info("Compaction Stats: Index segment {} processing complete (on-demand scanning) for store {}",
+        logger.debug("Compaction Stats: Index segment {} processing complete (on-demand scanning) for store {}",
             indexSegment.getFile().getName(), storeId);
       }
     }

@@ -364,8 +364,10 @@ class BlobStoreCompactor {
    */
   private void checkSanity(CompactionDetails details) {
     List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
-    // all segments should be available and should not have anything in the journal
-    // segments should be in order
+    // 1. all segments should be available
+    // 2. all segments should be in order
+    // 3. all segments should be a list of continuous log segments without skipping any one in the middle
+    // 4. all segments should not have anything in the journal
     LogSegmentName prevSegmentName = null;
     for (LogSegmentName segmentName : segmentsUnderCompaction) {
       LogSegment segment = srcLog.getSegment(segmentName);
@@ -374,6 +376,12 @@ class BlobStoreCompactor {
       }
       if (prevSegmentName != null && prevSegmentName.compareTo(segmentName) >= 0) {
         throw new IllegalArgumentException("Ordering of " + segmentsUnderCompaction + " is incorrect");
+      }
+      if (prevSegmentName != null && !prevSegmentName.equals(srcLog.getPrevSegment(segment).getName())) {
+        throw new IllegalArgumentException(
+            segmentsUnderCompaction + " is incorrect because it's not continuous. " + segment.getName()
+                + "'s previous log segment should be " + srcLog.getPrevSegment(segment).getName() + " not "
+                + prevSegmentName);
       }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
@@ -736,7 +744,6 @@ class BlobStoreCompactor {
     boolean copiedAll = true;
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
-    long totalCopiedBytes = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
       // byte[] for both general IO and direct IO.
       byte[] byteArrayToUse;
@@ -1238,14 +1245,14 @@ class BlobStoreCompactor {
         // source. If we are here, then there is no duplicate at all, this might be an error.
         logger.info(
             "Processing IndexSegment {} with duplicate search span {} in {}, we probably should have duplicates.",
-            indexSegment, duplicateSearchSpan, storeId);
+            indexSegment.toString(), duplicateSearchSpan, storeId);
         logger.info("IndexSegments in source persistent index with {}", storeId);
         srcIndex.getIndexSegments().values().forEach(seg -> logger.info("{}", seg.getFile()));
         Map<PersistentIndex.IndexEntryType, Long> collect = copyCandidates.stream()
             .collect(Collectors.groupingBy(entry -> entry.getValue().getIndexValueType(), Collectors.counting()));
         logger.info("{} with {}", collect.entrySet()
             .stream()
-            .map(ent -> String.format("{} {}", ent.getValue(), ent.getKey()))
+            .map(ent -> ent.getValue().toString() + " " + String.valueOf(ent.getKey()))
             .collect(Collectors.joining(",")), storeId);
         logger.info("Valid entry size {}, number of keys found: {}", validEntriesSize, numKeysFoundInDuplicateChecking);
       }

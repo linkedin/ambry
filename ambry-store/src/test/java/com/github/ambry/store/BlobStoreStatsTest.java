@@ -174,6 +174,22 @@ public class BlobStoreStatsTest {
     blobStoreStats.close();
   }
 
+  @Test
+  public void testLogSegementValidDataSizeWithZeroValidByteSegment() throws StoreException {
+    assumeTrue(!bucketingEnabled);
+    BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
+    long requiredCount = state.index.getLogSegmentCount() + 1;
+    long requiredBytes = requiredCount * state.log.getSegmentCapacity();
+    // Fill up these segments with expired PUTs
+    long numPuts = (requiredBytes - state.index.getLogUsedCapacity()) / PUT_RECORD_SIZE;
+    state.addPutEntries((int) numPuts, PUT_RECORD_SIZE, 0);
+
+    long currentTimeInMs = state.time.milliseconds();
+    TimeRange timeRange = new TimeRange(currentTimeInMs, 0L);
+    verifyAndGetLogSegmentValidSize(blobStoreStats, timeRange);
+    blobStoreStats.close();
+  }
+
   /**
    * Tests to verify the correctness of reported stats after new puts via the following steps:
    * 1. Verify reported stats and record the total valid size prior to adding the new puts.

@@ -408,6 +408,19 @@ class PersistentIndex {
   }
 
   /**
+   * @return All the {@link LogSegment}s.
+   */
+  List<LogSegment> getLogSegments() {
+    List<LogSegment> result = new ArrayList<>();
+    LogSegment segment = log.getFirstSegment();
+    while (segment != null) {
+      result.add(segment);
+      segment = log.getNextSegment(segment);
+    }
+    return result;
+  }
+
+  /**
    * Atomically adds {@code segmentFilesToAdd} to and removes {@code segmentsToRemove} from the map of {@link Offset} to
    * {@link IndexSegment} instances.
    * @param segmentFilesToAdd the backing files of the {@link IndexSegment} instances to add.
