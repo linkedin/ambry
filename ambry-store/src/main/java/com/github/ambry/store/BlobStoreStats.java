@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
@@ -76,6 +77,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   private final long logSegmentForecastOffsetMs;
   private final long waitTimeoutInSecs;
   private final boolean enableBucketForLogSegmentReports;
+  private final boolean enablePurgeDeleteTombstone;
   private final StoreMetrics metrics;
   private final ReentrantLock scanLock = new ReentrantLock();
   private final Condition waitCondition = scanLock.newCondition();
@@ -138,10 +140,22 @@ class BlobStoreStats implements StoreStats, Closeable {
     return new StatsSnapshot(totalSize, containerValidSizeMap);
   }
 
+  BlobStoreStats(String storeId, PersistentIndex index, StoreConfig config, Time time,
+      ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
+    this(storeId, index, config.storeStatsBucketCount, TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes),
+        TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours),
+        TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes),
+        config.storeStatsWaitTimeoutInSecs, config.storeEnableBucketForLogSegmentReports,
+        config.storeCompactionPurgeDeleteTombstone, time, longLiveTaskScheduler, shortLiveTaskScheduler,
+        diskIOScheduler, metrics);
+  }
+
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
       long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
-      boolean enableBucketForLogSegmentReports, Time time, ScheduledExecutorService longLiveTaskScheduler,
-      ScheduledExecutorService shortLiveTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
+      boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time,
+      ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
     this.storeId = storeId;
     this.index = index;
     this.time = time;
@@ -152,6 +166,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     this.waitTimeoutInSecs = waitTimeoutInSecs;
     this.metrics = metrics;
     this.enableBucketForLogSegmentReports = enableBucketForLogSegmentReports;
+    this.enablePurgeDeleteTombstone = enablePurgeDeleteTombstone;
 
     if (bucketCount > 0) {
       indexScanner = new IndexScanner();
@@ -269,7 +284,17 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange)
       throws StoreException {
-    return getValidDataSizeByLogSegment(timeRange, time.milliseconds());
+    return getValidDataSizeByLogSegment(timeRange, time.milliseconds(), null);
+  }
+
+  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange,
+      FileSpan fileSpanUnderCompaction) throws StoreException {
+    return getValidDataSizeByLogSegment(timeRange, time.milliseconds(), fileSpanUnderCompaction);
+  }
+
+  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange,
+      long expiryReferenceTime) throws StoreException {
+    return getValidDataSizeByLogSegment(timeRange, expiryReferenceTime, null);
   }
 
   /**
@@ -285,7 +310,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @throws StoreException
    */
   Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange,
-      long expiryReferenceTime) throws StoreException {
+      long expiryReferenceTime, FileSpan fileSpanUnderCompaction) throws StoreException {
     if (!enabled.get()) {
       throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
           StoreErrorCodes.Store_Shutting_Down);
@@ -336,8 +361,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       // 2. timed out while waiting for an ongoing scan.
       // 3. rare edge case where currentScanResults updated twice since the start of the wait.
       referenceTimeInMs = timeRange.getEndTimeInMs();
-      retValue =
-          new Pair<>(referenceTimeInMs, collectValidDataSizeByLogSegment(referenceTimeInMs, expiryReferenceTime));
+      retValue = new Pair<>(referenceTimeInMs,
+          collectValidDataSizeByLogSegment(referenceTimeInMs, expiryReferenceTime, fileSpanUnderCompaction));
     }
     // Before return the value, make sure all the log segments are in the final map
     for (LogSegment segment : index.getLogSegments()) {
@@ -503,14 +528,15 @@ class BlobStoreStats implements StoreStats, Closeable {
       long indexSegmentStartProcessTimeMs = time.milliseconds();
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexSegment.size());
-      forEachValidIndexEntry(indexSegment, referenceTimeInMs, time.milliseconds(), keyFinalStates, true, entry -> {
-        IndexValue indexValue = entry.getValue();
-        if (indexValue.isPut()) {
-          // delete and TTL update records does not count towards valid data size for usage (containers)
-          updateNestedMapHelper(validDataSizePerContainer, indexValue.getAccountId(), indexValue.getContainerId(),
-              indexValue.getSize());
-        }
-      });
+      forEachValidIndexEntry(indexSegment, referenceTimeInMs, time.milliseconds(), null, keyFinalStates, true,
+          entry -> {
+            IndexValue indexValue = entry.getValue();
+            if (indexValue.isPut()) {
+              // delete and TTL update records does not count towards valid data size for usage (containers)
+              updateNestedMapHelper(validDataSizePerContainer, indexValue.getAccountId(), indexValue.getContainerId(),
+                  indexValue.getSize());
+            }
+          });
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
@@ -532,7 +558,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @return a {@link NavigableMap} of log segment name to valid data size
    */
   private NavigableMap<LogSegmentName, Long> collectValidDataSizeByLogSegment(long deleteReferenceTimeInMs,
-      long expiryReferenceTimeInMs) throws StoreException {
+      long expiryReferenceTimeInMs, FileSpan fileSpanUnderCompaction) throws StoreException {
     logger.trace("On demand index scanning to collect compaction data stats for store {} wrt ref time {}", storeId,
         deleteReferenceTimeInMs);
     long startTimeMs = time.milliseconds();
@@ -548,7 +574,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       LogSegmentName logSegmentName = indexSegment.getLogSegmentName();
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexSegment.size());
-      forEachValidIndexEntry(indexSegment, deleteReferenceTimeInMs, expiryReferenceTimeInMs, keyFinalStates, true,
+      forEachValidIndexEntry(indexSegment, deleteReferenceTimeInMs, expiryReferenceTimeInMs, fileSpanUnderCompaction,
+          keyFinalStates, true,
           entry -> updateMapHelper(validSizePerLogSegment, logSegmentName, entry.getValue().getSize()));
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
           TimeUnit.MILLISECONDS);
@@ -564,7 +591,9 @@ class BlobStoreStats implements StoreStats, Closeable {
     if (validSizePerLogSegment.isEmpty()) {
       validSizePerLogSegment.put(index.getStartOffset().getName(), 0L);
     }
-    removeDeleteTombStonesFromValidSize(keyFinalStates.values(), validSizePerLogSegment);
+    if (enablePurgeDeleteTombstone) {
+      removeDeleteTombStonesFromValidSize(keyFinalStates.values(), validSizePerLogSegment, expiryReferenceTimeInMs);
+    }
     return validSizePerLogSegment;
   }
 
@@ -572,12 +601,14 @@ class BlobStoreStats implements StoreStats, Closeable {
    * Remove expired delete tombstones from valid data size per log segment.
    * @param indexFinalStates the {@link IndexFinalState} that contains delete tombstones.
    * @param validSizePerLogSegment a {@link NavigableMap} of log segment name to valid data size.
+   * @param expiryReferenceTimeInMs the reference time in ms until which expiration are relevant
    */
   private void removeDeleteTombStonesFromValidSize(Collection<IndexFinalState> indexFinalStates,
-      NavigableMap<LogSegmentName, Long> validSizePerLogSegment) {
+      NavigableMap<LogSegmentName, Long> validSizePerLogSegment, long expiryReferenceTimeInMs) {
     for (IndexFinalState finalState : indexFinalStates) {
       if (finalState.isDelete()) {
-        if (finalState.getExpirationTime() != Utils.Infinite_Time) {
+        if (finalState.getExpirationTime() != Utils.Infinite_Time && isExpired(finalState.getExpirationTime(),
+            expiryReferenceTimeInMs)) {
           // expired delete tombstone should be considered invalid
           LogSegmentName logSegmentName = finalState.getOffset().getName();
           validSizePerLogSegment.computeIfPresent(logSegmentName, (k, v) -> {
@@ -603,8 +634,8 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @throws StoreException if there are problems reading the index.
    */
   private void forEachValidIndexEntry(IndexSegment indexSegment, long deleteReferenceTimeInMs,
-      long expiryReferenceTimeInMs, Map<StoreKey, IndexFinalState> keyFinalStates, boolean removeFinalStateOnPut,
-      IndexEntryAction validIndexEntryAction) throws StoreException {
+      long expiryReferenceTimeInMs, FileSpan fileSpanUnderCompaction, Map<StoreKey, IndexFinalState> keyFinalStates,
+      boolean removeFinalStateOnPut, IndexEntryAction validIndexEntryAction) throws StoreException {
     ListIterator<IndexEntry> it = indexSegment.listIterator(indexSegment.size());
     while (it.hasPrevious()) {
       IndexEntry indexEntry = it.previous();
@@ -654,7 +685,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           validIndexEntryAction.accept(indexEntry);
         }
       } else if (indexValue.isTtlUpdate()) {
-        if (isTtlUpdateEntryValid(key, indexValue, deleteReferenceTimeInMs, keyFinalStates)) {
+        if (isTtlUpdateEntryValid(key, indexValue, deleteReferenceTimeInMs, fileSpanUnderCompaction, keyFinalStates)) {
           validIndexEntryAction.accept(indexEntry);
         }
       } else {
@@ -689,24 +720,33 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @throws StoreException if there are problems accessing the index
    */
   private boolean isTtlUpdateEntryValid(StoreKey key, IndexValue ttlUpdateValue, long referenceTimeInMs,
-      Map<StoreKey, IndexFinalState> keyFinalStates) throws StoreException {
+      FileSpan fileSpanUnderCompaction, Map<StoreKey, IndexFinalState> keyFinalStates) throws StoreException {
     // Offset sanity check
     if (ttlUpdateValue.getOffset().compareTo(index.getStartOffset()) < 0) {
       return false;
     }
+    // Validity of ttl update is determined by the logic like this
+    // Is there PUT before this ttl update
+    //   NO: invalid
+    //   YES: is the final state a delete and out of retention
+    //     NO: valid
+    //     YES: is ttl update NOT in the same log as put || is put NOT under compaction
+    //       YES: valid
+    //       NO: invalid
     FileSpan searchSpan = new FileSpan(index.getStartOffset(), ttlUpdateValue.getOffset());
     IndexValue putValue = index.findKey(key, searchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
+    IndexFinalState finalState = keyFinalStates.get(key);
     boolean valid = true;
     if (putValue == null) {
-      // no put value so not valid
       valid = false;
-    } else if (putValue.getOffset().getName().equals(ttlUpdateValue.getOffset().getName())) {
-      // can be invalid if it is in the same log segment and the put is invalid
-      IndexFinalState finalState = keyFinalStates.get(key);
-      if (finalState != null && finalState.isDelete() && finalState.getOperationTime() < referenceTimeInMs) {
-        valid = false;
+    } else if (finalState != null && finalState.isDelete() && finalState.getOperationTime() < referenceTimeInMs) {
+      if (fileSpanUnderCompaction != null) {
+        valid = !fileSpanUnderCompaction.inSpan(putValue.getOffset());
+      } else {
+        valid = !putValue.getOffset().getName().equals(ttlUpdateValue.getOffset().getName());
       }
     }
+
     if (valid && !keyFinalStates.containsKey(key)) {
       keyFinalStates.put(key, new IndexFinalState(ttlUpdateValue.getFlags(), ttlUpdateValue.
           getOperationTimeInMs(), ttlUpdateValue.getLifeVersion(), ttlUpdateValue.getSize(),
@@ -1318,14 +1358,14 @@ class BlobStoreStats implements StoreStats, Closeable {
 
       // valid index entries wrt log segment reference time
       forEachValidIndexEntry(indexSegment, newScanResults.logSegmentForecastStartTimeMsForDeleted,
-          newScanResults.logSegmentForecastStartTimeMsForExpired, keyFinalStates, false, entry -> {
+          newScanResults.logSegmentForecastStartTimeMsForExpired, null, keyFinalStates, false, entry -> {
             if (predicate == null || predicate.test(entry)) {
               processEntryForLogSegmentBucket(newScanResults, entry, keyFinalStates);
             }
           });
       // valid index entries wrt container reference time
       forEachValidIndexEntry(indexSegment, newScanResults.containerForecastStartTimeMs,
-          newScanResults.containerForecastStartTimeMs, keyFinalStates, true, entry -> {
+          newScanResults.containerForecastStartTimeMs, null, keyFinalStates, true, entry -> {
             if (predicate == null || predicate.test(entry)) {
               processEntryForContainerBucket(newScanResults, entry, keyFinalStates);
             }

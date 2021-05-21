@@ -250,15 +250,10 @@ public class BlobStore implements Store {
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
-        long logSegmentForecastOffsetMs = TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours);
-        long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
-        long queueProcessingPeriodInMs =
-            TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes);
         if (blobStoreStats == null) {
-          blobStoreStats = new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs,
-              logSegmentForecastOffsetMs, queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs,
-              config.storeEnableBucketForLogSegmentReports, time, longLivedTaskScheduler, taskScheduler,
-              diskIOScheduler, metrics);
+          blobStoreStats =
+              new BlobStoreStats(storeId, index, config, time, longLivedTaskScheduler, taskScheduler, diskIOScheduler,
+                  metrics);
         }
         metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
             config.storeEnableCurrentInvalidSizeMetric);
