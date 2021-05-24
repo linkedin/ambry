@@ -472,7 +472,9 @@ public class BlobStore implements Store {
 
           if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
             Offset endOffsetOfLastMessage = log.getEndOffset();
-            messageSetToWrite.writeTo(log);
+            long diskWriteStartTime = time.milliseconds();
+            long sizeWritten = messageSetToWrite.writeTo(log);
+            metrics.diskWriteTimePerMbInMs.update(((time.milliseconds() - diskWriteStartTime) << 20) / sizeWritten);
             logger.trace("Store : {} message set written to log", dataDir);
 
             List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();

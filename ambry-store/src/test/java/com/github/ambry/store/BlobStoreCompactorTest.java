@@ -13,7 +13,9 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -2570,6 +2572,56 @@ public class BlobStoreCompactorTest {
     doUndeleteTgtDupTest();
   }
 
+  /**
+   * Tests for {@link BlobStoreCompactor#getDesiredSpeedPerSecond(double, int)}.
+   * @throws Exception
+   */
+  @Test
+  public void testGetDesiredSpeedPerSecond() throws Exception {
+    refreshState(false, true);
+    int storeCompactionOperationsBytesPerSec = 1000;
+    int storeCompactionMinOperationBytesPerSec = 500;
+    double storeCompactionOperationsAdjustK = 1.5;
+    int storeDiskIoReservoirTimeWindowMs = 200;
+    state.properties.put("store.compaction.operations.bytes.per.sec",
+        Integer.toString(storeCompactionOperationsBytesPerSec));
+    state.properties.put("store.compaction.min.operations.bytes.per.sec",
+        Integer.toString(storeCompactionMinOperationBytesPerSec));
+    state.properties.put("store.compaction.operations.adjust.k", Double.toString(storeCompactionOperationsAdjustK));
+    state.properties.put("store.disk.io.reservoir.time.window.ms", Integer.toString(storeDiskIoReservoirTimeWindowMs));
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null);
+    compactor.initialize(state.index);
+    int latencyThreshold = 20;
+
+    // Test getDesiredSpeedPerSecond
+    assertEquals("Incorrect speed", storeCompactionOperationsBytesPerSec,
+        compactor.getDesiredSpeedPerSecond(latencyThreshold, latencyThreshold));
+    assertEquals("Incorrect speed", storeCompactionOperationsBytesPerSec,
+        compactor.getDesiredSpeedPerSecond(latencyThreshold - 1, latencyThreshold));
+
+    int actualLatency = latencyThreshold * 2;
+    int expectedSpeed = (int) (storeCompactionMinOperationBytesPerSec
+        + (storeCompactionOperationsBytesPerSec - storeCompactionMinOperationBytesPerSec) * latencyThreshold
+        / actualLatency / storeCompactionOperationsAdjustK);
+    assertEquals("Incorrect speed", expectedSpeed,
+        compactor.getDesiredSpeedPerSecond(latencyThreshold * 2, latencyThreshold));
+
+    // // Test histogram and getDesiredSpeedPerSecond
+    Histogram histogram = new Histogram(new SlidingTimeWindowArrayReservoir(1000, TimeUnit.MILLISECONDS));
+    double p95 = histogram.getSnapshot().get95thPercentile();
+    assertEquals("Histogram without data should return 0.0", 0.0, p95, 0.001);
+    assertEquals("Incorrect speed", storeCompactionOperationsBytesPerSec,
+        compactor.getDesiredSpeedPerSecond(p95, latencyThreshold));
+
+    histogram.update(100);
+    p95 = histogram.getSnapshot().get95thPercentile();
+    assertEquals("Histogram without data should return 0.0", 100.0, p95, 0.001);
+    expectedSpeed = (int) (storeCompactionMinOperationBytesPerSec
+        + (storeCompactionOperationsBytesPerSec - storeCompactionMinOperationBytesPerSec) * latencyThreshold / p95
+        / storeCompactionOperationsAdjustK);
+    assertEquals("Incorrect speed", expectedSpeed, compactor.getDesiredSpeedPerSecond(p95, latencyThreshold));
+  }
+
   // helpers
 
   // general
@@ -2671,6 +2723,7 @@ public class BlobStoreCompactorTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
+    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     return new BlobStoreCompactor(tempDirStr, STORE_ID, STORE_KEY_FACTORY, config, metrics, metrics, ioScheduler,
         StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log, state.time, state.sessionId, state.incarnationId,
         accountService, remoteTokenTracker);

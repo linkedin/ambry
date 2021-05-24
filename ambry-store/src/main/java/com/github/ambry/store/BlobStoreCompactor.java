@@ -730,6 +730,23 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Calculate the desired rate based on current disk latency and threadshold.
+   * @param diskTimePerMbInMs current disk latency per MB in ms.
+   * @param latencyThreshold the threshold.
+   * @return the adjusted compaction speed.
+   */
+  int getDesiredSpeedPerSecond(double diskTimePerMbInMs, int latencyThreshold) {
+    int currentLatency = diskTimePerMbInMs > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) diskTimePerMbInMs;
+    int desiredRatePerSec = config.storeCompactionOperationsBytesPerSec;
+    if (currentLatency > latencyThreshold) {
+      desiredRatePerSec = (int) (config.storeCompactionMinOperationsBytesPerSec +
+          (config.storeCompactionOperationsBytesPerSec - config.storeCompactionMinOperationsBytesPerSec)
+              * latencyThreshold / currentLatency / config.storeCompactionOperationsAdjustK);
+    }
+    return desiredRatePerSec;
+  }
+
+  /**
    * Copies the given {@code srcIndexEntries} from the given log segment into the swap spaces.
    * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param srcIndexEntries the {@link IndexEntry}s to copy.
@@ -790,8 +807,22 @@ class BlobStoreCompactor {
           long usedCapacity = tgtIndex.getLogUsedCapacity();
           if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
-            // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
+            if (config.storeCompactionMinOperationsBytesPerSec < config.storeCompactionOperationsBytesPerSec) {
+              // Enable dynamic desired rate based on disk latency.
+              int desiredReadPerSecond =
+                  getDesiredSpeedPerSecond(srcMetrics.diskReadTimePerMbInMs.getSnapshot().get95thPercentile(),
+                      config.storeCompactionDiskIoThresholdReadMsMb);
+              int desiredWritePerSecond =
+                  getDesiredSpeedPerSecond(srcMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile(),
+                      config.storeCompactionDiskIoThresholdWriteMsMb);
+              logger.debug("Desired compaction copy rate(KB/seconds): read: {} write: {}", desiredReadPerSecond,
+                  desiredWritePerSecond);
+              diskIOScheduler.updateThrottlerDesiredRate(COMPACTION_CLEANUP_JOB_NAME,
+                  Math.min(desiredReadPerSecond, desiredWritePerSecond));
+            }
+            // call into diskIOScheduler to make sure we can proceed.
             diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
+
             if (useDirectIO) {
               // do direct IO write
               tgtLog.appendFromDirectly(byteArrayToUse, (int) (srcValue.getOffset().getOffset() - startOffset),
@@ -867,6 +898,7 @@ class BlobStoreCompactor {
             tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
             writtenLastTime = srcValue.getSize();
             srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
+            srcMetrics.diskCompactionCopyRateInBytes.mark(srcValue.getSize());
           } else if (!isActive) {
             logger.info("Stopping copying in {} because shutdown is in progress", storeId);
             copiedAll = false;

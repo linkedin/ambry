@@ -66,5 +66,17 @@ class DiskIOScheduler {
       throttler.disable();
     }
   }
+
+  /**
+   * Update desired rate of a job type.
+   * @param jobType the type of the job requesting an I/O slice.
+   * @param newDesiredRatePerSec the newDesiredRatePerSec.
+   */
+  void updateThrottlerDesiredRate(String jobType, double newDesiredRatePerSec) {
+    Throttler throttler = throttlers.get(jobType);
+    if (throttler != null) {
+      throttler.updateDesiredRatePerSecond(newDesiredRatePerSec);
+    }
+  }
 }
 
