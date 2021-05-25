@@ -124,7 +124,7 @@ public class StoreConfig {
   public final int storeCompactionMinOperationsBytesPerSec;
 
   /**
-   * The adjustment to use when compaction calculate desired copy rate.
+   * The adjustment coefficient to use when compaction calculate desired copy rate.
    */
   @Config("store.compaction.operations.adjust.k")
   @Default("1")
@@ -418,14 +418,16 @@ public class StoreConfig {
       "store.compaction.enable.basic.info.on.missing.duplicate";
 
   /**
-   * The threshold of disk IO read latency to decrease compaction speed.
+   * A normalized disk IO read latency threshold(per MB). If actual normalized disk read latency high than the
+   * threshold, we need to decrease compaction speed.
    */
   @Config("store.compaction.disk.io.threshold.read.ms.mb")
   @Default("20")
   public final int storeCompactionDiskIoThresholdReadMsMb;
 
   /**
-   * The threshold of disk IO write latency to decrease compaction speed.
+   * A normalized disk IO write latency threshold(per MB). If actual normalized disk write latency high than the
+   * threshold, we need to decrease compaction speed.
    */
   @Config("store.compaction.disk.io.threshold.write.ms.mb")
   @Default("20")

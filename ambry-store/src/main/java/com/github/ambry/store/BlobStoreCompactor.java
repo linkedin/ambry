@@ -730,7 +730,7 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Calculate the desired rate based on current disk latency and threadshold.
+   * Calculate the desired rate based on current disk latency and threshold.
    * @param diskTimePerMbInMs current disk latency per MB in ms.
    * @param latencyThreshold the threshold.
    * @return the adjusted compaction speed.
@@ -742,6 +742,12 @@ class BlobStoreCompactor {
       desiredRatePerSec = (int) (config.storeCompactionMinOperationsBytesPerSec +
           (config.storeCompactionOperationsBytesPerSec - config.storeCompactionMinOperationsBytesPerSec)
               * latencyThreshold / currentLatency / config.storeCompactionOperationsAdjustK);
+      if (desiredRatePerSec < config.storeCompactionMinOperationsBytesPerSec) {
+        desiredRatePerSec = config.storeCompactionMinOperationsBytesPerSec;
+      }
+      if (desiredRatePerSec > config.storeCompactionOperationsBytesPerSec) {
+        desiredRatePerSec = config.storeCompactionOperationsBytesPerSec;
+      }
     }
     return desiredRatePerSec;
   }
@@ -809,14 +815,15 @@ class BlobStoreCompactor {
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
             if (config.storeCompactionMinOperationsBytesPerSec < config.storeCompactionOperationsBytesPerSec) {
               // Enable dynamic desired rate based on disk latency.
+              double currentReadTimePerMbInMs = srcMetrics.diskReadTimePerMbInMs.getSnapshot().get95thPercentile();
               int desiredReadPerSecond =
-                  getDesiredSpeedPerSecond(srcMetrics.diskReadTimePerMbInMs.getSnapshot().get95thPercentile(),
-                      config.storeCompactionDiskIoThresholdReadMsMb);
+                  getDesiredSpeedPerSecond(currentReadTimePerMbInMs, config.storeCompactionDiskIoThresholdReadMsMb);
+              double currentWriteTimePerMbInMs = srcMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile();
               int desiredWritePerSecond =
-                  getDesiredSpeedPerSecond(srcMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile(),
-                      config.storeCompactionDiskIoThresholdWriteMsMb);
-              logger.debug("Desired compaction copy rate(KB/seconds): read: {} write: {}", desiredReadPerSecond,
-                  desiredWritePerSecond);
+                  getDesiredSpeedPerSecond(currentWriteTimePerMbInMs, config.storeCompactionDiskIoThresholdWriteMsMb);
+              logger.debug(
+                  "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
+                  currentReadTimePerMbInMs, desiredWritePerSecond, desiredReadPerSecond, desiredWritePerSecond);
               diskIOScheduler.updateThrottlerDesiredRate(COMPACTION_CLEANUP_JOB_NAME,
                   Math.min(desiredReadPerSecond, desiredWritePerSecond));
             }
