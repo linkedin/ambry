@@ -69,6 +69,9 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   private Map<String, Map<String, Long>> fromAggregatedAccountStats(StatsSnapshot snapshot) {
+    if (snapshot == null) {
+      return null;
+    }
     Map<String, Map<String, Long>> result = new HashMap<>();
     for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
       String accountIdKey = accountMapEntry.getKey();

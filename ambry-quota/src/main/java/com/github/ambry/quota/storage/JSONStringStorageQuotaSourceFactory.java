@@ -13,9 +13,10 @@
  */
 package com.github.ambry.quota.storage;
 
-import com.github.ambry.config.StorageQuotaConfig;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaSource;
 import java.io.IOException;
-import java.util.concurrent.ScheduledExecutorService;
 
 
 /**
@@ -26,17 +27,21 @@ public class JSONStringStorageQuotaSourceFactory implements StorageQuotaSourceFa
 
   /**
    * Constructor to create a {@link JSONStringStorageQuotaSourceFactory}.
-   * @param scheduler The {@link ScheduledExecutorService} to use.
-   * @param config The {@link StorageQuotaConfig} to use.
+   * @param quotaConfig The {@link QuotaConfig} to use.
    * @throws IOException
    */
-  public JSONStringStorageQuotaSourceFactory(ScheduledExecutorService scheduler, StorageQuotaConfig config)
+  public JSONStringStorageQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService)
       throws IOException {
-    source = new JSONStringStorageQuotaSource(config);
+    source = new JSONStringStorageQuotaSource(quotaConfig.storageQuotaConfig);
   }
 
   @Override
   public StorageQuotaSource getStorageQuotaSource() {
+    return source;
+  }
+
+  @Override
+  public QuotaSource getQuotaSource() {
     return source;
   }
 }

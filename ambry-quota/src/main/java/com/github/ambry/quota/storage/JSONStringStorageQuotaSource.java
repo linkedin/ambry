@@ -16,7 +16,11 @@ package com.github.ambry.quota.storage;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StorageQuotaConfig;
+import com.github.ambry.quota.Quota;
+import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaResource;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -58,5 +62,41 @@ public class JSONStringStorageQuotaSource implements StorageQuotaSource {
   public void registerListener(Listener listener) {
     // no-op
     return;
+  }
+
+  @Override
+  public void addStorageUsageCallback(StorageUsageCallback callback) {
+    // no-op
+  }
+
+  @Override
+  public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) {
+    if (quotaName != QuotaName.STORAGE_IN_GB) {
+      return null;
+    }
+    if (quotaResource.getQuotaResourceType() != QuotaResource.QuotaResourceType.CONTAINER) {
+      return null;
+    }
+    // We know this is accountId_containerId
+    String[] accountContainer = quotaResource.getResourceId().split(QuotaResource.DELIM);
+    String accountId = accountContainer[0];
+    String containerId = accountContainer[1];
+    if (containerStorageQuota.containsKey(accountId)) {
+      if (containerStorageQuota.get(accountId).containsKey(containerId)) {
+        long quotaValue = containerStorageQuota.get(accountId).get(containerId);
+        return new Quota(quotaName, quotaValue, quotaResource);
+      }
+    }
+    return null;
+  }
+
+  @Override
+  public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
+    // no-op
+  }
+
+  @Override
+  public void shutdown() {
+    // no-op
   }
 }

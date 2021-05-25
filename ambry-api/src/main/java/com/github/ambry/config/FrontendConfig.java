@@ -15,7 +15,6 @@ package com.github.ambry.config;
 
 import com.github.ambry.accountstats.AccountStatsStoreFactory;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
@@ -49,9 +48,6 @@ public class FrontendConfig {
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
   private static final String DEFAULT_ENDPOINTS_STRING =
       "{\"POST\": \"" + DEFAULT_ENDPOINT + "\", \"GET\": \"" + DEFAULT_ENDPOINT + "\"}";
-
-  private static final String DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY =
-      "com.github.ambry.quota.storage.AmbryStorageQuotaServiceFactory";
 
   private static final String DEFAULT_ACCOUNT_STATS_STORE_FACTORY =
       "com.github.ambry.accountstats.InmemoryAccountStatsStoreFactory";
@@ -232,12 +228,6 @@ public class FrontendConfig {
   @Default("false")
   public final boolean enableStorageQuotaService;
 
-  /**
-   * The {@link StorageQuotaServiceFactory}.
-   */
-  @Config(STORAGE_QUOTA_SERVICE_FACTORY)
-  @Default(DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY)
-  public final String storageQuotaServiceFactory;
 
   /**
    * Can be set to a classname that implements {@link com.github.ambry.named.NamedBlobDbFactory} to enable named blob
@@ -305,8 +295,6 @@ public class FrontendConfig {
     accountStatsStoreFactory =
         verifiableProperties.getString(ACCOUNT_STATS_STORE_FACTORY, DEFAULT_ACCOUNT_STATS_STORE_FACTORY);
     enableStorageQuotaService = verifiableProperties.getBoolean(ENABLE_STORAGE_QUOTA_SERVICE, false);
-    storageQuotaServiceFactory =
-        verifiableProperties.getString(STORAGE_QUOTA_SERVICE_FACTORY, DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY);
     namedBlobDbFactory = verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
     containerMetricsExcludedAccounts =
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_EXCLUDED_ACCOUNTS, ""), ",");
