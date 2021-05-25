@@ -381,7 +381,7 @@ public class BlobStoreTest {
     when(replicaStatusDelegate.seal(any())).thenReturn(true);
     //Restart store
     reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
-    store.setMaxLagForPartition(10);
+    store.setLocalStoreMaxLagFromPeer(10);
     //Check that after start, replicaStatusDelegate is called to enable replica if it was previously disabled
     verify(replicaStatusDelegate, times(1)).enableReplica(replicaId);
     put(1, 50, Utils.Infinite_Time);
@@ -402,7 +402,7 @@ public class BlobStoreTest {
       //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
       //By restarting, only last segment will be in journal
       reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
-      store.setMaxLagForPartition(10);
+      store.setLocalStoreMaxLagFromPeer(10);
       verify(replicaStatusDelegate, times(2)).enableReplica(replicaId);
 
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify

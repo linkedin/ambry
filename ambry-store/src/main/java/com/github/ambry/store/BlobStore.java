@@ -87,7 +87,8 @@ public class BlobStore implements Store {
   private final RemoteTokenTracker remoteTokenTracker;
   private final AtomicInteger errorCount;
   private final AccountService accountService;
-  private long maxLagForPartition;
+  //The max replication lag indicating how far local store is behind peers.
+  private long localStoreMaxLagFromPeer;
   private Log log;
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
@@ -337,10 +338,10 @@ public class BlobStore implements Store {
 
   /**
    * Set max lag for blob store.
-   * @param maxLagForPartition the partition's maximum lag between local and its remote replicas.
+   * @param localStoreMaxLagFromPeer the partition's maximum lag between local and its remote replicas.
    */
-  public void setMaxLagForPartition(long maxLagForPartition) {
-    this.maxLagForPartition = maxLagForPartition;
+  public void setLocalStoreMaxLagFromPeer(long localStoreMaxLagFromPeer) {
+    this.localStoreMaxLagFromPeer = localStoreMaxLagFromPeer;
   }
 
   /**
@@ -417,10 +418,10 @@ public class BlobStore implements Store {
           replicaStatusDelegates.size() > 1 && isSealed.getAndSet(false)))) {
         for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
           if (config.storeAutoCloseLastLogSegmentEnabled && replicaId.isSealed()
-              && maxLagForPartition > config.storeUnsealReplicaMinimumLag) {
+              && localStoreMaxLagFromPeer > config.storeUnsealReplicaMinimumLagBytes) {
             logger.info(
                 "In order to wait until store catch up with peer replica, it should remain sealed due to the max lag : {} for partition : {} is larger than {} , current used capacity : {} bytes.",
-                maxLagForPartition, replicaId.getPartitionId(), config.storeUnsealReplicaMinimumLag,
+                localStoreMaxLagFromPeer, replicaId.getPartitionId(), config.storeUnsealReplicaMinimumLagBytes,
                 index.getLogUsedCapacity());
           } else if (!replicaStatusDelegate.unseal(replicaId)) {
             metrics.unsealSetError.inc();
@@ -1244,6 +1245,8 @@ public class BlobStore implements Store {
 
   /**
    * Closes the last log segment periodically if replica is in sealed status.
+   * Hybrid compaction policy will support both statsBasedCompactionPolicy and compactAllPolicy.
+   * Make sure this method is running before compactAllPolicy so it will compact the auto closed log segment afterwards.
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
   void closeLastLogSegmentIfQualified() throws StoreException {

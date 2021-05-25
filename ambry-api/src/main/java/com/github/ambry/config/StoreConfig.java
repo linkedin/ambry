@@ -348,12 +348,12 @@ public class StoreConfig {
   public static final String storeAutoCloseLastLogSegmentEnabledName = "store.auto.close.last.log.segment.enabled";
 
   /**
-   * Specifies the minimum value for maxLagForPartition which can unseal replica.
+   * Specifies the minimum value of Bytes for maxLagForPartition which can unseal replica.
    */
-  @Config(storeUnsealReplicaMinimumLagName)
-  @Default("10485760")
-  public final long storeUnsealReplicaMinimumLag;
-  public static final String storeUnsealReplicaMinimumLagName = "store.unseal.replica.minimum.lag";
+  @Config(storeUnsealReplicaMinimumLagBytesName)
+  @Default("0")
+  public final long storeUnsealReplicaMinimumLagBytes;
+  public static final String storeUnsealReplicaMinimumLagBytesName = "store.unseal.replica.minimum.lag.bytes";
 
 
   /**
@@ -539,8 +539,8 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
-    storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean("store.auto.close.last.log.segment.enabled", false);
-    storeUnsealReplicaMinimumLag = verifiableProperties.getLongInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 10485760, 0, Long.MAX_VALUE);
+    storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean(storeAutoCloseLastLogSegmentEnabledName, false);
+    storeUnsealReplicaMinimumLagBytes = verifiableProperties.getLongInRange(storeUnsealReplicaMinimumLagBytesName, 10485760, 0, Long.MAX_VALUE);
     storeSynchronizerInsideWhileLoopEnabled = verifiableProperties.getBoolean("store.synchronizer.inside.while.loop.enabled", false);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
