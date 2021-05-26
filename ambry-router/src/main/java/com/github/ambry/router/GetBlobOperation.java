@@ -38,6 +38,8 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
@@ -505,6 +507,14 @@ class GetBlobOperation extends GetOperation {
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
         Exception e = operationException.get();
+        if (e instanceof RouterException) {
+          RouterException routerException = (RouterException) e;
+          if (routerException.getErrorCode() == RouterErrorCode.UnexpectedInternalError) {
+            // Client deserves to know why there is an unexpected internal error
+            e = new RestServiceException(routerException.getMessage(), RestServiceErrorCode.InternalServerError, true,
+                false, null);
+          }
+        }
         readIntoFuture.done(bytesWritten.get(), e);
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten.get(), e);

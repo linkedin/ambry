@@ -320,6 +320,7 @@ project(':ambry-replication') {
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-store')
         testCompile project(':ambry-test-utils')
+        testCompile project(':ambry-clustermap')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')
         testCompile project(path: ':ambry-messageformat', configuration: 'testArchives')
