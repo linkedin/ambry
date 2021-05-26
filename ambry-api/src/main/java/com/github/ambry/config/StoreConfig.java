@@ -241,6 +241,20 @@ public class StoreConfig {
   public final long storeStatsRecentEntryProcessingIntervalInMinutes;
 
   /**
+   * Enable asynchronously get valid data size for metric emitting.
+   */
+  @Config("store.async.get.valid.size.enable")
+  @Default("false")
+  public final boolean storeAsyncGetValidSizeEnable;
+
+  /**
+   * Period in minutes to specify how frequent the validDataSizeCollector executed.
+   */
+  @Config("store.get.valid.size.interval.in.minutes")
+  @Default("2")
+  public final long storeGetValidSizeIntervalInMinutes;
+
+  /**
    * The upper limit in seconds for requests to wait for a ongoing construction of buckets (that contains the answer)
    * to complete.
    */
@@ -512,6 +526,9 @@ public class StoreConfig {
         verifiableProperties.getLongInRange("store.stats.bucket.span.in.minutes", 60, 1, 10000);
     storeStatsRecentEntryProcessingIntervalInMinutes =
         verifiableProperties.getLongInRange("store.stats.recent.entry.processing.interval.in.minutes", 2, 1, 60);
+    storeAsyncGetValidSizeEnable = verifiableProperties.getBoolean("store.async.get.valid.size.enable", false);
+    storeGetValidSizeIntervalInMinutes =
+        verifiableProperties.getLongInRange("store.get.valid.size.interval.in.minutes", 2, 1, 60);
     storeStatsWaitTimeoutInSecs =
         verifiableProperties.getLongInRange("store.stats.wait.timeout.in.secs", 2 * 60, 0, 30 * 60);
     storeStatsIndexEntriesPerSecond =

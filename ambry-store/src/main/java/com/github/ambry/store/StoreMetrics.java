@@ -259,7 +259,7 @@ public class StoreMetrics {
   }
 
   void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes,
-      BlobStoreStats blobStoreStats, boolean enableStoreCurrentInvalidSize) {
+      BlobStoreStats blobStoreStats, boolean enableStoreCurrentInvalidSize, boolean storeAsyncGetValidSizeEnable) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> currentCapacityUsed = index::getLogUsedCapacity;
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"), currentCapacityUsed);
@@ -271,8 +271,12 @@ public class StoreMetrics {
       Gauge<Long> currentInvalidDataSize = () -> {
         long invalidDataSize = -1;
         try {
-          invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSize(
-              new TimeRange(System.currentTimeMillis(), blobStoreStats.getBucketSpanTimeInMs())).getSecond();
+          if (storeAsyncGetValidSizeEnable) {
+            invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSizeAsync().getSecond();
+          } else {
+            invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSize(
+                new TimeRange(System.currentTimeMillis(), blobStoreStats.getBucketSpanTimeInMs())).getSecond();
+          }
         } catch (StoreException e) {
           logger.error("Failed to get invalidDataSize on store: {},", storeId, e);
         }

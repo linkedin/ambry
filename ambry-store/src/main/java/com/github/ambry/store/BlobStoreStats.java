@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -88,12 +89,14 @@ class BlobStoreStats implements StoreStats, Closeable {
   private final AtomicReference<Pair<Long, Long>> permanentDeleteTombstoneStats =
       new AtomicReference<>(new Pair<>(0L, 0L));
   private final AtomicBoolean enabled = new AtomicBoolean(true);
+  private final AtomicReference<Pair<Long, Long>> validDataSize = new AtomicReference<>(new Pair<>(0L, 0L));
 
   private volatile boolean isScanning = false;
   private volatile boolean recentEntryQueueEnabled = false;
   private final AtomicReference<ScanResults> scanResults = new AtomicReference<>();
   private IndexScanner indexScanner;
   private QueueProcessor queueProcessor;
+  private ValidDataSizeCollector validDataSizeCollector;
 
   /**
    * Convert a given nested {@link Map} of accountId to containerId to valid size to its corresponding
@@ -148,14 +151,14 @@ class BlobStoreStats implements StoreStats, Closeable {
         TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes),
         config.storeStatsWaitTimeoutInSecs, config.storeEnableBucketForLogSegmentReports,
         config.storeCompactionPurgeDeleteTombstone, time, longLiveTaskScheduler, shortLiveTaskScheduler,
-        diskIOScheduler, metrics);
+        diskIOScheduler, metrics, config.storeAsyncGetValidSizeEnable, TimeUnit.MINUTES.toMillis(config.storeGetValidSizeIntervalInMinutes));
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
       long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
-      boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time,
-      ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
-      DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
+      boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time, ScheduledExecutorService longLiveTaskScheduler,
+      ScheduledExecutorService shortLiveTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
+      boolean enableAsyncGetValidSize, long storeGetValidSizeIntervalInMs) {
     this.storeId = storeId;
     this.index = index;
     this.time = time;
@@ -175,6 +178,12 @@ class BlobStoreStats implements StoreStats, Closeable {
       queueProcessor = new QueueProcessor();
       shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessingPeriodInMs, TimeUnit.MILLISECONDS);
     }
+    if (enableAsyncGetValidSize) {
+      ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+      TimeRange timeRange = new TimeRange(System.currentTimeMillis(), getBucketSpanTimeInMs());
+      validDataSizeCollector = new ValidDataSizeCollector(timeRange);
+      scheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInMs, TimeUnit.MILLISECONDS);
+    }
   }
 
   @Override
@@ -188,6 +197,13 @@ class BlobStoreStats implements StoreStats, Closeable {
       totalValidSize += value;
     }
     return new Pair<>(logSegmentValidSizeResult.getFirst(), totalValidSize);
+  }
+
+  /**
+   * Get valid data size asynchronously.
+   */
+  Pair<Long, Long> getValidSizeAsync() {
+    return validDataSize.get();
   }
 
   /**
@@ -518,6 +534,9 @@ class BlobStoreStats implements StoreStats, Closeable {
       }
       if (queueProcessor != null) {
         queueProcessor.cancel();
+      }
+      if (validDataSizeCollector != null) {
+        validDataSizeCollector.cancel();
       }
     }
   }
@@ -1195,6 +1214,33 @@ class BlobStoreStats implements StoreStats, Closeable {
       } catch (Exception e) {
         logger.error("Unexpected exception while running QueueProcessor in store {}", storeId, e);
         metrics.blobStoreStatsQueueProcessorErrorCount.inc();
+      }
+    }
+
+    void cancel() {
+      cancelled = true;
+    }
+  }
+
+  /**
+   * Runner that get the valid data size asynchronously and cached in validDataSize.
+   */
+  private class ValidDataSizeCollector implements Runnable {
+    private volatile boolean cancelled = false;
+    private final TimeRange timeRange;
+
+    ValidDataSizeCollector(TimeRange timeRange) {
+      this.timeRange = timeRange;
+    }
+
+    @Override
+    public void run() {
+      try {
+        if (!cancelled) {
+          validDataSize.set(getValidSize(timeRange));
+        }
+      } catch (StoreException e) {
+        logger.error("Failed to get invalidDataSize on store: {},", storeId, e);
       }
     }
 
