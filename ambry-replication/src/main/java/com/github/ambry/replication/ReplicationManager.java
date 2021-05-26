@@ -241,7 +241,7 @@ public class ReplicationManager extends ReplicationEngine {
       replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
       remoteReplicaInfos.add(remoteReplicaInfo);
     }
-    replicationMetrics.addLagMetricForPartition(partition);
+    replicationMetrics.addLagMetricForPartition(partition, replicationConfig.replicationTrackPerPartitionLagFromRemote);
     return remoteReplicaInfos;
   }
 

@@ -359,9 +359,10 @@ public class StoreConfig {
   /**
    * Whether to enable add synchronizer inside while loop for journal clean up.
    */
-  @Config("store.synchronizer.inside.while.loop.enabled")
+  @Config(storeSynchronizerInsideWhileLoopEnabledName)
   @Default("false")
   public final boolean storeSynchronizerInsideWhileLoopEnabled;
+  public static final String storeSynchronizerInsideWhileLoopEnabledName = "store.synchronizer.inside.while.loop.enabled";
 
   /**
    * Specifies the permissions for data files in store. (Data files are user data related files for example, log segment,
@@ -540,8 +541,8 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
     storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean(storeAutoCloseLastLogSegmentEnabledName, false);
-    storeUnsealReplicaMinimumLagBytes = verifiableProperties.getLongInRange(storeUnsealReplicaMinimumLagBytesName, 10485760, 0, Long.MAX_VALUE);
-    storeSynchronizerInsideWhileLoopEnabled = verifiableProperties.getBoolean("store.synchronizer.inside.while.loop.enabled", false);
+    storeUnsealReplicaMinimumLagBytes = verifiableProperties.getLongInRange(storeUnsealReplicaMinimumLagBytesName, 0, 0, Long.MAX_VALUE);
+    storeSynchronizerInsideWhileLoopEnabled = verifiableProperties.getBoolean(storeSynchronizerInsideWhileLoopEnabledName, false);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
     String storeOperationFilePermissionStr =

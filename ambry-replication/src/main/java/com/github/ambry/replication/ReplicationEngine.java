@@ -131,7 +131,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       this.tokenHelper = findTokenHelper;
     }
     this.replicaThreadPoolByDc = new ConcurrentHashMap<>();
-    this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds, replicationConfig);
+    this.replicationMetrics = new ReplicationMetrics(metricRegistry, replicaIds);
     this.mountPathToPartitionInfos = new ConcurrentHashMap<>();
     this.partitionToPartitionInfo = new ConcurrentHashMap<>();
     this.clusterMap = clusterMap;

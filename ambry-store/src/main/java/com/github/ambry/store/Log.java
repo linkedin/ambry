@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -467,11 +468,14 @@ class Log implements Write {
         ensureCapacity(0);
         setActiveSegment();
         //refresh journal.
+        long startTime = SystemTime.getInstance().milliseconds();
         if (config.storeSynchronizerInsideWhileLoopEnabled) {
           journal.cleanUpJournalWithSynchronizeInside(activeSegment.getName());
         } else {
           journal.cleanUpJournal(activeSegment.getName());
         }
+        logger.debug("Time to clean up journal size for store : {} in dataDir: {} is {} ms", storeId, dataDir,
+            SystemTime.getInstance().milliseconds() - startTime);
       } catch (IllegalStateException e) {
         //if there is no more capacity left in data dir to create new log segment, just bypass this logic.
         //no-op

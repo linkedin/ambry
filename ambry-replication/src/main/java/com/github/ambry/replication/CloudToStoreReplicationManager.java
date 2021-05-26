@@ -195,7 +195,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
-      replicationMetrics.addLagMetricForPartition(partitionId);
+      replicationMetrics.addLagMetricForPartition(partitionId, true);
     }
     replicationMetrics.addCatchUpPointMetricForPartition(partitionId);
   }

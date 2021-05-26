@@ -219,9 +219,7 @@ class BlobStoreCompactor {
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
   void closeLastLogSegmentIfQualified(Journal journal) throws StoreException {
-    if (config.storeAutoCloseLastLogSegmentEnabled) {
-      srcLog.autoCloseLastLogSegmentIfQualified(journal);
-    }
+    srcLog.autoCloseLastLogSegmentIfQualified(journal);
   }
 
   /**

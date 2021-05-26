@@ -133,7 +133,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
 
     ReplicationMetrics replicationMetrics =
-        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId), replicationConfig);
+        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
     List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
@@ -1243,7 +1243,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
     int batchSize = 4;
     ReplicationMetrics replicationMetrics =
-        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId), replicationConfig);
+        new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
 
     List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, null);

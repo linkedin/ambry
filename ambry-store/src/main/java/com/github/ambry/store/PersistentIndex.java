@@ -200,25 +200,7 @@ class PersistentIndex {
         // We mark as sealed all the index segments except the most recent index segment.
         // The recent index segment would go through recovery after they have been
         // read into memory
-        boolean sealed;
-        if (config.storeAutoCloseLastLogSegmentEnabled) {
-          //if journal.getFirstOffset() is null, it means active log segment has been created
-          //due to auto last log segment closed during compaction.And no entry has been added yet.
-          if (i == indexFiles.size() - 1) {
-            LogSegmentName logSegmentName =
-                IndexSegment.getIndexSegmentStartOffset(indexFiles.get(i).getName()).getName();
-            LogSegmentName lastLogSegmentName = log.getLastSegment().getName();
-            if (logSegmentName.compareTo(lastLogSegmentName) < 0) {
-              sealed = true;
-            } else {
-              sealed = false;
-            }
-          } else {
-            sealed = i < indexFiles.size() - 1;
-          }
-        } else {
-          sealed = i < indexFiles.size() - 1;
-        }
+        boolean sealed = defineSealStatusForIndexFiles(i, indexFiles);
         IndexSegment info = new IndexSegment(indexFiles.get(i), sealed, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
@@ -283,6 +265,28 @@ class PersistentIndex {
       throw new StoreException("Unknown error while creating index " + datadir, e,
           StoreErrorCodes.Index_Creation_Failure);
     }
+  }
+
+  /**
+   *
+   * @param index the index of the list of indexFiles.
+   * @param indexFiles a list of file with index entry info.
+   * @return {@code true} if the index file needs to be set to seal status.
+   */
+  private boolean defineSealStatusForIndexFiles(int index, List<File> indexFiles) {
+    return index < indexFiles.size() - 1 || (config.storeAutoCloseLastLogSegmentEnabled
+        && indexFileNotInLastLogSegment(index, indexFiles));
+  }
+
+  /**
+   * @param index the index of the list of indexFiles.
+   * @param indexFiles a list of file with index entry info.
+   * @return {@code true} if index file is not related to last log segment. {@code false} otherwise.
+   */
+  private boolean indexFileNotInLastLogSegment (int index, List<File> indexFiles) {
+    LogSegmentName logSegmentName = IndexSegment.getIndexSegmentStartOffset(indexFiles.get(index).getName()).getName();
+    LogSegmentName lastLogSegmentName = log.getLastSegment().getName();
+    return logSegmentName.compareTo(lastLogSegmentName) < 0;
   }
 
   /**

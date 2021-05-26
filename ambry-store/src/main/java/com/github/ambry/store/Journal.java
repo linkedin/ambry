@@ -134,7 +134,8 @@ class Journal {
   }
 
   /**
-   * This method is used to test the impact of performance between release lock after journal finish clean up and release lock each time entry gets removed.
+   * This method is used to test the impact of performance between release lock after journal finish clean up and release
+   * lock each time entry gets removed.
    * @param activeLogSegmentName journal should remove all entries not belongs to active log segment.
    */
   void cleanUpJournalWithSynchronizeInside(LogSegmentName activeLogSegmentName) {

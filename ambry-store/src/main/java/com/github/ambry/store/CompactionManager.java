@@ -288,7 +288,7 @@ class CompactionManager {
                     metrics.markCompactionStart(true);
                     compactionStarted = true;
                     store.compact(details, bundleReadBuffer);
-                    if (store.getReplicaId().isSealed()) {
+                    if (storeConfig.storeAutoCloseLastLogSegmentEnabled && store.getReplicaId().isSealed()) {
                       store.closeLastLogSegmentIfQualified();
                     }
                   } else {
