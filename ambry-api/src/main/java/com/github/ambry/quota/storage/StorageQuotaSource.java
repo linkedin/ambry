@@ -47,11 +47,21 @@ public interface StorageQuotaSource extends QuotaSource {
    */
   void registerListener(Listener listener);
 
+  /**
+   * Callback to get the  current storage usage.
+   */
   interface StorageUsageCallback {
     Map<String, Map<String, Long>> containerStorageUsage();
   }
 
+  /**
+   * Add the callback to get storage usage so that {@link StorageQuotaSource} would know the updated storage usage.
+   * @param callback
+   */
   void addStorageUsageCallback(StorageUsageCallback callback);
 
+  /**
+   * Shutdown the {@link StorageQuotaSource}.
+   */
   void shutdown();
 }

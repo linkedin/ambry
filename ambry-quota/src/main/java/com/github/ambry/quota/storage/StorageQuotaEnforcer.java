@@ -63,6 +63,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   /**
    * Constructor to instantiate a new {@link StorageQuotaEnforcer}.
    * @param storageQuotaConfig the {@link StorageQuotaConfig}.
+   * @param storageQuotaSource the {@link StorageQuotaSource} to get the quota.
    * @param accountStatsStore the {@link AccountStatsStore}.
    * @throws Exception
    */
@@ -77,6 +78,13 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
         new MySqlStorageUsageRefresher(accountStatsStore, this.scheduler, this.config, metrics);
   }
 
+  /**
+   * Constructor to instantiate a new {@link StorageQuotaEnforcer}.
+   * @param storageQuotaConfig the {@link StorageQuotaConfig}.
+   * @param storageQuotaSource the {@link StorageQuotaSource} to get the quota.
+   * @param storageUsageRefresher the {@link StorageUsageRefresher} to refresh the storage usage for each container.
+   * @throws Exception
+   */
   StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, StorageQuotaSource storageQuotaSource,
       StorageUsageRefresher storageUsageRefresher) {
     this.metrics = new StorageQuotaServiceMetrics(new MetricRegistry());
@@ -90,7 +98,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   public void init() throws Exception {
     initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
     initStorageQuota(storageQuotaSource.getContainerQuota());
-    registerListeners(storageQuotaSource, storageUsageRefresher);
+    registerListeners();
   }
 
   @Override
@@ -155,27 +163,46 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     storageQuotaSource.shutdown();
   }
 
+  /**
+   * Initialize the storage usage from the given map.
+   * @param usage The map that contains storage usage for containers.
+   */
   void initStorageUsage(Map<String, Map<String, Long>> usage) {
     logger.info("Initializing storage usage for {} accounts", usage.size());
     storageUsage = new ConcurrentHashMap<>();
     initMap(usage, storageUsage, true);
   }
 
+  /**
+   * Only for testing.
+   * @return The unmodified version of storage usage.
+   */
   Map<String, Map<String, Long>> getStorageUsage() {
     return Collections.unmodifiableMap(storageUsage);
   }
 
+  /**
+   * Initialize the storage quota from the given map.
+   * @param quota The map that contains storage quota value for containers.
+   */
   void initStorageQuota(Map<String, Map<String, Long>> quota) {
     logger.info("Initializing storage quota for {} accounts");
     storageQuota = new HashMap<>();
     initMap(quota, storageQuota, false);
   }
 
+  /**
+   * Only for testing
+   * @return The unmodified version of storage quota value.
+   */
   Map<String, Map<String, Long>> getStorageQuota() {
     return Collections.unmodifiableMap(storageQuota);
   }
 
-  private void registerListeners(StorageQuotaSource storageQuotaSource, StorageUsageRefresher storageUsageRefresher) {
+  /**
+   * Register listeners to {@link StorageQuotaSource} and {@link StorageUsageRefresher}.
+   */
+  private void registerListeners() {
     logger.info("Register quota source and usage refresher listeners");
     storageQuotaSource.registerListener(getQuotaSourceListener());
     storageUsageRefresher.registerListener(getUsageRefresherListener());

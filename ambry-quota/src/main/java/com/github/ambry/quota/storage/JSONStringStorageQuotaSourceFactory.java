@@ -28,6 +28,7 @@ public class JSONStringStorageQuotaSourceFactory implements StorageQuotaSourceFa
   /**
    * Constructor to create a {@link JSONStringStorageQuotaSourceFactory}.
    * @param quotaConfig The {@link QuotaConfig} to use.
+   * @param accountService The {@link AccountService} to use.
    * @throws IOException
    */
   public JSONStringStorageQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService)
