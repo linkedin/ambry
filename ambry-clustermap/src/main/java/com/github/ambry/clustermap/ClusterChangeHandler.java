@@ -23,8 +23,7 @@ import java.util.stream.Stream;
 
 /**
  * General handler that handles any resource or state changes in cluster. It exposes API(s) for cluster manager to
- * access up-to-date cluster info for a data center. Each data center has its own
- * {@link ClusterChangeHandler}.
+ * access up-to-date cluster info for a data center. Each data center has its own {@link ClusterChangeHandler}.
  */
 public interface ClusterChangeHandler {
   /**
@@ -40,6 +39,13 @@ public interface ClusterChangeHandler {
    * @return the {@link ReplicaId}s satisfying requirements.
    */
   Stream<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state);
+
+  /**
+   * Get a snapshot of replica states from given partition.
+   * @param partition the {@link AmbryPartition} that the replicas belong to.
+   * @return a map whose key is {@link ReplicaState} and value is a list of {@link AmbryReplica} in that state.
+   */
+  Map<ReplicaState, List<AmbryReplica>> getSnapshotOfReplicaStates(AmbryPartition partition);
 
   /**
    * @return a map from ambry data node to its disks.

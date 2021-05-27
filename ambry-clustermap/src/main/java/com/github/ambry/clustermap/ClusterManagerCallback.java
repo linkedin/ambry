@@ -15,6 +15,8 @@ package com.github.ambry.clustermap;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -46,6 +48,15 @@ interface ClusterManagerCallback<R extends ReplicaId, D extends DiskId, P extend
    * @return the list of {@link ReplicaId}s satisfying requirements.
    */
   List<R> getReplicaIdsByState(P partition, ReplicaState state, String dcName);
+
+  /**
+   * Get replicas (grouped by required states) from given partition in specified datacenter.
+   * @param partition the {@link PartitionId} that replicas belong to.
+   * @param states a set of required states.
+   * @param dcName name of datacenter from which the replicas should come
+   * @return a map whose key is required {@link ReplicaState} and value is a list of {@link ReplicaId} in that state.
+   */
+  Map<ReplicaState, List<R>> getReplicaIdsByStates(P partition, Set<ReplicaState> states, String dcName);
 
   /**
    * Get the counter for the sealed state change for partitions.

@@ -18,6 +18,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONArray;
@@ -71,6 +73,11 @@ public class AmbryPartition implements PartitionId {
   @Override
   public List<AmbryReplica> getReplicaIdsByState(ReplicaState state, String dcName) {
     return clusterManagerCallback.getReplicaIdsByState(this, state, dcName);
+  }
+
+  @Override
+  public Map<ReplicaState, List<AmbryReplica>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName){
+    return clusterManagerCallback.getReplicaIdsByStates(this,  states, dcName);
   }
 
   @Override
