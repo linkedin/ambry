@@ -1351,31 +1351,6 @@ class BlobStoreCompactor {
     }
 
     /**
-     * @return the start {@link Offset} of the index segment up until which delete records are considered applicable. Any
-     * delete records of blobs in subsequent index segments do not count and the blob is considered as not deleted.
-     * <p/>
-     * Returns {@code null} if none of the delete records are considered applicable.
-     */
-    private Offset getStartOffsetOfLastIndexSegmentForDeleteCheck() {
-      // TODO: move this to BlobStoreStats
-      Offset cutoffOffset = compactionLog.getStartOffsetOfLastIndexSegmentForDeleteCheck();
-      if (cutoffOffset == null || !srcIndex.getIndexSegments().containsKey(cutoffOffset)) {
-        long referenceTimeMs = compactionLog.getCompactionDetails().getReferenceTimeMs();
-        for (IndexSegment indexSegment : srcIndex.getIndexSegments().descendingMap().values()) {
-          if (indexSegment.getLastModifiedTimeMs() < referenceTimeMs) {
-            cutoffOffset = indexSegment.getEndOffset();
-            break;
-          }
-        }
-        if (cutoffOffset != null) {
-          compactionLog.setStartOffsetOfLastIndexSegmentForDeleteCheck(cutoffOffset);
-          logger.info("Start offset of last index segment for delete check is {} for {}", cutoffOffset, storeId);
-        }
-      }
-      return cutoffOffset;
-    }
-
-    /**
      * Determines whether a TTL update entry is valid. A TTL update entry is valid as long as the associated PUT record
      * is still present in the store (the validity of the PUT record does not matter - only its presence/absence does).
      * @param key the {@link StoreKey} being examined

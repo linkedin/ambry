@@ -287,14 +287,21 @@ class BlobStoreStats implements StoreStats, Closeable {
     return getValidDataSizeByLogSegment(timeRange, time.milliseconds(), null);
   }
 
+  /**
+   * Same as the {@link #getValidDataSizeByLogSegment(TimeRange)}, but provides a file span for under compaction log segments.
+   * This file span would impact TTL_UPDATE's validity.
+   * @param timeRange the delete reference {@link TimeRange} at which the data is requested. Defines both the reference time
+   *                  and the acceptable resolution.
+   * @param fileSpanUnderCompaction the {@link FileSpan} of the under compaction log segments. This file span would impact
+   *                                the validity of TTL_UPDATE. The rules can be found below. This file span could be null.
+   * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second
+   * element is the valid data size for each segment in the form of a {@link NavigableMap} of segment names to
+   * valid data sizes.
+   * @throws StoreException
+   */
   Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange,
       FileSpan fileSpanUnderCompaction) throws StoreException {
     return getValidDataSizeByLogSegment(timeRange, time.milliseconds(), fileSpanUnderCompaction);
-  }
-
-  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange,
-      long expiryReferenceTime) throws StoreException {
-    return getValidDataSizeByLogSegment(timeRange, expiryReferenceTime, null);
   }
 
   /**
@@ -304,6 +311,25 @@ class BlobStoreStats implements StoreStats, Closeable {
    *                  and the acceptable resolution.
    * @param expiryReferenceTime the reference time for expired blobs. Blobs with expiration time less than it would be
    *                            considered as expired. Usually it's now.
+   * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second
+   * element is the valid data size for each segment in the form of a {@link NavigableMap} of segment names to
+   * valid data sizes.
+   * @throws StoreException
+   */
+  Pair<Long, NavigableMap<LogSegmentName, Long>> getValidDataSizeByLogSegment(TimeRange timeRange,
+      long expiryReferenceTime) throws StoreException {
+    return getValidDataSizeByLogSegment(timeRange, expiryReferenceTime, null);
+  }
+
+  /**
+   * Same as {@link #getValidDataSizeByLogSegment(TimeRange, long)}, but provides a file span for under compaction log segments.
+   * This file span would impact TTL_UPDATE's validity.
+   * @param timeRange the delete reference {@link TimeRange} at which the data is requested. Defines both the reference time
+   *                  and the acceptable resolution.
+   * @param expiryReferenceTime the reference time for expired blobs. Blobs with expiration time less than it would be
+   *                            considered as expired. Usually it's now.
+   * @param fileSpanUnderCompaction the {@link FileSpan} of the under compaction log segments. This file span would impact
+   *                                the validity of TTL_UPDATE. The rules can be found below. This file span could be null.
    * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second
    * element is the valid data size for each segment in the form of a {@link NavigableMap} of segment names to
    * valid data sizes.
