@@ -816,11 +816,11 @@ class BlobStoreCompactor {
             if (config.storeCompactionMinOperationsBytesPerSec < config.storeCompactionOperationsBytesPerSec) {
               // Enable dynamic desired rate based on disk latency.
               double currentReadTimePerMbInMs = srcMetrics.diskReadTimePerMbInMs.getSnapshot().get95thPercentile();
-              int desiredReadPerSecond =
-                  getDesiredSpeedPerSecond(currentReadTimePerMbInMs, config.storeCompactionDiskIoThresholdReadMsMb);
+              int desiredReadPerSecond = getDesiredSpeedPerSecond(currentReadTimePerMbInMs,
+                  config.storeCompactionIoPerMbReadLatencyThresholdMs);
               double currentWriteTimePerMbInMs = srcMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile();
-              int desiredWritePerSecond =
-                  getDesiredSpeedPerSecond(currentWriteTimePerMbInMs, config.storeCompactionDiskIoThresholdWriteMsMb);
+              int desiredWritePerSecond = getDesiredSpeedPerSecond(currentWriteTimePerMbInMs,
+                  config.storeCompactionIoPerMbWriteLatencyThresholdMs);
               logger.debug(
                   "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
                   currentReadTimePerMbInMs, desiredWritePerSecond, desiredReadPerSecond, desiredWritePerSecond);

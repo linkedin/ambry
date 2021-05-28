@@ -90,7 +90,9 @@ public class Throttler {
    * @param desiredRatePerSec the new desiredRatePerSec
    */
   public void updateDesiredRatePerSecond(double desiredRatePerSec){
-    this.desiredRatePerSec = desiredRatePerSec;
+    synchronized (lock) {
+      this.desiredRatePerSec = desiredRatePerSec;
+    }
   }
 
   /**

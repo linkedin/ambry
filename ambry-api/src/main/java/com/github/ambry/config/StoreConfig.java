@@ -418,20 +418,20 @@ public class StoreConfig {
       "store.compaction.enable.basic.info.on.missing.duplicate";
 
   /**
-   * A normalized disk IO read latency threshold(per MB). If actual normalized disk read latency high than the
+   * A normalized disk IO read latency threshold(per MB). If actual normalized disk read latency is higher than the
    * threshold, we need to decrease compaction speed.
    */
-  @Config("store.compaction.disk.io.threshold.read.ms.mb")
+  @Config("store.compaction.io.per.mb.read.latency.threshold.ms")
   @Default("20")
-  public final int storeCompactionDiskIoThresholdReadMsMb;
+  public final int storeCompactionIoPerMbReadLatencyThresholdMs;
 
   /**
-   * A normalized disk IO write latency threshold(per MB). If actual normalized disk write latency high than the
+   * A normalized disk IO write latency threshold(per MB). If actual normalized disk write latency is higher than the
    * threshold, we need to decrease compaction speed.
    */
-  @Config("store.compaction.disk.io.threshold.write.ms.mb")
+  @Config("store.compaction.io.per.mb.write.latency.threshold.ms")
   @Default("20")
-  public final int storeCompactionDiskIoThresholdWriteMsMb;
+  public final int storeCompactionIoPerMbWriteLatencyThresholdMs;
 
   /**
    * The per disk histogram's reservoir time window in millisecond.
@@ -537,10 +537,12 @@ public class StoreConfig {
     storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);
     storeCompactionEnableBasicInfoOnMissingDuplicate =
         verifiableProperties.getBoolean(storeCompactionEnableBasicInfoOnMissingDuplicateName, false);
-    storeCompactionDiskIoThresholdReadMsMb =
-        verifiableProperties.getIntInRange("store.compaction.disk.io.threshold.read.ms.mb", 20, 0, Integer.MAX_VALUE);
-    storeCompactionDiskIoThresholdWriteMsMb =
-        verifiableProperties.getIntInRange("store.compaction.disk.io.threshold.write.ms.mb", 20, 0, Integer.MAX_VALUE);
+    storeCompactionIoPerMbReadLatencyThresholdMs =
+        verifiableProperties.getIntInRange("store.compaction.io.per.mb.read.latency.threshold.ms", 20, 0,
+            Integer.MAX_VALUE);
+    storeCompactionIoPerMbWriteLatencyThresholdMs =
+        verifiableProperties.getIntInRange("store.compaction.io.per.mb.write.latency.threshold.ms", 20, 0,
+            Integer.MAX_VALUE);
     storeDiskIoReservoirTimeWindowMs =
         verifiableProperties.getIntInRange("store.disk.io.reservoir.time.window.ms", 200, 0, Integer.MAX_VALUE);
   }
