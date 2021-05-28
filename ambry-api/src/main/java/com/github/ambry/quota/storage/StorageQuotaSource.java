@@ -51,6 +51,11 @@ public interface StorageQuotaSource extends QuotaSource {
    * Callback to get the  current storage usage.
    */
   interface StorageUsageCallback {
+    /**
+     *  Method to return container storage usage in a map. The format of this map follows the container storage quota
+     *  in this class.
+     * @return The storage usage for each container.
+     */
     Map<String, Map<String, Long>> containerStorageUsage();
   }
 
