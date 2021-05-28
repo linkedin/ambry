@@ -78,6 +78,7 @@ public class StoreMessageReadSetTest {
     tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + TestUtils.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
+    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     this.doDataPrefetch = doDataPrefetch;
     this.setFilePermissionEnabled = setFilePermissionEnabled;
   }

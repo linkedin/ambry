@@ -106,6 +106,7 @@ class DiskManager {
     this.scheduler = scheduler;
     this.metrics = metrics;
     this.storeMainMetrics = storeMainMetrics;
+    this.storeMainMetrics.initializeDiskMetrics(disk.getMountPath(), storeConfig.storeDiskIoReservoirTimeWindowMs);
     this.storeUnderCompactionMetrics = storeUnderCompactionMetrics;
     this.keyFactory = keyFactory;
     this.recovery = recovery;

@@ -1056,6 +1056,7 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
+    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(time);
     store = new MockBlobStore(replicaId, config, null, metrics, mockBlobStoreStats);
     store.start();
@@ -1873,6 +1874,7 @@ public class BlobStoreTest {
     properties.put("store.io.error.count.to.trigger.shutdown", "3");
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
+    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
@@ -3307,6 +3309,7 @@ public class BlobStoreTest {
       List<ReplicaStatusDelegate> replicaStatusDelegates) {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
+    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     return new MockBlobStore(replicaId, config, replicaStatusDelegates, metrics);
   }
 

@@ -110,11 +110,25 @@ public class StoreConfig {
   public final int storeHardDeleteOperationsBytesPerSec;
 
   /**
-   * The rate of I/O allowed per disk for compaction.
+   * The max rate of I/O allowed per disk for compaction.
    */
   @Config("store.compaction.operations.bytes.per.sec")
   @Default("1*1024*1024")
   public final int storeCompactionOperationsBytesPerSec;
+
+  /**
+   * The minimum  I/O rate allowed per disk for compaction.
+   */
+  @Config("store.compaction.min.operations.bytes.per.sec")
+  @Default("512*1024")
+  public final int storeCompactionMinOperationsBytesPerSec;
+
+  /**
+   * The adjustment coefficient to use when compaction calculate desired copy rate.
+   */
+  @Config("store.compaction.operations.adjust.k")
+  @Default("1")
+  public final double storeCompactionOperationsAdjustK;
 
   /**
    * The check interval used in compaction rate throttler. -1 means we check rate in every call.
@@ -403,6 +417,29 @@ public class StoreConfig {
   public static final String storeCompactionEnableBasicInfoOnMissingDuplicateName =
       "store.compaction.enable.basic.info.on.missing.duplicate";
 
+  /**
+   * A normalized disk IO read latency threshold(per MB). If actual normalized disk read latency is higher than the
+   * threshold, we need to decrease compaction speed.
+   */
+  @Config("store.compaction.io.per.mb.read.latency.threshold.ms")
+  @Default("20")
+  public final int storeCompactionIoPerMbReadLatencyThresholdMs;
+
+  /**
+   * A normalized disk IO write latency threshold(per MB). If actual normalized disk write latency is higher than the
+   * threshold, we need to decrease compaction speed.
+   */
+  @Config("store.compaction.io.per.mb.write.latency.threshold.ms")
+  @Default("20")
+  public final int storeCompactionIoPerMbWriteLatencyThresholdMs;
+
+  /**
+   * The per disk histogram's reservoir time window in millisecond.
+   */
+  @Config("store.disk.io.reservoir.time.window.ms")
+  @Default("200")
+  public final int storeDiskIoReservoirTimeWindowMs;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -427,6 +464,11 @@ public class StoreConfig {
     storeCompactionOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.compaction.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
+    storeCompactionMinOperationsBytesPerSec =
+        verifiableProperties.getIntInRange("store.compaction.min.operations.bytes.per.sec", 512 * 1024, 1,
+            Integer.MAX_VALUE);
+    storeCompactionOperationsAdjustK =
+        verifiableProperties.getDoubleInRange("store.compaction.operations.adjust.k", 1.0, -100.0, 100.0);
     storeCompactionThrottlerCheckIntervalMs =
         verifiableProperties.getIntInRange("store.compaction.throttler.check.interval.ms", -1, -1, Integer.MAX_VALUE);
     storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
@@ -495,5 +537,13 @@ public class StoreConfig {
     storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);
     storeCompactionEnableBasicInfoOnMissingDuplicate =
         verifiableProperties.getBoolean(storeCompactionEnableBasicInfoOnMissingDuplicateName, false);
+    storeCompactionIoPerMbReadLatencyThresholdMs =
+        verifiableProperties.getIntInRange("store.compaction.io.per.mb.read.latency.threshold.ms", 20, 0,
+            Integer.MAX_VALUE);
+    storeCompactionIoPerMbWriteLatencyThresholdMs =
+        verifiableProperties.getIntInRange("store.compaction.io.per.mb.write.latency.threshold.ms", 20, 0,
+            Integer.MAX_VALUE);
+    storeDiskIoReservoirTimeWindowMs =
+        verifiableProperties.getIntInRange("store.disk.io.reservoir.time.window.ms", 200, 0, Integer.MAX_VALUE);
   }
 }
