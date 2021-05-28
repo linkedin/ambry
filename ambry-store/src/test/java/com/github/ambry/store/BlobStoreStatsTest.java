@@ -89,7 +89,7 @@ public class BlobStoreStatsTest {
 
   private BlobStoreStats setupBlobStoreStats(int bucketCount, long logSegmentForecastOffsetMs) {
     return new BlobStoreStats("", state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs,
-        QUEUE_PROCESSOR_PERIOD_IN_Ms, DEFAULT_WAIT_TIMEOUT_SECS, true, state.time, indexScannerScheduler,
+        QUEUE_PROCESSOR_PERIOD_IN_Ms, DEFAULT_WAIT_TIMEOUT_SECS, true, true, state.time, indexScannerScheduler,
         queueProcessorScheduler, diskIOScheduler, METRICS);
   }
 
@@ -823,8 +823,8 @@ public class BlobStoreStatsTest {
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int expectedMinimumThrottleCount = 2 * state.referenceIndex.size();
     BlobStoreStats blobStoreStats =
-        new BlobStoreStats("", state.index, 10, BUCKET_SPAN_IN_MS, 0, QUEUE_PROCESSOR_PERIOD_IN_Ms, 1, true, state.time,
-            indexScannerScheduler, queueProcessorScheduler, diskIOScheduler, METRICS);
+        new BlobStoreStats("", state.index, 10, BUCKET_SPAN_IN_MS, 0, QUEUE_PROCESSOR_PERIOD_IN_Ms, 1, true, true,
+            state.time, indexScannerScheduler, queueProcessorScheduler, diskIOScheduler, METRICS);
     // proceed only when the scan is started
     assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
     advanceTimeToNextSecond();

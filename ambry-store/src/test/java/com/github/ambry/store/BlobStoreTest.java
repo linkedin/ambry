@@ -3413,7 +3413,7 @@ public class BlobStoreTest {
     volatile IndexValue previousValue;
 
     MockBlobStoreStats(Time time) {
-      super("", null, 0, 0, 0, 0, 0, false, time, null, null, null, null);
+      super("", null, 0, 0, 0, 0, 0, false, true, time, null, null, null, null);
     }
 
     @Override

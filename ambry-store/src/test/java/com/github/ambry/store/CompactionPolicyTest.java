@@ -491,12 +491,12 @@ class MockBlobStoreStats extends BlobStoreStats {
   private String storeId = "";
 
   MockBlobStoreStats(long maxBlobSize) {
-    super("", null, 0, 0, 0, 0, 0, true, null, null, null, null, null);
+    super("", null, 0, 0, 0, 0, 0, true, true, null, null, null, null, null);
     this.maxBlobSize = maxBlobSize;
   }
 
   MockBlobStoreStats(long maxBlobSize, int i) {
-    super("storeId" + i, null, 0, 0, 0, 0, 0, true, null, null, null, null, null);
+    super("storeId" + i, null, 0, 0, 0, 0, 0, true, true, null, null, null, null, null);
     this.storeId = "storeId" + i;
     this.maxBlobSize = maxBlobSize;
   }

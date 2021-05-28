@@ -1286,15 +1286,7 @@ class BlobStoreCompactor {
       // TTL update + DELETE -> DELETE
       // PUT + TTL update -> PUT (the one relevant to this comment)
       // PUT + TTL update + DELETE -> DELETE
-      // TODO: move this blob store stats
-      Offset startOffsetOfLastIndexSegmentForDeleteCheck = getStartOffsetOfLastIndexSegmentForDeleteCheck();
-      // deletes are in effect if this index segment does not have any deletes that are less than
-      // StoreConfig#storeDeletedMessageRetentionDays days old. If there are such deletes, then they are not counted as
-      // deletes and the PUT records are still valid as far as compaction is concerned
-      boolean deletesInEffect = startOffsetOfLastIndexSegmentForDeleteCheck != null
-          && indexSegment.getStartOffset().compareTo(startOffsetOfLastIndexSegmentForDeleteCheck) < 0;
-      logger.trace("Deletes in effect is {} for index segment with start offset {} in {}", deletesInEffect,
-          indexSegment.getStartOffset(), storeId);
+      long deleteReferenceTime = compactionLog.getCompactionDetails().getReferenceTimeMs();
       List<IndexEntry> validEntries = new ArrayList<>();
       for (IndexEntry indexEntry : allIndexEntries) {
         IndexValue value = indexEntry.getValue();
@@ -1303,7 +1295,7 @@ class BlobStoreCompactor {
           if (putValue != null) {
             // In PersistentIndex.markAsDeleted(), the expiry time of the put/ttl update value is copied into the
             // delete value. So it is safe to check for isExpired() on the delete value.
-            if (deletesInEffect || srcIndex.isExpired(value)) {
+            if (value.getOperationTimeInMs() < deleteReferenceTime || srcIndex.isExpired(value)) {
               // still have to evaluate whether the TTL update has to be copied
               NavigableSet<IndexValue> values = indexSegment.find(indexEntry.getKey());
               IndexValue secondVal = values.lower(values.last());
@@ -1340,20 +1332,14 @@ class BlobStoreCompactor {
           // Doesn't matter whether we get the PUT or DELETE entry for the expiry test
           if (!srcIndex.isExpired(valueFromIdx)) {
             // unexpired PUT entry.
-            if (deletesInEffect) {
-              if (!hasDeleteEntryInSpan(indexEntry.getKey(), indexSegment.getStartOffset(),
-                  startOffsetOfLastIndexSegmentForDeleteCheck)) {
-                // PUT entry that has not expired and is not considered deleted.
-                // Add all values in this index segment (to account for the presence of TTL updates)
-                addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
-              } else {
-                logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
-                    indexEntry, indexSegment.getStartOffset(), storeId);
-              }
-            } else {
-              // valid PUT entry
+            if (!hasDeleteEntryOutOfRetention(indexEntry.getKey(), indexSegment.getStartOffset(),
+                deleteReferenceTime)) {
+              // PUT entry that has not expired and is not considered deleted.
               // Add all values in this index segment (to account for the presence of TTL updates)
               addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
+            } else {
+              logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
+                  indexEntry, indexSegment.getStartOffset(), storeId);
             }
           } else {
             logger.trace("{} in index segment with start offset {} in {} is not valid because it is an expired PUT",
@@ -1362,31 +1348,6 @@ class BlobStoreCompactor {
         }
       }
       return validEntries;
-    }
-
-    /**
-     * @return the start {@link Offset} of the index segment up until which delete records are considered applicable. Any
-     * delete records of blobs in subsequent index segments do not count and the blob is considered as not deleted.
-     * <p/>
-     * Returns {@code null} if none of the delete records are considered applicable.
-     */
-    private Offset getStartOffsetOfLastIndexSegmentForDeleteCheck() {
-      // TODO: move this to BlobStoreStats
-      Offset cutoffOffset = compactionLog.getStartOffsetOfLastIndexSegmentForDeleteCheck();
-      if (cutoffOffset == null || !srcIndex.getIndexSegments().containsKey(cutoffOffset)) {
-        long referenceTimeMs = compactionLog.getCompactionDetails().getReferenceTimeMs();
-        for (IndexSegment indexSegment : srcIndex.getIndexSegments().descendingMap().values()) {
-          if (indexSegment.getLastModifiedTimeMs() < referenceTimeMs) {
-            cutoffOffset = indexSegment.getEndOffset();
-            break;
-          }
-        }
-        if (cutoffOffset != null) {
-          compactionLog.setStartOffsetOfLastIndexSegmentForDeleteCheck(cutoffOffset);
-          logger.info("Start offset of last index segment for delete check is {} for {}", cutoffOffset, storeId);
-        }
-      }
-      return cutoffOffset;
     }
 
     /**
@@ -1460,14 +1421,16 @@ class BlobStoreCompactor {
     /**
      * @param key the {@link StoreKey} to check
      * @param searchStartOffset the start offset of the search for delete entry
-     * @param searchEndOffset the end offset of the search for delete entry
-     * @return {@code true} if the key has a delete entry in the given search span.
+     * @param deleteReferenceTime the timestamp to reference when deciding a delete is out of retention
+     * @return {@code true} if the key has a delete entry that is out of retention
      * @throws StoreException if there are any problems using the index
      */
-    private boolean hasDeleteEntryInSpan(StoreKey key, Offset searchStartOffset, Offset searchEndOffset)
+    private boolean hasDeleteEntryOutOfRetention(StoreKey key, Offset searchStartOffset, long deleteReferenceTime)
         throws StoreException {
-      FileSpan deleteSearchSpan = new FileSpan(searchStartOffset, searchEndOffset);
-      return srcIndex.findKey(key, deleteSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.DELETE)) != null;
+      FileSpan deleteSearchSpan = new FileSpan(searchStartOffset, srcIndex.getCurrentEndOffset());
+      IndexValue deleteValue =
+          srcIndex.findKey(key, deleteSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.DELETE));
+      return deleteValue != null && deleteValue.getOperationTimeInMs() < deleteReferenceTime;
     }
 
     @Override

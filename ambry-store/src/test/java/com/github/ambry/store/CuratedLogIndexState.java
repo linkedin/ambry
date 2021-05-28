@@ -164,8 +164,8 @@ class CuratedLogIndexState {
     this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, false);
   }
 
-  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey)
-      throws IOException, StoreException {
+  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes,
+      boolean enableResetKey) throws IOException, StoreException {
     this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, enableResetKey);
   }
 
@@ -1609,7 +1609,7 @@ class CuratedLogIndexState {
               // check if this is a delete tombstone left by compaction
               boolean isValid = true;
               try {
-                if (index.findKey(key, null, EnumSet.of(PersistentIndex.IndexEntryType.PUT)) == null) {
+                if (getExpectedValue(key, true) == null) {
                   if (currentValue.getExpiresAtMs() == Utils.Infinite_Time || currentValue.isTtlUpdate()) {
                     // TODO check validity of permanent delete tombstone
                     deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
@@ -1617,7 +1617,7 @@ class CuratedLogIndexState {
                   } else {
                     deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
                     deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
-                    if (invalidateExpiredDelete && currentValue.getExpiresAtMs() < time.milliseconds()) {
+                    if (invalidateExpiredDelete && currentValue.getExpiresAtMs() < expiryReferenceTimeMs) {
                       isValid = false;
                       expiredDeletes.getFirst().add(key);
                     }
@@ -1625,7 +1625,7 @@ class CuratedLogIndexState {
                 } else {
                   // if this is a delete with PUT, we check if it has expired and track it in a separate set
                   if (invalidateExpiredDelete && currentValue.getExpiresAtMs() != Utils.Infinite_Time
-                      && currentValue.getExpiresAtMs() < time.milliseconds()) {
+                      && currentValue.getExpiresAtMs() < expiryReferenceTimeMs) {
                     expiredDeletes.getSecond().add(key);
                   }
                 }

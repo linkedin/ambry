@@ -258,10 +258,9 @@ public class BlobStoreCompactorTest {
     StatsBasedCompactionPolicy policy = new StatsBasedCompactionPolicy(storeConfig, state.time);
     ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
 
-    // Create stats, so the fillupLogSegment is true
     BlobStoreStats stats =
-        new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, state.time, scheduler,
-            scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
+        new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, purgeDeleteTombstone,
+            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
     BlobStoreStats spyStats = Mockito.spy(stats);
     Mockito.doReturn(PUT_RECORD_SIZE).when(spyStats).getMaxBlobSize();
     CompactionDetails details =
@@ -2724,9 +2723,11 @@ public class BlobStoreCompactorTest {
     Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     for (LogSegmentName segment : logSegments) {
-      size += state.getValidDataSizeForLogSegment(state.log.getSegment(segment), deleteReferenceTimeMs,
-          state.time.milliseconds(), getFileSpanForLogSegments(logSegments), deleteTombstoneStats, expiredDeletes,
-          invalidateExpiredDelete);
+      long logSegmentValidSize =
+          state.getValidDataSizeForLogSegment(state.log.getSegment(segment), deleteReferenceTimeMs,
+              state.time.milliseconds(), getFileSpanForLogSegments(logSegments), deleteTombstoneStats, expiredDeletes,
+              invalidateExpiredDelete);
+      size += logSegmentValidSize;
     }
     return size;
   }
@@ -2797,8 +2798,21 @@ public class BlobStoreCompactorTest {
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     long indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
 
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
+    BlobStoreStats stats =
+        new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, purgeDeleteTombstone,
+            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()));
+    NavigableMap<LogSegmentName, Long> validDataSizeFromBlobStoreStats =
+        stats.getValidDataSizeByLogSegment(new TimeRange(deleteReferenceTimeMs, 0L),
+            getFileSpanForLogSegments(segmentsUnderCompaction)).getSecond();
+    scheduler.shutdown();
+    long totalSizeAfterCompactionFromBlobStoreStats =
+        segmentsUnderCompaction.stream().mapToLong(validDataSizeFromBlobStoreStats::get).sum();
+
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
     long expectedValidDataSize = getValidDataSize(segmentsUnderCompaction, deleteReferenceTimeMs, purgeDeleteTombstone);
+    assertEquals("Valid size from blob store should be the same as compacted size", expectedValidDataSize,
+        totalSizeAfterCompactionFromBlobStoreStats);
     List<LogSegmentName> unaffectedSegments = getUnaffectedSegments(segmentsUnderCompaction);
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     List<LogEntry> validLogEntriesInOrder =
