@@ -75,7 +75,11 @@ public class RestServiceException extends Exception {
     this.error = error;
     this.includeExceptionMessageInResponse = includeExceptionMessageInResponse;
     this.includeExceptionHeadersInResponse = includeExceptionHeadersInResponse;
-    this.exceptionHeadersMap = Collections.unmodifiableMap(exceptionHeadersMap);
+    if (includeExceptionHeadersInResponse) {
+      this.exceptionHeadersMap = Collections.unmodifiableMap(exceptionHeadersMap);
+    } else {
+      this.exceptionHeadersMap = Collections.emptyMap();
+    }
   }
 
   public RestServiceErrorCode getErrorCode() {
