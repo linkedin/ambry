@@ -272,7 +272,7 @@ public class StoreMetrics {
         long invalidDataSize = -1;
         try {
           if (storeAsyncGetValidSizeEnable) {
-            invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSizeAsync().getSecond();
+            invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getCachedValidSize().getSecond();
           } else {
             invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSize(
                 new TimeRange(System.currentTimeMillis(), blobStoreStats.getBucketSpanTimeInMs())).getSecond();

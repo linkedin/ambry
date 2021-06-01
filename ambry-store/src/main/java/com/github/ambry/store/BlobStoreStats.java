@@ -179,10 +179,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessingPeriodInMs, TimeUnit.MILLISECONDS);
     }
     if (enableAsyncGetValidSize) {
-      ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-      TimeRange timeRange = new TimeRange(System.currentTimeMillis(), getBucketSpanTimeInMs());
-      validDataSizeCollector = new ValidDataSizeCollector(timeRange);
-      scheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInMs, TimeUnit.MILLISECONDS);
+      validDataSizeCollector = new ValidDataSizeCollector();
+      shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInMs, TimeUnit.MILLISECONDS);
     }
   }
 
@@ -202,7 +200,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   /**
    * Get valid data size asynchronously.
    */
-  Pair<Long, Long> getValidSizeAsync() {
+  Pair<Long, Long> getCachedValidSize() {
     return validDataSize.get();
   }
 
@@ -1227,17 +1225,15 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   private class ValidDataSizeCollector implements Runnable {
     private volatile boolean cancelled = false;
-    private final TimeRange timeRange;
 
-    ValidDataSizeCollector(TimeRange timeRange) {
-      this.timeRange = timeRange;
+    ValidDataSizeCollector() {
     }
 
     @Override
     public void run() {
       try {
         if (!cancelled) {
-          validDataSize.set(getValidSize(timeRange));
+          validDataSize.set(getValidSize(new TimeRange(System.currentTimeMillis(), getBucketSpanTimeInMs())));
         }
       } catch (StoreException e) {
         logger.error("Failed to get invalidDataSize on store: {},", storeId, e);
