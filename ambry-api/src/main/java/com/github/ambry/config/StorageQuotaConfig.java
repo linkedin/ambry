@@ -13,8 +13,6 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.quota.QuotaMode;
-
 
 /**
  * Config for Storage Quota service.
@@ -30,10 +28,8 @@ public class StorageQuotaConfig {
       STORAGE_QUOTA_PREFIX + "mysql.monthly.base.fetch.offset.sec";
   public static final String MYSQL_STORE_RETRY_BACKOFF_MS = STORAGE_QUOTA_PREFIX + "mysql.store.retry.backoff.ms";
   public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
-  public static final String ENFORCER_MODE = STORAGE_QUOTA_PREFIX + "enforcer.mode";
   private static final String DEFAULT_VALUE_SOURCE_FACTORY =
       "com.github.ambry.quota.storage.JSONStringStorageQuotaSourceFactory";
-  private static final String DEFAULT_VALUE_ENFORCE_MODE = QuotaMode.TRACKING.name();
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -105,12 +101,6 @@ public class StorageQuotaConfig {
   public final long mysqlMonthlyBaseFetchOffsetSec;
 
   /**
-   * The quota mode to set for enforcer. There are two values, "tracking" or "throttling"
-   */
-  @Config(ENFORCER_MODE)
-  public final QuotaMode enforcerMode;
-
-  /**
    * Constructor to create a {@link StorageQuotaConfig}.
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
@@ -125,7 +115,5 @@ public class StorageQuotaConfig {
     mysqlStoreRetryBackoffMs = verifiableProperties.getLong(MYSQL_STORE_RETRY_BACKOFF_MS, 10 * 60 * 1000);
     mysqlStoreRetryMaxCount = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX_COUNT, 1);
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
-    enforcerMode =
-        QuotaMode.valueOf(verifiableProperties.getString(ENFORCER_MODE, DEFAULT_VALUE_ENFORCE_MODE).toUpperCase());
   }
 }

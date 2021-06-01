@@ -13,12 +13,12 @@
  */
 package com.github.ambry.quota.storage;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
-import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.config.StorageQuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -26,10 +26,9 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -37,17 +36,17 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit test for {@link AmbryStorageQuotaEnforcer}.
+ * Unit test for {@link StorageQuotaEnforcer}.
  */
-public class AmbryStorageQuotaEnforcerTest {
-  private final StorageQuotaServiceMetrics metrics = new StorageQuotaServiceMetrics(new MetricRegistry());
+public class StorageQuotaEnforcerTest {
+  StorageQuotaConfig config = new StorageQuotaConfig(new VerifiableProperties(new Properties()));
 
   /**
    * Test to initialize the storage usage with empty map.
    */
   @Test
-  public void testInitEmptyStorageUsage() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+  public void testInitEmptyStorageUsage() throws Exception {
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
     assertEquals(Collections.EMPTY_MAP, enforcer.getStorageUsage());
   }
@@ -56,8 +55,8 @@ public class AmbryStorageQuotaEnforcerTest {
    * Test to initialize the storage usage with non-empty map.
    */
   @Test
-  public void testInitStorageUsage() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+  public void testInitStorageUsage() throws Exception {
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     Map<String, Map<String, Long>> containerUsage = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageUsage(containerUsage);
     assertEquals(containerUsage, enforcer.getStorageUsage());
@@ -67,8 +66,8 @@ public class AmbryStorageQuotaEnforcerTest {
    * Test to initialize the storage quota with empty map.
    */
   @Test
-  public void testInitEmptyStorageQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+  public void testInitEmptyStorageQuota() throws Exception {
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     enforcer.initStorageQuota(Collections.EMPTY_MAP);
     assertEquals(Collections.EMPTY_MAP, enforcer.getStorageQuota());
   }
@@ -77,8 +76,8 @@ public class AmbryStorageQuotaEnforcerTest {
    * Test to initialize the storage quota with non-empty map.
    */
   @Test
-  public void testInitStorageQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+  public void testInitStorageQuota() throws Exception {
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     Map<String, Map<String, Long>> containerQuota = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageQuota(containerQuota);
     assertEquals(containerQuota, enforcer.getStorageQuota());
@@ -88,8 +87,8 @@ public class AmbryStorageQuotaEnforcerTest {
    * Test on storage quota updates.
    */
   @Test
-  public void testStorageQuotaSourceListener() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+  public void testStorageQuotaSourceListener() throws Exception {
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
@@ -109,16 +108,12 @@ public class AmbryStorageQuotaEnforcerTest {
    * Test when storage usage updates.
    */
   @Test
-  public void testStorageUsageRefresherListener() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+  public void testStorageUsageRefresherListener() throws Exception {
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedUsage = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageUsage(expectedUsage);
     assertEquals(expectedUsage, enforcer.getStorageUsage());
-
-    // Adding extra account and container usage
-    enforcer.getStorageUsage().put("1000", new ConcurrentHashMap<String, Long>());
-    enforcer.getStorageUsage().get("1000").put("1", new Long(10000));
 
     StorageUsageRefresher.Listener listener = enforcer.getUsageRefresherListener();
     int numUpdates = 10;
@@ -136,135 +131,21 @@ public class AmbryStorageQuotaEnforcerTest {
         expectedUsage.get(String.valueOf(accountId)).put(String.valueOf(containerId), newValue);
       }
       listener.onNewContainerStorageUsage(expectedUsage);
-      expectedUsage.put("1000", new HashMap<String, Long>());
-      expectedUsage.get("1000").put("1", new Long(10000));
       assertEquals(expectedUsage, enforcer.getStorageUsage());
-      expectedUsage.remove("1000");
     }
   }
 
   /**
-   * Test on {@link StorageQuotaEnforcer#shouldThrottle} when account and contaienr doesn't have a quota specified
-   */
-  @Test
-  public void testThrottleNoQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
-    int initNumAccounts = 10;
-    Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
-    enforcer.initStorageQuota(expectedQuota);
-    enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.THROTTLING);
-
-    // Make sure there is no quota for this account and container
-    Random random = new Random();
-    Map<String, Map<String, Long>> expectedUsage = new HashMap<>();
-    for (int i = 0; i < 100; i++) {
-      short accountId = (short) (random.nextInt(10) + initNumAccounts + 1);
-      short containerId = (short) (random.nextInt(10));
-      long size = random.nextLong() % 10000 + 100;
-      expectedUsage.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-          .compute(String.valueOf(containerId), (k, v) -> {
-            if (v == null) {
-              return size;
-            } else {
-              return v.longValue() + size;
-            }
-          });
-      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
-    }
-
-    assertEquals(expectedUsage, enforcer.getStorageUsage());
-  }
-
-  /**
-   *  Test on {@link StorageQuotaEnforcer#shouldThrottle} when the mode is {@link QuotaMode#TRACKING}.
-   */
-  @Test
-  public void testThrottleTracking() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
-    int initNumAccounts = 10;
-    Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
-    enforcer.initStorageQuota(expectedQuota);
-    enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.TRACKING);
-
-    // Make sure there is no quota for this account and container
-    Random random = new Random();
-    Map<String, Map<String, Long>> expectedUsage = new HashMap<>();
-    for (int i = 0; i < 100; i++) {
-      short accountId = (short) (random.nextInt(10) + initNumAccounts + 1);
-      short containerId = (short) (random.nextInt(10));
-      long size = random.nextLong() % 10000 + 100;
-      expectedUsage.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-          .compute(String.valueOf(containerId), (k, v) -> {
-            if (v == null) {
-              return size;
-            } else {
-              return v.longValue() + size;
-            }
-          });
-      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
-    }
-    // Make sure the container with quota will not be throttled.
-    for (int i = 0; i < 100; i++) {
-      short accountId = (short) (random.nextInt(10) + 1);
-      short containerId = (short) (random.nextInt(10) + 1);
-      long size = random.nextLong() % 10000 + 1000; // this might be greater than the quota
-      long quota = expectedQuota.get(String.valueOf(accountId)).get(String.valueOf(containerId));
-      expectedUsage.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-          .compute(String.valueOf(containerId), (k, v) -> {
-            if (v == null) {
-              return size;
-            } else if (v.longValue() + size < quota) {
-              return v.longValue() + size;
-            } else {
-              return v.longValue();
-            }
-          });
-      assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, size));
-    }
-    assertEquals(expectedUsage, enforcer.getStorageUsage());
-  }
-
-  /**
-   * Test on {@link StorageQuotaEnforcer#shouldThrottle} when the quota is exceeded.
-   */
-  @Test
-  public void testThrottleExceedsQuota() {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
-    int initNumAccounts = 10;
-    Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
-    enforcer.initStorageQuota(expectedQuota);
-    enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.THROTTLING);
-
-    for (Map.Entry<String, Map<String, Long>> accountQuota : expectedQuota.entrySet()) {
-      short accountId = Short.parseShort(accountQuota.getKey());
-      for (Map.Entry<String, Long> containerQuota : accountQuota.getValue().entrySet()) {
-        short containerId = Short.parseShort(containerQuota.getKey());
-        long quota = containerQuota.getValue();
-        // Delete should return false
-        assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Delete, quota));
-        // First upload should return false
-        assertFalse(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, quota));
-        // Exceeds quota should return true
-        assertTrue(enforcer.shouldThrottle(accountId, containerId, QuotaOperation.Post, 1));
-      }
-    }
-  }
-
-  /**
-   * Test {@link AmbryStorageQuotaEnforcer#getQuotaAndUsage} and {@link AmbryStorageQuotaEnforcer#charge} methods.
+   * Test {@link StorageQuotaEnforcer#getQuotaAndUsage} and {@link StorageQuotaEnforcer#charge} methods.
    * @throws Exception
    */
   @Test
   public void testGetQuotaAndUsageAndCharge() throws Exception {
-    AmbryStorageQuotaEnforcer enforcer = new AmbryStorageQuotaEnforcer(null, metrics);
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     enforcer.initStorageQuota(expectedQuota);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    enforcer.setQuotaMode(QuotaMode.THROTTLING);
 
     for (Map.Entry<String, Map<String, Long>> accountEntry : expectedQuota.entrySet()) {
       short accountId = Short.valueOf(accountEntry.getKey());

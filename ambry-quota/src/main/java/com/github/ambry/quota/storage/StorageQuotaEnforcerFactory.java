@@ -21,10 +21,10 @@ import com.github.ambry.quota.QuotaSource;
 
 
 /**
- * A factory implementation to return {@link StorageQuotaAdaptorQuotaEnforcer}.
+ * A factory implementation to return {@link StorageQuotaEnforcer}.
  */
-public class StorageQuotaAdaptorQuotaEnforcerFactory implements QuotaEnforcerFactory {
-  private final StorageQuotaAdaptorQuotaEnforcer quotaEnforcer;
+public class StorageQuotaEnforcerFactory implements QuotaEnforcerFactory {
+  private final StorageQuotaEnforcer quotaEnforcer;
 
   /**
    * Constructor to instantiate a factory.
@@ -33,9 +33,13 @@ public class StorageQuotaAdaptorQuotaEnforcerFactory implements QuotaEnforcerFac
    * @param accountStatsStore the {@link AccountStatsStore}.
    * @throws Exception
    */
-  public StorageQuotaAdaptorQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
+  public StorageQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
       AccountStatsStore accountStatsStore) throws Exception {
-    quotaEnforcer = new StorageQuotaAdaptorQuotaEnforcer(quotaConfig.storageQuotaConfig, accountStatsStore);
+    if (!(quotaSource instanceof StorageQuotaSource)) {
+      throw new IllegalStateException("QuotaSource should be a StorageQuotaSource");
+    }
+    quotaEnforcer =
+        new StorageQuotaEnforcer(quotaConfig.storageQuotaConfig, (StorageQuotaSource) quotaSource, accountStatsStore);
   }
 
   @Override

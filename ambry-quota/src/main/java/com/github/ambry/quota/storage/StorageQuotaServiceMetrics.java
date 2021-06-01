@@ -29,13 +29,13 @@ public class StorageQuotaServiceMetrics {
   public final Histogram mysqlRefresherRefreshUsageTimeMs;
 
   public StorageQuotaServiceMetrics(MetricRegistry register) {
-    quotaExceededCount = register.counter(MetricRegistry.name(StorageQuotaService.class, "QuotaExceededCount"));
+    quotaExceededCount = register.counter(MetricRegistry.name(StorageQuotaEnforcer.class, "QuotaExceededCount"));
     quotaExceededCallbackTimeMs =
-        register.histogram(MetricRegistry.name(StorageQuotaService.class, "QuotaExceededCallbackTimeMs"));
-    shouldThrottleTimeMs = register.histogram(MetricRegistry.name(StorageQuotaService.class, "ShouldThrottleTimeMs"));
+        register.histogram(MetricRegistry.name(StorageQuotaEnforcer.class, "QuotaExceededCallbackTimeMs"));
+    shouldThrottleTimeMs = register.histogram(MetricRegistry.name(StorageQuotaEnforcer.class, "ShouldThrottleTimeMs"));
     mysqlRefresherInitTimeMs =
-        register.histogram(MetricRegistry.name(StorageQuotaService.class, "MysqlRefresherInitTimeMs"));
+        register.histogram(MetricRegistry.name(StorageQuotaEnforcer.class, "MysqlRefresherInitTimeMs"));
     mysqlRefresherRefreshUsageTimeMs =
-        register.histogram(MetricRegistry.name(StorageQuotaService.class, "MysqlRefresherRefreshUsageTimeMs"));
+        register.histogram(MetricRegistry.name(StorageQuotaEnforcer.class, "MysqlRefresherRefreshUsageTimeMs"));
   }
 }

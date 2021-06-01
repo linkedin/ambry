@@ -13,13 +13,16 @@
  */
 package com.github.ambry.quota.storage;
 
+import com.github.ambry.quota.QuotaSourceFactory;
+
+
 /**
  * StorageQuotaSourceFactory is a factory to generate all the supporting cast required to instantiate a
  * {@link StorageQuotaSource}.
  * <p>
  * Usually called with the canonical class name and as such might have to support appropriate (multiple) constructors.
  */
-public interface StorageQuotaSourceFactory {
+public interface StorageQuotaSourceFactory extends QuotaSourceFactory {
 
   /**
    * Returns an instance of the {@link StorageQuotaSource} that the factory generates.
