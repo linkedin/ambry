@@ -348,7 +348,8 @@ public class StoreConfig {
   public static final String storeAutoCloseLastLogSegmentEnabledName = "store.auto.close.last.log.segment.enabled";
 
   /**
-   * Specifies the minimum value of Bytes for maxLagForPartition which can unseal replica.
+   * Specifies the minimum value of Bytes for maxLagForPartition(max lag refers to local replica is lagging behind remote peers)
+   * which can unseal replica.
    */
   @Config(storeUnsealReplicaMinimumLagBytesName)
   @Default("0")
@@ -357,7 +358,8 @@ public class StoreConfig {
 
 
   /**
-   * Whether to enable add synchronizer inside while loop for journal clean up.
+   * Whether to enable add Synchronizer inside while loop for journal clean up.
+   * Depends on the performance for the method cleanUpJournal vs cleanUpJournalWithSynchronizeInside in Journal, eventually will choose one way for the implementation.
    */
   @Config(storeSynchronizerInsideWhileLoopEnabledName)
   @Default("false")

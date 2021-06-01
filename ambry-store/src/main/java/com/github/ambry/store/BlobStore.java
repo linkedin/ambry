@@ -88,7 +88,7 @@ public class BlobStore implements Store {
   private final AtomicInteger errorCount;
   private final AccountService accountService;
   //The max replication lag indicating how far local store is behind peers.
-  private long localStoreMaxLagFromPeer;
+  private volatile long localStoreMaxLagFromPeer;
   private Log log;
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
