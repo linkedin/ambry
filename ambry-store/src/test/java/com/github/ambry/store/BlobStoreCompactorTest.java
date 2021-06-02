@@ -275,7 +275,7 @@ public class BlobStoreCompactorTest {
 
     BlobStoreStats stats =
         new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, purgeDeleteTombstone,
-            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 0);
+            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 1);
     BlobStoreStats spyStats = Mockito.spy(stats);
     Mockito.doReturn(PUT_RECORD_SIZE).when(spyStats).getMaxBlobSize();
     CompactionDetails details =
@@ -2945,7 +2945,7 @@ public class BlobStoreCompactorTest {
     ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
     BlobStoreStats stats =
         new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, purgeDeleteTombstone,
-            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 0);
+            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 1);
     NavigableMap<LogSegmentName, Long> validDataSizeFromBlobStoreStats =
         stats.getValidDataSizeByLogSegment(new TimeRange(deleteReferenceTimeMs, 0L),
             getFileSpanForLogSegments(segmentsUnderCompaction)).getSecond();

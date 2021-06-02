@@ -241,11 +241,11 @@ public class StoreConfig {
   public final long storeStatsRecentEntryProcessingIntervalInMinutes;
 
   /**
-   * Period in minutes to specify how frequent the validDataSizeCollector executed.
+   * Period in seconds to specify how frequent the validDataSizeCollector executed.
    */
-  @Config("store.get.valid.size.interval.in.minutes")
-  @Default("2")
-  public final long storeGetValidSizeIntervalInMinutes;
+  @Config("store.get.valid.size.interval.in.secs")
+  @Default("2*60")
+  public final long storeGetValidSizeIntervalInSecs;
 
   /**
    * The upper limit in seconds for requests to wait for a ongoing construction of buckets (that contains the answer)
@@ -519,8 +519,8 @@ public class StoreConfig {
         verifiableProperties.getLongInRange("store.stats.bucket.span.in.minutes", 60, 1, 10000);
     storeStatsRecentEntryProcessingIntervalInMinutes =
         verifiableProperties.getLongInRange("store.stats.recent.entry.processing.interval.in.minutes", 2, 1, 60);
-    storeGetValidSizeIntervalInMinutes =
-        verifiableProperties.getLongInRange("store.get.valid.size.interval.in.minutes", 2, 1, 60);
+    storeGetValidSizeIntervalInSecs =
+        verifiableProperties.getLongInRange("store.get.valid.size.interval.in.secs", 2 * 60, 1, 60 * 60);
     storeStatsWaitTimeoutInSecs =
         verifiableProperties.getLongInRange("store.stats.wait.timeout.in.secs", 2 * 60, 0, 30 * 60);
     storeStatsIndexEntriesPerSecond =

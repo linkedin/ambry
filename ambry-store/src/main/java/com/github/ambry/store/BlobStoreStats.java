@@ -150,13 +150,14 @@ class BlobStoreStats implements StoreStats, Closeable {
         TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes),
         config.storeStatsWaitTimeoutInSecs, config.storeEnableBucketForLogSegmentReports,
         config.storeCompactionPurgeDeleteTombstone, time, longLiveTaskScheduler, shortLiveTaskScheduler,
-        diskIOScheduler, metrics, TimeUnit.MINUTES.toMillis(config.storeGetValidSizeIntervalInMinutes));
+        diskIOScheduler, metrics, TimeUnit.SECONDS.toMillis(config.storeGetValidSizeIntervalInSecs));
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
       long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
-      boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time, ScheduledExecutorService longLiveTaskScheduler,
-      ScheduledExecutorService shortLiveTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics, long storeGetValidSizeIntervalInMs) {
+      boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time,
+      ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics, long storeGetValidSizeIntervalInSecs) {
     this.storeId = storeId;
     this.index = index;
     this.time = time;
@@ -176,8 +177,10 @@ class BlobStoreStats implements StoreStats, Closeable {
       queueProcessor = new QueueProcessor();
       shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessingPeriodInMs, TimeUnit.MILLISECONDS);
     }
-    validDataSizeCollector = new ValidDataSizeCollector();
-    shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInMs, TimeUnit.MILLISECONDS);
+    if (shortLiveTaskScheduler != null) {
+      validDataSizeCollector = new ValidDataSizeCollector();
+      shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInSecs, TimeUnit.MILLISECONDS);
+    }
   }
 
   @Override
