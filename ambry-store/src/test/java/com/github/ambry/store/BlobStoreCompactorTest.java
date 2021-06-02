@@ -31,6 +31,7 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -2898,7 +2899,12 @@ public class BlobStoreCompactorTest {
       }
     }
 
-    compactor.closeLastLogSegmentIfQualified(state.index.journal);
+    if (compactor.closeLastLogSegmentIfQualified()) {
+      //refresh journal.
+      LogSegmentName activeSegmentName = state.index.log.getLastSegment().getName();
+      state.index.journal.cleanUpJournal(activeSegmentName);
+    }
+    compactor.closeLastLogSegmentIfQualified();
     if (!changeExpected) {
       assertEquals("Journal size should be cleaned up after last log segment closed",0, state.index.journal.getCurrentNumberOfEntries());
     }

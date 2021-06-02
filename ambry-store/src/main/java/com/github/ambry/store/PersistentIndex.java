@@ -99,7 +99,7 @@ class PersistentIndex {
   final HardDeleter hardDeleter;
   final Thread hardDeleteThread;
 
-  private final Log log;
+  protected final Log log;
   private final long maxInMemoryIndexSizeInBytes;
   private final int maxInMemoryNumElements;
   private final String dataDir;
@@ -200,7 +200,7 @@ class PersistentIndex {
         // We mark as sealed all the index segments except the most recent index segment.
         // The recent index segment would go through recovery after they have been
         // read into memory
-        boolean sealed = defineSealStatusForIndexFiles(i, indexFiles);
+        boolean sealed = determineSealStatusForIndexFiles(i, indexFiles);
         IndexSegment info = new IndexSegment(indexFiles.get(i), sealed, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
@@ -268,12 +268,11 @@ class PersistentIndex {
   }
 
   /**
-   *
    * @param index the index of the list of indexFiles.
    * @param indexFiles a list of file with index entry info.
    * @return {@code true} if the index file needs to be set to seal status.
    */
-  private boolean defineSealStatusForIndexFiles(int index, List<File> indexFiles) {
+  private boolean determineSealStatusForIndexFiles(int index, List<File> indexFiles) {
     return index < indexFiles.size() - 1 || (config.storeAutoCloseLastLogSegmentEnabled
         && indexFileNotInLastLogSegment(index, indexFiles));
   }

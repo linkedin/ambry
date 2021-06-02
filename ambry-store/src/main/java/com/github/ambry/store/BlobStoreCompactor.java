@@ -215,11 +215,10 @@ class BlobStoreCompactor {
 
   /**
    * Closes the last log segment periodically if replica is in sealed status.
-   * @param journal The {@link Journal} needs to be clean up after log segment closed.
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
-  void closeLastLogSegmentIfQualified(Journal journal) throws StoreException {
-    srcLog.autoCloseLastLogSegmentIfQualified(journal);
+  boolean closeLastLogSegmentIfQualified() throws StoreException {
+    return srcLog.autoCloseLastLogSegmentIfQualified();
   }
 
   /**

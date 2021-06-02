@@ -451,47 +451,50 @@ class Log implements Write {
   private void rollOverIfRequired(long writeSize) throws StoreException {
     if (activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() < writeSize) {
       ensureCapacity(writeSize);
-      setActiveSegment();
+      setActiveSegment(writeSize, false);
     }
   }
 
   /**
    * Closes the last log segment periodically if replica is in sealed status.
-   * @param journal The {@link Journal} needs to be clean up after log segment closed.
+   * @return {@code True} if last log segment has been closed and new log segment has been successfully
+   * generated. {@code False} otherwise.
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
-  void autoCloseLastLogSegmentIfQualified(Journal journal) throws StoreException {
+  boolean autoCloseLastLogSegmentIfQualified() throws StoreException {
     if (compactionPolicySwitchInfoCounterValueReached()) {
       //ensure the capacity to open the new log segment and allocate new log segment.
       //if not able to close the last log segment, continue running the compaction.
       try {
         ensureCapacity(0);
-        setActiveSegment();
-        //refresh journal.
-        long startTime = SystemTime.getInstance().milliseconds();
-        if (config.storeSynchronizerInsideWhileLoopEnabled) {
-          journal.cleanUpJournalWithSynchronizeInside(activeSegment.getName());
-        } else {
-          journal.cleanUpJournal(activeSegment.getName());
-        }
-        logger.debug("Time to clean up journal size for store : {} in dataDir: {} is {} ms", storeId, dataDir,
-            SystemTime.getInstance().milliseconds() - startTime);
+        setActiveSegment(0, true);
+        return true;
       } catch (IllegalStateException e) {
-        //if there is no more capacity left in data dir to create new log segment, just bypass this logic.
         //no-op
+        logger.info("There's no more capacity left in: {} to create new log segment, bypass clean up journal logic" , dataDir);
+        return false;
       }
     }
+    return false;
   }
 
   /**
    * Set the last log segment as active segment and init buffer for append.
+   * @param writeSize the size of the incoming write.
+   * @param isAutoClosed {@code True} if the log segment is closed automatically during compaction. {@code False} otherwise.
    * @throws StoreException
    */
-  private void setActiveSegment() throws StoreException {
+  private void setActiveSegment(long writeSize, boolean isAutoClosed) throws StoreException {
     // this cannot be null since capacity has either been ensured or has thrown.
     LogSegment nextActiveSegment = segmentsByName.higherEntry(activeSegment.getName()).getValue();
-    logger.info("Auto close last log segment: {} and create new active segment : {}", activeSegment.getName(),
-        nextActiveSegment.getName());
+    if (isAutoClosed) {
+      logger.info("Auto close last log segment: {} and create new active segment : {}", activeSegment.getName(),
+          nextActiveSegment.getName());
+    } else {
+      logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
+          nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
+          activeSegment.getCapacityInBytes());
+    }
     activeSegment.dropBufferForAppend();
     nextActiveSegment.initBufferForAppend();
     activeSegment = nextActiveSegment;
@@ -516,9 +519,11 @@ class Log implements Write {
         logger.trace("The compaction policy switch counter value is qualified for closing last log segment.");
         return true;
       } else {
+        logger.trace("Next round of compaction is not CompactAllPolicy");
         return false;
       }
     } else {
+      logger.error("Compaction policy file: {} is not exist in dir: {}", COMPACT_POLICY_INFO_PATH, dataDir);
       return false;
     }
   }

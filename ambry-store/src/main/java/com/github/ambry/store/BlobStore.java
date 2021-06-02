@@ -26,6 +26,7 @@ import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -1250,7 +1251,18 @@ public class BlobStore implements Store {
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
   void closeLastLogSegmentIfQualified() throws StoreException {
-    compactor.closeLastLogSegmentIfQualified(index.journal);
+    if (compactor.closeLastLogSegmentIfQualified()) {
+      //refresh journal.
+      long startTime = SystemTime.getInstance().milliseconds();
+      LogSegmentName activeSegmentName = index.log.getLastSegment().getName();
+      if (config.storeSynchronizerInsideWhileLoopEnabled) {
+        index.journal.cleanUpJournalWithSynchronizeInside(activeSegmentName);
+      } else {
+        index.journal.cleanUpJournal(activeSegmentName);
+      }
+      logger.debug("Time to clean up journal size for store : {} in dataDir: {} is {} ms", storeId, dataDir,
+          SystemTime.getInstance().milliseconds() - startTime);
+    }
   }
 
   /**
