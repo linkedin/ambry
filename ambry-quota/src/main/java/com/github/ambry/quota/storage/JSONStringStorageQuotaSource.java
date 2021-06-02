@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,7 +66,7 @@ public class JSONStringStorageQuotaSource implements StorageQuotaSource {
   }
 
   @Override
-  public void addStorageUsageCallback(StorageUsageCallback callback) {
+  public void addStorageUsageSupplier(Supplier<Map<String, Map<String, Long>>> supplier) {
     // no-op
   }
 

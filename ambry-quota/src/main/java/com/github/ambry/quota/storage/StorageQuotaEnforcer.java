@@ -206,8 +206,8 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     logger.info("Register quota source and usage refresher listeners");
     storageQuotaSource.registerListener(getQuotaSourceListener());
     storageUsageRefresher.registerListener(getUsageRefresherListener());
-    // Register the storage usage callback to source.
-    storageQuotaSource.addStorageUsageCallback(this::getStorageUsage);
+    // Register the storage usage supplier to source.
+    storageQuotaSource.addStorageUsageSupplier(this::getStorageUsage);
   }
 
   /**

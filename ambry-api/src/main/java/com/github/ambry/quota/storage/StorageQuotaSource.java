@@ -15,6 +15,7 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.quota.QuotaSource;
 import java.util.Map;
+import java.util.function.Supplier;
 
 
 /**
@@ -48,22 +49,10 @@ public interface StorageQuotaSource extends QuotaSource {
   void registerListener(Listener listener);
 
   /**
-   * Callback to get the  current storage usage.
+   * Add the supplier method to get storage usage so that {@link StorageQuotaSource} would know the updated storage usage.
+   * @param supplier The method to return storage usages for all containers.
    */
-  interface StorageUsageCallback {
-    /**
-     *  Method to return container storage usage in a map. The format of this map follows the container storage quota
-     *  in this class.
-     * @return The storage usage for each container.
-     */
-    Map<String, Map<String, Long>> containerStorageUsage();
-  }
-
-  /**
-   * Add the callback to get storage usage so that {@link StorageQuotaSource} would know the updated storage usage.
-   * @param callback
-   */
-  void addStorageUsageCallback(StorageUsageCallback callback);
+  void addStorageUsageSupplier(Supplier<Map<String, Map<String, Long>>> supplier);
 
   /**
    * Shutdown the {@link StorageQuotaSource}.
