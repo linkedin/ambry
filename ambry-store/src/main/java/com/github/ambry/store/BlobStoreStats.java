@@ -35,7 +35,6 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -151,14 +150,13 @@ class BlobStoreStats implements StoreStats, Closeable {
         TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes),
         config.storeStatsWaitTimeoutInSecs, config.storeEnableBucketForLogSegmentReports,
         config.storeCompactionPurgeDeleteTombstone, time, longLiveTaskScheduler, shortLiveTaskScheduler,
-        diskIOScheduler, metrics, config.storeAsyncGetValidSizeEnable, TimeUnit.MINUTES.toMillis(config.storeGetValidSizeIntervalInMinutes));
+        diskIOScheduler, metrics, TimeUnit.MINUTES.toMillis(config.storeGetValidSizeIntervalInMinutes));
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
       long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
       boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time, ScheduledExecutorService longLiveTaskScheduler,
-      ScheduledExecutorService shortLiveTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
-      boolean enableAsyncGetValidSize, long storeGetValidSizeIntervalInMs) {
+      ScheduledExecutorService shortLiveTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics, long storeGetValidSizeIntervalInMs) {
     this.storeId = storeId;
     this.index = index;
     this.time = time;
@@ -178,10 +176,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       queueProcessor = new QueueProcessor();
       shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessingPeriodInMs, TimeUnit.MILLISECONDS);
     }
-    if (enableAsyncGetValidSize) {
-      validDataSizeCollector = new ValidDataSizeCollector();
-      shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInMs, TimeUnit.MILLISECONDS);
-    }
+    validDataSizeCollector = new ValidDataSizeCollector();
+    shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInMs, TimeUnit.MILLISECONDS);
   }
 
   @Override
@@ -1225,9 +1221,6 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   private class ValidDataSizeCollector implements Runnable {
     private volatile boolean cancelled = false;
-
-    ValidDataSizeCollector() {
-    }
 
     @Override
     public void run() {
