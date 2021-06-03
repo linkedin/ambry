@@ -16,7 +16,6 @@ package com.github.ambry.store;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -475,6 +474,7 @@ class Log implements Write {
         return false;
       }
     }
+    logger.trace("Current compaction policy is not qualified for auto close last logsegment");
     return false;
   }
 

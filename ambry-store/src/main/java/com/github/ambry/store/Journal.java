@@ -96,7 +96,7 @@ class Journal {
    * @param key The key that the entry in the journal refers to.
    * @param crc The crc of the object. This may be null if crc is not available.
    */
-  synchronized void addEntry(Offset offset, StoreKey key, Long crc) {
+  void addEntry(Offset offset, StoreKey key, Long crc) {
     if (key == null || offset == null) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
     }
@@ -122,7 +122,7 @@ class Journal {
    * It will delay the addEntry method for sealed replica, so the replication performance will be hold while running this method.
    * @param activeLogSegmentName journal should remove all entries not belongs to active log segment.
    */
-  synchronized void cleanUpJournal(LogSegmentName activeLogSegmentName) {
+  void cleanUpJournal(LogSegmentName activeLogSegmentName) {
     Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
     while (!inBootstrapMode && earliestEntry != null
         && earliestEntry.getKey().getName().compareTo(activeLogSegmentName) < 0) {
@@ -130,24 +130,6 @@ class Journal {
       recentCrcs.remove(earliestEntry.getValue());
       currentNumberOfEntries.decrementAndGet();
       earliestEntry = journal.firstEntry();
-    }
-  }
-
-  /**
-   * This method is used to test the impact of performance between release lock after journal finish clean up and release
-   * lock each time entry gets removed.
-   * @param activeLogSegmentName journal should remove all entries not belongs to active log segment.
-   */
-  void cleanUpJournalWithSynchronizeInside(LogSegmentName activeLogSegmentName) {
-    Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
-    while (!inBootstrapMode && earliestEntry != null
-        && earliestEntry.getKey().getName().compareTo(activeLogSegmentName) < 0) {
-      synchronized (this) {
-        journal.remove(earliestEntry.getKey());
-        recentCrcs.remove(earliestEntry.getValue());
-        currentNumberOfEntries.decrementAndGet();
-        earliestEntry = journal.firstEntry();
-      }
     }
   }
 

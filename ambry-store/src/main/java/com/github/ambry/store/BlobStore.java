@@ -1251,17 +1251,15 @@ public class BlobStore implements Store {
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
   void closeLastLogSegmentIfQualified() throws StoreException {
-    if (compactor.closeLastLogSegmentIfQualified()) {
-      //refresh journal.
-      long startTime = SystemTime.getInstance().milliseconds();
-      LogSegmentName activeSegmentName = index.log.getLastSegment().getName();
-      if (config.storeSynchronizerInsideWhileLoopEnabled) {
-        index.journal.cleanUpJournalWithSynchronizeInside(activeSegmentName);
-      } else {
+    synchronized (storeWriteLock) {
+      if (compactor.closeLastLogSegmentIfQualified()) {
+        //refresh journal.
+        LogSegmentName activeSegmentName = index.log.getLastSegment().getName();
+        long startTime = SystemTime.getInstance().milliseconds();
         index.journal.cleanUpJournal(activeSegmentName);
+        logger.debug("Time to clean up journal size for store : {} in dataDir: {} is {} ms", storeId, dataDir,
+            SystemTime.getInstance().milliseconds() - startTime);
       }
-      logger.debug("Time to clean up journal size for store : {} in dataDir: {} is {} ms", storeId, dataDir,
-          SystemTime.getInstance().milliseconds() - startTime);
     }
   }
 

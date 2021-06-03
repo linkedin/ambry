@@ -356,16 +356,6 @@ public class StoreConfig {
   public final long storeUnsealReplicaMinimumLagBytes;
   public static final String storeUnsealReplicaMinimumLagBytesName = "store.unseal.replica.minimum.lag.bytes";
 
-
-  /**
-   * Whether to enable add Synchronizer inside while loop for journal clean up.
-   * Depends on the performance for the method cleanUpJournal vs cleanUpJournalWithSynchronizeInside in Journal, eventually will choose one way for the implementation.
-   */
-  @Config(storeSynchronizerInsideWhileLoopEnabledName)
-  @Default("false")
-  public final boolean storeSynchronizerInsideWhileLoopEnabled;
-  public static final String storeSynchronizerInsideWhileLoopEnabledName = "store.synchronizer.inside.while.loop.enabled";
-
   /**
    * Specifies the permissions for data files in store. (Data files are user data related files for example, log segment,
    * index segment and bloom filter etc)
@@ -544,7 +534,6 @@ public class StoreConfig {
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
     storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean(storeAutoCloseLastLogSegmentEnabledName, false);
     storeUnsealReplicaMinimumLagBytes = verifiableProperties.getLongInRange(storeUnsealReplicaMinimumLagBytesName, 0, 0, Long.MAX_VALUE);
-    storeSynchronizerInsideWhileLoopEnabled = verifiableProperties.getBoolean(storeSynchronizerInsideWhileLoopEnabledName, false);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
     String storeOperationFilePermissionStr =
