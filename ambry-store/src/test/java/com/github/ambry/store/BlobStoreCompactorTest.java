@@ -2886,11 +2886,7 @@ public class BlobStoreCompactorTest {
       boolean changeExpected) throws Exception {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
-    long indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
-
-    CompactionPolicy compactionPolicy = new HybridCompactionPolicy(config, time);
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
-
     try {
       compactor.compact(details, bundleReadBuffer);
     } finally {
@@ -2898,23 +2894,22 @@ public class BlobStoreCompactorTest {
         compactor.close(0);
       }
     }
-
     if (compactor.closeLastLogSegmentIfQualified()) {
       //refresh journal.
-      LogSegmentName activeSegmentName = state.index.log.getLastSegment().getName();
-      state.index.journal.cleanUpJournal(activeSegmentName);
+      state.index.journal.cleanUpJournal();
     }
     compactor.closeLastLogSegmentIfQualified();
     if (!changeExpected) {
       assertEquals("Journal size should be cleaned up after last log segment closed",0, state.index.journal.getCurrentNumberOfEntries());
     }
-
     long logSegmentSizeAfterCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
-    long indexSegmentCountAfterCompaction = state.index.getIndexSegments().size();
-
     if (changeExpected) {
       assertTrue("Last index segment should be compacted", logSegmentSizeSumBeforeCompaction - logSegmentSizeAfterCompaction > 0);
+      assertEquals("Log Segment count should be same due to no new index entry mapping to the last log segment.", logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction);
+      state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+      logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
+      assertEquals("Log Segment count should be increased after some data has been added to the last log segment.", logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction - 1);
     }
   }
 
@@ -3836,7 +3831,6 @@ public class BlobStoreCompactorTest {
           state.time.milliseconds(), true, true);
     }
   }
-
 
   @Test
   public void testCloseLastLogSegmentIfQualified() throws Exception {

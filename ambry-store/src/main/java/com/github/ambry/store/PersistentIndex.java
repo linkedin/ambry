@@ -99,7 +99,7 @@ class PersistentIndex {
   final HardDeleter hardDeleter;
   final Thread hardDeleteThread;
 
-  protected final Log log;
+  private final Log log;
   private final long maxInMemoryIndexSizeInBytes;
   private final int maxInMemoryNumElements;
   private final String dataDir;
@@ -547,6 +547,13 @@ class PersistentIndex {
           lastSegment.getVersion(), PersistentIndex.CURRENT_VERSION);
       return true;
     }
+    //Must check the log segment name before checking the size written for the edge case when last index segment is
+    //sealed after log segment gets auto closed.
+    if (!offset.getName().equals(lastSegment.getLogSegmentName())) {
+      logger.info("Index: {} Rolling over from {} to {} because the log has rolled over from {} to {}", dataDir,
+          lastSegment.getStartOffset(), offset, lastSegment.getLogSegmentName(), offset.getName());
+      return true;
+    }
     if (lastSegment.getSizeWritten() >= maxInMemoryIndexSizeInBytes) {
       logger.info("Index: {} Rolling over from {} to {} because the size written {} >= maxInMemoryIndexSizeInBytes {}",
           dataDir, lastSegment.getStartOffset(), offset, lastSegment.getSizeWritten(), maxInMemoryIndexSizeInBytes);
@@ -568,11 +575,6 @@ class PersistentIndex {
       logger.info(
           "Index: {} Rolling over from {} to {} because the segment value size: {} != current entry value size: {}",
           dataDir, lastSegment.getStartOffset(), offset, lastSegment.getValueSize(), thisValueSize);
-      return true;
-    }
-    if (!offset.getName().equals(lastSegment.getLogSegmentName())) {
-      logger.info("Index: {} Rolling over from {} to {} because the log has rolled over from {} to {}", dataDir,
-          lastSegment.getStartOffset(), offset, lastSegment.getLogSegmentName(), offset.getName());
       return true;
     }
     return false;

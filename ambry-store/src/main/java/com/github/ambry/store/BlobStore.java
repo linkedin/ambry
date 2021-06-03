@@ -1254,9 +1254,8 @@ public class BlobStore implements Store {
     synchronized (storeWriteLock) {
       if (compactor.closeLastLogSegmentIfQualified()) {
         //refresh journal.
-        LogSegmentName activeSegmentName = index.log.getLastSegment().getName();
         long startTime = SystemTime.getInstance().milliseconds();
-        index.journal.cleanUpJournal(activeSegmentName);
+        index.journal.cleanUpJournal();
         logger.debug("Time to clean up journal size for store : {} in dataDir: {} is {} ms", storeId, dataDir,
             SystemTime.getInstance().milliseconds() - startTime);
       }

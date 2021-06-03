@@ -120,16 +120,12 @@ class Journal {
   /**
    * This method should only be called when replica gets sealed. Remove all entries belongs to the auto closed log segment.
    * It will delay the addEntry method for sealed replica, so the replication performance will be hold while running this method.
-   * @param activeLogSegmentName journal should remove all entries not belongs to active log segment.
    */
-  void cleanUpJournal(LogSegmentName activeLogSegmentName) {
-    Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
-    while (!inBootstrapMode && earliestEntry != null
-        && earliestEntry.getKey().getName().compareTo(activeLogSegmentName) < 0) {
-      journal.remove(earliestEntry.getKey());
-      recentCrcs.remove(earliestEntry.getValue());
-      currentNumberOfEntries.decrementAndGet();
-      earliestEntry = journal.firstEntry();
+  void cleanUpJournal() {
+    if (!inBootstrapMode) {
+      journal.clear();
+      recentCrcs.clear();
+      currentNumberOfEntries.set(0);
     }
   }
 
