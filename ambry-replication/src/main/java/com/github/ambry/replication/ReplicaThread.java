@@ -44,17 +44,16 @@ import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -636,6 +635,11 @@ public class ReplicaThread implements Runnable {
 
                 replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                     exchangeMetadataResponse.localLagFromRemoteInBytes);
+                long maxLag =
+                    replicationMetrics.getMaxLagForPartition(remoteReplicaInfo.getReplicaId().getPartitionId());
+                if (remoteReplicaInfo.getLocalStore() instanceof BlobStore) {
+                  ((BlobStore) remoteReplicaInfo.getLocalStore()).setLocalStoreMaxLagFromPeer(maxLag);
+                }
                 if (replicaMetadataResponseInfo.getMessageInfoList().size() > 0) {
                   replicationMetrics.updateCatchupPointMetricForCloudReplica(remoteReplicaInfo,
                       replicaMetadataResponseInfo.getMessageInfoList()

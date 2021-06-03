@@ -13,12 +13,14 @@
  */
 package com.github.ambry.store;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -47,6 +49,8 @@ class Log implements Write {
   private static final Logger logger = LoggerFactory.getLogger(Log.class);
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
   private final String storeId;
+  private static final String COMPACT_POLICY_INFO_PATH = File.separator + "compactionPolicyInfo.json";
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private boolean isLogSegmented;
   private LogSegment activeSegment = null;
@@ -230,6 +234,13 @@ class Log implements Write {
    */
   LogSegment getFirstSegment() {
     return segmentsByName.firstEntry().getValue();
+  }
+
+  /**
+   * @return the last {@link LogSegment} instance in the log.
+   */
+  LogSegment getLastSegment() {
+    return segmentsByName.lastEntry().getValue();
   }
 
   /**
@@ -439,14 +450,81 @@ class Log implements Write {
   private void rollOverIfRequired(long writeSize) throws StoreException {
     if (activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() < writeSize) {
       ensureCapacity(writeSize);
-      // this cannot be null since capacity has either been ensured or has thrown.
-      LogSegment nextActiveSegment = segmentsByName.higherEntry(activeSegment.getName()).getValue();
+      setActiveSegment(writeSize, false);
+    }
+  }
+
+  /**
+   * Closes the last log segment periodically if replica is in sealed status.
+   * @return {@code True} if last log segment has been closed and new log segment has been successfully
+   * generated. {@code False} otherwise.
+   * @throws StoreException if any store exception occurred as part of ensuring capacity.
+   */
+  boolean autoCloseLastLogSegmentIfQualified() throws StoreException {
+    if (compactionPolicySwitchInfoCounterValueReached()) {
+      //ensure the capacity to open the new log segment and allocate new log segment.
+      //if not able to close the last log segment, continue running the compaction.
+      try {
+        ensureCapacity(0);
+        setActiveSegment(0, true);
+        return true;
+      } catch (IllegalStateException e) {
+        //no-op
+        logger.info("There's no more capacity left in: {} to create new log segment, bypass clean up journal logic" , dataDir);
+        return false;
+      }
+    }
+    logger.trace("Current compaction policy is not qualified for auto close last logsegment");
+    return false;
+  }
+
+  /**
+   * Set the last log segment as active segment and init buffer for append.
+   * @param writeSize the size of the incoming write.
+   * @param isAutoClosed {@code True} if the log segment is closed automatically during compaction. {@code False} otherwise.
+   * @throws StoreException
+   */
+  private void setActiveSegment(long writeSize, boolean isAutoClosed) throws StoreException {
+    // this cannot be null since capacity has either been ensured or has thrown.
+    LogSegment nextActiveSegment = segmentsByName.higherEntry(activeSegment.getName()).getValue();
+    if (isAutoClosed) {
+      logger.info("Auto close last log segment: {} and create new active segment : {}", activeSegment.getName(),
+          nextActiveSegment.getName());
+    } else {
       logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
           nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
           activeSegment.getCapacityInBytes());
-      activeSegment.dropBufferForAppend();
-      nextActiveSegment.initBufferForAppend();
-      activeSegment = nextActiveSegment;
+    }
+    activeSegment.dropBufferForAppend();
+    nextActiveSegment.initBufferForAppend();
+    activeSegment = nextActiveSegment;
+  }
+
+  /**
+   * @return {@code True} if next round is compact all policy.
+   */
+  private boolean compactionPolicySwitchInfoCounterValueReached() {
+    File file = new File(Paths.get(dataDir, COMPACT_POLICY_INFO_PATH).toString());
+    if (file.exists()) {
+      CompactionPolicySwitchInfo compactionPolicySwitchInfo = null;
+      try {
+        compactionPolicySwitchInfo = objectMapper.readValue(file, CompactionPolicySwitchInfo.class);
+      } catch (IOException e) {
+        logger.error("Could not deserialize file : {} into {} Object", file,
+            CompactionPolicySwitchInfo.class.getName());
+        return false;
+      }
+      if (config.storeCompactionPolicySwitchCounterDays - 1 == (compactionPolicySwitchInfo.getCompactionPolicyCounter()
+          .getCounter())) {
+        logger.trace("The compaction policy switch counter value is qualified for closing last log segment.");
+        return true;
+      } else {
+        logger.trace("Next round of compaction is not CompactAllPolicy");
+        return false;
+      }
+    } else {
+      logger.error("Compaction policy file: {} is not exist in dir: {}", COMPACT_POLICY_INFO_PATH, dataDir);
+      return false;
     }
   }
 

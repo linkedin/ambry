@@ -340,6 +340,23 @@ public class StoreConfig {
   public final boolean storeSetFilePermissionEnabled;
 
   /**
+   * Whether to enable auto close last log segment during compaction.
+   */
+  @Config(storeAutoCloseLastLogSegmentEnabledName)
+  @Default("false")
+  public final boolean storeAutoCloseLastLogSegmentEnabled;
+  public static final String storeAutoCloseLastLogSegmentEnabledName = "store.auto.close.last.log.segment.enabled";
+
+  /**
+   * Specifies the minimum value of Bytes for maxLagForPartition(max lag refers to local replica is lagging behind remote peers)
+   * which can unseal replica.
+   */
+  @Config(storeUnsealReplicaMinimumLagBytesName)
+  @Default("0")
+  public final long storeUnsealReplicaMinimumLagBytes;
+  public static final String storeUnsealReplicaMinimumLagBytesName = "store.unseal.replica.minimum.lag.bytes";
+
+  /**
    * Specifies the permissions for data files in store. (Data files are user data related files for example, log segment,
    * index segment and bloom filter etc)
    */
@@ -515,6 +532,8 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
+    storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean(storeAutoCloseLastLogSegmentEnabledName, false);
+    storeUnsealReplicaMinimumLagBytes = verifiableProperties.getLongInRange(storeUnsealReplicaMinimumLagBytesName, 0, 0, Long.MAX_VALUE);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
     String storeOperationFilePermissionStr =

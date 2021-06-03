@@ -351,7 +351,7 @@ public class ReplicationTestHelper {
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
     }
     for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
-      replicationMetrics.addLagMetricForPartition(partitionId);
+      replicationMetrics.addLagMetricForPartition(partitionId, true);
     }
 
     return new Pair<>(replicasToReplicate, replicaThread);

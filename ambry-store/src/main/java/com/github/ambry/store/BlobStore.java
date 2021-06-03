@@ -26,6 +26,7 @@ import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.FileLock;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -87,7 +88,8 @@ public class BlobStore implements Store {
   private final RemoteTokenTracker remoteTokenTracker;
   private final AtomicInteger errorCount;
   private final AccountService accountService;
-
+  //The max replication lag indicating how far local store is behind peers.
+  private volatile long localStoreMaxLagFromPeer;
   private Log log;
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
@@ -331,6 +333,18 @@ public class BlobStore implements Store {
     }
   }
 
+  ReplicaId getReplicaId() {
+    return this.replicaId;
+  }
+
+  /**
+   * Set max lag for blob store.
+   * @param localStoreMaxLagFromPeer the partition's maximum lag between local and its remote replicas.
+   */
+  public void setLocalStoreMaxLagFromPeer(long localStoreMaxLagFromPeer) {
+    this.localStoreMaxLagFromPeer = localStoreMaxLagFromPeer;
+  }
+
   /**
    * Checks the state of the messages in the given {@link MessageWriteSet} in the given {@link FileSpan}.
    * @param messageSetToWrite Non-empty set of messages to write to the store.
@@ -404,7 +418,13 @@ public class BlobStore implements Store {
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && (replicaId.isSealed() || (
           replicaStatusDelegates.size() > 1 && isSealed.getAndSet(false)))) {
         for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
-          if (!replicaStatusDelegate.unseal(replicaId)) {
+          if (config.storeAutoCloseLastLogSegmentEnabled && replicaId.isSealed()
+              && localStoreMaxLagFromPeer > config.storeUnsealReplicaMinimumLagBytes) {
+            logger.info(
+                "In order to wait until store catch up with peer replica, it should remain sealed due to the max lag : {} for partition : {} is larger than {} , current used capacity : {} bytes.",
+                localStoreMaxLagFromPeer, replicaId.getPartitionId(), config.storeUnsealReplicaMinimumLagBytes,
+                index.getLogUsedCapacity());
+          } else if (!replicaStatusDelegate.unseal(replicaId)) {
             metrics.unsealSetError.inc();
             logger.warn("Could not set the partition as read-write status on {}", replicaId);
             isSealed.set(true);
@@ -1222,6 +1242,24 @@ public class BlobStore implements Store {
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
     logger.info("One cycle of compaction is completed on the store {}", storeId);
+  }
+
+  /**
+   * Closes the last log segment periodically if replica is in sealed status.
+   * Hybrid compaction policy will support both statsBasedCompactionPolicy and compactAllPolicy.
+   * Make sure this method is running before compactAllPolicy so it will compact the auto closed log segment afterwards.
+   * @throws StoreException if any store exception occurred as part of ensuring capacity.
+   */
+  void closeLastLogSegmentIfQualified() throws StoreException {
+    synchronized (storeWriteLock) {
+      if (compactor.closeLastLogSegmentIfQualified()) {
+        //refresh journal.
+        long startTime = SystemTime.getInstance().milliseconds();
+        index.journal.cleanUpJournal();
+        logger.debug("Time to clean up journal size for store : {} in dataDir: {} is {} ms", storeId, dataDir,
+            SystemTime.getInstance().milliseconds() - startTime);
+      }
+    }
   }
 
   /**

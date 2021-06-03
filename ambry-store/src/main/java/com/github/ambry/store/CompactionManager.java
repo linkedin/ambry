@@ -288,6 +288,9 @@ class CompactionManager {
                     metrics.markCompactionStart(true);
                     compactionStarted = true;
                     store.compact(details, bundleReadBuffer);
+                    if (storeConfig.storeAutoCloseLastLogSegmentEnabled && store.getReplicaId().isSealed()) {
+                      store.closeLastLogSegmentIfQualified();
+                    }
                   } else {
                     storesNoCompaction++;
                     logger.info("{} is not eligible for compaction due to empty compaction details", store);
