@@ -107,7 +107,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     long newLastUpdateContainerTimestamp =
         requestAgent.doWithRetries(() -> cosmosDataAccessor.deprecateContainers(cosmosContainerDeletionEntries),
             "updateDeprecatedContainers", null);
-    logger.info(String.format("Deprecated %d new containers from %l timestamp", cosmosContainerDeletionEntries.size(),
+    logger.info(String.format("Deprecated %d new containers from %d timestamp", cosmosContainerDeletionEntries.size(),
         latestContainerDeletionTimestamp));
     vcrMetrics.deprecatedContainerCount.inc(cosmosContainerDeletionEntries.size());
     if (newLastUpdateContainerTimestamp != -1) {
