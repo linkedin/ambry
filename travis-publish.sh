@@ -9,10 +9,6 @@ echo "Building artifacts, and creating pom files"
 echo "Testing publication by uploading in dry run mode"
 ./gradlew -i --scan artifactoryPublishAll -Partifactory.dryRun
 
-echo "Pull request: [$TRAVIS_PULL_REQUEST], Travis branch: [$TRAVIS_BRANCH]"
-# release only from master when no pull request build
-if [ "$TRAVIS_BRANCH" = "master" ] && [ "$TRAVIS_PULL_REQUEST" = "false" ]
-then
-    echo "Releasing (tagging, uploading to Bintray)"
-    ./gradlew -i --scan ciPerformRelease
-fi
+echo "Releasing (tagging, uploading to JFrog Artifactory)"
+./gradlew -i --scan ciPerformRelease
+
