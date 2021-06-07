@@ -150,14 +150,16 @@ class BlobStoreStats implements StoreStats, Closeable {
         TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes),
         config.storeStatsWaitTimeoutInSecs, config.storeEnableBucketForLogSegmentReports,
         config.storeCompactionPurgeDeleteTombstone, time, longLiveTaskScheduler, shortLiveTaskScheduler,
-        diskIOScheduler, metrics, TimeUnit.SECONDS.toMillis(config.storeGetValidSizeIntervalInSecs));
+        diskIOScheduler, metrics, TimeUnit.SECONDS.toMillis(config.storeGetValidSizeIntervalInSecs),
+        config.storeEnableCurrentInvalidSizeMetric);
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
       long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
       boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time,
       ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
-      DiskIOScheduler diskIOScheduler, StoreMetrics metrics, long storeGetValidSizeIntervalInSecs) {
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics, long storeGetValidSizeIntervalInSecs,
+      boolean storeEnableCurrentInvalidSizeMetric) {
     this.storeId = storeId;
     this.index = index;
     this.time = time;
@@ -177,7 +179,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       queueProcessor = new QueueProcessor();
       shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessingPeriodInMs, TimeUnit.MILLISECONDS);
     }
-    if (shortLiveTaskScheduler != null) {
+    if (storeEnableCurrentInvalidSizeMetric && shortLiveTaskScheduler != null) {
       validDataSizeCollector = new ValidDataSizeCollector();
       shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInSecs, TimeUnit.MILLISECONDS);
     }

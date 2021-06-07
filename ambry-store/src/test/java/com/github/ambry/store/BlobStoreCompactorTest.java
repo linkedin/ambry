@@ -31,7 +31,6 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -275,7 +274,7 @@ public class BlobStoreCompactorTest {
 
     BlobStoreStats stats =
         new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, purgeDeleteTombstone,
-            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 1);
+            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 1, false);
     BlobStoreStats spyStats = Mockito.spy(stats);
     Mockito.doReturn(PUT_RECORD_SIZE).when(spyStats).getMaxBlobSize();
     CompactionDetails details =
@@ -2945,7 +2944,7 @@ public class BlobStoreCompactorTest {
     ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
     BlobStoreStats stats =
         new BlobStoreStats("", state.index, 0, Time.MsPerSec, 0, 100, Time.SecsPerMin, false, purgeDeleteTombstone,
-            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 1);
+            state.time, scheduler, scheduler, DISK_IO_SCHEDULER, new StoreMetrics(new MetricRegistry()), 1, false);
     NavigableMap<LogSegmentName, Long> validDataSizeFromBlobStoreStats =
         stats.getValidDataSizeByLogSegment(new TimeRange(deleteReferenceTimeMs, 0L),
             getFileSpanForLogSegments(segmentsUnderCompaction)).getSecond();
