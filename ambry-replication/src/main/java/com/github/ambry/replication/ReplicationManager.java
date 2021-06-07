@@ -53,6 +53,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 
 /**
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
+ * Store-> Store
  */
 public class ReplicationManager extends ReplicationEngine {
   protected CountDownLatch startupLatch = new CountDownLatch(1);

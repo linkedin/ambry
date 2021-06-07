@@ -16,24 +16,25 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterAgentFactory;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 
 
 /**
- * {@link StaticVcrClusterFactory} to generate VCR Cluster for static partition assignment.
+ * {@link StaticVcrClusterAgentFactory} to generate VCR Cluster for static partition assignment.
  */
-public class StaticVcrClusterFactory implements VirtualReplicatorClusterFactory {
+public class StaticVcrClusterAgentFactory implements VcrClusterAgentFactory {
 
   private final CloudConfig cloudConfig;
   private final ClusterMapConfig clusterMapConfig;
   private final ClusterMap clusterMap;
-  private VirtualReplicatorCluster virtualReplicatorCluster;
+  private VcrClusterParticipant _vcrClusterParticipant;
 
-  public StaticVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
+  public StaticVcrClusterAgentFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
       AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination,
       MetricRegistry metricRegistry) {
     this.cloudConfig = cloudConfig;
@@ -42,10 +43,15 @@ public class StaticVcrClusterFactory implements VirtualReplicatorClusterFactory 
   }
 
   @Override
-  synchronized public VirtualReplicatorCluster getVirtualReplicatorCluster() {
-    if (virtualReplicatorCluster == null) {
-      virtualReplicatorCluster = new StaticVcrCluster(cloudConfig, clusterMapConfig, clusterMap);
+  synchronized public VcrClusterParticipant getVcrClusterParticipant() {
+    if (_vcrClusterParticipant == null) {
+      _vcrClusterParticipant = new StaticVcrClusterParticipant(cloudConfig, clusterMapConfig, clusterMap);
     }
-    return virtualReplicatorCluster;
+    return _vcrClusterParticipant;
+  }
+
+  @Override
+  public VcrClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
+    return null;
   }
 }

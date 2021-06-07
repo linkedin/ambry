@@ -20,8 +20,8 @@ import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterAgentFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -70,7 +70,7 @@ public class VcrServer {
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
   private ClusterMap clusterMap;
-  private VirtualReplicatorCluster virtualReplicatorCluster;
+  private VcrClusterParticipant vcrClusterParticipant;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
@@ -153,10 +153,10 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
       AccountService accountService = accountServiceFactory.getAccountService();
 
-      virtualReplicatorCluster =
-          ((VirtualReplicatorClusterFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
+      vcrClusterParticipant =
+          ((VcrClusterAgentFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
               clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
-              registry)).getVirtualReplicatorCluster();
+              registry)).getVcrClusterParticipant();
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
@@ -171,11 +171,11 @@ public class VcrServer {
           new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
       vcrReplicationManager =
           new VcrReplicationManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, cloudStorageManager,
-              storeKeyFactory, clusterMap, virtualReplicatorCluster, cloudDestination, scheduler, connectionPool,
+              storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler, connectionPool,
               vcrMetrics, notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer);
       vcrReplicationManager.start();
 
-      DataNodeId currentNode = virtualReplicatorCluster.getCurrentDataNodeId();
+      DataNodeId currentNode = vcrClusterParticipant.getCurrentDataNodeId();
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
       if (currentNode.hasSSLPort()) {
@@ -239,8 +239,8 @@ public class VcrServer {
       if (clusterMap != null) {
         clusterMap.close();
       }
-      if (virtualReplicatorCluster != null) {
-        virtualReplicatorCluster.close();
+      if (vcrClusterParticipant != null) {
+        vcrClusterParticipant.close();
       }
       if (cloudDestination != null) {
         cloudDestination.close();
@@ -259,8 +259,8 @@ public class VcrServer {
     return shutdownLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
   }
 
-  public VirtualReplicatorCluster getVirtualReplicatorCluster() {
-    return virtualReplicatorCluster;
+  public VcrClusterParticipant getVcrClusterParticipant() {
+    return vcrClusterParticipant;
   }
 
   public VcrReplicationManager getVcrReplicationManager() {

@@ -18,10 +18,10 @@ import java.util.List;
 
 
 /**
- * The {@link VirtualReplicatorCluster} provides a high-level interface to Virtual Replicator Cluster.
+ * The {@link VcrClusterParticipant} provides a high-level interface to Virtual Replicator Cluster.
  * In Virtual Replicator Cluster, {@link PartitionId}s are resources and they are assigned to participant node.
  */
-public interface VirtualReplicatorCluster extends AutoCloseable {
+public interface VcrClusterParticipant extends AutoCloseable {
   String Cloud_Replica_Keyword = "vcr";
 
   /**
@@ -55,8 +55,8 @@ public interface VirtualReplicatorCluster extends AutoCloseable {
   boolean isPartitionAssigned(String partitionPath);
 
   /**
-   * Add {@link VirtualReplicatorClusterListener} to listen for cluster change.
+   * Add {@link VcrClusterListener} to listen for cluster change.
    * @param listener to add.
    */
-  void addListener(VirtualReplicatorClusterListener listener);
+  void addListener(VcrClusterListener listener);
 }

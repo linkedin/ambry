@@ -18,8 +18,8 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -42,7 +42,7 @@ import org.mockito.Mockito;
 /**
  * Tests of HelixVcrCluster.
  */
-public class HelixVcrClusterTest {
+public class HelixVcrClusterParticipantTest {
   private static final String ZK_SERVER_HOSTNAME = "localhost";
   private static final int ZK_SERVER_PORT = 31900;
   private static final String ZK_CONNECT_STRING = ZK_SERVER_HOSTNAME + ":" + ZK_SERVER_PORT;
@@ -69,7 +69,7 @@ public class HelixVcrClusterTest {
   }
 
   /**
-   * Test addReplica and removeReplica of {@link HelixVcrCluster}
+   * Test addReplica and removeReplica of {@link HelixVcrClusterParticipant}
    */
   @Test
   public void helixVcrClusterTest() throws Exception {
@@ -77,7 +77,7 @@ public class HelixVcrClusterTest {
         new StrictMatchExternalViewVerifier(ZK_CONNECT_STRING, VCR_CLUSTER_NAME,
             Collections.singleton(VcrTestUtil.helixResource), null);
     // Create helixInstance1 and join the cluster. All partitions should be assigned to helixInstance1.
-    VirtualReplicatorCluster helixInstance1 = createHelixInstance(8123, 10123);
+    VcrClusterParticipant helixInstance1 = createHelixVcrClusterParticipant(8123, 10123);
     Collection<? extends PartitionId> expectedPartitions =
         Collections.unmodifiableCollection(mockClusterMap.getAllPartitionIds(null));
     MockVcrListener mockVcrListener = new MockVcrListener();
@@ -89,7 +89,7 @@ public class HelixVcrClusterTest {
         collectionEquals(helixInstance1.getAssignedPartitionIds(), expectedPartitions));
 
     // Create helixInstance2 and join the cluster. Half of partitions should be removed from helixInstance1.
-    VirtualReplicatorCluster helixInstance2 = createHelixInstance(8124, 10124);
+    VcrClusterParticipant helixInstance2 = createHelixVcrClusterParticipant(8124, 10124);
     helixInstance2.participate();
     // Detect any ideal state change first.
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() < expectedPartitions.size(),
@@ -111,11 +111,11 @@ public class HelixVcrClusterTest {
   }
 
   /**
-   * Helper function to create helix instance and join helix cluster.
+   * Helper function to create {@link HelixVcrClusterParticipant}.
    * @param clusterMapPort The clusterMapPort of the instance.
    * @param vcrSslPort The vcrSslPort of this vcr.
    */
-  private VirtualReplicatorCluster createHelixInstance(int clusterMapPort, int vcrSslPort) throws Exception {
+  private VcrClusterParticipant createHelixVcrClusterParticipant(int clusterMapPort, int vcrSslPort) throws Exception {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.resolve.hostnames", "false");
@@ -131,8 +131,8 @@ public class HelixVcrClusterTest {
     props.setProperty(CloudConfig.VCR_CLUSTER_NAME, VCR_CLUSTER_NAME);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
-    return new HelixVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
-        new StoreConfig(verifiableProperties), null, new MetricRegistry()).getVirtualReplicatorCluster();
+    return new HelixVcrClusterAgentFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
+        new StoreConfig(verifiableProperties), null, new MetricRegistry()).getVcrClusterParticipant();
   }
 
   /**
@@ -147,7 +147,7 @@ public class HelixVcrClusterTest {
         collection1);
   }
 
-  private static class MockVcrListener implements VirtualReplicatorClusterListener {
+  private static class MockVcrListener implements VcrClusterListener {
 
     private final Set<PartitionId> partitionSet = ConcurrentHashMap.newKeySet();
 

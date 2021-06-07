@@ -1,4 +1,5 @@
-/*
+/**
+ *
  * Copyright 2019 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +14,20 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.config.CloudConfig;
-import com.github.ambry.config.ClusterMapConfig;
-
-
 /**
- * A factory to create {@link ClusterSpectator} object.
+ * {@link VcrClusterListener} takes actions on {@link VcrClusterParticipant} partition add or removal.
  */
-public class HelixClusterSpectatorFactory implements ClusterSpectatorFactory {
+public interface VcrClusterListener {
 
-  @Override
-  public ClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
-    return new HelixClusterSpectator(cloudConfig, clusterMapConfig);
-  }
+  /**
+   * Action to take when new Partition is added.
+   * @param partitionId on add.
+   */
+  void onPartitionAdded(PartitionId partitionId);
+
+  /**
+   * Action to take when new Partition is removed.
+   * @param partitionId on remove.
+   */
+  void onPartitionRemoved(PartitionId partitionId);
 }

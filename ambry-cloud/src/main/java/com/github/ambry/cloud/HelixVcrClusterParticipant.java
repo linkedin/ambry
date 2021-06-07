@@ -19,8 +19,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -52,15 +52,15 @@ import org.slf4j.LoggerFactory;
 /**
  * Helix Based VCR Cluster.
  */
-public class HelixVcrCluster implements VirtualReplicatorCluster {
-  private static final Logger logger = LoggerFactory.getLogger(HelixVcrCluster.class);
+public class HelixVcrClusterParticipant implements VcrClusterParticipant {
+  private static final Logger logger = LoggerFactory.getLogger(HelixVcrClusterParticipant.class);
   private final DataNodeId currentDataNode;
   private final String vcrClusterName;
   private final String vcrInstanceName;
   private final Map<String, PartitionId> partitionIdMap;
   private final Set<PartitionId> assignedPartitionIds = ConcurrentHashMap.newKeySet();
   private final HelixVcrClusterMetrics metrics;
-  private final List<VirtualReplicatorClusterListener> listeners = new ArrayList<>();
+  private final List<VcrClusterListener> listeners = new ArrayList<>();
   private final CloudConfig cloudConfig;
   private final StoreConfig storeConfig;
   private final AccountService accountService;
@@ -76,7 +76,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
    * @param clusterMap The clusterMap to use.
    * @param vcrMetrics {@link VcrMetrics} object.
    */
-  public HelixVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
+  public HelixVcrClusterParticipant(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, StoreConfig storeConfig,
       ClusterMap clusterMap, AccountService accountService, CloudDestination cloudDestination, VcrMetrics vcrMetrics) {
     if (Utils.isNullOrEmpty(cloudConfig.vcrClusterZkConnectString)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING);
@@ -108,7 +108,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     PartitionId partitionId = partitionIdMap.get(partitionIdStr);
     if (partitionId != null) {
       if (assignedPartitionIds.add(partitionId)) {
-        for (VirtualReplicatorClusterListener listener : listeners) {
+        for (VcrClusterListener listener : listeners) {
           listener.onPartitionAdded(partitionId);
         }
         logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
@@ -133,7 +133,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
     PartitionId partitionId = partitionIdMap.get(partitionIdStr);
     if (partitionId != null) {
       if (assignedPartitionIds.remove(partitionId)) {
-        for (VirtualReplicatorClusterListener listener : listeners) {
+        for (VcrClusterListener listener : listeners) {
           listener.onPartitionRemoved(partitionId);
         }
         logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
@@ -211,7 +211,7 @@ public class HelixVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
-  public void addListener(VirtualReplicatorClusterListener listener) {
+  public void addListener(VcrClusterListener listener) {
     listeners.add(listener);
   }
 

@@ -22,7 +22,7 @@ import org.apache.helix.participant.statemachine.StateModel;
  */
 public class OnlineOfflineHelixVcrStateModelFactory extends VcrStateModelFactory {
 
-  public OnlineOfflineHelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
+  public OnlineOfflineHelixVcrStateModelFactory(HelixVcrClusterParticipant helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
   }
 

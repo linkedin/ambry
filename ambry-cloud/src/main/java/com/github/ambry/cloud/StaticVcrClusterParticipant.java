@@ -17,8 +17,8 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
@@ -37,12 +37,12 @@ import java.util.stream.Collectors;
 /**
  * VCR Cluster based on static partition assignment.
  */
-public class StaticVcrCluster implements VirtualReplicatorCluster {
+public class StaticVcrClusterParticipant implements VcrClusterParticipant {
 
   private final DataNodeId currentDataNode;
   private final Map<String, PartitionId> partitionIdMap;
   private final Set<PartitionId> assignedPartitionIds;
-  private final List<VirtualReplicatorClusterListener> listeners = new ArrayList<>();
+  private final List<VcrClusterListener> listeners = new ArrayList<>();
 
   /**
    * Construct the static VCR cluster.
@@ -50,7 +50,7 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
    * @param clusterMapConfig The clustermap configuration to use.
    * @param clusterMap The clustermap to use.
    */
-  public StaticVcrCluster(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
+  public StaticVcrClusterParticipant(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     if (Utils.isNullOrEmpty(cloudConfig.vcrAssignedPartitions)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_ASSIGNED_PARTITIONS);
@@ -82,7 +82,7 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
 
   @Override
   public void participate() throws Exception {
-    for (VirtualReplicatorClusterListener listener : listeners) {
+    for (VcrClusterListener listener : listeners) {
       for (PartitionId partitionId : assignedPartitionIds) {
         listener.onPartitionAdded(partitionId);
       }
@@ -102,7 +102,7 @@ public class StaticVcrCluster implements VirtualReplicatorCluster {
   }
 
   @Override
-  public void addListener(VirtualReplicatorClusterListener listener) {
+  public void addListener(VcrClusterListener listener) {
     listeners.add(listener);
   }
 

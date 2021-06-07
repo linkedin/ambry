@@ -16,8 +16,8 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterAgentFactory;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -34,7 +34,7 @@ import static org.junit.Assert.*;
 /**
  * Test of StaticVcrCluster.
  */
-public class StaticVcrClusterTest {
+public class StaticVcrClusterParticipantTest {
   private MockClusterAgentsFactory mockClusterAgentsFactory;
   private MockClusterMap mockClusterMap;
 
@@ -60,20 +60,20 @@ public class StaticVcrClusterTest {
     VerifiableProperties vProps = new VerifiableProperties(props);
     CloudConfig cloudConfig = new CloudConfig(vProps);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
-    VirtualReplicatorClusterFactory factory =
-        new StaticVcrClusterFactory(cloudConfig, clusterMapConfig, mockClusterMap, null, null, null,
+    VcrClusterAgentFactory factory =
+        new StaticVcrClusterAgentFactory(cloudConfig, clusterMapConfig, mockClusterMap, null, null, null,
             new MetricRegistry());
-    VirtualReplicatorCluster virtualReplicatorCluster = factory.getVirtualReplicatorCluster();
+    VcrClusterParticipant vcrClusterParticipant = factory.getVcrClusterParticipant();
     assertEquals("CloudDataNode host name doesn't match", hostName,
-        virtualReplicatorCluster.getCurrentDataNodeId().getHostname());
-    assertEquals("CloudDataNode port doesn't match", port, virtualReplicatorCluster.getCurrentDataNodeId().getPort());
+        vcrClusterParticipant.getCurrentDataNodeId().getHostname());
+    assertEquals("CloudDataNode port doesn't match", port, vcrClusterParticipant.getCurrentDataNodeId().getPort());
     assertTrue("Partition assignment incorrect", assignedPartitions.equals(
-        virtualReplicatorCluster.getAssignedPartitionIds()
+        vcrClusterParticipant.getAssignedPartitionIds()
             .stream()
             .map(partitionId -> partitionId.toPathString())
             .collect(Collectors.toList())));
-    assertEquals("Number of CloudDataNode should be 1", 1, virtualReplicatorCluster.getAllDataNodeIds().size());
-    assertEquals("CloudDataNode mismatch", virtualReplicatorCluster.getCurrentDataNodeId(),
-        virtualReplicatorCluster.getAllDataNodeIds().get(0));
+    assertEquals("Number of CloudDataNode should be 1", 1, vcrClusterParticipant.getAllDataNodeIds().size());
+    assertEquals("CloudDataNode mismatch", vcrClusterParticipant.getCurrentDataNodeId(),
+        vcrClusterParticipant.getAllDataNodeIds().get(0));
   }
 }

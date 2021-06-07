@@ -19,21 +19,26 @@ import java.util.List;
 
 
 /**
- * Mock {@link ClusterSpectatorFactory} to instantiate {@link MockClusterSpectator}.
+ * Mock {@link VcrClusterAgentFactory} to instantiate {@link MockVcrClusterSpectator}.
  */
-public class MockClusterSpectatorFactory implements ClusterSpectatorFactory {
+public class MockVcrClusterAgentFactory implements VcrClusterAgentFactory {
   private final List<MockDataNodeId> cloudDataNodes;
 
   /**
-   * Constructor for {@link MockClusterSpectatorFactory} object.
-   * @param cloudDataNodes list of cloud {@link MockDataNodeId}s in instance config of {@link MockClusterSpectator}.
+   * Constructor for {@link MockVcrClusterAgentFactory} object.
+   * @param cloudDataNodes list of cloud {@link MockDataNodeId}s in instance config of {@link MockVcrClusterSpectator}.
    */
-  public MockClusterSpectatorFactory(List<MockDataNodeId> cloudDataNodes) {
+  public MockVcrClusterAgentFactory(List<MockDataNodeId> cloudDataNodes) {
     this.cloudDataNodes = cloudDataNodes;
   }
 
   @Override
-  public ClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
-    return new MockClusterSpectator(cloudDataNodes);
+  public VcrClusterParticipant getVcrClusterParticipant() throws Exception {
+    return null;
+  }
+
+  @Override
+  public VcrClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
+    return new MockVcrClusterSpectator(cloudDataNodes);
   }
 }

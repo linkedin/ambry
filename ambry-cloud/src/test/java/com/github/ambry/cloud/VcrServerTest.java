@@ -58,7 +58,7 @@ public class VcrServerTest {
   }
 
   /**
-   * Bring up the VCR server and then shut it down with {@link StaticVcrCluster}.
+   * Bring up the VCR server and then shut it down with {@link StaticVcrClusterParticipant}.
    * @throws Exception
    */
   @Test
@@ -71,7 +71,7 @@ public class VcrServerTest {
   }
 
   /**
-   * Bring up the VCR server and then shut it down with {@link StaticVcrCluster} and a custom {@link JmxReporter}
+   * Bring up the VCR server and then shut it down with {@link StaticVcrClusterParticipant} and a custom {@link JmxReporter}
    * factory.
    * @throws Exception
    */
@@ -90,7 +90,7 @@ public class VcrServerTest {
   }
 
   /**
-   * Bring up the VCR server and then shut it down with {@link HelixVcrCluster}.
+   * Bring up the VCR server and then shut it down with {@link HelixVcrClusterParticipant}.
    * @throws Exception
    */
   @Test
@@ -121,7 +121,7 @@ public class VcrServerTest {
   private VerifiableProperties getStaticClusterVcrProps() {
     Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, null);
     props.setProperty(CloudConfig.VCR_ASSIGNED_PARTITIONS, "0,1");
-    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterFactory.class.getName());
+    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterAgentFactory.class.getName());
     // Run this one with compaction disabled
     props.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "false");
     props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,

@@ -26,7 +26,7 @@ public class LeaderStandbyHelixVcrStateModelFactory extends VcrStateModelFactory
    * Constructor for {@link LeaderStandbyHelixVcrStateModelFactory}.
    * @param helixVcrCluster the helix vcr cluster.
    */
-  public LeaderStandbyHelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
+  public LeaderStandbyHelixVcrStateModelFactory(HelixVcrClusterParticipant helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
   }
 

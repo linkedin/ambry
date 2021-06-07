@@ -17,8 +17,8 @@ import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -53,7 +53,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
   private final StoreConfig storeConfig;
   private final VcrMetrics vcrMetrics;
-  private final VirtualReplicatorCluster virtualReplicatorCluster;
+  private final VcrClusterParticipant vcrClusterParticipant;
   private final CloudStorageCompactor cloudStorageCompactor;
   private final CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
@@ -61,17 +61,17 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
-      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VirtualReplicatorCluster virtualReplicatorCluster,
+      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
       CloudDestination cloudDestination, ScheduledExecutorService scheduler, ConnectionPool connectionPool,
       VcrMetrics vcrMetrics, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
       String transformerClassName) throws ReplicationException, IllegalStateException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
-        virtualReplicatorCluster.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
+        vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
         storeManager, null);
     this.cloudConfig = cloudConfig;
     this.storeConfig = storeConfig;
-    this.virtualReplicatorCluster = virtualReplicatorCluster;
+    this.vcrClusterParticipant = vcrClusterParticipant;
     this.vcrMetrics = vcrMetrics;
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
@@ -90,7 +90,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   public void start() throws ReplicationException {
     // Add listener for new coming assigned partition
-    virtualReplicatorCluster.addListener(new VirtualReplicatorClusterListener() {
+    vcrClusterParticipant.addListener(new VcrClusterListener() {
       @Override
       public void onPartitionAdded(PartitionId partitionId) {
         try {
@@ -119,7 +119,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     });
 
     try {
-      virtualReplicatorCluster.participate();
+      vcrClusterParticipant.participate();
     } catch (Exception e) {
       throw new ReplicationException("Cluster participate failed.", e);
     }
@@ -138,7 +138,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
     // after delay to allow startup to finish.
     scheduleTask(() -> cloudContainerCompactor.compactAssignedDeprecatedContainers(
-        virtualReplicatorCluster.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
+        vcrClusterParticipant.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
         cloudConfig.cloudContainerCompactionStartupDelaySecs,
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudContainerCompactionIntervalHours), "cloud container compaction");
   }
@@ -169,7 +169,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
       throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
-    ReplicaId cloudReplica = new CloudReplica(partitionId, virtualReplicatorCluster.getCurrentDataNodeId());
+    ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());
     if (!storeManager.addBlobStore(cloudReplica)) {
       logger.error("Can't start cloudstore for replica {}", cloudReplica);
       throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);

@@ -29,9 +29,9 @@ import org.slf4j.LoggerFactory;
 @StateModelInfo(initialState = "OFFLINE", states = {"LEADER", "STANDBY"})
 public class LeaderStandbyHelixVcrStateModel extends StateModel {
   private static final Logger logger = LoggerFactory.getLogger(LeaderStandbyHelixVcrStateModel.class);
-  private final HelixVcrCluster helixVcrCluster;
+  private final HelixVcrClusterParticipant helixVcrCluster;
 
-  LeaderStandbyHelixVcrStateModel(HelixVcrCluster helixVcrCluster) {
+  LeaderStandbyHelixVcrStateModel(HelixVcrClusterParticipant helixVcrCluster) {
     this.helixVcrCluster = helixVcrCluster;
   }
 

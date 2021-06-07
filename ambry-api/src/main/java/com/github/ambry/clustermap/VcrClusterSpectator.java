@@ -18,9 +18,9 @@ import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 
 
 /**
- * {@link ClusterSpectator} adds itself as a spectator of a cluster and registers some cluster change listeners.
+ * {@link VcrClusterSpectator} adds itself as a spectator of a cluster and registers some cluster change listeners.
  */
-public interface ClusterSpectator extends InstanceConfigChangeListener, LiveInstanceChangeListener {
+public interface VcrClusterSpectator extends InstanceConfigChangeListener, LiveInstanceChangeListener {
 
   /**
    * Register with helix cluster as a spectator.
