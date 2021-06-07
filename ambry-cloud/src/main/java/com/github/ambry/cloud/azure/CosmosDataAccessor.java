@@ -601,7 +601,7 @@ public class CosmosDataAccessor {
         }
       } catch (DocumentClientException dex) {
         if (dex.getStatusCode() == HttpConstants.StatusCodes.CONFLICT) {
-          logger.info("Container with accountid {} and containerid {} already exists. Skipping.",
+          logger.info("Container with accountid {} and containerid {} already deprecated. Skipping.",
               containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId());
         } else {
           throw dex;
