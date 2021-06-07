@@ -268,6 +268,10 @@ class PartitionLayout {
    */
   public Partition getPartition(InputStream stream) throws IOException {
     byte[] partitionBytes = Partition.readPartitionBytesFromStream(stream);
+    if(!partitionMap.containsKey(ByteBuffer.wrap(partitionBytes))) {
+      logger.info(String.format("Partition obtained from stream: %s", new String(partitionBytes)));
+      logger.info(String.format("PartitionLayout info: %s", toString()));
+    }
     return partitionMap.get(ByteBuffer.wrap(partitionBytes));
   }
 
