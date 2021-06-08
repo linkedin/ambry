@@ -43,6 +43,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -401,6 +402,8 @@ class GetBlobOperation extends GetOperation {
     private AtomicLong bytesWritten = new AtomicLong(0);
     // the number of chunks that have been written out to the asyncWritableChannel.
     private AtomicInteger numChunksWrittenOut = new AtomicInteger(0);
+    // the time of last chunk write done
+    private AtomicLong lastChunkWriteDoneTime = new AtomicLong(0);
     // the callback that is passed into the asyncWritableChannel write() operation.
     private final Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
       @Override
@@ -414,6 +417,7 @@ class GetBlobOperation extends GetOperation {
         if (byteBuf != null) {
           byteBuf.release();
         }
+        lastChunkWriteDoneTime.set(SystemTime.getInstance().milliseconds());
         numChunksWrittenOut.incrementAndGet();
         routerCallback.onPollReady();
       }
@@ -522,6 +526,10 @@ class GetBlobOperation extends GetOperation {
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
+          logger.warn(
+              "GetBlobOperationError, numChunksRetrieved:{}, numChunksWrittenOut: {}. Time since last chunk write done: {}ms",
+              numChunksRetrieved, numChunksWrittenOut,
+              SystemTime.getInstance().milliseconds() - lastChunkWriteDoneTime.get());
           routerMetrics.onGetBlobError(e, options, isEncrypted);
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
