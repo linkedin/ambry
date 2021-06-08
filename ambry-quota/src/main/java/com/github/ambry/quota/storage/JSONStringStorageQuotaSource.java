@@ -19,32 +19,30 @@ import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaSource;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * A JSON string implementation of {@link StorageQuotaSource} interface. The entire storage quota is encoded as json
+ * A JSON string implementation of {@link QuotaSource} interface. The entire storage quota is encoded as json
  * string in {@link StorageQuotaConfig#containerStorageQuotaInJson}.
  */
-public class JSONStringStorageQuotaSource implements StorageQuotaSource {
+public class JSONStringStorageQuotaSource implements QuotaSource {
   private static final Logger logger = LoggerFactory.getLogger(JSONStringStorageQuotaSource.class);
 
   private final Map<String, Map<String, Long>> containerStorageQuota;
-  private final StorageQuotaConfig config;
 
   /**
    * Constructor to create a {@link JSONStringStorageQuotaSource}.
-   * @param config The {@link StorageQuotaSource}.
+   * @param config The {@link QuotaSource}.
    * @throws IOException
    */
   public JSONStringStorageQuotaSource(StorageQuotaConfig config) throws IOException {
-    this.config = config;
     Map<String, Map<String, Long>> quota = Collections.EMPTY_MAP;
     if (config.containerStorageQuotaInJson != null && !config.containerStorageQuotaInJson.trim().isEmpty()) {
       ObjectMapper mapper = new ObjectMapper();
@@ -54,20 +52,8 @@ public class JSONStringStorageQuotaSource implements StorageQuotaSource {
     this.containerStorageQuota = quota;
   }
 
-  @Override
-  public Map<String, Map<String, Long>> getContainerQuota() {
-    return Collections.unmodifiableMap(containerStorageQuota);
-  }
-
-  @Override
-  public void registerListener(Listener listener) {
-    // no-op
-    return;
-  }
-
-  @Override
-  public void addStorageUsageSupplier(Supplier<Map<String, Map<String, Long>>> supplier) {
-    // no-op
+  JSONStringStorageQuotaSource(Map<String, Map<String, Long>> storageQuota) {
+    this.containerStorageQuota = storageQuota;
   }
 
   @Override
@@ -93,11 +79,6 @@ public class JSONStringStorageQuotaSource implements StorageQuotaSource {
 
   @Override
   public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
-    // no-op
-  }
-
-  @Override
-  public void shutdown() {
     // no-op
   }
 }

@@ -16,14 +16,15 @@ package com.github.ambry.quota.storage;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.quota.QuotaSourceFactory;
 import java.io.IOException;
 
 
 /**
  * Factory for {@link JSONStringStorageQuotaSource}.
  */
-public class JSONStringStorageQuotaSourceFactory implements StorageQuotaSourceFactory {
-  private final StorageQuotaSource source;
+public class JSONStringStorageQuotaSourceFactory implements QuotaSourceFactory {
+  private final QuotaSource source;
 
   /**
    * Constructor to create a {@link JSONStringStorageQuotaSourceFactory}.
@@ -34,11 +35,6 @@ public class JSONStringStorageQuotaSourceFactory implements StorageQuotaSourceFa
   public JSONStringStorageQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService)
       throws IOException {
     source = new JSONStringStorageQuotaSource(quotaConfig.storageQuotaConfig);
-  }
-
-  @Override
-  public StorageQuotaSource getStorageQuotaSource() {
-    return source;
   }
 
   @Override

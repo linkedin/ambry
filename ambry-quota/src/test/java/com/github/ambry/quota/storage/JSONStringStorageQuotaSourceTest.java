@@ -15,8 +15,10 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.Quota;
+import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaResource;
 import java.io.IOException;
-import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -37,17 +39,16 @@ public class JSONStringStorageQuotaSourceTest {
     StorageQuotaConfig config = new StorageQuotaConfig(new VerifiableProperties(properties));
 
     JSONStringStorageQuotaSource source = new JSONStringStorageQuotaSource(config);
-    Map<String, Map<String, Long>> containerQuota = source.getContainerQuota();
-    assertEquals(containerQuota.size(), 2);
-    assertTrue(containerQuota.containsKey("10"));
-    assertTrue(containerQuota.containsKey("20"));
-    Map<String, Long> quota = containerQuota.get("10");
-    assertEquals(quota.size(), 2);
-    assertEquals(quota.get("1").longValue(), 1000);
-    assertEquals(quota.get("2").longValue(), 3000);
-    quota = containerQuota.get("20");
-    assertEquals(quota.size(), 2);
-    assertEquals(quota.get("4").longValue(), 2000);
-    assertEquals(quota.get("5").longValue(), 1000);
+    QuotaResource.QuotaResourceType resourceType = QuotaResource.QuotaResourceType.CONTAINER;
+    Quota quota = source.getQuota(new QuotaResource("1000_1", resourceType), QuotaName.STORAGE_IN_GB);
+    assertNull(quota);
+    quota = source.getQuota(new QuotaResource("10_1", resourceType), QuotaName.STORAGE_IN_GB);
+    assertEquals(1000L, (long) quota.getQuotaValue());
+    quota = source.getQuota(new QuotaResource("10_2", resourceType), QuotaName.STORAGE_IN_GB);
+    assertEquals(3000L, (long) quota.getQuotaValue());
+    quota = source.getQuota(new QuotaResource("20_4", resourceType), QuotaName.STORAGE_IN_GB);
+    assertEquals(2000L, (long) quota.getQuotaValue());
+    quota = source.getQuota(new QuotaResource("20_5", resourceType), QuotaName.STORAGE_IN_GB);
+    assertEquals(1000L, (long) quota.getQuotaValue());
   }
 }

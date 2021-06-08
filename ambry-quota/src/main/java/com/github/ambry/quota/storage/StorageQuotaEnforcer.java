@@ -14,12 +14,15 @@
 package com.github.ambry.quota.storage;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Container;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
+import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
@@ -46,15 +49,14 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   private static final int HTTP_STATUS_THROTTLE = 429;
   private static final int HTTP_STATUS_ALLOW = 200;
   private static final long NO_RETRY = -1L;
-  private static final double BYTES_IN_GB = 1024 * 1024 * 1024;
-  private final StorageUsageRefresher storageUsageRefresher;
-  private final StorageQuotaSource storageQuotaSource;
-  private final ScheduledExecutorService scheduler;
-  private final StorageQuotaConfig config;
-  private final StorageQuotaServiceMetrics metrics;
+  private static final long BYTES_IN_GB = 1024 * 1024 * 1024;
 
-  private volatile Map<String, Map<String, Long>> storageQuota;
-  private volatile Map<String, Map<String, Long>> storageUsage;
+  protected final StorageUsageRefresher storageUsageRefresher;
+  protected final QuotaSource quotaSource;
+  protected final StorageQuotaConfig config;
+  protected final StorageQuotaServiceMetrics metrics;
+  protected final ScheduledExecutorService scheduler;
+  protected volatile Map<String, Map<String, Long>> storageUsage;
 
   // The quota recommendation returned when there is no quota found for the given account/container.
   private static final QuotaRecommendation NO_QUOTA_VALUE_RECOMMENDATION =
@@ -63,17 +65,17 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   /**
    * Constructor to instantiate a new {@link StorageQuotaEnforcer}.
    * @param storageQuotaConfig the {@link StorageQuotaConfig}.
-   * @param storageQuotaSource the {@link StorageQuotaSource} to get the quota.
+   * @param quotaSource the {@link QuotaSource} to get the quota.
    * @param accountStatsStore the {@link AccountStatsStore}.
    * @throws Exception
    */
-  public StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, StorageQuotaSource storageQuotaSource,
+  public StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, QuotaSource quotaSource,
       AccountStatsStore accountStatsStore) throws Exception {
     Objects.requireNonNull(accountStatsStore, "AccountStatsStore is null");
     this.metrics = new StorageQuotaServiceMetrics(new MetricRegistry());
     this.scheduler = Utils.newScheduler(1, STORAGE_QUOTA_SERVICE_PREFIX, false);
     this.config = storageQuotaConfig;
-    this.storageQuotaSource = storageQuotaSource;
+    this.quotaSource = quotaSource;
     this.storageUsageRefresher =
         new MySqlStorageUsageRefresher(accountStatsStore, this.scheduler, this.config, metrics);
   }
@@ -81,23 +83,22 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   /**
    * Constructor to instantiate a new {@link StorageQuotaEnforcer}.
    * @param storageQuotaConfig the {@link StorageQuotaConfig}.
-   * @param storageQuotaSource the {@link StorageQuotaSource} to get the quota.
+   * @param quotaSource the {@link QuotaSource} to get the quota.
    * @param storageUsageRefresher the {@link StorageUsageRefresher} to refresh the storage usage for each container.
    * @throws Exception
    */
-  StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, StorageQuotaSource storageQuotaSource,
+  StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, QuotaSource quotaSource,
       StorageUsageRefresher storageUsageRefresher) {
     this.metrics = new StorageQuotaServiceMetrics(new MetricRegistry());
     this.scheduler = null;
     this.config = storageQuotaConfig;
-    this.storageQuotaSource = storageQuotaSource;
+    this.quotaSource = quotaSource;
     this.storageUsageRefresher = storageUsageRefresher;
   }
 
   @Override
   public void init() throws Exception {
     initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
-    initStorageQuota(storageQuotaSource.getContainerQuota());
     registerListeners();
   }
 
@@ -151,7 +152,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    */
   @Override
   public QuotaSource getQuotaSource() {
-    return storageQuotaSource;
+    return quotaSource;
   }
 
   @Override
@@ -160,7 +161,6 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
       long schedulerTimeout = Math.max(config.refresherPollingIntervalMs, config.sourcePollingIntervalMs);
       Utils.shutDownExecutorService(scheduler, schedulerTimeout, TimeUnit.MILLISECONDS);
     }
-    storageQuotaSource.shutdown();
   }
 
   /**
@@ -182,46 +182,11 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   /**
-   * Initialize the storage quota from the given map.
-   * @param quota The map that contains storage quota value for containers.
-   */
-  void initStorageQuota(Map<String, Map<String, Long>> quota) {
-    logger.info("Initializing storage quota for {} accounts");
-    storageQuota = new HashMap<>();
-    initMap(quota, storageQuota, false);
-  }
-
-  /**
-   * Only for testing
-   * @return The unmodified version of storage quota value.
-   */
-  Map<String, Map<String, Long>> getStorageQuota() {
-    return Collections.unmodifiableMap(storageQuota);
-  }
-
-  /**
-   * Register listeners to {@link StorageQuotaSource} and {@link StorageUsageRefresher}.
+   * Register listeners to {@link StorageUsageRefresher}.
    */
   private void registerListeners() {
     logger.info("Register quota source and usage refresher listeners");
-    storageQuotaSource.registerListener(getQuotaSourceListener());
     storageUsageRefresher.registerListener(getUsageRefresherListener());
-    // Register the storage usage supplier to source.
-    storageQuotaSource.addStorageUsageSupplier(this::getStorageUsage);
-  }
-
-  /**
-   * Return a {@link StorageQuotaSource.Listener}, only used in test.
-   * @return {@link StorageQuotaSource.Listener}.
-   */
-  StorageQuotaSource.Listener getQuotaSourceListener() {
-    return containerStorageQuota -> {
-      logger.trace("QuotaSourceListener invoked with new container storage quota");
-      logger.debug("New quota: {}", containerStorageQuota);
-      Map<String, Map<String, Long>> newQuota = new HashMap<>();
-      initMap(containerStorageQuota, newQuota, false);
-      storageQuota = newQuota;
-    };
   }
 
   /**
@@ -267,16 +232,19 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     long quotaValue = -1L;
     long currentUsage = 0L;
     try {
-      short accountId = RestUtils.getAccountFromArgs(restRequest.getArgs()).getId();
-      short containerId = RestUtils.getContainerFromArgs(restRequest.getArgs()).getId();
-      quotaValue = storageQuota.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-          .getOrDefault(String.valueOf(containerId), -1L);
+      Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      Quota quota = quotaSource.getQuota(QuotaResource.fromContainer(container), QuotaName.STORAGE_IN_GB);
+      if (quota != null) {
+        quotaValue = (long) quota.getQuotaValue() * BYTES_IN_GB;
+      }
       if (quotaValue != -1L) {
         currentUsage = storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
             .getOrDefault(String.valueOf(containerId), 0L);
       }
     } catch (Exception e) {
-      logger.error("Failed to getQuotaAndUsage logic to RestRequest {}", restRequest, e);
+      logger.error("Failed to getQuotaAndUsage for RestRequest {}", restRequest, e);
     }
     return new Pair<>(quotaValue, currentUsage);
   }
@@ -294,10 +262,13 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     long quotaValue = -1L;
     long usageAfterCharge = 0L;
     try {
-      short accountId = RestUtils.getAccountFromArgs(restRequest.getArgs()).getId();
-      short containerId = RestUtils.getContainerFromArgs(restRequest.getArgs()).getId();
-      quotaValue = storageQuota.getOrDefault(String.valueOf(accountId), new HashMap<>())
-          .getOrDefault(String.valueOf(containerId), -1L);
+      Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      Quota quota = quotaSource.getQuota(QuotaResource.fromContainer(container), QuotaName.STORAGE_IN_GB);
+      if (quota != null) {
+        quotaValue = (long) quota.getQuotaValue() * BYTES_IN_GB;
+      }
       if (quotaValue != -1L) {
         AtomicLong existingUsage = new AtomicLong();
         storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
@@ -311,7 +282,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
         usageAfterCharge = existingUsage.addAndGet(usage);
       }
     } catch (Exception e) {
-      logger.error("Failed to getQuotaAndUsage logic to RestRequest {}", restRequest, e);
+      logger.error("Failed to getQuotaAndUsage for RestRequest {}", restRequest, e);
     }
     return new Pair<>(quotaValue, usageAfterCharge);
   }
