@@ -31,7 +31,6 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -96,7 +95,7 @@ public class BlobStoreCompactorTest {
   private final StoreConfig config;
   private boolean alwaysEnableTargetIndexDuplicateChecking = false;
   private final Time time = new MockTime();
-  private static final String COMPACT_POLICY_INFO_PATH = File.separator + "compactionPolicyInfo.json";
+  private static final String COMPACT_POLICY_INFO_PATH_V2 = File.separator + "compactionPolicyInfoV2.json";
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private CuratedLogIndexState state = null;
@@ -2882,8 +2881,8 @@ public class BlobStoreCompactorTest {
    * @param changeExpected {@code true} if compaction will cause a change in size of data. {@code false} otherwise.
    * @throws Exception
    */
-  private void compactAndVerifyForContainerDeletion(List<LogSegmentName> segmentsUnderCompaction, long deleteReferenceTimeMs,
-      boolean changeExpected) throws Exception {
+  private void compactAndVerifyForContainerDeletion(List<LogSegmentName> segmentsUnderCompaction,
+      long deleteReferenceTimeMs, boolean changeExpected) throws Exception {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction, null);
@@ -2900,26 +2899,30 @@ public class BlobStoreCompactorTest {
     }
     compactor.closeLastLogSegmentIfQualified();
     if (!changeExpected) {
-      assertEquals("Journal size should be cleaned up after last log segment closed",0, state.index.journal.getCurrentNumberOfEntries());
+      assertEquals("Journal size should be cleaned up after last log segment closed", 0,
+          state.index.journal.getCurrentNumberOfEntries());
     }
     long logSegmentSizeAfterCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
     if (changeExpected) {
-      assertTrue("Last index segment should be compacted", logSegmentSizeSumBeforeCompaction - logSegmentSizeAfterCompaction > 0);
-      assertEquals("Log Segment count should be same due to no new index entry mapping to the last log segment.", logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction);
+      assertTrue("Last index segment should be compacted",
+          logSegmentSizeSumBeforeCompaction - logSegmentSizeAfterCompaction > 0);
+      assertEquals("Log Segment count should be same due to no new index entry mapping to the last log segment.",
+          logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction);
       state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
       logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
-      assertEquals("Log Segment count should be increased after some data has been added to the last log segment.", logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction - 1);
+      assertEquals("Log Segment count should be increased after some data has been added to the last log segment.",
+          logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction - 1);
     }
   }
 
   private void backUpCompactionPolicyInfo(String tempDir, CompactionPolicySwitchInfo compactionPolicySwitchInfo) {
     if (tempDir != null) {
-      File tempFile = new File(Paths.get(tempDir, COMPACT_POLICY_INFO_PATH + ".temp").toString());
+      File tempFile = new File(tempDir, COMPACT_POLICY_INFO_PATH_V2 + ".temp");
       try {
         tempFile.createNewFile();
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, compactionPolicySwitchInfo);
-        tempFile.renameTo(new File(Paths.get(tempDir, COMPACT_POLICY_INFO_PATH).toString()));
+        tempFile.renameTo(new File(tempDir, COMPACT_POLICY_INFO_PATH_V2));
       } catch (IOException e) {
         logger.error("Exception while store compaction policy info for local report. Output file path - {}",
             tempFile.getAbsolutePath(), e);
@@ -2927,15 +2930,15 @@ public class BlobStoreCompactorTest {
     }
   }
 
-    /**
-     * Compacts the {@code segmentsUnderCompaction} and verifies sanity of store and data. Also verifies that no change
-     * occurred if no change was expected and vice versa. Ensures that reloading the log does not have effects on the
-     * integrity of the store and data.
-     * @param segmentsUnderCompaction the names of the log segments under compaction.
-     * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
-     * @param changeExpected {@code true} if compaction will cause a change in size of data. {@code false} otherwise.
-     * @throws Exception
-     */
+  /**
+   * Compacts the {@code segmentsUnderCompaction} and verifies sanity of store and data. Also verifies that no change
+   * occurred if no change was expected and vice versa. Ensures that reloading the log does not have effects on the
+   * integrity of the store and data.
+   * @param segmentsUnderCompaction the names of the log segments under compaction.
+   * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
+   * @param changeExpected {@code true} if compaction will cause a change in size of data. {@code false} otherwise.
+   * @throws Exception
+   */
   private void compactAndVerify(List<LogSegmentName> segmentsUnderCompaction, long deleteReferenceTimeMs,
       boolean changeExpected) throws Exception {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
@@ -3862,10 +3865,8 @@ public class BlobStoreCompactorTest {
     state.reloadIndex(true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     // Prepare the compactionPolicyInfo before compaction.
-    CompactionPolicyCounter compactionPolicyCounter = new CompactionPolicyCounter(config.storeCompactionPolicySwitchCounterDays);
-    compactionPolicyCounter.setCounter(config.storeCompactionPolicySwitchCounterDays - 1);
     CompactionPolicySwitchInfo compactionPolicySwitchInfo =
-        new CompactionPolicySwitchInfo(compactionPolicyCounter, System.currentTimeMillis());
+        new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
     backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
 
     //instantiate compactor.
@@ -3874,10 +3875,12 @@ public class BlobStoreCompactorTest {
 
     compactAndVerifyForContainerDeletion(segmentsUnderCompaction, state.time.milliseconds(), false);
     //increment the counter
-    compactionPolicySwitchInfo.getCompactionPolicyCounter().increment();
+    compactionPolicySwitchInfo.setNextRoundIsCompactAllPolicy(false);
     // reload index to make sure journal is on only the latest log segment
     backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
-    segmentsUnderCompaction = getLogSegments(0, state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - state.log.getRemainingUnallocatedSegments() - 1);
+    segmentsUnderCompaction = getLogSegments(0,
+        state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - state.log.getRemainingUnallocatedSegments()
+            - 1);
 
     compactAndVerifyForContainerDeletion(segmentsUnderCompaction, state.time.milliseconds(), true);
     state.reloadLog(true);
