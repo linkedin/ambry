@@ -527,9 +527,9 @@ class GetBlobOperation extends GetOperation {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
           logger.warn(
-              "GetBlobOperationError, numChunksRetrieved:{}, numChunksWrittenOut: {}. Time since last chunk write done: {}ms",
-              numChunksRetrieved, numChunksWrittenOut,
-              SystemTime.getInstance().milliseconds() - lastChunkWriteDoneTime.get());
+              "GetBlobOperationError BlobId: {}, numChunksRetrieved:{}, numChunksWrittenOut: {}. Time since last chunk write done: {}ms",
+              blobId, numChunksRetrieved, numChunksWrittenOut,
+              SystemTime.getInstance().milliseconds() - lastChunkWriteDoneTime.get(), e);
           routerMetrics.onGetBlobError(e, options, isEncrypted);
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
