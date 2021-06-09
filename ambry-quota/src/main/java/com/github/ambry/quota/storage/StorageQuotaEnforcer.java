@@ -158,8 +158,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   @Override
   public void shutdown() {
     if (scheduler != null) {
-      long schedulerTimeout = Math.max(config.refresherPollingIntervalMs, config.sourcePollingIntervalMs);
-      Utils.shutDownExecutorService(scheduler, schedulerTimeout, TimeUnit.MILLISECONDS);
+      Utils.shutDownExecutorService(scheduler, config.refresherPollingIntervalMs, TimeUnit.MILLISECONDS);
     }
   }
 
@@ -233,15 +232,11 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     long currentUsage = 0L;
     try {
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      Quota quota = quotaSource.getQuota(QuotaResource.fromContainer(container), QuotaName.STORAGE_IN_GB);
-      if (quota != null) {
-        quotaValue = (long) quota.getQuotaValue() * BYTES_IN_GB;
-      }
+      quotaValue = getQuotaValueForContainer(container);
       if (quotaValue != -1L) {
-        currentUsage = storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-            .getOrDefault(String.valueOf(containerId), 0L);
+        currentUsage =
+            storageUsage.computeIfAbsent(String.valueOf(container.getParentAccountId()), k -> new HashMap<>())
+                .getOrDefault(String.valueOf(container.getId()), 0L);
       }
     } catch (Exception e) {
       logger.error("Failed to getQuotaAndUsage for RestRequest {}", restRequest, e);
@@ -263,16 +258,11 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     long usageAfterCharge = 0L;
     try {
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      Quota quota = quotaSource.getQuota(QuotaResource.fromContainer(container), QuotaName.STORAGE_IN_GB);
-      if (quota != null) {
-        quotaValue = (long) quota.getQuotaValue() * BYTES_IN_GB;
-      }
+      quotaValue = getQuotaValueForContainer(container);
       if (quotaValue != -1L) {
         AtomicLong existingUsage = new AtomicLong();
-        storageUsage.computeIfAbsent(String.valueOf(accountId), k -> new ConcurrentHashMap<>())
-            .compute(String.valueOf(containerId), (k, v) -> {
+        storageUsage.computeIfAbsent(String.valueOf(container.getParentAccountId()), k -> new ConcurrentHashMap<>())
+            .compute(String.valueOf(container.getId()), (k, v) -> {
               existingUsage.set(v == null ? 0 : v);
               if (v == null) {
                 return usage;
@@ -282,8 +272,22 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
         usageAfterCharge = existingUsage.addAndGet(usage);
       }
     } catch (Exception e) {
-      logger.error("Failed to getQuotaAndUsage for RestRequest {}", restRequest, e);
+      logger.error("Failed to charge for RestRequest {}", restRequest, e);
     }
     return new Pair<>(quotaValue, usageAfterCharge);
+  }
+
+  /**
+   * Return the storage quota value (in bytes) for given {@link Container}.
+   * @param container The {@link Container} to fetch quota value.
+   * @return The storage quota value (in bytes)
+   */
+  protected long getQuotaValueForContainer(Container container) {
+    Quota quota = quotaSource.getQuota(QuotaResource.fromContainer(container), QuotaName.STORAGE_IN_GB);
+    if (quota != null) {
+      return (long) quota.getQuotaValue() * BYTES_IN_GB;
+    } else {
+      return -1;
+    }
   }
 }
