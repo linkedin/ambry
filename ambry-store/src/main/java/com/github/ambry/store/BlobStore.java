@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ReplicaId;
@@ -65,6 +66,7 @@ public class BlobStore implements Store {
 
   private final String storeId;
   private final String dataDir;
+  private final String diskMountPath;
   private final ScheduledExecutorService taskScheduler;
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
@@ -183,6 +185,7 @@ public class BlobStore implements Store {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
+    this.diskMountPath = dataDir.substring(0, dataDir.lastIndexOf(File.separator));
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
@@ -489,7 +492,11 @@ public class BlobStore implements Store {
             Offset endOffsetOfLastMessage = log.getEndOffset();
             long diskWriteStartTime = time.milliseconds();
             long sizeWritten = messageSetToWrite.writeTo(log);
-            metrics.diskWriteTimePerMbInMs.update(((time.milliseconds() - diskWriteStartTime) << 20) / sizeWritten);
+
+            Histogram diskWriteTimePerMbInMs = metrics.diskWriteTimePerMbInMs.get(diskMountPath);
+            if (diskWriteTimePerMbInMs != null) {
+              diskWriteTimePerMbInMs.update(((time.milliseconds() - diskWriteStartTime) << 20) / sizeWritten);
+            }
             logger.trace("Store : {} message set written to log", dataDir);
 
             List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();

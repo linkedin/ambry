@@ -76,6 +76,7 @@ class BlobStoreCompactor {
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final File dataDir;
   private final String storeId;
+  private final String diskMountPath;
   private final StoreKeyFactory storeKeyFactory;
   private final StoreConfig config;
   private final StoreMetrics srcMetrics;
@@ -126,6 +127,7 @@ class BlobStoreCompactor {
       DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
       AccountService accountService, RemoteTokenTracker remoteTokenTracker) throws IOException, StoreException {
     this.dataDir = new File(dataDir);
+    this.diskMountPath = dataDir.substring(0, dataDir.lastIndexOf(File.separator));
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
     this.config = config;
@@ -393,7 +395,8 @@ class BlobStoreCompactor {
       }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
-      if (srcIndex.journal.getFirstOffset() != null && segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
+      if (srcIndex.journal.getFirstOffset() != null
+          && segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
         throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
       }
       prevSegmentName = segment.getName();
@@ -821,19 +824,29 @@ class BlobStoreCompactor {
           long usedCapacity = tgtIndex.getLogUsedCapacity();
           if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
-            if (config.storeCompactionMinOperationsBytesPerSec < config.storeCompactionOperationsBytesPerSec) {
+            if (config.storeCompactionMinOperationsBytesPerSec < config.storeCompactionOperationsBytesPerSec
+                && srcMetrics.diskReadTimePerMbInMs.containsKey(diskMountPath)
+                && srcMetrics.diskWriteTimePerMbInMs.containsKey(diskMountPath)) {
               // Enable dynamic desired rate based on disk latency.
-              double currentReadTimePerMbInMs = srcMetrics.diskReadTimePerMbInMs.getSnapshot().get95thPercentile();
+              double currentReadTimePerMbInMs =
+                  srcMetrics.diskReadTimePerMbInMs.get(diskMountPath).getSnapshot().get95thPercentile();
               int desiredReadPerSecond = getDesiredSpeedPerSecond(currentReadTimePerMbInMs,
                   config.storeCompactionIoPerMbReadLatencyThresholdMs);
-              double currentWriteTimePerMbInMs = srcMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile();
+              double currentWriteTimePerMbInMs =
+                  srcMetrics.diskWriteTimePerMbInMs.get(diskMountPath).getSnapshot().get95thPercentile();
               int desiredWritePerSecond = getDesiredSpeedPerSecond(currentWriteTimePerMbInMs,
                   config.storeCompactionIoPerMbWriteLatencyThresholdMs);
               logger.debug(
                   "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
-                  currentReadTimePerMbInMs, desiredWritePerSecond, desiredReadPerSecond, desiredWritePerSecond);
+                  currentReadTimePerMbInMs, currentWriteTimePerMbInMs, desiredReadPerSecond, desiredWritePerSecond);
               diskIOScheduler.updateThrottlerDesiredRate(COMPACTION_CLEANUP_JOB_NAME,
                   Math.min(desiredReadPerSecond, desiredWritePerSecond));
+            } else {
+              logger.debug("Adaptive compaction is not enabled: storeCompactionMinOperationsBytesPerSec: {}, "
+                      + "storeCompactionOperationsBytesPerSec: {}, diskReadTimePerMbInMs: {}, diskWriteTimePerMbInMs: {}",
+                  config.storeCompactionMinOperationsBytesPerSec, config.storeCompactionOperationsBytesPerSec,
+                  srcMetrics.diskReadTimePerMbInMs.containsKey(diskMountPath),
+                  srcMetrics.diskWriteTimePerMbInMs.containsKey(diskMountPath));
             }
             // call into diskIOScheduler to make sure we can proceed.
             diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
@@ -913,7 +926,9 @@ class BlobStoreCompactor {
             tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
             writtenLastTime = srcValue.getSize();
             srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
-            srcMetrics.diskCompactionCopyRateInBytes.mark(srcValue.getSize());
+            if (srcMetrics.diskCompactionCopyRateInBytes.containsKey(diskMountPath)) {
+              srcMetrics.diskCompactionCopyRateInBytes.get(diskMountPath).mark(srcValue.getSize());
+            }
           } else if (!isActive) {
             logger.info("Stopping copying in {} because shutdown is in progress", storeId);
             copiedAll = false;

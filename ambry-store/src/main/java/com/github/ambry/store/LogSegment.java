@@ -51,6 +51,7 @@ class LogSegment implements Read, Write {
 
   private final FileChannel fileChannel;
   private final File file;
+  private final String diskMountPath;
   private final long capacityInBytes;
   private final LogSegmentName name;
   private final Pair<File, FileChannel> segmentView;
@@ -83,6 +84,7 @@ class LogSegment implements Read, Write {
           StoreErrorCodes.File_Not_Found);
     }
     this.file = file;
+    this.diskMountPath = parseDiskMountPath(file);
     this.name = name;
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
@@ -138,6 +140,7 @@ class LogSegment implements Read, Write {
         }
       }
       this.file = file;
+      this.diskMountPath = parseDiskMountPath(file);
       this.name = name;
       this.metrics = metrics;
       fileChannel = Utils.openChannel(file, true);
@@ -168,6 +171,7 @@ class LogSegment implements Read, Write {
       throws StoreException {
     this.file = file;
     this.name = LogSegmentName.fromFilename(file.getName());
+    this.diskMountPath = parseDiskMountPath(file);
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
     this.fileChannel = fileChannel;
@@ -554,5 +558,18 @@ class LogSegment implements Read, Write {
 
   public StoreMetrics getMetrics() {
     return metrics;
+  }
+
+  /**
+   * Parse DiskMountPath from logsegment file name. File name pattern: /disk..Mount..Path/storeId/logSegmentName
+   * @throws StoreException if there is any store exception while writing to the file.
+   */
+  private static String parseDiskMountPath(File file) {
+    File parentFile = file.getParentFile();
+    return parentFile == null ? null : parentFile.getParent();
+  }
+
+  public String getDiskMountPath() {
+    return diskMountPath;
   }
 }

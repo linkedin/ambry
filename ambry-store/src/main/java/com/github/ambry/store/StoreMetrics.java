@@ -21,6 +21,8 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.codahale.metrics.Timer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -87,9 +89,9 @@ public class StoreMetrics {
   public final Counter duplicateKeysInBatch;
   public final Counter storeIoErrorTriggeredShutdownCount;
   public final Counter blobStoreRecoverCompactionPolicySwitchInfoErrorCount;
-  public Histogram diskReadTimePerMbInMs;
-  public Histogram diskWriteTimePerMbInMs;
-  public Meter diskCompactionCopyRateInBytes;
+  public Map<String, Histogram> diskReadTimePerMbInMs = new HashMap<>();
+  public Map<String, Histogram> diskWriteTimePerMbInMs = new HashMap<>();
+  public Map<String, Meter> diskCompactionCopyRateInBytes = new HashMap<>();
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
@@ -248,14 +250,15 @@ public class StoreMetrics {
   void initializeDiskMetrics(String diskMountPath, int diskIoHistogramReservoirTimeWindow) {
     // Should be initialized only once per disk.
     String prefix = diskMountPath + SEPARATOR;
-    diskReadTimePerMbInMs = registry.histogram(MetricRegistry.name(BlobStore.class, prefix + "DiskReadTimePerMbInMs"),
-        () -> new Histogram(
-            new SlidingTimeWindowArrayReservoir(diskIoHistogramReservoirTimeWindow, TimeUnit.MILLISECONDS)));
-    diskWriteTimePerMbInMs = registry.histogram(MetricRegistry.name(BlobStore.class, prefix + "DiskWriteTimePerMbInMs"),
-        () -> new Histogram(
-            new SlidingTimeWindowArrayReservoir(diskIoHistogramReservoirTimeWindow, TimeUnit.MILLISECONDS)));
-    diskCompactionCopyRateInBytes =
-        registry.meter(MetricRegistry.name(BlobStoreCompactor.class, prefix + "DiskCompactionCopyRateInBytes"));
+    diskReadTimePerMbInMs.put(diskMountPath,
+        registry.histogram(MetricRegistry.name(BlobStore.class, prefix + "DiskReadTimePerMbInMs"), () -> new Histogram(
+            new SlidingTimeWindowArrayReservoir(diskIoHistogramReservoirTimeWindow, TimeUnit.MILLISECONDS))));
+
+    diskWriteTimePerMbInMs.put(diskMountPath,
+        registry.histogram(MetricRegistry.name(BlobStore.class, prefix + "DiskWriteTimePerMbInMs"), () -> new Histogram(
+            new SlidingTimeWindowArrayReservoir(diskIoHistogramReservoirTimeWindow, TimeUnit.MILLISECONDS))));
+    diskCompactionCopyRateInBytes.put(diskMountPath,
+        registry.meter(MetricRegistry.name(BlobStoreCompactor.class, prefix + "DiskCompactionCopyRateInBytes")));
   }
 
   void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes,

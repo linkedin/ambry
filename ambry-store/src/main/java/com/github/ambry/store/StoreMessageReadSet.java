@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.codahale.metrics.Histogram;
 
 
 /**
@@ -165,8 +166,11 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     prefetchedData = PooledByteBufAllocator.DEFAULT.ioBuffer((int) sizeToRead);
     long fetchStartTime = SystemTime.getInstance().milliseconds();
     prefetchedData.writeBytes(getChannel(), offset.getOffset() + relativeOffset, (int) sizeToRead);
-    segment.getMetrics().diskReadTimePerMbInMs.update(
-        ((SystemTime.getInstance().milliseconds() - fetchStartTime) << 20) / sizeToRead);
+    String diskMountPath = segment.getDiskMountPath();
+    Histogram diskReadTimePerMbInMs = segment.getMetrics().diskReadTimePerMbInMs.get(diskMountPath);
+    if (diskReadTimePerMbInMs != null) {
+      diskReadTimePerMbInMs.update(((SystemTime.getInstance().milliseconds() - fetchStartTime) << 20) / sizeToRead);
+    }
     prefetchedDataRelativeOffset = relativeOffset;
   }
 
