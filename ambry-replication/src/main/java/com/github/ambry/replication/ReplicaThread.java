@@ -612,11 +612,6 @@ public class ReplicaThread implements Runnable {
                   }
                 }
 
-                // add exchangeMetadataResponse to list after replicaSyncUpManager(if not null) has completed update. The
-                // reason is replicaSyncUpManager may also throw exception and add one more exchangeMetadataResponse
-                // associated with same RemoteReplicaInfo.
-                exchangeMetadataResponseList.add(exchangeMetadataResponse);
-
                 // If remote token has not moved forward, wait for back off time before resending next metadata request
                 if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
                   remoteReplicaInfo.setReEnableReplicationTime(
@@ -646,6 +641,11 @@ public class ReplicaThread implements Runnable {
                           .get(replicaMetadataResponseInfo.getMessageInfoList().size() - 1)
                           .getOperationTimeMs());
                 }
+
+                // Add exchangeMetadataResponse to list at the end after operations such as replicaSyncUpManager(if not null)
+                // has completed update, etc. The reason is we may get exceptions in between (for ex: replicaSyncUpManager may
+                // throw exception) and end up adding one more exchangeMetadataResponse associated with same RemoteReplicaInfo.
+                exchangeMetadataResponseList.add(exchangeMetadataResponse);
               } catch (Exception e) {
                 if (e instanceof StoreException
                     && ((StoreException) e).getErrorCode() == StoreErrorCodes.Store_Not_Started) {
