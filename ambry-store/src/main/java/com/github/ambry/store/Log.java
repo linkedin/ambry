@@ -20,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -49,7 +48,7 @@ class Log implements Write {
   private static final Logger logger = LoggerFactory.getLogger(Log.class);
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
   private final String storeId;
-  private static final String COMPACT_POLICY_INFO_PATH = File.separator + "compactionPolicyInfo.json";
+  private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private boolean isLogSegmented;
@@ -470,7 +469,8 @@ class Log implements Write {
         return true;
       } catch (IllegalStateException e) {
         //no-op
-        logger.info("There's no more capacity left in: {} to create new log segment, bypass clean up journal logic" , dataDir);
+        logger.info("There's no more capacity left in: {} to create new log segment, bypass clean up journal logic",
+            dataDir);
         return false;
       }
     }
@@ -504,7 +504,7 @@ class Log implements Write {
    * @return {@code True} if next round is compact all policy.
    */
   private boolean compactionPolicySwitchInfoCounterValueReached() {
-    File file = new File(Paths.get(dataDir, COMPACT_POLICY_INFO_PATH).toString());
+    File file = new File(dataDir, COMPACT_POLICY_INFO_FILE_NAME_V2);
     if (file.exists()) {
       CompactionPolicySwitchInfo compactionPolicySwitchInfo = null;
       try {
@@ -514,8 +514,7 @@ class Log implements Write {
             CompactionPolicySwitchInfo.class.getName());
         return false;
       }
-      if (config.storeCompactionPolicySwitchCounterDays - 1 == (compactionPolicySwitchInfo.getCompactionPolicyCounter()
-          .getCounter())) {
+      if (compactionPolicySwitchInfo.isNextRoundCompactAllPolicy()) {
         logger.trace("The compaction policy switch counter value is qualified for closing last log segment.");
         return true;
       } else {
@@ -523,7 +522,7 @@ class Log implements Write {
         return false;
       }
     } else {
-      logger.error("Compaction policy file: {} is not exist in dir: {}", COMPACT_POLICY_INFO_PATH, dataDir);
+      logger.error("Compaction policy file: {} is not exist in dir: {}", COMPACT_POLICY_INFO_FILE_NAME_V2, dataDir);
       return false;
     }
   }
