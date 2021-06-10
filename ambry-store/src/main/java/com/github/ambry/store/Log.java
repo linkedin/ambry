@@ -20,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -49,7 +48,7 @@ class Log implements Write {
   private static final Logger logger = LoggerFactory.getLogger(Log.class);
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
   private final String storeId;
-  private static final String COMPACT_POLICY_INFO_PATH_V2 = File.separator + "compactionPolicyInfoV2.json";
+  private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private boolean isLogSegmented;
@@ -505,7 +504,7 @@ class Log implements Write {
    * @return {@code True} if next round is compact all policy.
    */
   private boolean compactionPolicySwitchInfoCounterValueReached() {
-    File file = new File(dataDir, COMPACT_POLICY_INFO_PATH_V2);
+    File file = new File(dataDir, COMPACT_POLICY_INFO_FILE_NAME_V2);
     if (file.exists()) {
       CompactionPolicySwitchInfo compactionPolicySwitchInfo = null;
       try {
@@ -523,7 +522,7 @@ class Log implements Write {
         return false;
       }
     } else {
-      logger.error("Compaction policy file: {} is not exist in dir: {}", COMPACT_POLICY_INFO_PATH_V2, dataDir);
+      logger.error("Compaction policy file: {} is not exist in dir: {}", COMPACT_POLICY_INFO_FILE_NAME_V2, dataDir);
       return false;
     }
   }

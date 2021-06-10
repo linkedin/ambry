@@ -62,7 +62,7 @@ public class CompactionPolicyTest {
   private final Path dataDirPath;
   private static final Logger logger = LoggerFactory.getLogger(CompactionPolicyTest.class);
   private static final ObjectMapper objectMapper = new ObjectMapper();
-  private static final String COMPACT_POLICY_INFO_PATH_V2 = File.separator + "compactionPolicyInfoV2.json";
+  private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
 
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   private final Properties properties = new Properties();
@@ -126,7 +126,7 @@ public class CompactionPolicyTest {
       tmpDir.mkdir();
     }
     compactionManager.getCompactionDetails(blobStore);
-    File compactionPolicyInfoFile = new File(tmpDir.toString(), COMPACT_POLICY_INFO_PATH_V2);
+    File compactionPolicyInfoFile = new File(tmpDir.toString(), COMPACT_POLICY_INFO_FILE_NAME_V2);
     CompactionPolicySwitchInfo compactionPolicySwitchInfo =
         objectMapper.readValue(compactionPolicyInfoFile, CompactionPolicySwitchInfo.class);
     assertFalse("Next round of compaction is not compactAll", compactionPolicySwitchInfo.isNextRoundCompactAllPolicy());
@@ -282,7 +282,7 @@ public class CompactionPolicyTest {
     File[] files = backupDir.listFiles(tempFileFilter);
     if (files != null) {
       for (File file : files) {
-        File deleteFile = new File(MOUNT_PATH + file.getName() + File.separator + "compactionPolicyInfo.json");
+        File deleteFile = new File(MOUNT_PATH + file.getName(), "compactionPolicyInfo.json");
         logger.trace("Delete temp file {}", deleteFile.getName());
         deleteFile(deleteFile.toPath());
       }

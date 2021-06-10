@@ -18,7 +18,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +37,8 @@ public class HybridCompactionPolicy implements CompactionPolicy {
   private static final Logger logger = LoggerFactory.getLogger(HybridCompactionPolicy.class);
   private final Map<String, CompactionPolicySwitchInfo> blobToCompactionPolicySwitchInfoMap;
   private static final ObjectMapper objectMapper = new ObjectMapper();
-  private static final String COMPACT_POLICY_INFO_PATH = File.separator + "compactionPolicyInfo.json";
-  private static final String COMPACT_POLICY_INFO_PATH_V2 = File.separator + "compactionPolicyInfoV2.json";
+  private static final String COMPACT_POLICY_INFO_FILE_NAME = "compactionPolicyInfo.json";
+  private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
   private static final long INIT_COMPACT_ALL_TIME = System.currentTimeMillis();
   private static final int DELTA_TIME_IN_DAYS = 3;
   private static final Random random = new Random();
@@ -87,8 +86,8 @@ public class HybridCompactionPolicy implements CompactionPolicy {
   private CompactionPolicySwitchInfo getCompactionPolicySwitchInfo(String storeId, String dataDir,
       BlobStoreStats blobStoreStats) {
     if (!blobToCompactionPolicySwitchInfoMap.containsKey(storeId)) {
-      File file = new File(dataDir, COMPACT_POLICY_INFO_PATH_V2);
-      File oldFile = new File(dataDir, COMPACT_POLICY_INFO_PATH);
+      File file = new File(dataDir, COMPACT_POLICY_INFO_FILE_NAME_V2);
+      File oldFile = new File(dataDir, COMPACT_POLICY_INFO_FILE_NAME);
       if (oldFile.exists()) {
         if (!oldFile.delete()) {
           logger.error("Old compact policy info file has not been successfully deleted in dataDir: {}", dataDir);
@@ -191,11 +190,11 @@ public class HybridCompactionPolicy implements CompactionPolicy {
    */
   private void backUpCompactionPolicyInfo(String dataDir, CompactionPolicySwitchInfo compactionPolicySwitchInfo) {
     if (dataDir != null && !dataDir.isEmpty()) {
-      File tempFile = new File(dataDir, COMPACT_POLICY_INFO_PATH_V2 + ".temp");
+      File tempFile = new File(dataDir, COMPACT_POLICY_INFO_FILE_NAME_V2 + ".temp");
       try {
         tempFile.createNewFile();
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, compactionPolicySwitchInfo);
-        tempFile.renameTo(new File(dataDir, COMPACT_POLICY_INFO_PATH_V2));
+        tempFile.renameTo(new File(dataDir, COMPACT_POLICY_INFO_FILE_NAME_V2));
       } catch (IOException e) {
         logger.error("Exception while store compaction policy info for local report. Output file path - {}",
             tempFile.getAbsolutePath(), e);

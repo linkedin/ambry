@@ -39,7 +39,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -95,7 +94,7 @@ public class BlobStoreCompactorTest {
   private final StoreConfig config;
   private boolean alwaysEnableTargetIndexDuplicateChecking = false;
   private final Time time = new MockTime();
-  private static final String COMPACT_POLICY_INFO_PATH_V2 = File.separator + "compactionPolicyInfoV2.json";
+  private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private CuratedLogIndexState state = null;
@@ -2918,11 +2917,11 @@ public class BlobStoreCompactorTest {
 
   private void backUpCompactionPolicyInfo(String tempDir, CompactionPolicySwitchInfo compactionPolicySwitchInfo) {
     if (tempDir != null) {
-      File tempFile = new File(tempDir, COMPACT_POLICY_INFO_PATH_V2 + ".temp");
+      File tempFile = new File(tempDir, COMPACT_POLICY_INFO_FILE_NAME_V2 + ".temp");
       try {
         tempFile.createNewFile();
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, compactionPolicySwitchInfo);
-        tempFile.renameTo(new File(tempDir, COMPACT_POLICY_INFO_PATH_V2));
+        tempFile.renameTo(new File(tempDir, COMPACT_POLICY_INFO_FILE_NAME_V2));
       } catch (IOException e) {
         logger.error("Exception while store compaction policy info for local report. Output file path - {}",
             tempFile.getAbsolutePath(), e);
