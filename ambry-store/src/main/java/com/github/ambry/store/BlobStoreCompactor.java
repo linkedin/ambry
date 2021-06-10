@@ -103,6 +103,7 @@ class BlobStoreCompactor {
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
   private final AtomicReference<CompactionDetails> currentCompactionDetails = new AtomicReference();
+  private final AtomicLong compactedLogCount = new AtomicLong(0L);
 
   /**
    * Constructs the compactor component.
@@ -168,7 +169,7 @@ class BlobStoreCompactor {
     isActive = true;
     logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
         System.getProperty("os.name"), useDirectIO);
-    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails);
+    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails, compactedLogCount);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -1137,6 +1138,29 @@ class BlobStoreCompactor {
     if (compactionLog != null) {
       if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         logger.info("Compaction of {} finished", storeId);
+        if (srcIndex != null && !srcIndex.isEmpty() && !compactionLog.cycleLogs.isEmpty()) {
+          // The log segment positions after compaction
+          Set<Long> compactedLogSegments = srcIndex.getLogSegments()
+              .stream()
+              .map(LogSegment::getName)
+              .map(LogSegmentName::getPosition)
+              .collect(Collectors.toSet());
+          // The log segment positions under compaction
+          Set<Long> logSegmentsUnderCompaction = new HashSet<>();
+          for (CompactionLog.CycleLog clog : compactionLog.cycleLogs) {
+            logSegmentsUnderCompaction.addAll(clog.compactionDetails.getLogSegmentsUnderCompaction()
+                .stream()
+                .map(LogSegmentName::getPosition)
+                .collect(Collectors.toSet()));
+          }
+          // If the position under compaction doesn't exist in the set after compaction, then this log segment is compacted
+          // eg: log segment under compaction [0_23, 130_16, 144_3]
+          //     log segment after compaction [0_24, 130_24, 155_0, 166_0]
+          // log segment 144_3's position doesn't exist in the compaction log, so we have one log segment compacted.
+          compactedLogCount.set(
+              logSegmentsUnderCompaction.stream().filter(p -> !compactedLogSegments.contains(p)).count());
+        }
+
         if (srcIndex != null && srcIndex.hardDeleter != null) {
           srcIndex.hardDeleter.resume();
         }
