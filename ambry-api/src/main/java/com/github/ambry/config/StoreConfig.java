@@ -260,6 +260,13 @@ public class StoreConfig {
   public final int storeIndexPersistedEntryMinBytes;
 
   /**
+   * The minimum bytes to determine in current log segment only contains the header info.
+   */
+  @Config("store.determine.log.segment.only.contains.header.min.bytes")
+  @Default("20")
+  public final int storeDetermineLogSegmentOnlyContainsHeaderMinBytes;
+
+  /**
    * Whether to rebuild replication token (if it's been invalidated) based on reset key. If {@code false}, the token
    * will be reset to the very beginning of whole log.
    */
@@ -508,6 +515,8 @@ public class StoreConfig {
     storeStatsIndexEntriesPerSecond =
         verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
     storeIndexPersistedEntryMinBytes = verifiableProperties.getInt("store.index.persisted.entry.min.bytes", 115);
+    storeDetermineLogSegmentOnlyContainsHeaderMinBytes =
+        verifiableProperties.getIntInRange("store.determine.log.segment.only.contains.header.min.bytes", 20, 1, 1000);
     storeReplicaStatusDelegateEnable = verifiableProperties.getBoolean(storeReplicaStatusDelegateEnableName, false);
     storeReadOnlyEnableSizeThresholdPercentage =
         verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);

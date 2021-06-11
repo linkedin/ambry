@@ -1644,7 +1644,8 @@ class PersistentIndex {
         break; // we have entered and finished reading from the journal, so we are done.
       }
 
-      if (segmentStartOffset == validIndexSegments.lastKey()) {
+      if (segmentStartOffset == validIndexSegments.lastKey()
+          && segmentStartOffset.getOffset() > config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes) {
         /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
          * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
          * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
