@@ -1595,11 +1595,10 @@ public class IndexTest {
 
   /**
    * Test that verifies that everything is ok even if {@link MessageStoreHardDelete} instance provided is null.
-   * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void hardDeleteNullTest() throws IOException, StoreException {
+  public void hardDeleteNullTest() throws StoreException {
     state.hardDelete = null;
     state.reloadIndex(true, false);
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1728,7 +1727,7 @@ public class IndexTest {
    * Tests the behavior of {@link Journal} bootstrap.
    */
   @Test
-  public void journalBootstrapTest() throws StoreException, IOException {
+  public void journalBootstrapTest() throws StoreException {
     if (state.getMaxInMemElements() <= 1) {
       fail("This test can work only if the max in mem elements config > 1");
     }
@@ -1804,7 +1803,7 @@ public class IndexTest {
   private void undeleteKeyAndVerify(StoreKey targetKey, short expectedLifeVersion, boolean expectTtlUpdateSet)
       throws StoreException {
     assertTrue("targetKey is not deleted", state.index.findKey(targetKey).isDelete());
-    assertTrue("targetKey is undeleted early", !state.index.findKey(targetKey).isUndelete());
+    assertFalse("targetKey is undeleted early", state.index.findKey(targetKey).isUndelete());
     IndexValue prevValue = state.index.findKey(targetKey);
     assertEquals("Life version isn't " + (expectedLifeVersion - 1) + " but " + prevValue.getLifeVersion(),
         expectedLifeVersion - 1, prevValue.getLifeVersion());
@@ -1841,14 +1840,14 @@ public class IndexTest {
    * @throws StoreException
    */
   private void deleteKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
-    assertTrue("targetKey is already deleted", !state.index.findKey(key).isDelete());
+    assertFalse("targetKey is already deleted", state.index.findKey(key).isDelete());
     short actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
     state.appendToLog(DELETE_RECORD_SIZE);
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), DELETE_RECORD_SIZE);
     state.index.markAsDeleted(key, fileSpan, System.currentTimeMillis());
-    assertTrue("targetKey is undeleted", !state.index.findKey(key).isUndelete());
+    assertFalse("targetKey is undeleted", state.index.findKey(key).isUndelete());
     assertTrue("targetKey is not deleted", state.index.findKey(key).isDelete());
     actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
@@ -1862,7 +1861,7 @@ public class IndexTest {
    * @throws StoreException
    */
   private void ttlUpdateKeyAndVerify(StoreKey key, short expectedLifeVersion) throws StoreException {
-    assertTrue("targetKey is already ttlUpdated", !state.index.findKey(key).isTtlUpdate());
+    assertFalse("targetKey is already ttlUpdated", state.index.findKey(key).isTtlUpdate());
     short actualLifeVersion = state.index.findKey(key).getLifeVersion();
     assertEquals("Life version isn't " + expectedLifeVersion + " but " + actualLifeVersion, expectedLifeVersion,
         actualLifeVersion);
@@ -2087,10 +2086,9 @@ public class IndexTest {
    * @param maxLogSegmentsToBeIgnored number of log segments not to be returned via {@link PersistentIndex#getLogSegmentsNotInJournal()}
    * @param maxEntriesInJournal max number of entries in {@link Journal}
    * @throws StoreException
-   * @throws IOException
    */
   private void testGetLogSegmentsNotInJournal(int maxLogSegmentsToBeIgnored, int maxEntriesInJournal)
-      throws StoreException, IOException {
+      throws StoreException {
     // fill current log segment to its capacity
     fillLastLogSegmentToCapacity(1, false);
 
@@ -2140,10 +2138,9 @@ public class IndexTest {
    * @param numberOfEntries number of entries to be added to fill the log segment to its capacity
    * @param newLogSegment {@code true} if this is a new log segment. {@code false} otherwise
    * @throws StoreException
-   * @throws IOException
    */
   private void fillLastLogSegmentToCapacity(int numberOfEntries, boolean newLogSegment)
-      throws StoreException, IOException {
+      throws StoreException {
     if (newLogSegment) {
       // to ensure a new log segment is created. If not, find the remaining size below will fail
       state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);

@@ -401,11 +401,36 @@ public class BlobStoreCompactorTest {
   }
 
   /**
+   * Test finding key with old file span. The log segment associated with start offset in file span has been compacted.
+   * @throws Exception
+   */
+  @Test
+  public void findKeyWithOldFileSpan() throws Exception{
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true, false);
+    FileSpan oldFileSpan = new FileSpan(state.index.getStartOffset(), state.index.getCurrentEndOffset());
+    MockId tombstone1 = state.permanentDeleteTombstones.get(0);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // find the key by using old file span (the 1_0 log segment has been compacted to 1_1). The index should use current
+    // first segment if there is no log segment found less than or equal to start offset in old file span.
+    IndexValue indexValue = state.index.findKey(tombstone1, oldFileSpan);
+    assertNotNull("The key should exist", indexValue);
+  }
+
+  /**
    * Tests compacting delete tombstone with both invalid and journal based tokens.
    * @throws Exception
    */
   @Test
-  public void compactDeleteTombstoneTwice() throws Exception {
+  public void compactDeleteTombstoneTwiceTest() throws Exception {
     assumeTrue(purgeDeleteTombstone);
     refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
