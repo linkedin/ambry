@@ -419,7 +419,7 @@ public class BlobStoreCompactorTest {
     } finally {
       compactor.close(0);
     }
-    // find the key by using old file span (the 1_0 log segment has been compacted to 1_1). The index should use current
+    // find the key by using old file span (the 0_0 log segment has been compacted to 0_1). The index should use current
     // first segment if there is no log segment found less than or equal to start offset in old file span.
     IndexValue indexValue = state.index.findKey(tombstone1, oldFileSpan);
     assertNotNull("The key should exist", indexValue);
