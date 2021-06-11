@@ -453,7 +453,8 @@ public class ReplicationMetrics {
    */
   public void addLagMetricForPartition(PartitionId partitionId, boolean enableEmmitMetricForReplicaLag) {
     if (!partitionLags.containsKey(partitionId)) {
-      partitionLags.put(partitionId, new HashMap<>());
+      // Use concurrent hash map for the inner value map as well to avoid concurrent modification exception.
+      partitionLags.put(partitionId, new ConcurrentHashMap<>());
       // Set up metrics if and only if no mapping for this partition before.
       if (enableEmmitMetricForReplicaLag) {
         Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
