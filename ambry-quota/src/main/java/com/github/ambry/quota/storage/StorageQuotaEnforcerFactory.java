@@ -35,11 +35,7 @@ public class StorageQuotaEnforcerFactory implements QuotaEnforcerFactory {
    */
   public StorageQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
       AccountStatsStore accountStatsStore) throws Exception {
-    if (!(quotaSource instanceof StorageQuotaSource)) {
-      throw new IllegalStateException("QuotaSource should be a StorageQuotaSource");
-    }
-    quotaEnforcer =
-        new StorageQuotaEnforcer(quotaConfig.storageQuotaConfig, (StorageQuotaSource) quotaSource, accountStatsStore);
+    quotaEnforcer = new StorageQuotaEnforcer(quotaConfig.storageQuotaConfig, quotaSource, accountStatsStore);
   }
 
   @Override

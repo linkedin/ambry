@@ -39,6 +39,7 @@ import static org.junit.Assert.*;
  * Unit test for {@link StorageQuotaEnforcer}.
  */
 public class StorageQuotaEnforcerTest {
+  private static final long BYTES_IN_GB = 1024 * 1024 * 1024;
   StorageQuotaConfig config = new StorageQuotaConfig(new VerifiableProperties(new Properties()));
 
   /**
@@ -60,48 +61,6 @@ public class StorageQuotaEnforcerTest {
     Map<String, Map<String, Long>> containerUsage = TestUtils.makeStorageMap(10, 10, 1000, 100);
     enforcer.initStorageUsage(containerUsage);
     assertEquals(containerUsage, enforcer.getStorageUsage());
-  }
-
-  /**
-   * Test to initialize the storage quota with empty map.
-   */
-  @Test
-  public void testInitEmptyStorageQuota() throws Exception {
-    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
-    enforcer.initStorageQuota(Collections.EMPTY_MAP);
-    assertEquals(Collections.EMPTY_MAP, enforcer.getStorageQuota());
-  }
-
-  /**
-   * Test to initialize the storage quota with non-empty map.
-   */
-  @Test
-  public void testInitStorageQuota() throws Exception {
-    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
-    Map<String, Map<String, Long>> containerQuota = TestUtils.makeStorageMap(10, 10, 1000, 100);
-    enforcer.initStorageQuota(containerQuota);
-    assertEquals(containerQuota, enforcer.getStorageQuota());
-  }
-
-  /**
-   * Test on storage quota updates.
-   */
-  @Test
-  public void testStorageQuotaSourceListener() throws Exception {
-    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
-    int initNumAccounts = 10;
-    Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
-    enforcer.initStorageQuota(expectedQuota);
-    assertEquals(expectedQuota, enforcer.getStorageQuota());
-
-    StorageQuotaSource.Listener listener = enforcer.getQuotaSourceListener();
-    int numUpdates = 10;
-    for (int i = 1; i <= numUpdates; i++) {
-      Map<String, Map<String, Long>> additionalUsage = TestUtils.makeStorageMap(1, 10, 10000, 1000);
-      expectedQuota.put(String.valueOf(initNumAccounts + i), additionalUsage.remove("1"));
-      listener.onNewContainerStorageQuota(expectedQuota);
-      assertEquals(expectedQuota, enforcer.getStorageQuota());
-    }
   }
 
   /**
@@ -141,17 +100,17 @@ public class StorageQuotaEnforcerTest {
    */
   @Test
   public void testGetQuotaAndUsageAndCharge() throws Exception {
-    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, null, (StorageUsageRefresher) null);
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> expectedQuota = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
-    enforcer.initStorageQuota(expectedQuota);
+    JSONStringStorageQuotaSource source = new JSONStringStorageQuotaSource(expectedQuota);
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, source, (StorageUsageRefresher) null);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
 
     for (Map.Entry<String, Map<String, Long>> accountEntry : expectedQuota.entrySet()) {
       short accountId = Short.valueOf(accountEntry.getKey());
       for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
         short containerId = Short.valueOf(containerEntry.getKey());
-        long quota = containerEntry.getValue();
+        long quota = containerEntry.getValue() * BYTES_IN_GB;
         RestRequest restRequest = createRestRequest(accountId, containerId);
         Pair<Long, Long> quotaAndUsage = enforcer.getQuotaAndUsage(restRequest);
         assertEquals(quota, quotaAndUsage.getFirst().longValue());
