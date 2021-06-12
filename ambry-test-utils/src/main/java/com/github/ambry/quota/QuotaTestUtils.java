@@ -15,6 +15,7 @@ package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import java.util.Map;
 import java.util.Properties;
@@ -54,12 +55,17 @@ public class QuotaTestUtils {
   public static QuotaManager createDummyQuotaManager() {
     return new QuotaManager() {
       @Override
-      public void init() throws InstantiationException {
-
+      public void init() {
       }
 
       @Override
       public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) {
+        return null;
+      }
+
+      @Override
+      public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+          Map<QuotaName, Double> requestCostMap) {
         return null;
       }
 
@@ -81,6 +87,7 @@ public class QuotaTestUtils {
   }
 
   public static QuotaChargeEventListener createDummyQuotaChargeEventListener() {
-    return () -> {};
+    return () -> {
+    };
   }
 }

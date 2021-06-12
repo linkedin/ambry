@@ -31,7 +31,6 @@ public class QuotaConfig {
   public static final String REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON =
       QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
   public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manager.factory";
-  public static final String REQUEST_QUOTA_VALUES_IN_JSON = QUOTA_CONFIG_PREFIX + "request.quota.values.in.json";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public StorageQuotaConfig storageQuotaConfig;
@@ -78,37 +77,6 @@ public class QuotaConfig {
   public QuotaMode throttlingMode;
 
   /**
-   *
-   * A JSON string representing capacity unit quota for all containers. eg:
-   * {
-   *   "101": {
-   *     "1": {
-   *       "WRITE_CAPACITY_UNIT": 10,
-   *       "READ_CAPACITY_UNIT": 10
-   *     },
-   *     "2": {
-   *       "WRITE_CAPACITY_UNIT": 12,
-   *       "READ_CAPACITY_UNIT": 12
-   *     }
-   *   },
-   *   "102": {
-   *     "1": {
-   *       "WRITE_CAPACITY_UNIT": 5,
-   *       "READ_CAPACITY_UNIT": 7
-   *     }
-   *   }
-   * }
-   * The key of the top object is the acount id and the key of the inner object is the container id.
-   * The value of the each container id is the WRITE_CAPACITY_UNIT and READ_CAPACITY_UNIT quota in bytes for this container.
-   *
-   * If the targeted container doesn't have a capacity quota in this JSON string, it's up to CapacityQuotaEnforcer
-   * to decide whether to allow uploads or not.
-   *
-   */
-  @Config(REQUEST_QUOTA_VALUES_IN_JSON)
-  public String requestQuotaValuesInJson;
-
-  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
@@ -120,7 +88,6 @@ public class QuotaConfig {
             buildDefaultQuotaEnforcerSourceInfoPairJson().toString());
     quotaManagerFactory = verifiableProperties.getString(QUOTA_MANAGER_FACTORY, DEFAULT_QUOTA_MANAGER_FACTORY);
     throttlingMode = QuotaMode.valueOf(verifiableProperties.getString(THROTTLING_MODE, DEFAULT_QUOTA_THROTTLING_MODE));
-    requestQuotaValuesInJson = verifiableProperties.getString(REQUEST_QUOTA_VALUES_IN_JSON, "");
   }
 
   /**

@@ -57,6 +57,12 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
+  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
+      Map<QuotaName, Double> requestCostMap) {
+    return chargeAndRecommend(restRequest);
+  }
+
+  @Override
   public QuotaRecommendation recommend(RestRequest restRequest) {
     if (isReadRequest(restRequest)) {
       return allowReadRecommendation;
