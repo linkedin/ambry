@@ -16,12 +16,16 @@ package com.github.ambry.quota;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Listener for each data chunk upload to or download from Ambry.
  */
 public interface QuotaChargeEventListener {
+  Logger logger = LoggerFactory.getLogger(QuotaChargeEventListener.class);
+
   /**
    * Build {@link QuotaChargeEventListener} to handle quota compliance of requests.
    * @param restRequest {@link RestRequest} for which quota is being charged.
@@ -33,7 +37,8 @@ public interface QuotaChargeEventListener {
       boolean shouldThrottle) {
     return () -> {
       ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest);
-      if (throttlingRecommendation.shouldThrottle() && shouldThrottle) {
+      if (throttlingRecommendation.shouldThrottle() && shouldThrottle
+          && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
         throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
       }
     };
