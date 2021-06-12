@@ -751,14 +751,16 @@ class FrontendRestRequestService implements RestRequestService {
           }
           if (subResource == null) {
             getCallback.markStartTime();
-            router.getBlob(convertedId, getCallback.options, getCallback, QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
+            router.getBlob(convertedId, getCallback.options, getCallback,
+                QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
           } else {
             switch (subResource) {
               case BlobInfo:
               case UserMetadata:
               case Segment:
                 getCallback.markStartTime();
-                router.getBlob(convertedId, getCallback.options, getCallback, QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
+                router.getBlob(convertedId, getCallback.options, getCallback,
+                    QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
                 break;
               case Replicas:
                 response = getReplicasHandler.getReplicas(convertedId, restResponseChannel);
@@ -777,11 +779,13 @@ class FrontendRestRequestService implements RestRequestService {
           headCallback.markStartTime();
           router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
               .getOption(getOption)
-              .build(), headCallback, QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false));
+              .build(), headCallback,
+              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false));
           break;
         case DELETE:
           deleteCallback.markStartTime();
-          router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback, QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false));
+          router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback,
+              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false));
           break;
         default:
           throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
@@ -863,7 +867,8 @@ class FrontendRestRequestService implements RestRequestService {
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
      * @param options the {@link GetBlobOptions} associated with the
-     *                {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
+     *                {@link Router#
+     *                getBlob(String, GetBlobOptions, Callback)} call.
      */
     GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, SubResource subResource,
         GetBlobOptions options) {

@@ -209,4 +209,3 @@ public interface Router extends Closeable {
     return undeleteBlob(blobId, serviceId, null, quotaChargeEventListener);
   }
 }
-

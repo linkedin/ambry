@@ -245,7 +245,9 @@ public class NamedBlobPutHandler {
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback, quotaChargeEventListener), this::isRetriable,
+              callback ->
+                  router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback, quotaChargeEventListener),
+              this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,

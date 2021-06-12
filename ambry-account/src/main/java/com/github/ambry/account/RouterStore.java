@@ -129,7 +129,8 @@ class RouterStore extends AccountMetadataStore {
    */
   Map<String, String> readAccountMetadataFromBlobID(String blobID) {
     long startTimeMs = System.currentTimeMillis();
-    Future<GetBlobResult> resultF = router.get().getBlob(blobID, new GetBlobOptionsBuilder().build(), QUOTA_CHARGE_EVENT_LISTENER);
+    Future<GetBlobResult> resultF =
+        router.get().getBlob(blobID, new GetBlobOptionsBuilder().build(), QUOTA_CHARGE_EVENT_LISTENER);
     try {
       GetBlobResult result = resultF.get();
       accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);

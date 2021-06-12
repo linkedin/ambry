@@ -3176,19 +3176,22 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeEventListener quotaChargeEventListener) {
     deleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.DeleteBlob);
   }
 
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+      QuotaChargeEventListener quotaChargeEventListener) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);
   }
 
   @Override
-  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeEventListener quotaChargeEventListener) {
     undeleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.UndeleteBlob);
   }
