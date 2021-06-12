@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -30,6 +31,10 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -75,6 +80,7 @@ class NonBlockingRouter implements Router {
   private final CryptoJobHandler cryptoJobHandler;
   private final AccountService accountService;
   private final Time time;
+  private final QuotaManager quotaManager;
   // Resources that need to be shut down when the router does.
   private final List<Closeable> resourcesToClose;
 
@@ -100,12 +106,14 @@ class NonBlockingRouter implements Router {
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
+   * @param quotaManager {@link QuotaManager} object to handle Ambry quotas.
    * @throws IOException if the OperationController could not be successfully created.
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      AccountService accountService, Time time, String defaultPartitionClass) throws IOException {
+      AccountService accountService, Time time, String defaultPartitionClass, QuotaManager
+       quotaManager) throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.networkClientFactory = networkClientFactory;
@@ -117,6 +125,7 @@ class NonBlockingRouter implements Router {
     this.cryptoJobHandler = cryptoJobHandler;
     this.accountService = accountService;
     this.time = time;
+    this.quotaManager = quotaManager;
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
@@ -152,12 +161,13 @@ class NonBlockingRouter implements Router {
    * @param blobIdStr The ID of the blob for which blob data is requested.
    * @param options The options associated with the request. This cannot be null.
    * @param callback The callback which will be invoked on the completion of the request.
+   * @param quotaChargeEventListener {@link QuotaChargeEventListener} object.
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
   @Override
   public Future<GetBlobResult> getBlob(String blobIdStr, GetBlobOptions options,
-      final Callback<GetBlobResult> callback) {
+      final Callback<GetBlobResult> callback, QuotaChargeEventListener quotaChargeEventListener) {
     if (blobIdStr == null || options == null) {
       throw new IllegalArgumentException("blobId or options must not be null");
     }
@@ -173,7 +183,7 @@ class NonBlockingRouter implements Router {
           if (callback != null) {
             callback.onCompletion(getBlobResult, exception);
           }
-        });
+        }, quotaChargeEventListener);
       } else {
         boolean isEncrypted = false;
         try {
@@ -203,7 +213,7 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
     if (blobProperties == null || channel == null || options == null) {
       throw new IllegalArgumentException("blobProperties, channel, or options must not be null");
     }
@@ -219,7 +229,7 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback);
+      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback, quotaChargeEventListener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -232,7 +242,7 @@ class NonBlockingRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback) {
+      Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
     if (blobProperties == null || chunksToStitch == null) {
       throw new IllegalArgumentException("blobProperties or chunksToStitch must not be null");
     }
@@ -248,7 +258,7 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, futureResult, callback);
+      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, futureResult, callback, quotaChargeEventListener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -267,7 +277,7 @@ class NonBlockingRouter implements Router {
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
@@ -278,7 +288,7 @@ class NonBlockingRouter implements Router {
     if (isOpen.get()) {
       // Can skip attemptChunkDeletes if we can determine this is not a metadata blob
       boolean attemptChunkDeletes = isMaybeMetadataBlob(blobId);
-      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, attemptChunkDeletes);
+      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, attemptChunkDeletes, quotaChargeEventListener);
       if (!attemptChunkDeletes) {
         routerMetrics.skippedGetBlobCount.inc();
       }
@@ -300,7 +310,7 @@ class NonBlockingRouter implements Router {
    * @return A future that would contain information about whether the undelete succeeded or not, eventually.
    */
   @Override
-  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
@@ -309,7 +319,7 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().undeleteBlob(blobId, serviceId, futureResult, callback);
+      getOperationController().undeleteBlob(blobId, serviceId, futureResult, callback, quotaChargeEventListener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -331,7 +341,7 @@ class NonBlockingRouter implements Router {
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
@@ -340,7 +350,7 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult, callback);
+      getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult, callback, quotaChargeEventListener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -363,7 +373,7 @@ class NonBlockingRouter implements Router {
               logger.error("Background delete operation failed with exception", exception);
             }
             currentBackgroundOperationsCount.decrementAndGet();
-          }, false);
+          }, false, null);
     }
   }
 
@@ -399,7 +409,7 @@ class NonBlockingRouter implements Router {
         .getOption(GetOption.Include_All)
         .build();
     GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, routerMetrics.ageAtDelete);
-    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback);
+    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback, null);
   }
 
   /**
@@ -680,8 +690,8 @@ class NonBlockingRouter implements Router {
      * @param callback The callback which will be invoked on the completion of the request.
      */
     protected void getBlob(String blobIdStr, GetBlobOptionsInternal options,
-        final Callback<GetBlobResultInternal> callback) throws RouterException {
-      getManager.submitGetBlobOperation(blobIdStr, options, callback);
+        final Callback<GetBlobResultInternal> callback, QuotaChargeEventListener quotaChargeEventListener) throws RouterException {
+      getManager.submitGetBlobOperation(blobIdStr, options, callback, quotaChargeEventListener);
       routerCallback.onPollReady();
     }
 
@@ -695,11 +705,11 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
      */
     protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback) {
+        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
       if (!putManager.isOpen()) {
         handlePutManagerClosed(blobProperties, false, futureResult, callback);
       } else {
-        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback);
+        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback, quotaChargeEventListener);
         routerCallback.onPollReady();
       }
     }
@@ -717,11 +727,11 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
      */
     protected void stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-        FutureResult<String> futureResult, Callback<String> callback) {
+        FutureResult<String> futureResult, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
       if (!putManager.isOpen()) {
         handlePutManagerClosed(blobProperties, true, futureResult, callback);
       } else {
-        putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, futureResult, callback);
+        putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, futureResult, callback, quotaChargeEventListener);
         routerCallback.onPollReady();
       }
     }
@@ -737,7 +747,7 @@ class NonBlockingRouter implements Router {
      *                            attempted. Set this to false if it is known that the given blob is a data chunk.
      */
     protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
-        final Callback<Void> callback, boolean attemptChunkDeletes) {
+        final Callback<Void> callback, boolean attemptChunkDeletes, QuotaChargeEventListener quotaChargeEventListener) {
       try {
         deleteManager.submitDeleteBlobOperation(blobIdStr, serviceId, futureResult,
             (Void result, Exception exception) -> {
@@ -753,7 +763,7 @@ class NonBlockingRouter implements Router {
               if (callback != null) {
                 callback.onCompletion(result, exception);
               }
-            });
+            }, quotaChargeEventListener);
       } catch (RouterException e) {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.onDeleteBlobError(e);
@@ -771,14 +781,14 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of a request.
      */
     protected void undeleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
-        final Callback<Void> callback) {
+        final Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
       doOperationTowardsMaybeCompositeBlob(blobIdStr, futureResult, callback,
           new CompositeBlobOperationHelper("UNDELETE", GetOption.Include_Deleted_Blobs, routerMetrics.ageAtUndelete,
               (blobIds) -> {
                 doUndeleteOperation(blobIds, serviceId, futureResult, callback);
               }, (exception) -> {
             completeUndeleteBlobOperation(exception, futureResult, callback);
-          }));
+          }), quotaChargeEventListener);
     }
 
     /**
@@ -792,13 +802,13 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
      */
     protected void updateBlobTtl(final String blobIdStr, final String serviceId, long expiresAtMs,
-        FutureResult<Void> futureResult, Callback<Void> callback) {
+        FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
       doOperationTowardsMaybeCompositeBlob(blobIdStr, futureResult, callback,
           new CompositeBlobOperationHelper("TTL UPDATE", GetOption.None, routerMetrics.ageAtTtlUpdate, (blobIds) -> {
             doUpdateTtlOperation(blobIds, serviceId, expiresAtMs, futureResult, callback);
           }, (exception) -> {
             completeUpdateBlobTtlOperation(exception, futureResult, callback);
-          }));
+          }), quotaChargeEventListener);
     }
 
     /**
@@ -810,7 +820,7 @@ class NonBlockingRouter implements Router {
      * @param helper The {@link CompositeBlobOperationHelper} that carries other information about this operation.
      */
     protected void doOperationTowardsMaybeCompositeBlob(final String blobIdStr, FutureResult<Void> futureResult,
-        Callback<Void> callback, CompositeBlobOperationHelper helper) {
+        Callback<Void> callback, CompositeBlobOperationHelper helper, QuotaChargeEventListener quotaChargeEventListener) {
       // Can skip GET if we can determine this is not a metadata blob
       if (isMaybeMetadataBlob(blobIdStr)) {
         Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
@@ -829,6 +839,11 @@ class NonBlockingRouter implements Router {
             }
             currentOperationsCount.addAndGet(blobIdStrs.size());
             helper.doOperation.accept(blobIdStrs);
+            try {
+              quotaChargeEventListener.onQuotaChargeEvent();
+            } catch (RouterException routerException) {
+              logger.error("Unexpected exception {} during {} of blob {}", routerException, helper.opName, blobIdStr);
+            }
           }
         };
 
@@ -837,7 +852,7 @@ class NonBlockingRouter implements Router {
             .build();
         GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, helper.metrics);
         try {
-          getBlob(blobIdStr, optionsInternal, internalCallback);
+          getBlob(blobIdStr, optionsInternal, internalCallback, null);
         } catch (RouterException e) {
           helper.completeOperationAtException.accept(e);
         }
@@ -1070,7 +1085,7 @@ class NonBlockingRouter implements Router {
      */
     @Override
     protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback) {
+        PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
       RouterException routerException = new RouterException("Illegal attempt to put blob through BackgroundDeleter",
           RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationDequeuingRate.mark();
@@ -1083,7 +1098,7 @@ class NonBlockingRouter implements Router {
      */
     @Override
     protected void stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-        FutureResult<String> futureResult, Callback<String> callback) {
+        FutureResult<String> futureResult, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
       RouterException routerException = new RouterException("Illegal attempt to stitch blob through BackgroundDeleter",
           RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationDequeuingRate.mark();
@@ -1096,7 +1111,7 @@ class NonBlockingRouter implements Router {
      */
     @Override
     protected void updateBlobTtl(String blobIdStr, final String serviceId, long expiresAtMs,
-        FutureResult<Void> futureResult, Callback<Void> callback) {
+        FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
       RouterException routerException =
           new RouterException("Illegal attempt to update TTL of blob through BackgroundDeleter",
               RouterErrorCode.UnexpectedInternalError);
@@ -1111,12 +1126,12 @@ class NonBlockingRouter implements Router {
      */
     @Override
     protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
-        final Callback<Void> callback, boolean attemptChunkDeletes) {
+        final Callback<Void> callback, boolean attemptChunkDeletes, QuotaChargeEventListener quotaChargeEventListener) {
       Supplier<Void> deleteCall = () -> {
         super.deleteBlob(blobIdStr, serviceId, futureResult, (Void result, Exception e) -> {
           callback.onCompletion(result, e);
           concurrentBackgroundDeleteOperationCount.decrementAndGet();
-        }, attemptChunkDeletes);
+        }, attemptChunkDeletes, null);
         return null;
       };
       if (routerConfig.routerBackgroundDeleterMaxConcurrentOperations > 0) {

@@ -27,6 +27,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -74,6 +75,7 @@ public class NamedBlobPutHandlerTest {
   private static final Container REF_CONTAINER;
   private static final Container REF_CONTAINER_WITH_TTL_REQUIRED;
   private static final ClusterMap CLUSTER_MAP;
+  private static final QuotaChargeEventListener QUOTA_CHARGE_EVENT_LISTENER;
 
   private static final int TIMEOUT_SECS = 10;
   private static final String SERVICE_ID = "test-app";
@@ -96,6 +98,7 @@ public class NamedBlobPutHandlerTest {
       REF_ACCOUNT = ACCOUNT_SERVICE.getAccountById(newAccount.getId());
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
       REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+      QUOTA_CHARGE_EVENT_LISTENER = () -> {};
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -399,7 +402,7 @@ public class NamedBlobPutHandlerTest {
               null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
-              new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
+              new PutBlobOptionsBuilder().chunkUpload(true).build(), QUOTA_CHARGE_EVENT_LISTENER).get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
       chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
     }

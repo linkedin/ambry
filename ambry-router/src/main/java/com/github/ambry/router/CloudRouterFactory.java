@@ -140,7 +140,7 @@ public class CloudRouterFactory implements RouterFactory {
       CompositeNetworkClientFactory networkClientFactory = getCompositeNetworkClientFactory(requestHandlerPool);
       NonBlockingRouter router =
           new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap, kms,
-              cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
+              cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, null);
       // Make sure requestHandlerPool is shut down properly
       router.addResourceToClose(requestHandlerPool);
       router.addResourceToClose(cloudDestination);

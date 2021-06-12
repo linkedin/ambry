@@ -15,12 +15,17 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.accountstats.AccountStatsStoreFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
@@ -28,6 +33,9 @@ import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -58,6 +66,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
   private final String defaultPartitionClass;
+  private final QuotaManager quotaManager;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -112,6 +121,15 @@ public class NonBlockingRouterFactory implements RouterFactory {
     cryptoService = cryptoServiceFactory.getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
     defaultPartitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
+    FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
+    AccountStatsStore accountStatsStore =
+        Utils.<AccountStatsStoreFactory>getObj(frontendConfig.accountStatsStoreFactory, verifiableProperties,
+            clusterMapConfig, new StatsManagerConfig(verifiableProperties),
+            clusterMap.getMetricRegistry()).getAccountStatsStore();
+    QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
+    quotaManager =
+        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
+            accountService, accountStatsStore, clusterMap.getMetricRegistry())).getQuotaManager();
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 
@@ -123,7 +141,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter() {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
+          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, quotaManager);
     } catch (IOException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

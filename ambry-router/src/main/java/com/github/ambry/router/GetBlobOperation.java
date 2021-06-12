@@ -38,6 +38,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
@@ -93,6 +94,7 @@ class GetBlobOperation extends GetOperation {
   private final BlobIdFactory blobIdFactory;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
+  private final QuotaChargeEventListener quotaChargeEventListener;
   // Associated with all data chunks in the case of composite blobs. Only a fixed number of these are initialized.
   // Each of these is initialized with the information required to fetch a data chunk and is responsible for
   // retrieving and adding it to the list of chunk buffers. Once complete, they are reused to fetch subsequent data
@@ -139,11 +141,12 @@ class GetBlobOperation extends GetOperation {
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted) {
+      boolean isEncrypted, QuotaChargeEventListener quotaChargeEventListener) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
+    this.quotaChargeEventListener = quotaChargeEventListener;
     firstChunk = new FirstGetChunk();
   }
 
@@ -243,6 +246,12 @@ class GetBlobOperation extends GetOperation {
               setOperationCompleted();
             }
             operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
+            try {
+              quotaChargeEventListener.onQuotaChargeEvent();
+            } catch (RouterException routerException) {
+              logger.info("Exception {} occurred during the quota charge event of blob {}", routerException, blobId.getID());
+              e = routerException;
+            }
           } else {
             blobDataChannel = null;
             operationResult = null;

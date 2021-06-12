@@ -42,12 +42,9 @@ public interface QuotaManager {
   /**
    * Charges the requestCost against the quota for the specified restRequest and blobInfo.
    * @param restRequest {@link RestRequest} object.
-   * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
-   *                                 determined by enforcers.
-   * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
    * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
-  ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap);
+  ThrottlingRecommendation charge(RestRequest restRequest);
 
   /**
    * @return QuotaConfig object.

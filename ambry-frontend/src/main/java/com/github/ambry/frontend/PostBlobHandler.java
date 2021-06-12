@@ -15,17 +15,19 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
@@ -61,12 +63,11 @@ import static com.github.ambry.frontend.FrontendUtils.*;
  * The body of the request should be a JSON object that conforms to the format described in {@link StitchRequestSerDe}.
  */
 class PostBlobHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(PostBlobHandler.class);
   /**
    * Key to represent the time at which a blob will expire in ms. Used within the metadata map in signed IDs.
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
-
+  private static final Logger LOGGER = LoggerFactory.getLogger(PostBlobHandler.class);
   private final SecurityService securityService;
   private final IdConverter idConverter;
   private final IdSigningService idSigningService;
@@ -76,6 +77,7 @@ class PostBlobHandler {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final String clusterName;
+  private final QuotaManager quotaManager;
 
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
@@ -88,10 +90,11 @@ class PostBlobHandler {
    * @param frontendConfig the {@link FrontendConfig} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterName the name of the storage cluster that the router communicates with
+   * @param quotaManager {@link QuotaManager} instance to charge against quota for each chunk.
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
       Router router, AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics, String clusterName) {
+      FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
@@ -101,6 +104,7 @@ class PostBlobHandler {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.clusterName = clusterName;
+    this.quotaManager = quotaManager;
   }
 
   /**
@@ -180,7 +184,8 @@ class PostBlobHandler {
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo));
+              routerPutBlobCallback(blobInfo),
+              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -196,7 +201,9 @@ class PostBlobHandler {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
+              routerStitchBlobCallback(blobInfo),
+              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false)), uri, LOGGER,
+          finalCallback);
     }
 
     /**

@@ -89,7 +89,7 @@ public class UndeleteHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     undeleteHandler =
         new UndeleteHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            accountAndContainerInjector, metrics, CLUSTER_MAP);
+            accountAndContainerInjector, metrics, CLUSTER_MAP, null);
   }
 
   /**
@@ -98,10 +98,10 @@ public class UndeleteHandlerTest {
    */
   public void setupBlob() throws Exception {
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
-    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
+    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null)
         .get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
-    router.deleteBlob(blobId, SERVICE_ID).get(1, TimeUnit.SECONDS);
+    router.deleteBlob(blobId, SERVICE_ID, null).get(1, TimeUnit.SECONDS);
   }
 
   /**
@@ -118,7 +118,7 @@ public class UndeleteHandlerTest {
     verifyUndelete(restRequest, REF_ACCOUNT, REF_CONTAINER);
 
     // 2. Test undelete it again
-    router.deleteBlob(blobId, SERVICE_ID).get(1, TimeUnit.SECONDS);
+    router.deleteBlob(blobId, SERVICE_ID, null).get(1, TimeUnit.SECONDS);
     restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
     restRequest.setArg(RestUtils.Headers.BLOB_ID, blobId);
     restRequest.setArg(RestUtils.Headers.SERVICE_ID, SERVICE_ID);
@@ -147,7 +147,7 @@ public class UndeleteHandlerTest {
   private void verifyUndelete(RestRequest restRequest, Account expectedAccount, Container expectedContainer)
       throws Exception {
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(1, TimeUnit.SECONDS);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null).get(1, TimeUnit.SECONDS);
       fail("Get blob should fail on a deleted blob");
     } catch (ExecutionException e) {
       RouterException routerException = (RouterException) e.getCause();
@@ -165,7 +165,7 @@ public class UndeleteHandlerTest {
     assertEquals("Container not as expected", expectedContainer,
         restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
 
-    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(1, TimeUnit.SECONDS);
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null).get(1, TimeUnit.SECONDS);
   }
 
   /**

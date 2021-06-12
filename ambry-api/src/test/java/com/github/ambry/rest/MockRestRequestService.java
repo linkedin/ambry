@@ -98,7 +98,7 @@ public class MockRestRequestService implements RestRequestService {
       String blobId = getBlobId(restRequest);
       MockGetCallback callback = new MockGetCallback(this, restRequest, restResponseChannel);
       router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
-          callback);
+          callback, ()-> {});
     }
   }
 
@@ -111,7 +111,7 @@ public class MockRestRequestService implements RestRequestService {
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
         router.putBlob(blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
-            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties));
+            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), ()-> {});
       } catch (RestServiceException e) {
         handleResponse(restRequest, restResponseChannel, null, e);
       }
@@ -135,7 +135,7 @@ public class MockRestRequestService implements RestRequestService {
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.deleteBlob(blobId, null, new MockDeleteCallback(this, restRequest, restResponseChannel));
+      router.deleteBlob(blobId, null, new MockDeleteCallback(this, restRequest, restResponseChannel), ()-> {});
     }
   }
 
@@ -144,7 +144,7 @@ public class MockRestRequestService implements RestRequestService {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
       router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
-          new MockHeadCallback(this, restRequest, restResponseChannel));
+          new MockHeadCallback(this, restRequest, restResponseChannel), ()-> {});
     }
   }
 

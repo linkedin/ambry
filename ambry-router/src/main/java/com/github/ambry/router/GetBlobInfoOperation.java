@@ -31,9 +31,11 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
+import com.microsoft.azure.cosmosdb.internal.Constants;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -58,6 +60,8 @@ class GetBlobInfoOperation extends GetOperation {
   private final OperationTracker operationTracker;
   // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
   private final ProgressTracker progressTracker;
+  // listener for events that should charge towards quota (like chunk download)
+  private final QuotaChargeEventListener quotaChargeEventListener;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // metrics tracker to track decrypt jobs
@@ -87,10 +91,11 @@ class GetBlobInfoOperation extends GetOperation {
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted, QuotaChargeEventListener quotaChargeEventListener) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
+    this.quotaChargeEventListener = quotaChargeEventListener;
     operationTracker =
         getOperationTracker(blobId.getPartition(), blobId.getDatacenterId(), RouterOperation.GetBlobInfoOperation);
     progressTracker = new ProgressTracker(operationTracker);
@@ -356,6 +361,7 @@ class GetBlobInfoOperation extends GetOperation {
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
       BlobInfo blobInfo = new BlobInfo(serverBlobProperties, userMetadata.array(), messageInfo.getLifeVersion());
+      handleQuotaEvent();
       operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
     } else {
       // submit decrypt job
@@ -373,6 +379,7 @@ class GetBlobInfoOperation extends GetOperation {
               logger.trace("Successfully updating decrypt job callback results for {}", blobId);
               BlobInfo blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(),
                   messageInfo.getLifeVersion());
+              handleQuotaEvent();
               operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
               progressTracker.setCryptoJobSuccess();
             } else {
@@ -455,6 +462,20 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);
       }
       NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
+    }
+  }
+
+  /**
+   * Handle events that should do a callback for quota accounting.
+   */
+  private void handleQuotaEvent() {
+    if(quotaChargeEventListener != null) {
+      try {
+        quotaChargeEventListener.onQuotaChargeEvent();
+      } catch (RouterException routerException) {
+        // No exception should be thrown when doing quota charge for blobinfo operation.
+        logger.trace("Unexpected exception {} thrown on handling quota event for {}", routerException, blobId);
+      }
     }
   }
 
