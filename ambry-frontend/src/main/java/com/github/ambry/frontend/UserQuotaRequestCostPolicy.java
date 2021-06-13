@@ -37,7 +37,6 @@ import static com.github.ambry.rest.RestUtils.*;
 public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
   final static double BYTES_IN_GB = 1024 * 1024 * 1024; // 1GB
   final static double CU_COST_UNIT = 4 * 1024 * 1024; //4 MB
-  final static double ZERO_COST = 0;
   final static double INDEX_ONLY_COST = 1;
   final static double MIN_CU_COST = INDEX_ONLY_COST;
   private static final Logger logger = LoggerFactory.getLogger(UserQuotaRequestCostPolicy.class);
@@ -91,8 +90,14 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
     RequestPath requestPath = getRequestPath(restRequest);
     switch (restRequest.getRestMethod()) {
       case POST:
-        // The cost has already been charged for each chunk.
-        return ZERO_COST;
+        long contentSize = 0;
+        if (requestPath.matchesOperation(Operations.STITCH)) {
+          contentSize = Long.parseLong((String) restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+        } else {
+          contentSize = restRequest.getBytesReceived();
+        }
+        double cost = Math.ceil(contentSize / CU_COST_UNIT);
+        return (cost > 0) ? cost : 1;
       case GET:
         SubResource subResource = requestPath.getSubResource();
         if (requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
@@ -104,8 +109,21 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
           if (blobInfo == null) { // Maybe its a GET for a deleted blob
             return MIN_CU_COST;
           }
-          // for all other cases charging has already happened for each chunk.
-          return ZERO_COST;
+          if (restRequest.getArgs().containsKey(RestUtils.Headers.RANGE)) { // Range request case
+            try {
+              size = RestUtils.buildByteRange(restRequest.getArgs().get(RestUtils.Headers.RANGE).toString())
+                  .toResolvedByteRange(blobInfo.getBlobProperties().getBlobSize(), true)
+                  .getRangeSize();
+            } catch (RestServiceException rsEx) {
+              // this should never happen.
+              logger.error("Exception while calculation CU cost for range request", rsEx);
+              size = 0; // this will default to one chunk
+            }
+          } else { // regular GET blob
+            size = blobInfo.getBlobProperties().getBlobSize();
+          }
+          cost = Math.ceil(size / CU_COST_UNIT);
+          return Math.max(cost, MIN_CU_COST);
         }
       default:
         return INDEX_ONLY_COST; // Assuming 1 unit of capacity unit cost for all requests that don't fetch or store a blob's data.
