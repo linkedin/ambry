@@ -24,7 +24,6 @@ import org.slf4j.LoggerFactory;
  * Listener for each data chunk upload to or download from Ambry.
  */
 public interface QuotaChargeEventListener {
-  Logger logger = LoggerFactory.getLogger(QuotaChargeEventListener.class);
 
   /**
    * Build {@link QuotaChargeEventListener} to handle quota compliance of requests.

@@ -19,7 +19,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -31,10 +30,8 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.quota.QuotaManager;
-import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -229,7 +226,8 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback, quotaChargeEventListener);
+      getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback,
+          quotaChargeEventListener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -258,7 +256,8 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, futureResult, callback, quotaChargeEventListener);
+      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, futureResult, callback,
+          quotaChargeEventListener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -288,7 +287,8 @@ class NonBlockingRouter implements Router {
     if (isOpen.get()) {
       // Can skip attemptChunkDeletes if we can determine this is not a metadata blob
       boolean attemptChunkDeletes = isMaybeMetadataBlob(blobId);
-      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, attemptChunkDeletes, quotaChargeEventListener);
+      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, attemptChunkDeletes,
+          quotaChargeEventListener);
       if (!attemptChunkDeletes) {
         routerMetrics.skippedGetBlobCount.inc();
       }
@@ -350,7 +350,8 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult, callback, quotaChargeEventListener);
+      getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult, callback,
+          quotaChargeEventListener);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -709,7 +710,8 @@ class NonBlockingRouter implements Router {
       if (!putManager.isOpen()) {
         handlePutManagerClosed(blobProperties, false, futureResult, callback);
       } else {
-        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback, quotaChargeEventListener);
+        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback,
+            quotaChargeEventListener);
         routerCallback.onPollReady();
       }
     }
@@ -731,7 +733,8 @@ class NonBlockingRouter implements Router {
       if (!putManager.isOpen()) {
         handlePutManagerClosed(blobProperties, true, futureResult, callback);
       } else {
-        putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, futureResult, callback, quotaChargeEventListener);
+        putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, futureResult, callback,
+            quotaChargeEventListener);
         routerCallback.onPollReady();
       }
     }

@@ -130,7 +130,8 @@ class GetManager {
     } else {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeEventListener);
+              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
+              quotaChargeEventListener);
     }
     getOperations.add(getOperation);
   }

@@ -35,7 +35,6 @@ import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
-import com.microsoft.azure.cosmosdb.internal.Constants;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;

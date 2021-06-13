@@ -14,9 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.Histogram;
-import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;

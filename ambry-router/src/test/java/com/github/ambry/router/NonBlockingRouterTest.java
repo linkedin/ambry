@@ -26,7 +26,6 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -48,8 +47,6 @@ import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaTestUtils;
-import com.github.ambry.quota.ThrottlingRecommendation;
-import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
@@ -333,7 +330,8 @@ public class NonBlockingRouterTest {
     List<String> blobIds = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
       setOperationParams();
-      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, quotaChargeEventListener).get();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
+          quotaChargeEventListener).get();
       logger.debug("Put blob {}", blobId);
       blobIds.add(blobId);
     }
@@ -347,7 +345,8 @@ public class NonBlockingRouterTest {
       router.getBlob(blobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener).get();
       router.updateBlobTtl(blobId, null, Utils.Infinite_Time, quotaChargeEventListener);
       router.getBlob(blobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener).get();
-      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), quotaChargeEventListener)
+      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
+          quotaChargeEventListener)
           .get();
       router.deleteBlob(blobId, null, quotaChargeEventListener).get();
       try {
@@ -357,8 +356,10 @@ public class NonBlockingRouterTest {
         RouterException r = (RouterException) e.getCause();
         Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
       }
-      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), quotaChargeEventListener).get();
-      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), quotaChargeEventListener).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(),
+          quotaChargeEventListener).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(),
+          quotaChargeEventListener).get();
     }
 
     router.close();
@@ -388,7 +389,8 @@ public class NonBlockingRouterTest {
     List<String> blobIds = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
       setOperationParams();
-      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, quotaChargeEventListener).get();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
+          quotaChargeEventListener).get();
       ensurePutInAllServers(blobId, mockServerLayout);
       logger.debug("Put blob {}", blobId);
       blobIds.add(blobId);
@@ -397,7 +399,8 @@ public class NonBlockingRouterTest {
     List<ChunkInfo> chunksToStitch = blobIds.stream()
         .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
         .collect(Collectors.toList());
-    String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch, quotaChargeEventListener).get();
+    String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch,
+        quotaChargeEventListener).get();
     ensureStitchInAllServers(stitchedBlobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
     blobIds.add(stitchedBlobId);
 
@@ -411,8 +414,10 @@ public class NonBlockingRouterTest {
         RouterException r = (RouterException) e.getCause();
         Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
       }
-      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), quotaChargeEventListener).get();
-      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), quotaChargeEventListener).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(),
+          quotaChargeEventListener).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(),
+          quotaChargeEventListener).get();
     }
     // StitchedBlob is a composite blob
     router.undeleteBlob(stitchedBlobId, "undelete_server_id", quotaChargeEventListener).get();
@@ -426,7 +431,8 @@ public class NonBlockingRouterTest {
 
     // 2. Test undelete a simple blob
     setOperationParams();
-    String simpleBlobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, quotaChargeEventListener).get();
+    String simpleBlobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
+        quotaChargeEventListener).get();
     ensurePutInAllServers(simpleBlobId, mockServerLayout);
     router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener).get();
     router.deleteBlob(simpleBlobId, null, quotaChargeEventListener).get();
@@ -438,8 +444,10 @@ public class NonBlockingRouterTest {
       RouterException r = (RouterException) e.getCause();
       Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
     }
-    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), quotaChargeEventListener).get();
-    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), quotaChargeEventListener).get();
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(),
+        quotaChargeEventListener).get();
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(),
+        quotaChargeEventListener).get();
     router.undeleteBlob(simpleBlobId, "undelete_server_id", quotaChargeEventListener).get();
     ensureUndeleteInAllServers(simpleBlobId, mockServerLayout);
     router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener).get();
@@ -454,8 +462,10 @@ public class NonBlockingRouterTest {
       RouterException r = (RouterException) e.getCause();
       Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
     }
-    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), quotaChargeEventListener).get();
-    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), quotaChargeEventListener).get();
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(),
+        quotaChargeEventListener).get();
+    router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(),
+        quotaChargeEventListener).get();
 
     // 4. Test undelete more than once
     router.undeleteBlob(simpleBlobId, "undelete_server_id", quotaChargeEventListener).get();
@@ -498,7 +508,8 @@ public class NonBlockingRouterTest {
     List<String> blobIds = new ArrayList<>();
     for (int i = 0; i < 4; i++) {
       setOperationParams();
-      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, quotaChargeEventListener).get();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
+          quotaChargeEventListener).get();
       ensurePutInAllServers(blobId, mockServerLayout);
       blobIds.add(blobId);
     }
@@ -561,7 +572,8 @@ public class NonBlockingRouterTest {
     // 2. Test not-deleted blob
     setOperationParams();
     String notDeletedBlobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
+            quotaChargeEventListener).get();
     ensurePutInAllServers(notDeletedBlobId, mockServerLayout);
     router.getBlob(notDeletedBlobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener).get();
     try {
@@ -575,7 +587,8 @@ public class NonBlockingRouterTest {
     // 3. Test lifeVersion conflict blob
     setOperationParams();
     String conflictBlobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
+            quotaChargeEventListener).get();
     ensurePutInAllServers(conflictBlobId, mockServerLayout);
     router.getBlob(conflictBlobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener).get();
     router.deleteBlob(conflictBlobId, null, quotaChargeEventListener).get();
@@ -628,7 +641,8 @@ public class NonBlockingRouterTest {
     } catch (IllegalArgumentException expected) {
     }
     try {
-      router.putBlob(putBlobProperties, putUserMetadata, null, new PutBlobOptionsBuilder().build(), quotaChargeEventListener);
+      router.putBlob(putBlobProperties, putUserMetadata, null, new PutBlobOptionsBuilder().build(),
+          quotaChargeEventListener);
       Assert.fail("null channel should have resulted in IllegalArgumentException");
     } catch (IllegalArgumentException expected) {
     }
@@ -671,7 +685,8 @@ public class NonBlockingRouterTest {
     setOperationParams();
     mockClusterMap.markAllPartitionsUnavailable();
     try {
-      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+          quotaChargeEventListener).get();
       Assert.fail("Put should have failed if there are no partitions");
     } catch (Exception e) {
       RouterException r = (RouterException) e.getCause();
@@ -695,7 +710,8 @@ public class NonBlockingRouterTest {
     setRouter(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem());
     setOperationParams();
     try {
-      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+          quotaChargeEventListener).get();
       Assert.fail("Put should have failed if there are no partitions");
     } catch (Exception e) {
       RouterException r = (RouterException) e.getCause();
@@ -728,7 +744,8 @@ public class NonBlockingRouterTest {
 
     setOperationParams();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
-    Future future = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener);
+    Future future = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+        quotaChargeEventListener);
     try {
       while (!future.isDone()) {
         mockTime.sleep(1000);
@@ -742,7 +759,8 @@ public class NonBlockingRouterTest {
 
     setOperationParams();
     mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
-    future = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener);
+    future = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+        quotaChargeEventListener);
 
     Thread requestResponseHandlerThreadRegular = TestUtils.getThreadByThisName("RequestResponseHandlerThread-0");
     Thread requestResponseHandlerThreadBackground =
@@ -823,7 +841,8 @@ public class NonBlockingRouterTest {
 
     // Submit the put operation and wait for it to fail.
     try {
-      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+          quotaChargeEventListener).get();
     } catch (ExecutionException e) {
       Assert.assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
     }
@@ -891,7 +910,8 @@ public class NonBlockingRouterTest {
         cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaManager);
     setOperationParams();
     String blobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            quotaChargeEventListener).get();
     String deleteServiceId = "delete-service";
     Set<String> blobsToBeDeleted = getBlobsInServers(mockServerLayout);
     int getRequestCount = mockServerLayout.getCount(RequestOrResponseType.GetRequest);
@@ -904,7 +924,8 @@ public class NonBlockingRouterTest {
         putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
         blobId =
-            router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+            router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+                quotaChargeEventListener).get();
         Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
         allBlobsInServer.removeAll(blobsToBeDeleted);
         blobsToBeDeleted = allBlobsInServer;
@@ -976,7 +997,8 @@ public class NonBlockingRouterTest {
     setRouter(props, new MockServerLayout(mockClusterMap), deleteTrackingNotificationSystem);
     setOperationParams();
     String blobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            quotaChargeEventListener).get();
     router.deleteBlob(blobId, deleteServiceId, null).get();
     long waitStart = SystemTime.getInstance().milliseconds();
     while (router.getBackgroundOperationsCount() != 0
@@ -1041,7 +1063,8 @@ public class NonBlockingRouterTest {
           long chunkSize = chunkSizeIter.nextLong();
           setOperationParams((int) chunkSize, TTL_SECS);
           String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel,
-              new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(PUT_CONTENT_SIZE).build(), quotaChargeEventListener)
+              new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(PUT_CONTENT_SIZE).build(),
+              quotaChargeEventListener)
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
           long expirationTime = Utils.addSecondsToEpochTime(putBlobProperties.getCreationTimeInMs(),
               putBlobProperties.getTimeToLiveInSeconds());
@@ -1052,11 +1075,13 @@ public class NonBlockingRouterTest {
 
         // Stitch the chunks together
         setOperationParams(0, TTL_SECS / 2);
-        String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch, quotaChargeEventListener)
+        String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch,
+            quotaChargeEventListener)
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
         // Fetch the stitched blob
-        GetBlobResult getBlobResult = router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener)
+        GetBlobResult getBlobResult = router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(),
+            quotaChargeEventListener)
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertTrue("Blob properties must be the same", RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties,
             getBlobResult.getBlobInfo().getBlobProperties()));
@@ -1097,7 +1122,8 @@ public class NonBlockingRouterTest {
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener)
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+        quotaChargeEventListener)
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
     testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
@@ -1111,13 +1137,15 @@ public class NonBlockingRouterTest {
     for (Map.Entry<ServerErrorCode, RouterErrorCode> testAndExpected : testsAndExpected.entrySet()) {
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, quotaChargeEventListener);
+      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback,
+          quotaChargeEventListener);
       assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
     }
     layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
     // bad blob id
     TestCallback<Void> testCallback = new TestCallback<>();
-    Future<Void> future = router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback, quotaChargeEventListener);
+    Future<Void> future = router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback,
+        quotaChargeEventListener);
     assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
     router.close();
   }
@@ -1131,11 +1159,13 @@ public class NonBlockingRouterTest {
     MockServerLayout serverLayout = new MockServerLayout(mockClusterMap);
     setRouter(getNonBlockingRouterProperties("DC1"), serverLayout, new LoggingNotificationSystem());
     setOperationParams();
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener)
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+        quotaChargeEventListener)
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     String blobIdCheck =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener)
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            quotaChargeEventListener)
             .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null, expectedError -> {
       final CountDownLatch callbackCalled = new CountDownLatch(1);
@@ -1169,7 +1199,8 @@ public class NonBlockingRouterTest {
     // Submit a few jobs so that all the scaling units get exercised.
     for (int i = 0; i < SCALING_UNITS * 10; i++) {
       setOperationParams();
-      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+      router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+          quotaChargeEventListener).get();
     }
     router.close();
     assertExpectedThreadCounts(0, 0);
@@ -1265,7 +1296,8 @@ public class NonBlockingRouterTest {
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
     String blobIdStr =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            quotaChargeEventListener).get();
     BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
     router.close();
     for (MockServer mockServer : mockServerLayout.getMockServers()) {
@@ -1618,7 +1650,8 @@ public class NonBlockingRouterTest {
    */
   protected void assertClosed() {
     Future<String> future =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener);
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            quotaChargeEventListener);
     Assert.assertTrue(future.isDone());
     RouterException e = (RouterException) ((FutureResult<String>) future).error();
     Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
@@ -1640,7 +1673,8 @@ public class NonBlockingRouterTest {
     setOperationParams();
     Assert.assertFalse("The original ttl should not be infinite for this test to work",
         putBlobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), quotaChargeEventListener)
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+        quotaChargeEventListener)
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertTtl(router, Collections.singleton(blobId), TTL_SECS);
     router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, quotaChargeEventListener).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);

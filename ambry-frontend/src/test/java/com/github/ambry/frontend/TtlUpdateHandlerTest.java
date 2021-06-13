@@ -38,7 +38,6 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
