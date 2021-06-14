@@ -1644,9 +1644,8 @@ class PersistentIndex {
         break; // we have entered and finished reading from the journal, so we are done.
       }
 
-      if (segmentStartOffset == validIndexSegments.lastKey()
-          && validIndexSegments.get(segmentStartOffset).getEndOffset().getOffset()
-          > config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes) {
+      if (segmentStartOffset == validIndexSegments.lastKey() && !onlyContainsHeaderInLastLogSegment(
+          newTokenSegmentStartOffset)) {
         /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
          * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
          * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
@@ -1680,19 +1679,14 @@ class PersistentIndex {
       IndexSegment segmentOfToken = indexSegments.floorEntry(newTokenOffsetInJournal).getValue();
       return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, segmentOfToken.getResetKey(),
           segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
-    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime() && (
-        validIndexSegments.get(initialSegmentStartOffset) != null
-            && validIndexSegments.get(initialSegmentStartOffset).getEndOffset().getOffset()
-            > config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes)) {
+    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime() && !onlyContainsHeaderInLastLogSegment(newTokenSegmentStartOffset)) {
       // If the condition does not have an end time, then since we have entered a segment, we should return at least one
       // message unless the new log segment only contains headers.
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
               + initialSegmentStartOffset + ", key: " + key + ", findEntriesCondition: " + findEntriesCondition);
     } else {
-      if (newTokenSegmentStartOffset == null || (validIndexSegments.get(newTokenSegmentStartOffset) != null
-          && validIndexSegments.get(newTokenSegmentStartOffset).getEndOffset().getOffset()
-          < config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes)) {
+      if (newTokenSegmentStartOffset == null || onlyContainsHeaderInLastLogSegment(newTokenSegmentStartOffset)) {
         return new StoreFindToken();
       }
       // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
@@ -1702,6 +1696,16 @@ class PersistentIndex {
           sessionId, incarnationId, segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
           segmentOfToken.getResetKeyLifeVersion());
     }
+  }
+
+  /**
+   * @param startOffset the index segment start {@link Offset}.
+   * @return {@link true} if last log segment only contains the header info after auto closing last log segment during compaction.
+   */
+  private boolean onlyContainsHeaderInLastLogSegment(Offset startOffset) {
+    return (validIndexSegments.get(startOffset) != null
+        && validIndexSegments.get(startOffset).getEndOffset().getOffset()
+        < config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes);
   }
 
   /**
