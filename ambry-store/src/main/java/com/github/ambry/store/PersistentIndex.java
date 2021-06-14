@@ -1645,7 +1645,8 @@ class PersistentIndex {
       }
 
       if (segmentStartOffset == validIndexSegments.lastKey()
-          && segmentStartOffset.getOffset() > config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes) {
+          && validIndexSegments.get(segmentStartOffset).getEndOffset().getOffset()
+          > config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes) {
         /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
          * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
          * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
@@ -1679,14 +1680,19 @@ class PersistentIndex {
       IndexSegment segmentOfToken = indexSegments.floorEntry(newTokenOffsetInJournal).getValue();
       return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, segmentOfToken.getResetKey(),
           segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
-    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
+    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime() && (
+        validIndexSegments.get(initialSegmentStartOffset) != null
+            && validIndexSegments.get(initialSegmentStartOffset).getEndOffset().getOffset()
+            > config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes)) {
       // If the condition does not have an end time, then since we have entered a segment, we should return at least one
-      // message
+      // message unless the new log segment only contains headers.
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
               + initialSegmentStartOffset + ", key: " + key + ", findEntriesCondition: " + findEntriesCondition);
     } else {
-      if (newTokenSegmentStartOffset == null) {
+      if (newTokenSegmentStartOffset == null || (validIndexSegments.get(newTokenSegmentStartOffset) != null
+          && validIndexSegments.get(newTokenSegmentStartOffset).getEndOffset().getOffset()
+          < config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes)) {
         return new StoreFindToken();
       }
       // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
