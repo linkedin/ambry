@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
  * Listener for each data chunk upload to or download from Ambry.
  */
 public interface QuotaChargeEventListener {
+  Logger logger = LoggerFactory.getLogger(QuotaChargeEventListener.class);
 
   /**
    * Build {@link QuotaChargeEventListener} to handle quota compliance of requests.
@@ -35,10 +36,22 @@ public interface QuotaChargeEventListener {
   static QuotaChargeEventListener buildQuotaChargeEventListener(RestRequest restRequest, QuotaManager quotaManager,
       boolean shouldThrottle) {
     return () -> {
-      ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest);
-      if (throttlingRecommendation.shouldThrottle() && shouldThrottle
-          && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
-        throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
+      try {
+        ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest);
+        if (throttlingRecommendation.shouldThrottle() && shouldThrottle
+            && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
+          if (quotaManager.getQuotaConfig().throttleInProgressRequests) {
+            throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
+          } else {
+            logger.info("Quota exceeded for an in progress request.");
+          }
+        }
+      } catch (Exception ex) {
+        if (ex instanceof RouterException && ((RouterException) ex).getErrorCode()
+            .equals(RouterErrorCode.TooManyRequests)) {
+          throw ex;
+        }
+        logger.error("Unexpected exception {} while charging quota.", ex.toString());
       }
     };
   }

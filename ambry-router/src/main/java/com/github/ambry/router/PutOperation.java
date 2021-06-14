@@ -365,7 +365,6 @@ class PutOperation {
       totalSize += chunkInfo.getChunkSizeInBytes();
     }
     blobSize = totalSize;
-    quotaChargeEventListener.onQuotaChargeEvent();
     chunkFillingCompletedSuccessfully = true;
   }
 
@@ -603,9 +602,6 @@ class PutOperation {
             lastChunk.releaseBlobContent();
             lastChunk.state = ChunkState.Free;
           } else {
-            if (quotaChargeEventListener != null) {
-              quotaChargeEventListener.onQuotaChargeEvent();
-            }
             lastChunk.onFillComplete(true);
             updateChunkFillerWaitTimeMetrics();
           }
@@ -1303,6 +1299,15 @@ class PutOperation {
         }
       }
       if (done) {
+        // the chunk is complete now. We can charge against quota for the chunk.
+        if (quotaChargeEventListener != null) {
+          try {
+            quotaChargeEventListener.onQuotaChargeEvent();
+          } catch (RouterException rEx) {
+            // For now we only log for quota charge exceptions for in progress requests.
+            logger.info("Exception {} while handling quota charge event", rEx.toString());
+          }
+        }
         state = ChunkState.Complete;
       }
     }

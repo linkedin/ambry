@@ -845,7 +845,7 @@ class NonBlockingRouter implements Router {
             try {
               quotaChargeEventListener.onQuotaChargeEvent();
             } catch (RouterException routerException) {
-              logger.error("Unexpected exception {} during {} of blob {}", routerException, helper.opName, blobIdStr);
+              logger.error("Exception {} during {} of blob {}", routerException, helper.opName, blobIdStr);
             }
           }
         };
