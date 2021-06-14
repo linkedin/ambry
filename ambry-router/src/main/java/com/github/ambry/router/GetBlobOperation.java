@@ -250,7 +250,6 @@ class GetBlobOperation extends GetOperation {
               quotaChargeEventListener.onQuotaChargeEvent();
             } catch (RouterException routerException) {
               logger.info("Exception {} occurred during the quota charge event of blob {}", routerException, blobId.getID());
-              e = routerException;
             }
           } else {
             blobDataChannel = null;
