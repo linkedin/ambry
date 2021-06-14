@@ -30,6 +30,7 @@ class BatchOperationCallbackTracker {
 
   private final FutureResult<Void> futureResult;
   private final Callback<Void> callback;
+  private final Callback<Void> completionCallback;
   private final long numBlobIds;
   private final ConcurrentMap<BlobId, Boolean> blobIdToAck = new ConcurrentHashMap<>();
   private final AtomicLong ackedCount = new AtomicLong(0);
@@ -42,6 +43,10 @@ class BatchOperationCallbackTracker {
    * @param callback the {@link Callback} to be triggered once acks are received for all blobs
    */
   BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult, Callback<Void> callback) {
+    this(blobIds, futureResult, callback, null);
+  }
+
+  BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult, Callback<Void> callback, Callback<Void> completionCallback) {
     numBlobIds = blobIds.size();
     blobIds.forEach(blobId -> blobIdToAck.put(blobId, false));
     if (blobIdToAck.size() != numBlobIds) {
@@ -49,6 +54,7 @@ class BatchOperationCallbackTracker {
     }
     this.futureResult = futureResult;
     this.callback = callback;
+    this.completionCallback = completionCallback;
   }
 
   /**
@@ -78,6 +84,9 @@ class BatchOperationCallbackTracker {
    * @param e the {@link Exception} that occurred (if any).
    */
   private void complete(Exception e) {
+    if(completionCallback != null) {
+      completionCallback.onCompletion(null, null);
+    }
     if (completed.compareAndSet(false, true)) {
       NonBlockingRouter.completeOperation(futureResult, callback, null, e, false);
     }

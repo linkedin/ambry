@@ -788,10 +788,10 @@ class NonBlockingRouter implements Router {
       doOperationTowardsMaybeCompositeBlob(blobIdStr, futureResult, callback,
           new CompositeBlobOperationHelper("UNDELETE", GetOption.Include_Deleted_Blobs, routerMetrics.ageAtUndelete,
               (blobIds) -> {
-                doUndeleteOperation(blobIds, serviceId, futureResult, callback);
+                doUndeleteOperation(blobIds, serviceId, futureResult, callback, quotaChargeEventListener);
               }, (exception) -> {
             completeUndeleteBlobOperation(exception, futureResult, callback);
-          }), quotaChargeEventListener);
+          }));
     }
 
     /**
@@ -803,15 +803,16 @@ class NonBlockingRouter implements Router {
      *                    permanent
      * @param futureResult A future that would contain the BlobId eventually.
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
+     * @param quotaChargeEventListener The {@link QuotaChargeEventListener} object.
      */
     protected void updateBlobTtl(final String blobIdStr, final String serviceId, long expiresAtMs,
         FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
       doOperationTowardsMaybeCompositeBlob(blobIdStr, futureResult, callback,
           new CompositeBlobOperationHelper("TTL UPDATE", GetOption.None, routerMetrics.ageAtTtlUpdate, (blobIds) -> {
-            doUpdateTtlOperation(blobIds, serviceId, expiresAtMs, futureResult, callback);
+            doUpdateTtlOperation(blobIds, serviceId, expiresAtMs, futureResult, callback, quotaChargeEventListener);
           }, (exception) -> {
             completeUpdateBlobTtlOperation(exception, futureResult, callback);
-          }), quotaChargeEventListener);
+          }));
     }
 
     /**
@@ -823,7 +824,7 @@ class NonBlockingRouter implements Router {
      * @param helper The {@link CompositeBlobOperationHelper} that carries other information about this operation.
      */
     protected void doOperationTowardsMaybeCompositeBlob(final String blobIdStr, FutureResult<Void> futureResult,
-        Callback<Void> callback, CompositeBlobOperationHelper helper, QuotaChargeEventListener quotaChargeEventListener) {
+        Callback<Void> callback, CompositeBlobOperationHelper helper) {
       // Can skip GET if we can determine this is not a metadata blob
       if (isMaybeMetadataBlob(blobIdStr)) {
         Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
@@ -842,11 +843,6 @@ class NonBlockingRouter implements Router {
             }
             currentOperationsCount.addAndGet(blobIdStrs.size());
             helper.doOperation.accept(blobIdStrs);
-            try {
-              quotaChargeEventListener.onQuotaChargeEvent();
-            } catch (RouterException routerException) {
-              logger.error("Exception {} during {} of blob {}", routerException, helper.opName, blobIdStr);
-            }
           }
         };
 
@@ -873,11 +869,13 @@ class NonBlockingRouter implements Router {
      * @param expiresAtMs The new expiry time (in ms) of the blob.
      * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
      * @param callback The {@link Callback} that will be called on completion of the request.
+     * @param quotaChargeEventListener {@link QuotaChargeEventListener} for quota charging events.
      */
     private void doUpdateTtlOperation(List<String> blobIdStrs, final String serviceId, long expiresAtMs,
-        FutureResult<Void> futureResult, Callback<Void> callback) {
+        FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
       try {
-        ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback);
+        ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback,
+            quotaChargeEventListener);
         routerCallback.onPollReady();
       } catch (RouterException e) {
         currentOperationsCount.addAndGet(1 - blobIdStrs.size());
@@ -891,11 +889,12 @@ class NonBlockingRouter implements Router {
      * @param serviceId The service ID of the service undeleting the blob(s). This can be null if unknown.
      * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
      * @param callback The {@link Callback} that will be called on completion of the request.
+     * @param quotaChargeEventListener The {@link QuotaChargeEventListener} object.
      */
     private void doUndeleteOperation(List<String> blobIdStrs, final String serviceId, FutureResult<Void> futureResult,
-        Callback<Void> callback) {
+        Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) {
       try {
-        undeleteManager.submitUndeleteOperation(blobIdStrs, serviceId, futureResult, callback);
+        undeleteManager.submitUndeleteOperation(blobIdStrs, serviceId, futureResult, callback, quotaChargeEventListener);
         routerCallback.onPollReady();
       } catch (RouterException e) {
         currentOperationsCount.addAndGet(1 - blobIdStrs.size());

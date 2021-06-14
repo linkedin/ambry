@@ -295,7 +295,7 @@ public class TtlUpdateManagerTest {
     blobIds.add(blobIds.get(0));
     try {
       ttlUpdateManager.submitTtlUpdateOperation(blobIds, UPDATE_SERVICE_ID, Utils.Infinite_Time, new FutureResult<>(),
-          new TestCallback<>());
+          new TestCallback<>(), quotaChargeEventListener);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -321,7 +321,8 @@ public class TtlUpdateManagerTest {
     TestCallback<Void> callback = new TestCallback<>();
     NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
     notificationSystem.reset();
-    ttlUpdateManager.submitTtlUpdateOperation(ids, UPDATE_SERVICE_ID, Utils.Infinite_Time, future, callback);
+    ttlUpdateManager.submitTtlUpdateOperation(ids, UPDATE_SERVICE_ID, Utils.Infinite_Time, future, callback,
+        quotaChargeEventListener);
     sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests);
     long expectedTtlSecs = TTL_SECS;
     if (expectedErrorCode == null) {

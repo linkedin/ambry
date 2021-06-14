@@ -27,6 +27,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -36,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -43,6 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * operations that are assigned to it, and manages their states and life cycles.
  */
 class TtlUpdateManager {
+  private static final Logger LOGGER = LoggerFactory.getLogger(TtlUpdateOperation.class);
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
   private final Time time;
@@ -83,10 +87,11 @@ class TtlUpdateManager {
    * @param expiresAtMs The new expiry time (in ms) of the blob.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
+   * @param quotaChargeEventListener {@link QuotaChargeEventListener} object to account for quota.
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitTtlUpdateOperation(Collection<String> blobIdStrs, String serviceId, long expiresAtMs,
-      FutureResult<Void> futureResult, Callback<Void> callback) throws RouterException {
+      FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) throws RouterException {
     List<BlobId> blobIds = new ArrayList<>();
     for (String blobIdStr : blobIdStrs) {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
@@ -99,10 +104,18 @@ class TtlUpdateManager {
     if (blobIds.size() == 1) {
       TtlUpdateOperation ttlUpdateOperation =
           new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, expiresAtMs,
-              time.milliseconds(), callback, time, futureResult);
+              time.milliseconds(), callback, time, futureResult, quotaChargeEventListener);
       ttlUpdateOperations.add(ttlUpdateOperation);
     } else {
-      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback);
+      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback, (result, exception) -> {
+        if(quotaChargeEventListener != null) {
+          try {
+            quotaChargeEventListener.onQuotaChargeEvent();
+          } catch (RouterException rEx) {
+            LOGGER.info("Exception {} while charging quota for ttl operation", rEx.toString());
+          }
+        }
+      });
       long operationTimeMs = time.milliseconds();
       for (BlobId blobId : blobIds) {
         TtlUpdateOperation ttlUpdateOperation =

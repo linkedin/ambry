@@ -207,13 +207,6 @@ class DeleteOperation {
                   replica.getDataNodeId().getDatacenterName());
               routerMetrics.crossColoSuccessCount.inc();
             }
-            if(quotaChargeEventListener != null) {
-              try {
-                quotaChargeEventListener.onQuotaChargeEvent();
-              } catch (RouterException routerException) {
-                logger.error("Unexpected {} in quota charge event listener for blob {}", routerException, deleteRequest.getBlobId());
-              }
-            }
           } else if (serverError == ServerErrorCode.Disk_Unavailable) {
             logger.trace("Replica {} returned Disk_Unavailable for a delete request with correlationId : {} ", replica,
                 deleteRequest.getCorrelationId());
@@ -315,6 +308,13 @@ class DeleteOperation {
       } else if (operationTracker.hasFailedOnNotFound()) {
         operationException.set(
             new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+      }
+      if(quotaChargeEventListener != null) {
+        try {
+          quotaChargeEventListener.onQuotaChargeEvent();
+        } catch (RouterException routerException) {
+          logger.error("Exception  {} in quota charge event listener during delete operation", routerException.toString());
+        }
       }
       operationCompleted = true;
     }

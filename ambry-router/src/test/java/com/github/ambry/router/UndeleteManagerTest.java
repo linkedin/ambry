@@ -329,7 +329,8 @@ public class UndeleteManagerTest {
   public void duplicateBlobIdsTest() throws RouterException {
     blobIds.add(blobIds.get(0));
     try {
-      undeleteManager.submitUndeleteOperation(blobIds, UNDELETE_SERVICE_ID, new FutureResult<>(), null);
+      undeleteManager.submitUndeleteOperation(blobIds, UNDELETE_SERVICE_ID, new FutureResult<>(), null,
+          quotaChargeEventListener);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -402,7 +403,7 @@ public class UndeleteManagerTest {
       throws Exception {
     FutureResult<Void> future = new FutureResult<>();
     NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
-    undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done);
+    undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done, quotaChargeEventListener);
     sendRequestsGetResponse(future, undeleteManager, advanceTime);
     if (expectedErrorCode == null) {
       // Should return no error
