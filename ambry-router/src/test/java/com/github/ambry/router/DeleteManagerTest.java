@@ -23,6 +23,9 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.SocketNetworkClient;
+import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.router.RouterTestHelpers.*;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
@@ -67,6 +70,8 @@ public class DeleteManagerTest {
   private String blobIdString;
   private PartitionId partition;
   private Future<Void> future;
+  private final QuotaChargeEventListener quotaChargeEventListener = QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private final QuotaManager quotaManager = QuotaTestUtils.createDummyQuotaManager();
 
   /**
    * A checker that either asserts that a delete operation succeeds or returns the specified error code.
@@ -74,7 +79,7 @@ public class DeleteManagerTest {
   private final ErrorCodeChecker deleteErrorCodeChecker = new ErrorCodeChecker() {
     @Override
     public void testAndAssert(RouterErrorCode expectedError) throws Exception {
-      future = router.deleteBlob(blobIdString, null);
+      future = router.deleteBlob(blobIdString, null, quotaChargeEventListener);
       if (expectedError == null) {
         future.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       } else {
@@ -104,7 +109,7 @@ public class DeleteManagerTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
-        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaManager);
     List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
     blobId =
@@ -151,9 +156,9 @@ public class DeleteManagerTest {
                     callbackCalled.countDown();
                     throw new RuntimeException("Throwing an exception in the user callback");
                   }
-                }));
+                }, quotaChargeEventListener));
               } else {
-                futures.add(router.deleteBlob(blobIdString, null));
+                futures.add(router.deleteBlob(blobIdString, null, quotaChargeEventListener));
               }
             }
             for (Future future : futures) {
@@ -169,7 +174,7 @@ public class DeleteManagerTest {
             Assert.assertTrue("Router should not be closed", router.isOpen());
 
             //Test that DeleteManager is still operational
-            router.deleteBlob(blobIdString, null).get();
+            router.deleteBlob(blobIdString, null, quotaChargeEventListener).get();
           }
         });
   }
@@ -181,7 +186,7 @@ public class DeleteManagerTest {
   public void testBlobIdNotValid() throws Exception {
     String[] input = {"123", "abcd", "", "/"};
     for (String s : input) {
-      future = router.deleteBlob(s, null);
+      future = router.deleteBlob(s, null, quotaChargeEventListener);
       assertFailureAndCheckErrorCode(future, RouterErrorCode.InvalidBlobId);
     }
   }
@@ -366,7 +371,7 @@ public class DeleteManagerTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
-        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaManager);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
     serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
@@ -395,7 +400,7 @@ public class DeleteManagerTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-            future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch));
+            future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeEventListener);
             do {
               // increment mock time
               mockTime.sleep(1000);
@@ -427,7 +432,7 @@ public class DeleteManagerTest {
       mockSelectorState.set(state);
       setServerErrorCodes(serverErrorCodes, partition, serverLayout);
       CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-      future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch));
+      future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeEventListener);
       do {
         // increment mock time
         mockTime.sleep(1000);
@@ -447,7 +452,7 @@ public class DeleteManagerTest {
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
-            future = router.deleteBlob(blobIdString, null);
+            future = router.deleteBlob(blobIdString, null, quotaChargeEventListener);
             router.close();
             assertFailureAndCheckErrorCode(future, expectedError);
           }
@@ -468,7 +473,7 @@ public class DeleteManagerTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
-        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaManager);
     blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, (byte) 0,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false,
         BlobId.BlobDataType.DATACHUNK);

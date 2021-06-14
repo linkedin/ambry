@@ -81,6 +81,6 @@ public class QuotaResource {
    * Type of Ambry resource for which quota can be applied.
    */
   public enum QuotaResourceType {
-    ACCOUNT, CONTAINER
+    ACCOUNT, CONTAINER, SERVICE
   }
 }

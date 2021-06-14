@@ -31,6 +31,7 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -138,7 +139,8 @@ public class CloudRouterTest extends NonBlockingRouterTest {
 
     router =
         new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, mockClusterMap,
-            kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS,
+            QuotaTestUtils.createDummyQuotaManager());
     router.addResourceToClose(requestHandlerPool);
   }
 

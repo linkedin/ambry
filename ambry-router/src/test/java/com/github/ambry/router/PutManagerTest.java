@@ -35,6 +35,8 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -86,30 +88,6 @@ import static org.junit.Assert.*;
 public class PutManagerTest {
   static final GeneralSecurityException GSE = new GeneralSecurityException("Exception to throw for tests");
   private static final long MAX_WAIT_MS = 10000;
-  private final boolean testEncryption;
-  private final int metadataContentVersion;
-  private final MockServerLayout mockServerLayout;
-  private final MockTime mockTime = new MockTime();
-  private final MockClusterMap mockClusterMap;
-  private final InMemAccountService accountService;
-  // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
-  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
-  private TestNotificationSystem notificationSystem;
-  private NonBlockingRouter router;
-  private NonBlockingRouterMetrics metrics;
-  private MockKeyManagementService kms;
-  private MockCryptoService cryptoService;
-  private CryptoJobHandler cryptoJobHandler;
-  private boolean instantiateEncryptionCast = true;
-
-  private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<>();
-  private int chunkSize;
-  private int requestParallelism;
-  private int successTarget;
-  private boolean instantiateNewRouterForPuts;
-  private final Random random = new Random();
-  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
-
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
@@ -117,18 +95,29 @@ public class PutManagerTest {
   // has 3 replicas)
   private static final String LOCAL_DC = "DC3";
   private static final String EXTERNAL_ASSET_TAG = "ExternalAssetTag";
-
-  /**
-   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
-   * @return an array with all four different choices
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
-        {false, MessageFormatRecord.Metadata_Content_Version_V3},
-        {true, MessageFormatRecord.Metadata_Content_Version_V2},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
-  }
+  private final boolean testEncryption;
+  private final int metadataContentVersion;
+  private final MockServerLayout mockServerLayout;
+  private final MockTime mockTime = new MockTime();
+  private final MockClusterMap mockClusterMap;
+  private final InMemAccountService accountService;
+  private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<>();
+  private final Random random = new Random();
+  // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
+  private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
+  private final TestNotificationSystem notificationSystem;
+  private NonBlockingRouter router;
+  private NonBlockingRouterMetrics metrics;
+  private MockKeyManagementService kms;
+  private MockCryptoService cryptoService;
+  private CryptoJobHandler cryptoJobHandler;
+  private boolean instantiateEncryptionCast = true;
+  private final int chunkSize;
+  private final int requestParallelism;
+  private final int successTarget;
+  private boolean instantiateNewRouterForPuts;
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private final QuotaChargeEventListener quotaChargeEventListener = QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * Pre-initialization common to all tests.
@@ -148,6 +137,18 @@ public class PutManagerTest {
     notificationSystem = new TestNotificationSystem();
     instantiateNewRouterForPuts = true;
     accountService = new InMemAccountService(false, true);
+  }
+
+  /**
+   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
+   * @return an array with all four different choices
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3},
+        {true, MessageFormatRecord.Metadata_Content_Version_V2},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3}});
   }
 
   @Before
@@ -391,6 +392,7 @@ public class PutManagerTest {
         router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
           callbackCalled.countDown();
           throw new RuntimeException("Throwing an exception in the user callback");
+        }, () -> {
         });
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
@@ -698,7 +700,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options, null);
+            putChannel, requestAndResult.options, quotaChargeEventListener);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
     future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
@@ -738,9 +740,9 @@ public class PutManagerTest {
    */
   @Test
   public void testChannelSizeNotSizeInPropertiesPutSuccess() throws Exception {
-    int actualBlobSizes[] = {0, chunkSize - 1, chunkSize, chunkSize + 1, chunkSize * 2, chunkSize * 2 + 1};
+    int[] actualBlobSizes = {0, chunkSize - 1, chunkSize, chunkSize + 1, chunkSize * 2, chunkSize * 2 + 1};
     for (int actualBlobSize : actualBlobSizes) {
-      int sizesInProperties[] = {actualBlobSize - 1, actualBlobSize + 1};
+      int[] sizesInProperties = {actualBlobSize - 1, actualBlobSize + 1};
       for (int sizeInProperties : sizesInProperties) {
         requestAndResultsList.clear();
         RequestAndResult requestAndResult = new RequestAndResult(0);
@@ -775,7 +777,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options, null);
+            putChannel, requestAndResult.options, quotaChargeEventListener);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
@@ -917,7 +919,8 @@ public class PutManagerTest {
     router = new NonBlockingRouter(new RouterConfig(vProps), metrics,
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
-        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        QuotaTestUtils.createDummyQuotaManager());
     return router;
   }
 
@@ -992,10 +995,10 @@ public class PutManagerTest {
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
           if (requestAndResult.chunksToStitch == null) {
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, requestAndResult.options, null);
+                requestAndResult.putUserMetadata, putChannel, requestAndResult.options, quotaChargeEventListener);
           } else {
             requestAndResult.result = (FutureResult<String>) router.stitchBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch, null);
+                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch, quotaChargeEventListener);
           }
           requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
@@ -1296,6 +1299,16 @@ public class PutManagerTest {
         lastNRequestedPartitionClasses);
   }
 
+  private static class BlobCreatedEvent {
+    BlobProperties blobProperties;
+    NotificationBlobType notificationBlobType;
+
+    BlobCreatedEvent(BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
+      this.blobProperties = blobProperties;
+      this.notificationBlobType = notificationBlobType;
+    }
+  }
+
   private class RequestAndResult {
     BlobProperties putBlobProperties;
     byte[] putUserMetadata;
@@ -1378,16 +1391,6 @@ public class PutManagerTest {
       }
     }
   }
-
-  private static class BlobCreatedEvent {
-    BlobProperties blobProperties;
-    NotificationBlobType notificationBlobType;
-
-    BlobCreatedEvent(BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
-      this.blobProperties = blobProperties;
-      this.notificationBlobType = notificationBlobType;
-    }
-  }
 }
 
 /**
@@ -1396,14 +1399,14 @@ public class PutManagerTest {
  * not at once. Also if the beBad state is set, the callback is called with an exception.
  */
 class MockReadableStreamChannel implements ReadableStreamChannel {
+  private final long size;
+  private final boolean sendZeroSizedBuffers;
+  private final Random random = new Random();
   private AsyncWritableChannel writableChannel;
   private FutureResult<Long> returnedFuture;
   private Callback<Long> callback;
-  private final long size;
   private long readSoFar;
   private boolean beBad = false;
-  private final boolean sendZeroSizedBuffers;
-  private final Random random = new Random();
 
   /**
    * Constructs a MockReadableStreamChannel.

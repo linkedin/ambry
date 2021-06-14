@@ -29,6 +29,9 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -82,6 +85,9 @@ public class TtlUpdateManagerTest {
   private final TtlUpdateNotificationSystem notificationSystem = new TtlUpdateNotificationSystem();
   private final int serverCount = serverLayout.getMockServers().size();
   private final AccountService accountService = new InMemAccountService(true, false);
+  private final QuotaManager quotaManager = QuotaTestUtils.createDummyQuotaManager();
+  private final QuotaChargeEventListener quotaChargeEventListener =
+      QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * Sets up all required components including a blob.
@@ -98,13 +104,13 @@ public class TtlUpdateManagerTest {
             CHECKOUT_TIMEOUT_MS, serverLayout, time);
     router =
         new NonBlockingRouter(routerConfig, metrics, networkClientFactory, notificationSystem, clusterMap, null, null,
-            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaManager);
     for (int i = 0; i < BLOBS_COUNT; i++) {
       ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(PUT_CONTENT));
       BlobProperties putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
           Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build(),
+          quotaChargeEventListener).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
     }
     ttlUpdateManager =
@@ -133,7 +139,8 @@ public class TtlUpdateManagerTest {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
       TestCallback<Void> callback = new TestCallback<>();
       notificationSystem.reset();
-      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, callback).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, callback, quotaChargeEventListener)
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       notificationSystem.checkNotifications(1, null, Utils.Infinite_Time);
       assertTrue("Callback was not called", callback.getLatch().await(10, TimeUnit.MILLISECONDS));
       assertNull("There should be no exception in the callback", callback.getException());
