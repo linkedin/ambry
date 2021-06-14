@@ -359,7 +359,7 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
-  ExecutorService getScheduler() {
+  public ExecutorService getScheduler() {
     return scheduler;
   }
 

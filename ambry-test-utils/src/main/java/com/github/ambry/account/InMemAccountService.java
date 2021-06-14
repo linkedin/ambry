@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
 
@@ -50,6 +52,8 @@ public class InMemAccountService implements AccountService {
   private final Map<String, Account> nameToAccountMap = new HashMap<>();
   private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
   private boolean shouldUpdateSucceed = true;
+  static final String INMEM_ACCOUNT_UPDATER_PREFIX = "in-memory-account-updater";
+  private final ScheduledExecutorService scheduler;
 
   /**
    * Constructor.
@@ -60,6 +64,7 @@ public class InMemAccountService implements AccountService {
   public InMemAccountService(boolean shouldReturnOnlyUnknown, boolean notifyConsumers) {
     this.shouldReturnOnlyUnknown = shouldReturnOnlyUnknown;
     this.notifyConsumers = notifyConsumers;
+    this.scheduler = Utils.newScheduler(1, INMEM_ACCOUNT_UPDATER_PREFIX, false);
   }
 
   @Override
@@ -138,6 +143,10 @@ public class InMemAccountService implements AccountService {
   @Override
   public void close() {
     // no op
+  }
+
+  public ExecutorService getScheduler() {
+    return scheduler;
   }
 
   /**

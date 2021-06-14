@@ -17,12 +17,13 @@ package com.github.ambry.named;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.util.concurrent.ExecutorService;
 
 
 public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
@@ -30,18 +31,20 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   private final String localDatacenter;
   private final MetricRegistry metricRegistry;
   private final AccountService accountService;
+  private final ExecutorService scheduler;
 
   public MySqlNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      AccountService accountService) {
+      AccountService accountService, ExecutorService scheduler) {
     config = new MySqlNamedBlobDbConfig(verifiableProperties);
     localDatacenter = verifiableProperties.getString(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME);
     this.metricRegistry = metricRegistry;
     this.accountService = accountService;
+    this.scheduler = scheduler;
   }
 
   @Override
   public MySqlNamedBlobDb getNamedBlobDb() {
-    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter);
+    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter, scheduler);
   }
 
   /**
@@ -53,7 +56,8 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
     hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
-    hikariConfig.setMaximumPoolSize(config.poolSize);
+    hikariConfig.setMaximumPoolSize(
+        dbEndpoint.getDatacenter().equals(localDatacenter) ? config.localPoolSize : config.remotePoolSize);
     // Recommended properties for automatic prepared statement caching
     // https://github.com/brettwooldridge/HikariCP/wiki/MySQL-Configuration
     hikariConfig.addDataSourceProperty("cachePrepStmts", "true");

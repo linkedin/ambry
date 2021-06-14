@@ -18,25 +18,36 @@ package com.github.ambry.named;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import javax.sql.DataSource;
+import org.apache.commons.codec.binary.Base64;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 
@@ -51,8 +62,10 @@ public class MySqlNamedBlobDbTest {
   private final MySqlNamedBlobDb namedBlobDb;
   private final Account account;
   private final Container container;
+  private PartitionId partitionId;
+  private static String id;
 
-  public MySqlNamedBlobDbTest() {
+  public MySqlNamedBlobDbTest() throws IOException {
     Properties properties = new Properties();
     JSONArray dbInfo = new JSONArray();
     for (String datacenter : datacenters) {
@@ -64,9 +77,27 @@ public class MySqlNamedBlobDbTest {
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
-        dataSourceFactory, localDatacenter);
+        dataSourceFactory, localDatacenter, accountService.getScheduler());
     account = accountService.createAndAddRandomAccount();
     container = account.getAllContainers().iterator().next();
+    MockClusterMap clusterMap = new MockClusterMap();
+    partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    id = getBlobId(account, container);
+  }
+
+  @Test
+  public void testRetryGetNamedBlobFromDiffDcs() throws Exception {
+    dataSourceFactory.setLocalDatacenter(localDatacenter);
+    dataSourceFactory.triggerQueryExecutionErrorForLocalDataCenter(datacenters);
+    NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
+    assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
+  }
+
+  @Test
+  public void testRetryDeleteNamedBlob() throws Exception {
+    dataSourceFactory.setLocalDatacenter(localDatacenter);
+    dataSourceFactory.triggerQueryExecutionErrorForLocalDataCenter(datacenters);
+    checkErrorCode(() -> namedBlobDb.delete(account.getName(), container.getName(), "blobName"), RestServiceErrorCode.NotFound);
   }
 
   /**
@@ -93,12 +124,28 @@ public class MySqlNamedBlobDbTest {
         e -> Assert.assertEquals(sqlException, e.getCause()));
   }
 
+  /**
+   * @param callable an async call, where the {@link Future} is expected to be completed with an exception.
+   * @param errorCode the expected {@link RestServiceErrorCode}.
+   */
+  private void checkErrorCode(Callable<Future<?>> callable, RestServiceErrorCode errorCode) throws Exception {
+    TestUtils.assertException(ExecutionException.class, () -> callable.call().get(), e -> {
+      RestServiceException rse = (RestServiceException) e.getCause();
+      assertEquals("Unexpected error code for get after delete", errorCode, rse.getErrorCode());
+    });
+  }
+
   private static class MockDataSourceFactory implements MySqlNamedBlobDb.DataSourceFactory {
     private final Map<String, DataSource> dataSources = new HashMap<>();
+    private String localDatacenter;
 
     @Override
     public DataSource getDataSource(MySqlUtils.DbEndpoint dbEndpoint) {
       return dataSources.computeIfAbsent(dbEndpoint.getDatacenter(), k -> mock(DataSource.class));
+    }
+
+    private void setLocalDatacenter(String localDatacenter) {
+      this.localDatacenter = localDatacenter;
     }
 
     private void triggerConnectionError(String datacenter, SQLException connectionError) {
@@ -126,6 +173,44 @@ public class MySqlNamedBlobDbTest {
         throw new RuntimeException(e);
       }
     }
+
+    private void triggerQueryExecutionErrorForLocalDataCenter(List<String> datacenters) {
+      for (String datacenter : datacenters) {
+        try {
+          DataSource dataSource = dataSources.get(datacenter);
+          reset(dataSource);
+          PreparedStatement statement = mock(PreparedStatement.class);
+          ResultSet resultSet = mock(ResultSet.class);
+          if (localDatacenter.equals(datacenter)) {
+            when(resultSet.next()).thenReturn(false);
+            when(statement.executeQuery()).thenReturn(resultSet);
+            Connection connection = mock(Connection.class);
+            when(connection.prepareStatement(any())).thenReturn(statement);
+            when(dataSource.getConnection()).thenReturn(connection);
+          } else {
+            when(resultSet.next()).thenReturn(true);
+            when(resultSet.getBytes(1)).thenReturn(Base64.decodeBase64(id));
+            when(statement.executeQuery()).thenReturn(resultSet);
+            Connection connection = mock(Connection.class);
+            when(connection.prepareStatement(any())).thenReturn(statement);
+            when(dataSource.getConnection()).thenReturn(connection);
+          }
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+  }
+
+  /**
+   * Get a sample blob ID.
+   * @param account the account of the blob.
+   * @param container the container of the blob.
+   * @return the base64 blob ID.
+   */
+  private String getBlobId(Account account, Container container) {
+    return new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 0, account.getId(), container.getId(),
+        partitionId, false, BlobId.BlobDataType.SIMPLE).getID();
   }
 }
 

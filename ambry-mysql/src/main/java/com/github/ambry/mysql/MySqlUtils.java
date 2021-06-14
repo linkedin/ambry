@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -49,6 +50,25 @@ public class MySqlUtils {
       dcToDbEndpoints.computeIfAbsent(dbEndpoint.datacenter, key -> new ArrayList<>()).add(dbEndpoint);
     }
     return dcToDbEndpoints;
+  }
+
+  /**
+   * Parses DB information JSON string and returns a list of datacenter name.
+   * @param dbInfoJsonString the string containing the MySql DB info.
+   * @param localDatacenter name of the local data center
+   * @return The {@link PriorityQueue} of remote datacenter names with alphabetical order.
+   */
+  public static PriorityQueue<String> getRemoteDcFromDbInfo(String dbInfoJsonString, String localDatacenter) {
+    PriorityQueue<String> minHeap = new PriorityQueue<>();
+    JSONArray dbInfo = new JSONArray(dbInfoJsonString);
+    for (int i = 0; i < dbInfo.length(); i++) {
+      JSONObject entry = dbInfo.getJSONObject(i);
+      DbEndpoint dbEndpoint = DbEndpoint.fromJson(entry);
+      if (!localDatacenter.equals(dbEndpoint.datacenter)) {
+        minHeap.add(dbEndpoint.datacenter);
+      }
+    }
+    return minHeap;
   }
 
   /**
