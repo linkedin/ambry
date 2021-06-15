@@ -179,7 +179,7 @@ class FrontendRestRequestService implements RestRequestService {
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager);
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName);
+            frontendConfig, frontendMetrics, clusterName, quotaManager);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
