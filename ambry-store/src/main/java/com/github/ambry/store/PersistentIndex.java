@@ -1570,7 +1570,7 @@ class PersistentIndex {
       List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments, boolean inclusive) throws StoreException {
     Offset segmentStartOffset = initialSegmentStartOffset;
-    if (segmentStartOffset.equals(indexSegments.lastKey())) {
+    if (segmentStartOffset.equals(indexSegments.lastKey()) && !onlyContainsHeaderInLastLogSegment(segmentStartOffset)) {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
       throw new IllegalArgumentException(
           "Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset
@@ -1645,7 +1645,7 @@ class PersistentIndex {
       }
 
       if (segmentStartOffset == validIndexSegments.lastKey() && !onlyContainsHeaderInLastLogSegment(
-          newTokenSegmentStartOffset)) {
+          segmentStartOffset)) {
         /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
          * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
          * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
@@ -1679,7 +1679,7 @@ class PersistentIndex {
       IndexSegment segmentOfToken = indexSegments.floorEntry(newTokenOffsetInJournal).getValue();
       return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, segmentOfToken.getResetKey(),
           segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
-    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime() && !onlyContainsHeaderInLastLogSegment(newTokenSegmentStartOffset)) {
+    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime() && !onlyContainsHeaderInLastLogSegment(initialSegmentStartOffset)) {
       // If the condition does not have an end time, then since we have entered a segment, we should return at least one
       // message unless the new log segment only contains headers.
       throw new IllegalStateException(
