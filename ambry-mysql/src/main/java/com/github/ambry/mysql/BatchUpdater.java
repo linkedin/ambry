@@ -14,13 +14,12 @@
 package com.github.ambry.mysql;
 
 import com.github.ambry.utils.GenericThrowableConsumer;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 
 
 /**
@@ -38,7 +37,7 @@ import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
  *
  * Sample usage:
  * <pre>
- *   BatchUpdater batch = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 100);
+ *   BatchUpdater batch = new BatchUpdater(connection, metrics, "insert into myTable values(?)", "myTable", 100);
  *   for (String name: names) {
  *       batch.addUpdateToBatch(statement -> {
  *           statement.setString(1, name);
@@ -54,7 +53,8 @@ public class BatchUpdater {
   private final boolean autoCommit;
   private final PreparedStatement statement;
   private final int maxBatchSize;
-  private final MySqlDataAccessor dataAccessor;
+  private final Connection connection;
+  private final MySqlMetrics metrics;
   private final String tableName;
   private int currentBatchSize = 0;
   private int committedBatchSize = 0;
@@ -64,15 +64,17 @@ public class BatchUpdater {
 
   /**
    * Constructor to instantiate a {@link BatchUpdater}.
-   * @param dataAccessor The {@link MySqlDataAccessor}.
+   * @param connection The {@link Connection}.
+   * @param metrics The {@link MySqlMetrics}.
    * @param sql The sql command to prepare the statement.
    * @param tableName The name of the table that update statements are targeting at.
    * @param maxBatchSize The max batch size.
    * @throws SQLException
    */
-  public BatchUpdater(MySqlDataAccessor dataAccessor, String sql, String tableName, int maxBatchSize)
+  public BatchUpdater(Connection connection, MySqlMetrics metrics, String sql, String tableName, int maxBatchSize)
       throws SQLException {
-    this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
+    this.connection = Objects.requireNonNull(connection, "Connection is empty");
+    this.metrics = Objects.requireNonNull(metrics, "MySqlMetrics is empty");
     this.tableName = Objects.requireNonNull(tableName, "TableName is empty");
     if (maxBatchSize < 0) {
       throw new IllegalArgumentException("MaxBatchSize is not valid: " + maxBatchSize);
@@ -80,13 +82,14 @@ public class BatchUpdater {
     this.maxBatchSize = maxBatchSize;
     try {
       // Calling getPreparedStatement first, since it will setup connection if there is none
-      statement = dataAccessor.getPreparedStatement(sql, true);
+      statement = connection.prepareStatement(sql);
       statement.clearBatch();
-      autoCommit = dataAccessor.getAutoCommmit();
-      dataAccessor.setAutoCommit(false);
+      autoCommit = connection.getAutoCommit();
+      connection.setAutoCommit(false);
     } catch (SQLException e) {
-      dataAccessor.onException(e, BatchUpdate);
+      metrics.batchUpdateFailureCount.inc();
       logger.error("Failed to prepare for batch insert on {}", tableName, e);
+      connection.close();
       throw e;
     }
   }
@@ -112,6 +115,7 @@ public class BatchUpdater {
       currentBatchSize++;
     } catch (SQLException e) {
       rollback(e);
+      connection.close();
       throw e;
     }
   }
@@ -124,12 +128,14 @@ public class BatchUpdater {
     try {
       executeBatchAndCommit();
       if (startTime != 0) {
-        dataAccessor.onSuccess(BatchUpdate, System.currentTimeMillis() - startTime);
+        metrics.batchUpdateTimeMs.update(System.currentTimeMillis() - startTime);
       }
-      dataAccessor.setAutoCommit(autoCommit);
+      connection.setAutoCommit(autoCommit);
     } catch (SQLException e) {
       rollback(e);
       throw e;
+    } finally {
+      connection.close();
     }
   }
 
@@ -143,7 +149,7 @@ public class BatchUpdater {
     }
     statement.executeBatch();
     numBatches++;
-    dataAccessor.commit();
+    connection.commit();
     statement.clearBatch();
     committedBatchSize += currentBatchSize;
     currentBatchSize = 0;
@@ -159,13 +165,11 @@ public class BatchUpdater {
         currentBatchSize, committedBatchSize, e);
     try {
       // First try to rollback the transaction, this might fail due to connection error.
-      dataAccessor.rollback();
+      connection.rollback();
     } finally {
       // Then deal with exception, this might close the connection.
-      dataAccessor.onException(e, BatchUpdate);
-      if (dataAccessor.hasActiveConnection()) {
-        dataAccessor.setAutoCommit(autoCommit);
-      }
+      metrics.batchUpdateFailureCount.inc();
+      connection.setAutoCommit(autoCommit);
     }
   }
 

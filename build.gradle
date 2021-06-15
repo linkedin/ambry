@@ -477,6 +477,7 @@ project(':ambry-mysql') {
         compile ("org.apache.helix:helix-core:$helixVersion") {
             exclude group: "log4j", module: "log4j"
         }
+        compile "com.zaxxer:HikariCP:$hikariVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }

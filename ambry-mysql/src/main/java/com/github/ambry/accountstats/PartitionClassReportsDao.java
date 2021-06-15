@@ -14,7 +14,8 @@
 package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
-import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -24,10 +25,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 
 
 /**
@@ -123,14 +123,17 @@ public class PartitionClassReportsDao {
       UPDATED_AT_COLUMN, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN,
       ID_COLUMN, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN);
 
-  private final MySqlDataAccessor dataAccessor;
+  private final DataSource dataSource;
+  private final MySqlMetrics metrics;
 
   /**
    * Constructor to instantiate a {@link PartitionClassReportsDao}.
-   * @param dataAccessor
+   * @param dataSource The {@link DataSource}.
+   * @param metrics The {@link MySqlMetrics}.
    */
-  PartitionClassReportsDao(MySqlDataAccessor dataAccessor) {
-    this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
+  PartitionClassReportsDao(DataSource  dataSource, MySqlMetrics metrics) {
+    this.dataSource = Objects.requireNonNull(dataSource, "DataSource is empty");
+    this.metrics = Objects.requireNonNull(metrics, "MySqlMetrics is empty");
   }
 
   /**
@@ -142,21 +145,23 @@ public class PartitionClassReportsDao {
    */
   Map<String, Short> queryPartitionClassNames(String clusterName) throws SQLException {
     Map<String, Short> result = new HashMap<>();
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(queryPartitionClassNamesSql, false);
-      queryStatement.setString(1, clusterName);
-      try (ResultSet rs = queryStatement.executeQuery()) {
-        while (rs.next()) {
-          short partitionClassId = rs.getShort(1);
-          String partitionClassName = rs.getString(2);
-          result.put(partitionClassName, partitionClassId);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryStatement = connection.prepareStatement(queryPartitionClassNamesSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        try (ResultSet rs = queryStatement.executeQuery()) {
+          while (rs.next()) {
+            short partitionClassId = rs.getShort(1);
+            String partitionClassName = rs.getString(2);
+            result.put(partitionClassName, partitionClassId);
+          }
         }
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
       }
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return result;
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      metrics.readFailureCount.inc();
       logger.error("Failed to execute query of {}, with parameter {}", queryPartitionClassNamesSql, clusterName, e);
       throw e;
     }
@@ -170,18 +175,20 @@ public class PartitionClassReportsDao {
    * @throws SQLException
    */
   void insertPartitionClassName(String clusterName, String partitionClassName) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertPartitionClassNamesSql, true);
-      insertStatement.setString(1, clusterName);
-      insertStatement.setString(2, partitionClassName);
-      insertStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement insertStatement = connection.prepareStatement(insertPartitionClassNamesSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        insertStatement.setString(1, clusterName);
+        insertStatement.setString(2, partitionClassName);
+        insertStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLIntegrityConstraintViolationException e) {
       // If somehow the unique pair(clusterName, partitionClassName) is inserted, consider this as a success
       // ignore it
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute of {}, with parameter {} {}", insertPartitionClassNamesSql, clusterName,
           partitionClassName, e);
       throw e;
@@ -197,21 +204,23 @@ public class PartitionClassReportsDao {
    */
   Map<String, Set<Integer>> queryPartitionNameAndIds(String clusterName) throws SQLException {
     Map<String, Set<Integer>> nameAndIds = new HashMap<>();
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(queryPartitionIdAndNamesSql, false);
-      queryStatement.setString(1, clusterName);
-      try (ResultSet resultSet = queryStatement.executeQuery()) {
-        while (resultSet.next()) {
-          int partitionId = resultSet.getInt(1);
-          String partitionClassName = resultSet.getString(2);
-          nameAndIds.computeIfAbsent(partitionClassName, k -> new HashSet<>()).add(partitionId);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryStatement = connection.prepareStatement(queryPartitionIdAndNamesSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        try (ResultSet resultSet = queryStatement.executeQuery()) {
+          while (resultSet.next()) {
+            int partitionId = resultSet.getInt(1);
+            String partitionClassName = resultSet.getString(2);
+            nameAndIds.computeIfAbsent(partitionClassName, k -> new HashSet<>()).add(partitionId);
+          }
         }
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
       }
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return nameAndIds;
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      metrics.readFailureCount.inc();
       logger.error("Failed to execute query {}, with parameter {}", queryPartitionIdAndNamesSql, clusterName, e);
       throw e;
     }
@@ -226,19 +235,21 @@ public class PartitionClassReportsDao {
    */
   Set<Integer> queryPartitionIds(String clusterName) throws SQLException {
     Set<Integer> partitionIds = new HashSet<>();
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(queryPartitionIdsSql, false);
-      queryStatement.setString(1, clusterName);
-      try (ResultSet rs = queryStatement.executeQuery()) {
-        while (rs.next()) {
-          partitionIds.add(rs.getInt(1));
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryStatement = connection.prepareStatement(queryPartitionIdsSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        try (ResultSet rs = queryStatement.executeQuery()) {
+          while (rs.next()) {
+            partitionIds.add(rs.getInt(1));
+          }
         }
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
       }
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return partitionIds;
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      metrics.readFailureCount.inc();
       logger.error("Failed to execute query {}, with parameter {}", queryPartitionIdsSql, clusterName, e);
       throw e;
     }
@@ -253,19 +264,21 @@ public class PartitionClassReportsDao {
    * @throws SQLException
    */
   void insertPartitionId(String clusterName, int partitionId, short partitionClassId) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertPartitionIdSql, true);
-      insertStatement.setString(1, clusterName);
-      insertStatement.setInt(2, partitionId);
-      insertStatement.setShort(3, partitionClassId);
-      insertStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement insertStatement = connection.prepareStatement(insertPartitionIdSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        insertStatement.setString(1, clusterName);
+        insertStatement.setInt(2, partitionId);
+        insertStatement.setShort(3, partitionClassId);
+        insertStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLIntegrityConstraintViolationException e) {
       // If somehow the unique pair(clusterName, partitionId) is inserted, consider this as a success
       // ignore it
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute of {}, with parameter {} {} {}", insertPartitionIdSql, clusterName, partitionId,
           partitionClassId, e);
       throw e;
@@ -281,23 +294,25 @@ public class PartitionClassReportsDao {
    */
   void queryAggregatedPartitionClassReport(String clusterName, PartitionClassContainerUsageFunction func)
       throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(queryAggregatedSql, false);
-      queryStatement.setString(1, clusterName);
-      try (ResultSet rs = queryStatement.executeQuery()) {
-        while (rs.next()) {
-          String partitionClassName = rs.getString(1);
-          int accountId = rs.getInt(2);
-          int containerId = rs.getInt(3);
-          long usage = rs.getLong(4);
-          long updatedAt = rs.getTimestamp(5).getTime();
-          func.apply(partitionClassName, (short) accountId, (short) containerId, usage, updatedAt);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryStatement = connection.prepareStatement(queryAggregatedSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        try (ResultSet rs = queryStatement.executeQuery()) {
+          while (rs.next()) {
+            String partitionClassName = rs.getString(1);
+            int accountId = rs.getInt(2);
+            int containerId = rs.getInt(3);
+            long usage = rs.getLong(4);
+            long updatedAt = rs.getTimestamp(5).getTime();
+            func.apply(partitionClassName, (short) accountId, (short) containerId, usage, updatedAt);
+          }
         }
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
       }
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      metrics.readFailureCount.inc();
       logger.error("Failed to execute query {}, with parameter {}", queryAggregatedSql, clusterName, e);
       throw e;
     }
@@ -313,17 +328,19 @@ public class PartitionClassReportsDao {
    */
   void deleteAggregatedStorageUsage(String clusterName, String partitionClassName, short accountId, short containerId)
       throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteAggregatedSql, true);
-      deleteStatement.setString(1, clusterName);
-      deleteStatement.setString(2, partitionClassName);
-      deleteStatement.setInt(3, accountId);
-      deleteStatement.setInt(4, containerId);
-      deleteStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteAggregatedSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(2, partitionClassName);
+        deleteStatement.setInt(3, accountId);
+        deleteStatement.setInt(4, containerId);
+        deleteStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute of {}, with parameter {} {} {} {}", deleteAggregatedSql, clusterName,
           partitionClassName, accountId, containerId, e);
       throw e;
@@ -341,7 +358,8 @@ public class PartitionClassReportsDao {
      * @throws SQLException
      */
     public StorageBatchUpdater(int maxBatchSize) throws SQLException {
-      super(dataAccessor, insertAggregatedSql, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, maxBatchSize);
+      super(dataSource.getConnection(), metrics, insertAggregatedSql, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE,
+          maxBatchSize);
     }
 
     /**

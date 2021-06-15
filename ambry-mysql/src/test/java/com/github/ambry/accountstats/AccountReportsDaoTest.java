@@ -14,20 +14,16 @@
 package com.github.ambry.accountstats;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
-import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import java.sql.Connection;
-import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLTransientConnectionException;
 import java.sql.Timestamp;
-import java.util.Collections;
-import java.util.Properties;
+import javax.sql.DataSource;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -41,9 +37,7 @@ import static org.mockito.Mockito.*;
  */
 @RunWith(MockitoJUnitRunner.class)
 public class AccountReportsDaoTest {
-
   private final MySqlMetrics metrics;
-  private final MySqlDataAccessor dataAccessor;
   private final Connection mockConnection;
   private final PreparedStatement mockInsertStatement;
   private final PreparedStatement mockQueryStatement;
@@ -79,23 +73,19 @@ public class AccountReportsDaoTest {
     when(mockConnection.prepareStatement(startsWith("SELECT"))).thenReturn(mockQueryStatement);
 
     metrics = new MySqlMetrics(AccountReportsDao.class, new MetricRegistry());
-    dataAccessor = getDataAccessor(mockConnection, metrics);
-    accountReportsDao = new AccountReportsDao(dataAccessor);
+    accountReportsDao = new AccountReportsDao(getDataSource(mockConnection), metrics);
   }
 
   /**
-   * Utility to get a {@link MySqlDataAccessor}.
+   * Utility to get a {@link DataSource}.
    * @param mockConnection the connection to use.
-   * @return the {@link MySqlDataAccessor}.
+   * @return the {@link DataSource}.
    * @throws SQLException
    */
-  static MySqlDataAccessor getDataAccessor(Connection mockConnection, MySqlMetrics metrics) throws SQLException {
-    Driver mockDriver = mock(Driver.class);
-    when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
-    MySqlUtils.DbEndpoint dbEndpoint =
-        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/ambry_container_storage_stats", "dc1", true, "ambry",
-            "ambry");
-    return new MySqlDataAccessor(Collections.singletonList(dbEndpoint), mockDriver, metrics);
+  static DataSource getDataSource(Connection mockConnection) throws SQLException {
+    DataSource mockDataSource = mock(DataSource.class);
+    when(mockDataSource.getConnection()).thenReturn(mockConnection);
+    return mockDataSource;
   }
 
   @Test
@@ -109,7 +99,6 @@ public class AccountReportsDaoTest {
     assertEquals("Write success count should be 1", 1, metrics.writeSuccessCount.getCount());
     // Run second time to reuse statement
     accountReportsDao.updateStorageUsage(clusterName, hostname, partitionId, accountId, containerId, storageUsage);
-    verify(mockConnection).prepareStatement(anyString());
     assertEquals("Write success count should be 2", 2, metrics.writeSuccessCount.getCount());
   }
 

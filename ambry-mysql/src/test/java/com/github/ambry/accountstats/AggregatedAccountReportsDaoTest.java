@@ -14,18 +14,14 @@
 package com.github.ambry.accountstats;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
-import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.utils.TestUtils;
 import java.sql.Connection;
-import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLTransientConnectionException;
-import java.util.Collections;
-import java.util.Properties;
+import javax.sql.DataSource;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -40,7 +36,6 @@ import static org.mockito.Mockito.*;
 @RunWith(MockitoJUnitRunner.class)
 public class AggregatedAccountReportsDaoTest {
   private final MySqlMetrics metrics;
-  private final MySqlDataAccessor dataAccessor;
   private final Connection mockConnection;
   private final PreparedStatement mockInsertAggregatedStatement;
   private final PreparedStatement mockInsertCopyStatement;
@@ -101,23 +96,20 @@ public class AggregatedAccountReportsDaoTest {
         mockQueryAggregatedStatement);
 
     metrics = new MySqlMetrics(AggregatedAccountReportsDao.class, new MetricRegistry());
-    dataAccessor = getDataAccessor(mockConnection, metrics);
-    aggregatedAccountReportsDao = new AggregatedAccountReportsDao(dataAccessor);
+    aggregatedAccountReportsDao = new AggregatedAccountReportsDao(getDataSource(mockConnection), metrics);
   }
 
+
   /**
-   * Utility to get a {@link MySqlDataAccessor}.
+   * Utility to get a {@link DataSource}.
    * @param mockConnection the connection to use.
-   * @return the {@link MySqlDataAccessor}.
+   * @return the {@link DataSource}.
    * @throws SQLException
    */
-  static MySqlDataAccessor getDataAccessor(Connection mockConnection, MySqlMetrics metrics) throws SQLException {
-    Driver mockDriver = mock(Driver.class);
-    when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
-    MySqlUtils.DbEndpoint dbEndpoint =
-        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/ambry_container_storage_stats", "dc1", true, "ambry",
-            "ambry");
-    return new MySqlDataAccessor(Collections.singletonList(dbEndpoint), mockDriver, metrics);
+  static DataSource getDataSource(Connection mockConnection) throws SQLException {
+    DataSource mockDataSource = mock(DataSource.class);
+    when(mockDataSource.getConnection()).thenReturn(mockConnection);
+    return mockDataSource;
   }
 
   @Test
@@ -130,7 +122,6 @@ public class AggregatedAccountReportsDaoTest {
     assertEquals("Write success count should be 1", 1, metrics.writeSuccessCount.getCount());
     // Run second time to reuse statement
     aggregatedAccountReportsDao.updateStorageUsage(clusterName, accountId, containerId, storageUsage);
-    verify(mockConnection).prepareStatement(anyString());
     assertEquals("Write success count should be 2", 2, metrics.writeSuccessCount.getCount());
   }
 
@@ -150,7 +141,6 @@ public class AggregatedAccountReportsDaoTest {
 
     // Run second time to reuse statement
     aggregatedAccountReportsDao.copyAggregatedUsageToMonthlyAggregatedTableForCluster(clusterName);
-    verify(mockConnection).prepareStatement(anyString());
     assertEquals("Copy success count should be 2", 2, metrics.copySuccessCount.getCount());
   }
 
@@ -171,7 +161,6 @@ public class AggregatedAccountReportsDaoTest {
         metrics.writeSuccessCount.getCount());
 
     aggregatedAccountReportsDao.updateMonth(clusterName, "2020-01");
-    verify(mockConnection).prepareStatement(anyString());
     assertEquals("Write success count should be " + (writeSuccessCountBefore + 2), writeSuccessCountBefore + 2,
         metrics.writeSuccessCount.getCount());
   }

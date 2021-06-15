@@ -212,6 +212,9 @@ class FrontendRestRequestService implements RestRequestService {
         idConverter.close();
         idConverter = null;
       }
+      if (accountStatsStore != null) {
+        accountStatsStore.shutdown();
+      }
       logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {
       logger.error("Downstream service close failed", e);

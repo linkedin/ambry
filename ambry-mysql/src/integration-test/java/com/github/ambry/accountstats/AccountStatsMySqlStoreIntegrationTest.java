@@ -18,7 +18,6 @@ import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
@@ -43,6 +42,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -81,7 +81,12 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
   @Before
   public void before() throws Exception {
-    cleanup(mySqlStore.getMySqlDataAccessor());
+    cleanup(mySqlStore.getConnection());
+  }
+
+  @After
+  public void after() {
+    mySqlStore.shutdown();
   }
 
   /**
@@ -101,7 +106,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore2.storeAccountStats(stats2);
     mySqlStore3.storeAccountStats(stats3);
 
-    assertTableSize(mySqlStore1.getMySqlDataAccessor(), 3 * 10 * 10);
+    assertTableSize(mySqlStore1.getConnection(), 3 * 10 * 10);
 
     StatsWrapper obtainedStats1 = mySqlStore1.queryAccountStatsByHost(hostname1, port1);
     StatsWrapper obtainedStats2 = mySqlStore2.queryAccountStatsByHost(hostname2, port2);
@@ -109,6 +114,9 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertTwoStatsSnapshots(obtainedStats1.getSnapshot(), stats1.getSnapshot());
     assertTwoStatsSnapshots(obtainedStats2.getSnapshot(), stats2.getSnapshot());
     assertTwoStatsSnapshots(obtainedStats3.getSnapshot(), stats3.getSnapshot());
+    mySqlStore1.shutdown();
+    mySqlStore2.shutdown();
+    mySqlStore3.shutdown();
   }
 
   @Test
@@ -161,6 +169,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storeAccountStats(stats6);
     StatsWrapper obtainedStats6 = mySqlStore.queryAccountStatsByHost(hostname1, port1);
     assertEquals(obtainedStats6.getSnapshot(), stats6.getSnapshot());
+    mySqlStore.shutdown();
   }
 
   /**
@@ -251,6 +260,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storeAccountStats(stats);
     StatsWrapper obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1, port1);
     assertEquals(obtainedStats.getSnapshot(), stats.getSnapshot());
+    mySqlStore.shutdown();
   }
 
   /**
@@ -277,6 +287,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storeAccountStats(stats2);
     StatsWrapper obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1, port1);
     assertTwoStatsSnapshots(obtainedStats.getSnapshot(), stats2.getSnapshot());
+    mySqlStore.shutdown();
   }
 
   /**
@@ -324,6 +335,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.deleteAggregatedAccountStatsForContainer((short) 2, (short) 1);
     obtainedSnapshot = mySqlStore.queryAggregatedAccountStatsByClusterName(clusterName1);
     assertEquals(newSnapshot, obtainedSnapshot);
+    mySqlStore.shutdown();
   }
 
   /**
@@ -417,6 +429,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     assertEquals(partitionClassStats2.getSnapshot(), obtainedStats2.getSnapshot());
     StatsWrapper obtainedStats3 = mySqlStore3.queryPartitionClassStatsByHost(hostname3, port3, partitionNameAndIds);
     assertEquals(partitionClassStats3.getSnapshot(), obtainedStats3.getSnapshot());
+    mySqlStore3.shutdown();
   }
 
   /**
@@ -464,13 +477,14 @@ public class AccountStatsMySqlStoreIntegrationTest {
     short accountId = (short) 1;
     short containerId = (short) 1;
     String accountContainerKey = Utils.partitionClassStatsAccountContainerKey(accountId, containerId);
-    for (String partitionClassName: partitionNameAndIds.keySet()) {
+    for (String partitionClassName : partitionNameAndIds.keySet()) {
       mySqlStore.deleteAggregatedPartitionClassStatsForAccountContainer(partitionClassName, accountContainerKey);
       newSnapshot.getSubMap().get(partitionClassName).getSubMap().remove(accountContainerKey);
     }
     newSnapshot.updateValue();
     obtained = mySqlStore.queryAggregatedPartitionClassStats();
     assertEquals(newSnapshot, obtained);
+    mySqlStore3.shutdown();
   }
 
   private AccountStatsMySqlStore createAccountStatsMySqlStore(String clusterName, String hostname, int port)
@@ -483,6 +497,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(port));
     configProps.setProperty(AccountStatsMySqlConfig.DOMAIN_NAMES_TO_REMOVE, ".github.com");
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(batchSize));
+    configProps.setProperty(AccountStatsMySqlConfig.POOL_SIZE, String.valueOf(5));
     configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, localBackupFilePath.toString());
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
@@ -505,17 +520,16 @@ public class AccountStatsMySqlStoreIntegrationTest {
     return TestUtils.generateNodeStats(storeSnapshots, 1000, reportType);
   }
 
-  private void cleanup(MySqlDataAccessor dataAccessor) throws SQLException {
-    Connection dbConnection = dataAccessor.getDatabaseConnection(true);
-    Statement statement = dbConnection.createStatement();
+  private void cleanup(Connection connection) throws SQLException {
+    Statement statement = connection.createStatement();
     for (String table : AccountStatsMySqlStore.TABLES) {
       statement.executeUpdate("DELETE FROM " + table);
     }
+    connection.close();
   }
 
-  private void assertTableSize(MySqlDataAccessor dataAccessor, int expectedNumRows) throws SQLException {
-    Connection dbConnection = dataAccessor.getDatabaseConnection(true);
-    Statement statement = dbConnection.createStatement();
+  private void assertTableSize(Connection connection, int expectedNumRows) throws SQLException {
+    Statement statement = connection.createStatement();
     ResultSet resultSet = statement.executeQuery("SELECT * FROM " + AccountReportsDao.ACCOUNT_REPORTS_TABLE);
     int numRows = 0;
     if (resultSet != null) {
@@ -524,6 +538,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
       }
       resultSet.close();
     }
+    connection.close();
     assertEquals(expectedNumRows, numRows);
   }
 

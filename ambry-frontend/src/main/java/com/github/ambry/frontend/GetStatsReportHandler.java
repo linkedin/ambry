@@ -115,8 +115,7 @@ class GetStatsReportHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.getStatsReportSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        String clusterName =
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.CLUSTER_NAME, true);
+        String clusterName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.CLUSTER_NAME, true);
         String reportType = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.GET_STATS_REPORT_TYPE, true);
         StatsReportType statsReportType;
         try {
@@ -126,22 +125,16 @@ class GetStatsReportHandler {
               RestServiceErrorCode.BadRequest);
         }
         StatsSnapshot snapshot;
-        synchronized (accountStatsStore) {
-          try {
-            switch (statsReportType) {
-              case ACCOUNT_REPORT:
-                snapshot = accountStatsStore.queryAggregatedAccountStatsByClusterName(clusterName);
-                break;
-              case PARTITION_CLASS_REPORT:
-                snapshot = accountStatsStore.queryAggregatedPartitionClassStatsByClusterName(clusterName);
-                break;
-              default:
-                throw new RestServiceException("StatsReportType " + statsReportType + "not supported",
-                    RestServiceErrorCode.BadRequest);
-            }
-          } finally {
-            accountStatsStore.closeConnection();
-          }
+        switch (statsReportType) {
+          case ACCOUNT_REPORT:
+            snapshot = accountStatsStore.queryAggregatedAccountStatsByClusterName(clusterName);
+            break;
+          case PARTITION_CLASS_REPORT:
+            snapshot = accountStatsStore.queryAggregatedPartitionClassStatsByClusterName(clusterName);
+            break;
+          default:
+            throw new RestServiceException("StatsReportType " + statsReportType + "not supported",
+                RestServiceErrorCode.BadRequest);
         }
         if (snapshot == null) {
           throw new RestServiceException("StatsReport not found for clusterName " + clusterName,

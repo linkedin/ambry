@@ -122,13 +122,6 @@ public class MySqlDataAccessor {
   }
 
   /**
-   * @return True when active connection is available.
-   */
-  public synchronized boolean hasActiveConnection() {
-    return activeConnection != null;
-  }
-
-  /**
    * Enables or disables auto commit on current active {@link Connection}.
    * @param enable {@code true} to enable auto commit and {@code false} to disable auto commit.
    * @throws SQLException
@@ -138,23 +131,6 @@ public class MySqlDataAccessor {
       throw new IllegalStateException("No active connection available");
     }
     activeConnection.setAutoCommit(enable);
-  }
-
-  /**
-   * Retrieves the current auto-commit mode for this <code>Connection</code>
-   * object.
-   *
-   * @return the current state of this <code>Connection</code> object's
-   *         auto-commit mode
-   * @exception SQLException if a database access error occurs
-   * or this method is called on a closed connection
-   * @see #setAutoCommit
-   */
-  public synchronized boolean getAutoCommmit() throws SQLException {
-    if (activeConnection == null) {
-      throw new IllegalStateException("No active connection available");
-    }
-    return activeConnection.getAutoCommit();
   }
 
   /**

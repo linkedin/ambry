@@ -15,21 +15,18 @@ package com.github.ambry.mysql;
 
 import com.codahale.metrics.MetricRegistry;
 import java.sql.Connection;
-import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 
-import static org.mockito.Mockito.*;
-import static org.junit.Assert.*;
 import static com.github.ambry.mysql.MySqlUtils.*;
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -84,17 +81,12 @@ public class BatchUpdaterTest {
       return null;
     }).when(connection).rollback();
 
-    Driver driver = mock(Driver.class);
-    when(driver.connect(anyString(), any(Properties.class))).thenReturn(connection);
-
     DbEndpoint localEndpoint = new DbEndpoint("jdbc:mysql://localhost/testdb", "localDC", true, "user", "password");
-    MySqlDataAccessor dataAccessor = new MySqlDataAccessor(Collections.singletonList(localEndpoint), driver,
-        new MySqlMetrics(MySqlDataAccessor.class, new MetricRegistry()));
-    assertTrue(dataAccessor.getAutoCommmit());
 
     // Test BatchUpdater when there is no exception
-    BatchUpdater batchUpdater = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 17);
-    assertFalse(dataAccessor.getAutoCommmit());
+    MySqlMetrics metrics = new MySqlMetrics(BatchUpdater.class, new MetricRegistry());
+    BatchUpdater batchUpdater = new BatchUpdater(connection, metrics, "insert into myTable values(?)", "myTable", 17);
+    assertFalse(connection.getAutoCommit());
 
     for (int i = 0; i < 100; i++) {
       final int index = i;
@@ -110,12 +102,12 @@ public class BatchUpdaterTest {
       assertEquals(String.valueOf(i), committedBatchValues.get(i));
     }
     assertEquals(StatementStatus.COMMITTED, statusRef.get());
-    assertTrue(dataAccessor.getAutoCommmit());
+    assertTrue(connection.getAutoCommit());
 
     // Test BatchUpdater when exception is thrown at setString.
     committedBatchValues.clear();
     valueRef.set("");
-    batchUpdater = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 17);
+    batchUpdater = new BatchUpdater(connection, metrics, "insert into myTable values(?)", "myTable", 17);
     AtomicInteger setStringCount = new AtomicInteger(0);
     final int maxSetStringCount = 20;
     doAnswer(invocation -> {
@@ -142,7 +134,6 @@ public class BatchUpdaterTest {
     } catch (SQLException e) {
       assertEquals("Number of batches mismatch", 1, batchUpdater.getNumBatches());
       assertEquals(StatementStatus.ROLLBACK, statusRef.get());
-      assertFalse(dataAccessor.hasActiveConnection());
       assertEquals(String.valueOf(maxSetStringCount - 2), valueRef.get());
       assertEquals(17, committedBatchValues.size());
       assertEquals(2, currentBatchValues.size());
@@ -151,9 +142,7 @@ public class BatchUpdaterTest {
     // Test BatchUpdater when exception is thrown at addBatch
     committedBatchValues.clear();
     valueRef.set("");
-    dataAccessor = new MySqlDataAccessor(Collections.singletonList(localEndpoint), driver,
-        new MySqlMetrics(MySqlDataAccessor.class, new MetricRegistry()));
-    batchUpdater = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 17);
+    batchUpdater = new BatchUpdater(connection, metrics, "insert into myTable values(?)", "myTable", 17);
     doAnswer(invocation -> {
       valueRef.set(invocation.getArgument(1));
       return null;
@@ -185,7 +174,6 @@ public class BatchUpdaterTest {
     } catch (SQLException e) {
       assertEquals("Number of batches mismatch", 1, batchUpdater.getNumBatches());
       assertEquals(StatementStatus.ROLLBACK, statusRef.get());
-      assertFalse(dataAccessor.hasActiveConnection());
       assertEquals(String.valueOf(maxSetStringCount - 1), valueRef.get());
       assertEquals(17, committedBatchValues.size());
       assertEquals(2, currentBatchValues.size());
@@ -194,9 +182,7 @@ public class BatchUpdaterTest {
     // Test BatchUpdater when exception is thrown at addBatch
     committedBatchValues.clear();
     valueRef.set("");
-    dataAccessor = new MySqlDataAccessor(Collections.singletonList(localEndpoint), driver,
-        new MySqlMetrics(MySqlDataAccessor.class, new MetricRegistry()));
-    batchUpdater = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 17);
+    batchUpdater = new BatchUpdater(connection, metrics, "insert into myTable values(?)", "myTable", 17);
     doAnswer(invocation -> {
       currentBatchValues.add(valueRef.get());
       statusRef.set(StatementStatus.PREPARING);
@@ -227,7 +213,6 @@ public class BatchUpdaterTest {
     } catch (SQLException e) {
       assertEquals("Number of batches mismatch", 1, batchUpdater.getNumBatches());
       assertEquals(StatementStatus.ROLLBACK, statusRef.get());
-      assertFalse(dataAccessor.hasActiveConnection());
       assertEquals(String.valueOf(17 * 2 - 1), valueRef.get());
       assertEquals(17, committedBatchValues.size());
       assertEquals(17, currentBatchValues.size());
@@ -236,9 +221,7 @@ public class BatchUpdaterTest {
     // Test BatchUpdater when exception is thrown at commit
     committedBatchValues.clear();
     valueRef.set("");
-    dataAccessor = new MySqlDataAccessor(Collections.singletonList(localEndpoint), driver,
-        new MySqlMetrics(MySqlDataAccessor.class, new MetricRegistry()));
-    batchUpdater = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 17);
+    batchUpdater = new BatchUpdater(connection, metrics, "insert into myTable values(?)", "myTable", 17);
     doAnswer(invocation -> {
       statusRef.set(StatementStatus.EXECUTED);
       return null;
@@ -269,7 +252,6 @@ public class BatchUpdaterTest {
     } catch (SQLException e) {
       assertEquals("Number of batches mismatch", 2, batchUpdater.getNumBatches());
       assertEquals(StatementStatus.ROLLBACK, statusRef.get());
-      assertFalse(dataAccessor.hasActiveConnection());
       assertEquals(String.valueOf(17 * 2 - 1), valueRef.get());
       assertEquals(17, committedBatchValues.size());
       assertEquals(17, currentBatchValues.size());
@@ -278,9 +260,7 @@ public class BatchUpdaterTest {
     // Test BatchUpdater when exception is thrown at last commit and rollback
     committedBatchValues.clear();
     valueRef.set("");
-    dataAccessor = new MySqlDataAccessor(Collections.singletonList(localEndpoint), driver,
-        new MySqlMetrics(MySqlDataAccessor.class, new MetricRegistry()));
-    batchUpdater = new BatchUpdater(dataAccessor, "insert into myTable values(?)", "myTable", 17);
+    batchUpdater = new BatchUpdater(connection, metrics, "insert into myTable values(?)", "myTable", 17);
     doAnswer(invocation -> {
       statusRef.set(StatementStatus.EXECUTED);
       return null;
@@ -311,7 +291,6 @@ public class BatchUpdaterTest {
     } catch (SQLException e) {
       assertEquals("Number of batches mismatch", 100 / 17 + 1, batchUpdater.getNumBatches());
       assertEquals(StatementStatus.EXECUTED, statusRef.get());
-      assertFalse(dataAccessor.hasActiveConnection());
       assertEquals(String.valueOf(99), valueRef.get());
       assertEquals(100 / 17 * 17, committedBatchValues.size());
       assertEquals(100 % 17, currentBatchValues.size());

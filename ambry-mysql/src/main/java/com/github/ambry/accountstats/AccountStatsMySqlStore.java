@@ -18,23 +18,24 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.AccountStatsMySqlConfig;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
-import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Utils;
+import com.zaxxer.hikari.HikariDataSource;
 import java.io.File;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import javax.sql.DataSource;
 import joptsimple.internal.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +57,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           PartitionClassReportsDao.PARTITION_CLASS_NAMES_TABLE, PartitionClassReportsDao.PARTITIONS_TABLE,
           PartitionClassReportsDao.AGGREGATED_PARTITION_CLASS_REPORTS_TABLE};
 
-  private final MySqlDataAccessor mySqlDataAccessor;
+  private final DataSource dataSource;
   private final AccountReportsDao accountReportsDao;
   private final AggregatedAccountReportsDao aggregatedAccountReportsDao;
   private final PartitionClassReportsDao partitionClassReportsDao;
@@ -142,43 +143,25 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   /**
-   * Constructor to create {@link AccountStatsMySqlStore}.
-   * @param config The {@link AccountStatsMySqlConfig}.
-   * @param dbEndpoints MySql DB end points.
-   * @param localDatacenter The local datacenter name. Endpoints from local datacenter are preferred when creating connection to MySql DB.
-   * @param clusterName  The name of the cluster, like Ambry-test.
-   * @param hostname The name of the host.
-   * @param localBackupFilePath The filepath to local backup file.
-   * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
-   * @param registry The {@link MetricRegistry}.
-   * @throws SQLException
-   */
-  public AccountStatsMySqlStore(AccountStatsMySqlConfig config, List<MySqlUtils.DbEndpoint> dbEndpoints,
-      String localDatacenter, String clusterName, String hostname, String localBackupFilePath,
-      HostnameHelper hostnameHelper, MetricRegistry registry) throws SQLException {
-    this(config,
-        new MySqlDataAccessor(dbEndpoints, localDatacenter, new MySqlMetrics(AccountStatsMySqlStore.class, registry)),
-        clusterName, hostname, localBackupFilePath, hostnameHelper, registry);
-  }
-
-  /**
    * Constructor to create link {@link AccountStatsMySqlStore}. It's only used in tests.
-   * @param dataAccessor The {@link MySqlDataAccessor}.
+   * @param config The {@link AccountStatsMySqlConfig}.
+   * @param dataSource The {@link DataSource}.
    * @param clusterName  The name of the cluster, like Ambry-test.
    * @param hostname The name of the host.
    * @param localBackupFilePath The filepath to local backup file.
    * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
    * @param registry The {@link MetricRegistry}.
    */
-  AccountStatsMySqlStore(AccountStatsMySqlConfig config, MySqlDataAccessor dataAccessor, String clusterName,
+  public AccountStatsMySqlStore(AccountStatsMySqlConfig config, DataSource dataSource, String clusterName,
       String hostname, String localBackupFilePath, HostnameHelper hostnameHelper, MetricRegistry registry) {
     this.config = config;
     this.clusterName = clusterName;
     this.hostname = hostname;
-    mySqlDataAccessor = dataAccessor;
-    accountReportsDao = new AccountReportsDao(dataAccessor);
-    aggregatedAccountReportsDao = new AggregatedAccountReportsDao(dataAccessor);
-    partitionClassReportsDao = new PartitionClassReportsDao(dataAccessor);
+    MySqlMetrics mySqlMetrics = new MySqlMetrics(AccountStatsMySqlStore.class, registry);
+    this.dataSource = dataSource;
+    accountReportsDao = new AccountReportsDao(dataSource, mySqlMetrics);
+    aggregatedAccountReportsDao = new AggregatedAccountReportsDao(dataSource, mySqlMetrics);
+    partitionClassReportsDao = new PartitionClassReportsDao(dataSource, mySqlMetrics);
     this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
     if (!Strings.isNullOrEmpty(localBackupFilePath)) {
@@ -616,6 +599,13 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
+  public void shutdown() {
+    if (dataSource instanceof HikariDataSource) {
+      ((HikariDataSource) dataSource).close();
+    }
+  }
+
+  @Override
   public Map<String, Set<Integer>> queryPartitionNameAndIds() throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Set<Integer>> result = partitionClassReportsDao.queryPartitionNameAndIds(clusterName);
@@ -705,20 +695,19 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   /**
-   * Return {@link #mySqlDataAccessor}. Only used in test.
-   * @return
+   * Only used in test. Close connection after finishing using it.
+   * @return A {@link Connection}.
+   * @throws SQLException
    */
-  public MySqlDataAccessor getMySqlDataAccessor() {
-    return mySqlDataAccessor;
+  Connection getConnection() throws SQLException {
+    return dataSource.getConnection();
   }
 
   /**
-   * Helper method to close the active connection, if there is one.
+   * Only used in test
+   * @return The {@link DataSource}.
    */
-  @Override
-  public void closeConnection() {
-    if (mySqlDataAccessor != null) {
-      mySqlDataAccessor.closeActiveConnection();
-    }
+  DataSource getDataSource() {
+    return dataSource;
   }
 }

@@ -18,6 +18,7 @@ public class AccountStatsMySqlConfig {
 
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String DOMAIN_NAMES_TO_REMOVE = PREFIX + "domain.names.to.remove";
+  public static final String POOL_SIZE = PREFIX + "pool.size";
   public static final String UPDATE_BATCH_SIZE = PREFIX + "update.batch.size";
   public static final String ENABLE_REWRITE_BATCHED_STATEMENT = PREFIX + "enable.rewrite.batched.statements";
 
@@ -61,6 +62,16 @@ public class AccountStatsMySqlConfig {
   @Default("")
   public final String domainNamesToRemove;
 
+
+  /**
+   * Number of connections and threads to use for executing transactions.
+   */
+  @Config(POOL_SIZE)
+  @Default("2")
+  public final int poolSize;
+
+  /**
+
   /**
    * Negative numbers means disable batch. 0 means unlimited batch size. Any positive number means the size of each batch.
    */
@@ -79,6 +90,7 @@ public class AccountStatsMySqlConfig {
   public AccountStatsMySqlConfig(VerifiableProperties verifiableProperties) {
     dbInfo = verifiableProperties.getString(DB_INFO, "");
     domainNamesToRemove = verifiableProperties.getString(DOMAIN_NAMES_TO_REMOVE, "");
+    poolSize = verifiableProperties.getIntInRange(POOL_SIZE, 2, 1, Integer.MAX_VALUE);
     updateBatchSize = verifiableProperties.getInt(UPDATE_BATCH_SIZE, 0);
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
   }
