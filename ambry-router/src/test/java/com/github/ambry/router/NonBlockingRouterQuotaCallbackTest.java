@@ -118,6 +118,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
+      retainingAsyncWritableChannel.close();
 
       // test for regular blobs.
       setOperationParams();
@@ -183,6 +184,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
+      retainingAsyncWritableChannel.close();
 
       router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
       assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
