@@ -20,7 +20,7 @@ import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
@@ -185,7 +185,7 @@ class PostBlobHandler {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo),
-              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -202,7 +202,7 @@ class PostBlobHandler {
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo),
-              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false)), uri, LOGGER,
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER,
           finalCallback);
     }
 

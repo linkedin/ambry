@@ -24,7 +24,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -61,7 +60,6 @@ public class TtlUpdateHandlerTest {
   private static final Account REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
   private static final ClusterMap CLUSTER_MAP;
-  private static final QuotaChargeEventListener QUOTA_CHARGE_EVENT_LISTENER;
   private static final String SERVICE_ID = "TtlUpdateHandlerTest";
 
   private static final BlobProperties BLOB_PROPERTIES =
@@ -72,7 +70,6 @@ public class TtlUpdateHandlerTest {
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
-      QUOTA_CHARGE_EVENT_LISTENER = () -> {};
     } catch (IOException e) {
       throw new IllegalStateException(e);
     }
@@ -93,7 +90,7 @@ public class TtlUpdateHandlerTest {
         new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
             accountAndContainerInjector, metrics, CLUSTER_MAP, null);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
-    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), QUOTA_CHARGE_EVENT_LISTENER)
+    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
         .get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
   }
@@ -150,7 +147,7 @@ public class TtlUpdateHandlerTest {
    * @throws Exception
    */
   private void assertTtl(long expectedTtlSecs) throws Exception {
-    GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null).get(1, TimeUnit.SECONDS);
+    GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(1, TimeUnit.SECONDS);
     assertEquals("TTL not as expected", expectedTtlSecs,
         result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
   }

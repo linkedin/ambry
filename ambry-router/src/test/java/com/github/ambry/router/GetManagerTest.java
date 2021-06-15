@@ -25,8 +25,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.quota.QuotaChargeEventListener;
-import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -84,8 +83,7 @@ public class GetManagerTest {
   private ReadableStreamChannel putChannel;
   private GetBlobOptions options = new GetBlobOptionsBuilder().build();
   private List<ChunkInfo> chunkInfos;
-  private final QuotaManager quotaManager = QuotaTestUtils.createDummyQuotaManager();
-  private final QuotaChargeEventListener quotaChargeEventListener =
+  private final QuotaChargeCallback quotaChargeCallback =
       QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
@@ -263,8 +261,7 @@ public class GetManagerTest {
     router = getNonBlockingRouter();
     setOperationParams(blobSize, options);
     String blobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     getBlobAndCompareContent(blobId, -1);
     // Test GetBlobInfoOperation, regardless of options passed in.
     this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
@@ -286,14 +283,13 @@ public class GetManagerTest {
       byteBuffer.put(putContent);
       curBlobSize -= curChunkSize;
       stitchBlobsIds.add(
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-              quotaChargeEventListener).get());
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get());
       chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L));
     }
     setOperationParams(blobSize, null);
     this.options = new GetBlobOptionsBuilder().build();
     putContent = byteBuffer.array();
-    return router.stitchBlob(putBlobProperties, putUserMetadata, chunkInfos, quotaChargeEventListener).get();
+    return router.stitchBlob(putBlobProperties, putUserMetadata, chunkInfos).get();
   }
 
   /**
@@ -378,8 +374,7 @@ public class GetManagerTest {
     setOperationParams(LARGE_BLOB_SIZE, new GetBlobOptionsBuilder().build());
     final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
     String blobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     List<Future<GetBlobResult>> getBlobInfoFutures = new ArrayList<>();
     List<Future<GetBlobResult>> getBlobDataFutures = new ArrayList<>();
     GetBlobOptions infoOptions =
@@ -393,11 +388,11 @@ public class GetManagerTest {
             getBlobInfoCallbackCalled.countDown();
             throw new RuntimeException("Throwing an exception in the user callback");
           }
-        }, quotaChargeEventListener));
-        getBlobDataFutures.add(router.getBlob(blobId, dataOptions, getBlobCallback, quotaChargeEventListener));
+        }, quotaChargeCallback));
+        getBlobDataFutures.add(router.getBlob(blobId, dataOptions, getBlobCallback, quotaChargeCallback));
       } else {
-        getBlobInfoFutures.add(router.getBlob(blobId, infoOptions, quotaChargeEventListener));
-        getBlobDataFutures.add(router.getBlob(blobId, dataOptions, quotaChargeEventListener));
+        getBlobInfoFutures.add(router.getBlob(blobId, infoOptions));
+        getBlobDataFutures.add(router.getBlob(blobId, dataOptions));
       }
     }
     options = dataOptions;
@@ -417,8 +412,7 @@ public class GetManagerTest {
 
     // Test that GetManager is still operational
     setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
-    blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-        quotaChargeEventListener).get();
+    blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     getBlobAndCompareContent(blobId, -1);
     this.options = infoOptions;
     getBlobAndCompareContent(blobId, -1);
@@ -435,14 +429,12 @@ public class GetManagerTest {
     router = getNonBlockingRouter();
     setOperationParams(CHUNK_SIZE, new GetBlobOptionsBuilder().build());
     String blobId =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            quotaChargeEventListener).get();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     Future future;
     try {
       future = router.getBlob(blobId,
-          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
-          quotaChargeEventListener);
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build());
       while (!future.isDone()) {
         mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
         Thread.yield();
@@ -455,7 +447,7 @@ public class GetManagerTest {
     }
 
     try {
-      future = router.getBlob(blobId, options, quotaChargeEventListener);
+      future = router.getBlob(blobId, options);
       while (!future.isDone()) {
         mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
         Thread.yield();
@@ -493,7 +485,7 @@ public class GetManagerTest {
    * @throws Exception
    */
   private void getBlobAndCompareContent(String blobId, long segmentSize) throws Exception {
-    GetBlobResult result = router.getBlob(blobId, options, quotaChargeEventListener).get();
+    GetBlobResult result = router.getBlob(blobId, options).get();
 
     switch (options.getOperationType()) {
       case All:
@@ -520,7 +512,7 @@ public class GetManagerTest {
   private void getBlobAndAssertFailure(String blobId, GetBlobOptions options, RouterErrorCode expectedErrorCode)
       throws Exception {
     try {
-      Future future = router.getBlob(blobId, options, quotaChargeEventListener);
+      Future future = router.getBlob(blobId, options);
       future.get(routerConfig.routerRequestTimeoutMs + 1, TimeUnit.MILLISECONDS);
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
@@ -583,7 +575,7 @@ public class GetManagerTest {
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
         cryptoService, cryptoJobHandler, new InMemAccountService(false, true), mockTime,
-        MockClusterMap.DEFAULT_PARTITION_CLASS, quotaManager);
+        MockClusterMap.DEFAULT_PARTITION_CLASS);
     resetEncryptionObjects();
     return router;
   }

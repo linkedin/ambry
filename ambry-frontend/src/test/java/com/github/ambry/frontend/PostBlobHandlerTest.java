@@ -456,7 +456,7 @@ public class PostBlobHandlerTest {
               null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
-              new PutBlobOptionsBuilder().chunkUpload(true).build(), () -> {}).get(TIMEOUT_SECS, TimeUnit.SECONDS);
+              new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
       chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
     }

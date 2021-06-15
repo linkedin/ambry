@@ -23,7 +23,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -750,7 +750,7 @@ class FrontendRestRequestService implements RestRequestService {
           if (subResource == null) {
             getCallback.markStartTime();
             router.getBlob(convertedId, getCallback.options, getCallback,
-                QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
+                QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
           } else {
             switch (subResource) {
               case BlobInfo:
@@ -758,7 +758,7 @@ class FrontendRestRequestService implements RestRequestService {
               case Segment:
                 getCallback.markStartTime();
                 router.getBlob(convertedId, getCallback.options, getCallback,
-                    QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, true));
+                    QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
                 break;
               case Replicas:
                 response = getReplicasHandler.getReplicas(convertedId, restResponseChannel);
@@ -778,12 +778,12 @@ class FrontendRestRequestService implements RestRequestService {
           router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
               .getOption(getOption)
               .build(), headCallback,
-              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
           break;
         case DELETE:
           deleteCallback.markStartTime();
           router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback,
-              QuotaChargeEventListener.buildQuotaChargeEventListener(restRequest, quotaManager, false));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
           break;
         default:
           throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
@@ -864,9 +864,7 @@ class FrontendRestRequestService implements RestRequestService {
      * @param restRequest the {@link RestRequest} for whose response this is a callback.
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
-     * @param options the {@link GetBlobOptions} associated with the
-     *                {@link Router#
-     *                getBlob(String, GetBlobOptions, Callback)} call.
+     * @param options the {@link GetBlobOptions} associated with the {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
      */
     GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, SubResource subResource,
         GetBlobOptions options) {

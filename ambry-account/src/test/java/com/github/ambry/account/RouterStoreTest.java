@@ -234,8 +234,7 @@ public class RouterStoreTest {
           blobIDAndVersionsAfterUpdate.get(i - 1));
     }
     try {
-      router.getBlob(blobIDAndVersions.get(0).getBlobID(), new GetBlobOptionsBuilder().build(), () -> {
-      }).get();
+      router.getBlob(blobIDAndVersions.get(0).getBlobID(), new GetBlobOptionsBuilder().build()).get();
       fail("Expecting not found exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();

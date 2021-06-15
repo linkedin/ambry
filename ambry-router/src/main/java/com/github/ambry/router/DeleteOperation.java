@@ -24,7 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -64,7 +64,7 @@ class DeleteOperation {
   private final Map<Integer, DeleteRequestInfo> deleteRequestInfos;
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
-  private final QuotaChargeEventListener quotaChargeEventListener;
+  private final QuotaChargeCallback quotaChargeCallback;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
@@ -84,7 +84,7 @@ class DeleteOperation {
    */
   DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       ResponseHandler responsehandler, BlobId blobId, String serviceId, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeEventListener quotaChargeEventListener) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -94,7 +94,7 @@ class DeleteOperation {
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
-    this.quotaChargeEventListener = quotaChargeEventListener;
+    this.quotaChargeCallback = quotaChargeCallback;
     this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new TreeMap<Integer, DeleteRequestInfo>();
     byte blobDcId = blobId.getDatacenterId();
@@ -309,9 +309,9 @@ class DeleteOperation {
         operationException.set(
             new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
-      if(quotaChargeEventListener != null) {
+      if(quotaChargeCallback != null) {
         try {
-          quotaChargeEventListener.onQuotaChargeEvent();
+          quotaChargeCallback.chargeQuota();
         } catch (RouterException routerException) {
           logger.error("Exception  {} in quota charge event listener during delete operation", routerException.toString());
         }

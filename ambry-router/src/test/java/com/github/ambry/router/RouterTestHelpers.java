@@ -233,7 +233,7 @@ class RouterTestHelpers {
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()};
     for (String blobId : blobIds) {
       for (GetBlobOptions option : options) {
-        GetBlobResult result = router.getBlob(blobId, option, () -> {}).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         Assert.assertEquals("TTL not as expected", expectedTtlSecs,
             result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
         if (result.getBlobDataChannel() != null) {

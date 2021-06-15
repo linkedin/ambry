@@ -18,7 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -74,7 +74,7 @@ class PerfRouter implements Router {
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received getBlob call");
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     if (!routerOpen) {
@@ -110,7 +110,7 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      PutBlobOptions options, final Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {
@@ -138,7 +138,7 @@ class PerfRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received stitchBlob call");
     final FutureResult<String> futureResult = new FutureResult<>();
     if (!routerOpen) {
@@ -158,7 +158,7 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received deleteBlob call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!routerOpen) {
@@ -179,7 +179,7 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received updateBlobTtl call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!routerOpen) {
@@ -199,7 +199,7 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received undeleteBlob call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!routerOpen) {

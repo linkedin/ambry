@@ -36,7 +36,7 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -110,7 +110,7 @@ class PutOperation {
   private final Time time;
   private BlobProperties finalBlobProperties;
   private boolean isEncryptionEnabled;
-  private final QuotaChargeEventListener quotaChargeEventListener;
+  private final QuotaChargeCallback quotaChargeCallback;
 
   // Parameters associated with the state.
 
@@ -181,7 +181,7 @@ class PutOperation {
    * @param time the Time instance to use.
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
-   * @param quotaChargeEventListener {@link QuotaChargeEventListener} to listen to events that should result in charging quota.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
    * @return the {@link PutOperation}.
    */
   static PutOperation forUpload(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
@@ -190,10 +190,10 @@ class PutOperation {
       Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeEventListener quotaChargeEventListener) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
-        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeEventListener);
+        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
   }
 
   /**
@@ -218,7 +218,7 @@ class PutOperation {
    * @param time the Time instance to use.
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
-   * @param quotaChargeEventListener {@link QuotaChargeEventListener} to listen to events that should result in charging quota.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
    * @return the {@link PutOperation}.
    */
   static PutOperation forStitching(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
@@ -226,10 +226,10 @@ class PutOperation {
       List<ChunkInfo> chunksToStitch, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
       CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         null, chunksToStitch, PutBlobOptions.DEFAULT, futureResult, callback, routerCallback, null, kms, cryptoService,
-        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeEventListener);
+        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
   }
 
   /**
@@ -254,7 +254,7 @@ class PutOperation {
    * @param time the Time instance to use.
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
-   * @param quotaChargeEventListener {@link QuotaChargeEventListener} to listen to events that should result in charging quota.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
    */
   private PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
@@ -262,7 +262,7 @@ class PutOperation {
       FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeEventListener quotaChargeEventListener) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -282,7 +282,7 @@ class PutOperation {
     this.cryptoService = cryptoService;
     this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
-    this.quotaChargeEventListener = quotaChargeEventListener;
+    this.quotaChargeCallback = quotaChargeCallback;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
     putChunks = new ConcurrentLinkedQueue<>();
@@ -1300,9 +1300,9 @@ class PutOperation {
       }
       if (done) {
         // the chunk is complete now. We can charge against quota for the chunk.
-        if (quotaChargeEventListener != null) {
+        if (quotaChargeCallback != null) {
           try {
-            quotaChargeEventListener.onQuotaChargeEvent();
+            quotaChargeCallback.chargeQuota();
           } catch (RouterException rEx) {
             // For now we only log for quota charge exceptions for in progress requests.
             logger.info("Exception {} while handling quota charge event", rEx.toString());

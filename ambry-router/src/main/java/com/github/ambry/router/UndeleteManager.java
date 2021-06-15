@@ -25,7 +25,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.UndeleteResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -86,11 +86,11 @@ public class UndeleteManager {
    * @param serviceId The service ID of the service undeleting the blob(s). This can be null if unknown.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
-   * @param quotaChargeEventListener The {@link QuotaChargeEventListener} object.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitUndeleteOperation(Collection<String> blobIdStrs, String serviceId, FutureResult<Void> futureResult,
-      Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) throws RouterException {
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
     if (!isOpen()) {
       throw new IllegalStateException("UndeleteManager is closed");
     }
@@ -111,10 +111,12 @@ public class UndeleteManager {
       undeleteOperations.add(undeleteOperation);
     } else {
       BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback, ((result, exception) -> {
-        try {
-          quotaChargeEventListener.onQuotaChargeEvent();
-        } catch (RouterException routerException) {
-          LOGGER.info("Exception {} while charging quota for undelete operation", routerException.toString());
+        if (quotaChargeCallback != null) {
+          try {
+            quotaChargeCallback.chargeQuota();
+          } catch (RouterException routerException) {
+            LOGGER.info("Exception {} while charging quota for undelete operation", routerException.toString());
+          }
         }
       }));
       long operationTimeMs = time.milliseconds();

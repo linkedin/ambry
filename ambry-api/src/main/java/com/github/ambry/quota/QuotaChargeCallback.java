@@ -21,19 +21,19 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Listener for each data chunk upload to or download from Ambry.
+ * Callback for charging request cost against quota. Used by {@link QuotaEnforcer}s to charge quota for a request.
  */
-public interface QuotaChargeEventListener {
-  Logger logger = LoggerFactory.getLogger(QuotaChargeEventListener.class);
+public interface QuotaChargeCallback {
+  Logger logger = LoggerFactory.getLogger(QuotaChargeCallback.class);
 
   /**
-   * Build {@link QuotaChargeEventListener} to handle quota compliance of requests.
+   * Build {@link QuotaChargeCallback} to handle quota compliance of requests.
    * @param restRequest {@link RestRequest} for which quota is being charged.
    * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
    * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
-   * @return QuotaChargeEventListener object.
+   * @return QuotaChargeCallback object.
    */
-  static QuotaChargeEventListener buildQuotaChargeEventListener(RestRequest restRequest, QuotaManager quotaManager,
+  static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
       boolean shouldThrottle) {
     return () -> {
       try {
@@ -56,5 +56,9 @@ public interface QuotaChargeEventListener {
     };
   }
 
-  void onQuotaChargeEvent() throws RouterException;
+  /**
+   * Callback method that can be used to charge quota usage for a request or part of a request.
+   * @throws RouterException In case request needs to be throttled.
+   */
+  void chargeQuota() throws RouterException;
 }

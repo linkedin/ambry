@@ -66,7 +66,6 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
   private final String defaultPartitionClass;
-  private final QuotaManager quotaManager;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -126,10 +125,6 @@ public class NonBlockingRouterFactory implements RouterFactory {
         Utils.<AccountStatsStoreFactory>getObj(frontendConfig.accountStatsStoreFactory, verifiableProperties,
             clusterMapConfig, new StatsManagerConfig(verifiableProperties),
             clusterMap.getMetricRegistry()).getAccountStatsStore();
-    QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
-    quotaManager =
-        ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
-            accountService, accountStatsStore, clusterMap.getMetricRegistry())).getQuotaManager();
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 
@@ -141,7 +136,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter() {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, quotaManager);
+          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
     } catch (IOException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

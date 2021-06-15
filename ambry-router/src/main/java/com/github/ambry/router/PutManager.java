@@ -26,7 +26,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.HashMap;
@@ -137,15 +137,15 @@ class PutManager {
    * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
    * @param callback the {@link Callback} object to be called on completion of the operation.
-   * @param quotaChargeEventListener {@link QuotaChargeEventListener} object.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} object.
    */
   void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
-      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
         PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
             userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
-            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeEventListener);
+            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
     // TODO: netty send this request
     putOperations.add(putOperation);
     putOperation.startOperation();
@@ -158,15 +158,15 @@ class PutManager {
    * @param chunksToStitch the list of chunks to stitch together.
    * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
    * @param callback the {@link Callback} object to be called on completion of the operation.
-   * @param quotaChargeEventListener
+   * @param quotaChargeCallback
    */
   void submitStitchBlobOperation(BlobProperties blobProperties, byte[] userMetaData, List<ChunkInfo> chunksToStitch,
-      FutureResult<String> futureResult, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      FutureResult<String> futureResult, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
         PutOperation.forStitching(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
             userMetaData, chunksToStitch, futureResult, callback, routerCallback, kms, cryptoService, cryptoJobHandler,
-            time, blobProperties, partitionClass, quotaChargeEventListener);
+            time, blobProperties, partitionClass, quotaChargeCallback);
     putOperations.add(putOperation);
     putOperation.startOperation();
   }

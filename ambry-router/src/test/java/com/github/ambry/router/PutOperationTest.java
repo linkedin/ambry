@@ -26,7 +26,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.ByteBufferChannel;
@@ -61,7 +61,7 @@ public class PutOperationTest {
   private final MockServer mockServer = new MockServer(mockClusterMap, "");
   private final RequestRegistrationCallback<PutOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToPutOperation);
-  private final QuotaChargeEventListener quotaChargeEventListener =
+  private final QuotaChargeCallback quotaChargeCallback =
       QuotaTestUtils.createDummyQuotaChargeEventListener();
   private final int chunkSize = 10;
   private final int requestParallelism = 3;
@@ -111,7 +111,7 @@ public class PutOperationTest {
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
             new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
             new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
-            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeEventListener);
+            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
     op.startOperation();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.setRequestsToSend(requestInfos);
@@ -230,7 +230,7 @@ public class PutOperationTest {
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
             new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
             new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
-            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeEventListener);
+            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
     op.startOperation();
     // Calling fillChunks would fetch the buffer chunk and the empty chunk from the channel
     op.fillChunks();
@@ -261,7 +261,7 @@ public class PutOperationTest {
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
             new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
             null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
-            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeEventListener);
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
     op.startOperation();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.setRequestsToSend(requestInfos);
@@ -318,7 +318,7 @@ public class PutOperationTest {
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
             new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
             new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
-            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeEventListener);
+            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
     RouterErrorCode[] routerErrorCodes = new RouterErrorCode[5];
     routerErrorCodes[0] = RouterErrorCode.OperationTimedOut;
     routerErrorCodes[1] = RouterErrorCode.UnexpectedInternalError;
@@ -365,7 +365,7 @@ public class PutOperationTest {
         PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
             new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
             new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
-            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeEventListener);
+            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
     // Trigger an exception by making the last chunk size too large.
     op.startOperation();
     Assert.assertTrue("Operation should be completed", op.isOperationComplete());

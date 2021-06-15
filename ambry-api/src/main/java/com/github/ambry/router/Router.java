@@ -16,7 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
@@ -35,12 +35,12 @@ public interface Router extends Closeable {
    * @param blobId The ID of the blob for which blob data is requested.
    * @param options The options associated with the request. This cannot be null.
    * @param callback The callback which will be invoked on the completion of the request.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
   Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
-      QuotaChargeEventListener quotaChargeEventListener);
+      QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
@@ -50,11 +50,11 @@ public interface Router extends Closeable {
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
   Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener);
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
@@ -67,22 +67,22 @@ public interface Router extends Closeable {
    *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
    *                       fields are set accurately.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
   Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener);
+      Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobId The ID of the blob that needs to be deleted.
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
   Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener);
+      QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
@@ -92,22 +92,22 @@ public interface Router extends Closeable {
    * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
    *                    permanent
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener);
+      QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a blob to be undeleted asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobId The ID of the blob that needs to be undeleted.
    * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the undelete succeeded or not, eventually.
    */
   Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener);
+      QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Closes the router and releases any resources held by the router. If the router is already closed, then this
@@ -126,13 +126,11 @@ public interface Router extends Closeable {
    * {@link ReadableStreamChannel} containing the blob data, or both.
    * @param blobId The ID of the blob for which blob data is requested.
    * @param options The options associated with the request.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
-  default Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options,
-      QuotaChargeEventListener quotaChargeEventListener) {
-    return getBlob(blobId, options, null, quotaChargeEventListener);
+  default Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null, null);
   }
 
   /**
@@ -145,12 +143,10 @@ public interface Router extends Closeable {
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
    *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
    *                       fields are set accurately.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
-  default Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      QuotaChargeEventListener quotaChargeEventListener) {
-    return stitchBlob(blobProperties, userMetadata, chunksToStitch, null, quotaChargeEventListener);
+  default Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch) {
+    return stitchBlob(blobProperties, userMetadata, chunksToStitch, null, null);
   }
 
   /**
@@ -161,12 +157,11 @@ public interface Router extends Closeable {
    * @param userMetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
   default Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, QuotaChargeEventListener quotaChargeEventListener) {
-    return putBlob(blobProperties, userMetadata, channel, options, null, quotaChargeEventListener);
+      PutBlobOptions options) {
+    return putBlob(blobProperties, userMetadata, channel, options, null, null);
   }
 
   /**
@@ -174,11 +169,10 @@ public interface Router extends Closeable {
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs to be deleted.
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
-  default Future<Void> deleteBlob(String blobId, String serviceId, QuotaChargeEventListener quotaChargeEventListener) {
-    return deleteBlob(blobId, serviceId, null, quotaChargeEventListener);
+  default Future<Void> deleteBlob(String blobId, String serviceId) {
+    return deleteBlob(blobId, serviceId, null, null);
   }
 
   /**
@@ -188,12 +182,10 @@ public interface Router extends Closeable {
    * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
    * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
    *                    permanent
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
-  default Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs,
-      QuotaChargeEventListener quotaChargeEventListener) {
-    return updateBlobTtl(blobId, serviceId, expiresAtMs, null, quotaChargeEventListener);
+  default Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
+    return updateBlobTtl(blobId, serviceId, expiresAtMs, null, null);
   }
 
   /**
@@ -201,11 +193,9 @@ public interface Router extends Closeable {
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs to be undeleted.
    * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
-   * @param quotaChargeEventListener Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the undelete succeeded or not, eventually.
    */
-  default Future<Void> undeleteBlob(String blobId, String serviceId,
-      QuotaChargeEventListener quotaChargeEventListener) {
-    return undeleteBlob(blobId, serviceId, null, quotaChargeEventListener);
+  default Future<Void> undeleteBlob(String blobId, String serviceId) {
+    return undeleteBlob(blobId, serviceId, null, null);
   }
 }

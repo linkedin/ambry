@@ -32,8 +32,7 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.quota.QuotaChargeEventListener;
-import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
@@ -77,8 +76,7 @@ public class UndeleteManagerTest {
   private static final String LOCAL_DC = "DC1";
   private final NonBlockingRouter router;
   private final RouterConfig routerConfig;
-  private final QuotaManager quotaManager = QuotaTestUtils.createDummyQuotaManager();
-  private final QuotaChargeEventListener quotaChargeEventListener =
+  private final QuotaChargeCallback quotaChargeCallback =
       QuotaTestUtils.createDummyQuotaChargeEventListener();
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   private final MockClusterMap clusterMap = new MockClusterMap();
@@ -103,7 +101,7 @@ public class UndeleteManagerTest {
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
     router =
         new NonBlockingRouter(routerConfig, metrics, networkClientFactory, notificationSystem, clusterMap, null, null,
-            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaManager);
+            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
   }
 
   @Before
@@ -114,8 +112,7 @@ public class UndeleteManagerTest {
       BlobProperties putBlobProperties =
           new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
               Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build(),
-          quotaChargeEventListener).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
       // Make sure all the mock servers have this put
       BlobId id = new BlobId(blobId, clusterMap);
@@ -154,7 +151,7 @@ public class UndeleteManagerTest {
     for (String blobId : blobIds) {
       deleteBlobInAllServer(blobId);
       // Undelete requires global quorum, so we have to make sure all the mock servers received a delete.
-      router.undeleteBlob(blobId, UNDELETE_SERVICE_ID, quotaChargeEventListener)
+      router.undeleteBlob(blobId, UNDELETE_SERVICE_ID)
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       verifyUndelete(blobId);
     }
@@ -330,7 +327,7 @@ public class UndeleteManagerTest {
     blobIds.add(blobIds.get(0));
     try {
       undeleteManager.submitUndeleteOperation(blobIds, UNDELETE_SERVICE_ID, new FutureResult<>(), null,
-          quotaChargeEventListener);
+          quotaChargeCallback);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -352,7 +349,7 @@ public class UndeleteManagerTest {
 
   private void assertDeleted(String blobId) throws Exception {
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener)
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build())
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       fail("blob " + blobId + " Should be deleted");
     } catch (ExecutionException e) {
@@ -362,13 +359,13 @@ public class UndeleteManagerTest {
   }
 
   private void assertNotDeleted(String blobId) throws Exception {
-    router.getBlob(blobId, new GetBlobOptionsBuilder().build(), quotaChargeEventListener)
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
   }
 
   private void deleteBlobInAllServer(String blobId) throws Exception {
     // Delete this blob
-    router.deleteBlob(blobId, "serviceid", quotaChargeEventListener)
+    router.deleteBlob(blobId, "serviceid")
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     // Then make sure all the mock servers have the delete request.
     assertDeleted(blobId);
@@ -403,7 +400,7 @@ public class UndeleteManagerTest {
       throws Exception {
     FutureResult<Void> future = new FutureResult<>();
     NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
-    undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done, quotaChargeEventListener);
+    undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done, quotaChargeCallback);
     sendRequestsGetResponse(future, undeleteManager, advanceTime);
     if (expectedErrorCode == null) {
       // Should return no error

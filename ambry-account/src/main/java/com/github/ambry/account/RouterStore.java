@@ -17,7 +17,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.quota.QuotaChargeEventListener;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.PutBlobOptions;
@@ -64,7 +63,6 @@ class RouterStore extends AccountMetadataStore {
   static final String ACCOUNT_METADATA_BLOB_IDS_PATH = "/account_metadata/blobids";
   static final String ACCOUNT_METADATA_BLOB_IDS_LIST_KEY = "accountMetadataBlobIds";
   private static final String ZN_RECORD_ID = "account_metadata_version_list";
-  private static final QuotaChargeEventListener QUOTA_CHARGE_EVENT_LISTENER = () -> {};
   private static final Logger logger = LoggerFactory.getLogger(RouterStore.class);
 
   private static final Short ACCOUNT_ID = Account.HELIX_ACCOUNT_SERVICE_ACCOUNT_ID;
@@ -129,8 +127,7 @@ class RouterStore extends AccountMetadataStore {
    */
   Map<String, String> readAccountMetadataFromBlobID(String blobID) {
     long startTimeMs = System.currentTimeMillis();
-    Future<GetBlobResult> resultF =
-        router.get().getBlob(blobID, new GetBlobOptionsBuilder().build(), QUOTA_CHARGE_EVENT_LISTENER);
+    Future<GetBlobResult> resultF = router.get().getBlob(blobID, new GetBlobOptionsBuilder().build());
     try {
       GetBlobResult result = resultF.get();
       accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);
@@ -237,7 +234,7 @@ class RouterStore extends AccountMetadataStore {
     ByteBufferReadableStreamChannel channel =
         new ByteBufferReadableStreamChannel(ByteBuffer.wrap(object.toString().getBytes(Charsets.UTF_8)));
     BlobProperties properties = new BlobProperties(channel.getSize(), SERVICE_ID, ACCOUNT_ID, CONTAINER_ID, false);
-    return router.putBlob(properties, null, channel, PutBlobOptions.DEFAULT, QUOTA_CHARGE_EVENT_LISTENER).get();
+    return router.putBlob(properties, null, channel, PutBlobOptions.DEFAULT).get();
   }
 
   /**
@@ -390,7 +387,7 @@ class RouterStore extends AccountMetadataStore {
         try {
           logger.info("Removing blob {} since the update failed", newBlobID);
           // Block this execution? or maybe wait for a while then get out?
-          router.get().deleteBlob(newBlobID, SERVICE_ID, QUOTA_CHARGE_EVENT_LISTENER).get();
+          router.get().deleteBlob(newBlobID, SERVICE_ID).get();
         } catch (Exception e) {
           logger.error("Failed to delete blob={}", newBlobID, e);
           accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
@@ -403,7 +400,7 @@ class RouterStore extends AccountMetadataStore {
           try {
             logger.info("Removing blob {}", blobID);
             // Block this execution? or maybe wait for a while then get out?
-            router.get().deleteBlob(blobID, SERVICE_ID, QUOTA_CHARGE_EVENT_LISTENER).get();
+            router.get().deleteBlob(blobID, SERVICE_ID).get();
           } catch (Exception e) {
             logger.error("Failed to delete blob={}", blobID, e);
             accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();

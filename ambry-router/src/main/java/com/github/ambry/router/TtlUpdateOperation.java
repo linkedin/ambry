@@ -24,7 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -50,7 +50,7 @@ class TtlUpdateOperation {
   private final NonBlockingRouterMetrics routerMetrics;
   private final long expiresAtMs;
   private final long operationTimeMs;
-  private final QuotaChargeEventListener quotaChargeEventListener;
+  private final QuotaChargeCallback quotaChargeCallback;
   // Parameters associated with the state.
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
@@ -96,11 +96,11 @@ class TtlUpdateOperation {
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
-   * @param quotaChargeEventListener The {@link QuotaChargeEventListener} object.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    */
   TtlUpdateOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       BlobId blobId, String serviceId, long expiresAtMs, long operationTimeMs, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeEventListener quotaChargeEventListener) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
@@ -115,7 +115,7 @@ class TtlUpdateOperation {
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics);
-    this.quotaChargeEventListener = quotaChargeEventListener;
+    this.quotaChargeCallback = quotaChargeCallback;
   }
 
   /**
@@ -331,9 +331,9 @@ class TtlUpdateOperation {
         operationException.set(
             new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
-      if (quotaChargeEventListener != null) {
+      if (quotaChargeCallback != null) {
         try {
-          quotaChargeEventListener.onQuotaChargeEvent();
+          quotaChargeCallback.chargeQuota();
         } catch (RouterException rEx) {
           LOGGER.info("Exception {} while charging quota for ttl update operation.", rEx.toString());
         }

@@ -26,7 +26,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
@@ -93,7 +93,7 @@ class DeleteManager {
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitDeleteBlobOperation(String blobIdStr, String serviceId, FutureResult<Void> futureResult,
-      Callback<Void> callback, QuotaChargeEventListener quotaChargeEventListener) throws RouterException {
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
     final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     if (blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
         && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
@@ -101,7 +101,7 @@ class DeleteManager {
     }
     DeleteOperation deleteOperation =
         new DeleteOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
-            futureResult, quotaChargeEventListener);
+            futureResult, quotaChargeCallback);
     deleteOperations.add(deleteOperation);
   }
 

@@ -18,7 +18,7 @@ import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -71,7 +71,7 @@ public class MockRouter implements Router {
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     lock.lock();
     try {
       BlobInfoAndData blob = allBlobs.get(blobId);
@@ -99,7 +99,7 @@ public class MockRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     lock.lock();
     try {
       FutureResult<String> future = new FutureResult<>();
@@ -132,13 +132,13 @@ public class MockRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("stichBlob is not supported by this mock");
   }
 
   @Override
   public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     lock.lock();
     try {
       FutureResult<Void> future = new FutureResult<>();
@@ -164,13 +164,13 @@ public class MockRouter implements Router {
 
   @Override
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("updateBlobTtl is not supported by this mock");
   }
 
   @Override
   public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("Undelete is currently unsupported");
   }
 

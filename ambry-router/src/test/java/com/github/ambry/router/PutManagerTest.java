@@ -35,8 +35,6 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.quota.QuotaChargeEventListener;
-import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -117,7 +115,6 @@ public class PutManagerTest {
   private final int successTarget;
   private boolean instantiateNewRouterForPuts;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
-  private final QuotaChargeEventListener quotaChargeEventListener = QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * Pre-initialization common to all tests.
@@ -700,7 +697,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options, quotaChargeEventListener);
+            putChannel, requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
     future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
@@ -720,7 +717,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options, null);
+            putChannel, requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
 
     //Make the channel act bad.
@@ -777,7 +774,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options, quotaChargeEventListener);
+            putChannel, requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
@@ -919,8 +916,7 @@ public class PutManagerTest {
     router = new NonBlockingRouter(new RouterConfig(vProps), metrics,
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
-        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS,
-        QuotaTestUtils.createDummyQuotaManager());
+        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     return router;
   }
 
@@ -995,10 +991,10 @@ public class PutManagerTest {
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
           if (requestAndResult.chunksToStitch == null) {
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, requestAndResult.options, quotaChargeEventListener);
+                requestAndResult.putUserMetadata, putChannel, requestAndResult.options);
           } else {
             requestAndResult.result = (FutureResult<String>) router.stitchBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch, quotaChargeEventListener);
+                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch);
           }
           requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {

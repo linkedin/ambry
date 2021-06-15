@@ -23,7 +23,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
@@ -48,7 +48,7 @@ public class UndeleteOperation {
   private final Time time;
   private final NonBlockingRouterMetrics routerMetrics;
   private final long operationTimeMs;
-  private final QuotaChargeEventListener quotaChargeEventListener;
+  private final QuotaChargeCallback quotaChargeCallback;
   // Parameters associated with the state.
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
@@ -96,11 +96,11 @@ public class UndeleteOperation {
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
-   * @param quotaChargeEventListener The {@link QuotaChargeEventListener} object.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    */
   UndeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       BlobId blobId, String serviceId, long operationTimeMs, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeEventListener quotaChargeEventListener) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
@@ -111,7 +111,7 @@ public class UndeleteOperation {
     this.operationTimeMs = operationTimeMs;
     this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
         clusterMap.getDatacenterName(blobId.getDatacenterId()), routerMetrics);
-    this.quotaChargeEventListener = quotaChargeEventListener;
+    this.quotaChargeCallback = quotaChargeCallback;
   }
 
   /**
@@ -362,9 +362,9 @@ public class UndeleteOperation {
         operationException.set(
             new RouterException("UndeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
-      if(quotaChargeEventListener != null) {
+      if(quotaChargeCallback != null) {
         try {
-          quotaChargeEventListener.onQuotaChargeEvent();
+          quotaChargeCallback.chargeQuota();
         } catch (RouterException routerException) {
           LOGGER.info("Exception {} while charging quota for undelete operation", routerException.toString());
         }

@@ -41,7 +41,7 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
@@ -128,14 +128,12 @@ import static org.mockito.Mockito.*;
 public class FrontendRestRequestServiceTest {
   private final static QuotaManager QUOTA_MANAGER;
   private final static String CLUSTER_NAME = "ambry-test";
-  private final static QuotaChargeEventListener QUOTA_CHARGE_EVENT_LISTENER;
 
   static {
     try {
       QUOTA_MANAGER =
           new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
               new MaxThrottlePolicy(), Mockito.mock(AccountService.class), null, new MetricRegistry());
-      QUOTA_CHARGE_EVENT_LISTENER = () -> {};
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -718,7 +716,7 @@ public class FrontendRestRequestServiceTest {
             Container.UNKNOWN_CONTAINER_ID, false);
     byte[] usermetadata = TestUtils.getRandomBytes(25);
     String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content),
-        new PutBlobOptionsBuilder().build(), QUOTA_CHARGE_EVENT_LISTENER).get();
+        new PutBlobOptionsBuilder().build()).get();
 
     RestUtils.SubResource[] subResources = {RestUtils.SubResource.UserMetadata, RestUtils.SubResource.BlobInfo};
     for (RestUtils.SubResource subResource : subResources) {
@@ -3143,7 +3141,7 @@ class FrontendTestRouter implements Router {
   String undeleteServiceId = null;
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback, QuotaChargeEventListener quotaChargeEventListener) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
     GetBlobResult result;
     switch (options.getOperationType()) {
       case BlobInfo:
@@ -3165,33 +3163,33 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeEventListener quotaChargeEventListener) {
+      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.StitchBlob);
   }
 
   @Override
   public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     deleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.DeleteBlob);
   }
 
   @Override
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);
   }
 
   @Override
   public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
-      QuotaChargeEventListener quotaChargeEventListener) {
+      QuotaChargeCallback quotaChargeCallback) {
     undeleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.UndeleteBlob);
   }

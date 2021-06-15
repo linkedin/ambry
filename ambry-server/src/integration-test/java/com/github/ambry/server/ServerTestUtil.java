@@ -85,7 +85,7 @@ import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
-import com.github.ambry.quota.QuotaChargeEventListener;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.router.GetBlobOptionsBuilder;
@@ -144,7 +144,7 @@ import static org.junit.Assert.*;
 
 
 final class ServerTestUtil {
-  private static final QuotaChargeEventListener QUOTA_CHARGE_EVENT_LISTENER =
+  private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER =
       QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   static byte[] getBlobDataAndRelease(BlobData blobData) {
@@ -2135,7 +2135,7 @@ final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       // Now send the undelete operation through router, and it should fail because of not deleted error.
-      Future<Void> future = router.undeleteBlob(blobId1.toString(), "service", null);
+      Future<Void> future = router.undeleteBlob(blobId1.toString(), "service");
       try {
         future.get();
         fail("Undelete blob " + blobId1.toString() + " should fail");
@@ -2246,7 +2246,7 @@ final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       // Now send the undelete operation through router, and it should fail because of lifeVersion conflict error.
-      future = router.undeleteBlob(blobId2.toString(), "service", null);
+      future = router.undeleteBlob(blobId2.toString(), "service");
       try {
         future.get();
         fail("Undelete blob " + blobId2.toString() + " should fail");
@@ -2590,7 +2590,7 @@ final class ServerTestUtil {
 
   private static void checkBlobId(Router router, BlobId blobId, byte[] data) throws Exception {
     GetBlobResult result =
-        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build(), QUOTA_CHARGE_EVENT_LISTENER)
+        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build())
             .get(20, TimeUnit.SECONDS);
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,

@@ -86,7 +86,7 @@ public class QuotaTestUtils {
     };
   }
 
-  public static QuotaChargeEventListener createDummyQuotaChargeEventListener() {
+  public static QuotaChargeCallback createDummyQuotaChargeEventListener() {
     return () -> {
     };
   }

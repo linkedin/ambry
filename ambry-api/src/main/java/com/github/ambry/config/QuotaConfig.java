@@ -79,7 +79,7 @@ public class QuotaConfig {
   public QuotaMode throttlingMode;
 
   /**
-   * Should quota be throttled for in progress requests.
+   * Should requests in progress be throttled if they exceed their quota.
    */
   @Config(THROTTLE_IN_PROGRESS_REQUESTS)
   public boolean throttleInProgressRequests;
