@@ -118,6 +118,16 @@ public class BlobProperties {
     this.filename = filename;
   }
 
+  /**
+   * Constructor to copy all fields from another {@link BlobProperties}.
+   * @param other the {@link BlobProperties} to copy.
+   */
+  public BlobProperties(BlobProperties other) {
+    this(other.blobSize, other.serviceId, other.ownerId, other.contentType, other.isPrivate, other.timeToLiveInSeconds,
+        other.creationTimeInMs, other.accountId, other.containerId, other.isEncrypted, other.externalAssetTag,
+        other.contentEncoding, other.filename);
+  }
+
   public long getTimeToLiveInSeconds() {
     return timeToLiveInSeconds;
   }
