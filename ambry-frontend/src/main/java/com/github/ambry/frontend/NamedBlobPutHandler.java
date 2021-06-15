@@ -183,11 +183,7 @@ public class NamedBlobPutHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
-            // For blob with infinite time, the procedure is putBlob, record insert to database, and ttlUpdate.
-            blobInfo.getBlobProperties().setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
-          }
-          router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
+          router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo));
         }
       }, uri, LOGGER, finalCallback);
@@ -215,7 +211,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
+          bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
     }
@@ -242,10 +238,10 @@ public class NamedBlobPutHandler {
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
-        if (RestUtils.getTtlFromRequestHeader(restRequest.getArgs()) == Utils.Infinite_Time) {
+        if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
-          String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
+          String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback), this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
@@ -410,6 +406,25 @@ public class NamedBlobPutHandler {
             + stitchedBlobProperties.getAccountId() + ", " + stitchedBlobProperties.getContainerId() + ")",
             RestServiceErrorCode.BadRequest);
       }
+    }
+
+    /**
+     * Create a {@link BlobProperties} for the router upload (putBlob or stitchBlob) with a finite TTL such that
+     * orphaned blobs will not be created if the write to the named blob metadata DB fails.
+     * @param blobInfoFromRequest the {@link BlobInfo} parsed from the request.
+     * @return a {@link BlobProperties} for a TTL-ed initial router call.
+     */
+    BlobProperties getPropertiesForRouterUpload(BlobInfo blobInfoFromRequest) {
+      BlobProperties properties;
+      if (blobInfoFromRequest.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+        properties = new BlobProperties(blobInfoFromRequest.getBlobProperties());
+        // For blob with infinite time, the procedure is putBlob with a TTL, record insert to database with
+        // infinite TTL, and ttlUpdate.
+        properties.setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
+      } else {
+        properties = blobInfoFromRequest.getBlobProperties();
+      }
+      return properties;
     }
   }
 }

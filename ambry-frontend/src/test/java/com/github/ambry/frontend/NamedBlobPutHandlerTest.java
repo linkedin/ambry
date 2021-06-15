@@ -321,31 +321,41 @@ public class NamedBlobPutHandlerTest {
    */
   private void stitchBlobAndVerify(byte[] requestBody, List<ChunkInfo> expectedStitchedChunks,
       ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
-    JSONObject headers = new JSONObject();
-    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(),
-        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, "STITCH");
-    RestRequest request = getRestRequest(headers, request_path, requestBody);
-    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<Void> future = new FutureResult<>();
-    idConverterFactory.lastInput = null;
-    namedBlobPutHandler.handle(request, restResponseChannel, future::done);
-    if (errorChecker == null) {
-      future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
-      assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
-          restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
-      InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
-      assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks, blob.getStitchedChunks());
-      ByteArrayOutputStream expectedContent = new ByteArrayOutputStream();
-      expectedStitchedChunks.stream()
-          .map(chunkInfo -> router.getActiveBlobs().get(chunkInfo.getBlobId()).getBlob().array())
-          .forEach(buf -> expectedContent.write(buf, 0, buf.length));
-      assertEquals("Unexpected blob content stored", ByteBuffer.wrap(expectedContent.toByteArray()), blob.getBlob());
-      //check actual size of stitched blob
-      assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
-          restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
-    } else {
-      TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
-          errorChecker);
+    // unlike stitch for blob IDs, one step permanent stitch named blob can be supported through the built-in update TTL
+    // call
+    for (long ttl : new long[]{TestUtils.TTL_SECS, Utils.Infinite_Time}) {
+      JSONObject headers = new JSONObject();
+      FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, ttl, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+          CONTENT_TYPE, OWNER_ID, null, null, "STITCH");
+      RestRequest request = getRestRequest(headers, request_path, requestBody);
+      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      FutureResult<Void> future = new FutureResult<>();
+      idConverterFactory.lastInput = null;
+      idConverterFactory.lastBlobInfo = null;
+      idConverterFactory.lastConvertedId = null;
+      namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+      if (errorChecker == null) {
+        future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+        assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
+            restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+        InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+        assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks,
+            blob.getStitchedChunks());
+        ByteArrayOutputStream expectedContent = new ByteArrayOutputStream();
+        expectedStitchedChunks.stream()
+            .map(chunkInfo -> router.getActiveBlobs().get(chunkInfo.getBlobId()).getBlob().array())
+            .forEach(buf -> expectedContent.write(buf, 0, buf.length));
+        assertEquals("Unexpected blob content stored", ByteBuffer.wrap(expectedContent.toByteArray()), blob.getBlob());
+        //check actual size of stitched blob
+        assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
+            restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+        assertEquals("Unexpected TTL in named blob DB", ttl,
+            idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+        assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
+      } else {
+        TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
+            errorChecker);
+      }
     }
   }
 
@@ -430,6 +440,8 @@ public class NamedBlobPutHandlerTest {
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> future = new FutureResult<>();
     idConverterFactory.lastInput = null;
+    idConverterFactory.lastBlobInfo = null;
+    idConverterFactory.lastConvertedId = null;
     namedBlobPutHandler.handle(request, restResponseChannel, future::done);
     if (errorChecker == null) {
       future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
@@ -437,6 +449,9 @@ public class NamedBlobPutHandlerTest {
           restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
       InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
       assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
+      assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
+      assertEquals("Unexpected TTL in named blob DB", ttl,
+          idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
       assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),

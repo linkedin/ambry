@@ -2970,6 +2970,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
   String translation = null;
   boolean returnInputIfTranslationNull = false;
   volatile String lastInput = null;
+  volatile BlobInfo lastBlobInfo = null;
   volatile String lastConvertedId = null;
 
   @Override
@@ -2982,10 +2983,15 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
 
     @Override
     public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
+      return convert(restRequest, input, null, callback);
+    }
+
+    @Override
+    public Future<String> convert(RestRequest restRequest, String input, BlobInfo blobInfo, Callback<String> callback) {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
-      return completeOperation(input, callback);
+      return completeOperation(input, blobInfo, callback);
     }
 
     @Override
@@ -2996,11 +3002,13 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
     /**
      * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
      * @param input the original input ID received
+     * @param blobInfo the blob info received.
      * @param callback the {@link Callback} to invoke. Can be null.
      * @return the created {@link Future}.
      */
-    private Future<String> completeOperation(String input, Callback<String> callback) {
+    private Future<String> completeOperation(String input, BlobInfo blobInfo, Callback<String> callback) {
       lastInput = input;
+      lastBlobInfo = blobInfo;
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
