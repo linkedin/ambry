@@ -139,7 +139,7 @@ jobs:
 
     runs-on: ubuntu-latest
     needs: [ unit-test, store-test, int-test ]
-    env: # TODO: add below secrets in github-actions UI.
+    env:
       ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
       ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
       GIT_SECRET: ${{ secrets.GIT_SECRET }}
