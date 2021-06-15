@@ -335,14 +335,6 @@ class GetBlobOperation extends GetOperation {
                 < routerConfig.routerMaxInMemGetChunks)) {
               dataChunk.poll(requestRegistrationCallback);
               if (dataChunk.isComplete()) {
-                if (quotaChargeCallback != null) {
-                  try {
-                    quotaChargeCallback.chargeQuota();
-                  } catch (RouterException routerException) {
-                    logger.info("Exception {} occurred during the quota charge event of blob {}", routerException,
-                        blobId.getID());
-                  }
-                }
                 onChunkOperationComplete(dataChunk);
                 if (isOperationComplete()) {
                   break;

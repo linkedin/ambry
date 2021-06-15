@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
@@ -54,6 +55,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -382,6 +384,7 @@ public class NonBlockingRouterTest {
         .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
         .collect(Collectors.toList())).get();
 
+    // Test router for individual blob operations on the stitched blob's chunks.
     router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build()).get();
     router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time).get();
     router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build()).get();
@@ -415,11 +418,10 @@ public class NonBlockingRouterTest {
   }
 
   /**
-   * Test Router with single scaling unit for exception in {@link QuotaChargeCallback}.
+   * Test Router with single scaling unit for correct accounting in {@link QuotaChargeCallback}.
    */
   @Test
   public void testRouterWithQuotaCallback() throws Exception {
-    assumeTrue(!testEncryption);
     try {
       setRouter();
       assertExpectedThreadCounts(2, 1);
@@ -430,6 +432,7 @@ public class NonBlockingRouterTest {
         listenerCalledCount.incrementAndGet();
       };
 
+      // test for a composite blob.
       int blobSize = 3000;
       int numChunks = (blobSize > maxPutChunkSize) ? 1 : 0;
       numChunks += (blobSize % maxPutChunkSize) == 0 ? blobSize / maxPutChunkSize : (blobSize / maxPutChunkSize) + 1;
@@ -439,12 +442,15 @@ public class NonBlockingRouterTest {
               quotaChargeCallback).get();
       expectedChargeCallbackCount += numChunks;
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
-      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
-      //Sleep to make sure all the chunks are returned.
+      RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get().
+          getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
       expectedChargeCallbackCount += numChunks;
-      Thread.sleep(2000);
+      // read out all the chunks to make sure all the chunks are consumed and accounted for.
+      retainingAsyncWritableChannel.consumeContentAsInputStream();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 
+      // test for regular blobs.
       setOperationParams();
       List<String> blobIds = new ArrayList<>();
       for (int i = 0; i < 2; i++) {
@@ -485,6 +491,7 @@ public class NonBlockingRouterTest {
         assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
       }
 
+      // test for stitched blobs.
       blobIds = new ArrayList<>();
       for (int i = 0; i < 2; i++) {
         setOperationParams();
@@ -500,10 +507,12 @@ public class NonBlockingRouterTest {
           .collect(Collectors.toList()), null, quotaChargeCallback).get();
       assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
 
-      router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
+      retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       expectedChargeCallbackCount += 3;
-      //Sleep to make sure all the chunks are returned.
-      Thread.sleep(2000);
+      router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get()
+          .getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
+      // read out all the chunks to make sure all the chunks are consumed and accounted for.
+      retainingAsyncWritableChannel.consumeContentAsInputStream();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 
       router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
