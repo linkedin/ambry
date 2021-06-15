@@ -1703,6 +1703,12 @@ class PersistentIndex {
    * @return {@link true} if last log segment only contains the header info after auto closing last log segment during compaction.
    */
   private boolean onlyContainsHeaderInLastLogSegment(Offset startOffset) {
+    if (validIndexSegments.get(startOffset) == null) {
+      logger.debug("Start offset {} is not in the validIndexSegments", startOffset);
+    } else {
+      logger.debug("End offset is {} for the indexSegment file {}", validIndexSegments.get(startOffset).getEndOffset(),
+          validIndexSegments.get(startOffset).getFile().getAbsolutePath());
+    }
     return (validIndexSegments.get(startOffset) != null
         && validIndexSegments.get(startOffset).getEndOffset().getOffset()
         < config.storeDetermineLogSegmentOnlyContainsHeaderMinBytes);
