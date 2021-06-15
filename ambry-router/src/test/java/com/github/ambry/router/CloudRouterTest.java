@@ -31,7 +31,6 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
-import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;
 import java.util.EnumMap;
