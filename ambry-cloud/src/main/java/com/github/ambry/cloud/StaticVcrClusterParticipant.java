@@ -18,7 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipantListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
@@ -42,7 +42,7 @@ public class StaticVcrClusterParticipant implements VcrClusterParticipant {
   private final DataNodeId currentDataNode;
   private final Map<String, PartitionId> partitionIdMap;
   private final Set<PartitionId> assignedPartitionIds;
-  private final List<VcrClusterListener> listeners = new ArrayList<>();
+  private final List<VcrClusterParticipantListener> listeners = new ArrayList<>();
 
   /**
    * Construct the static VCR cluster.
@@ -82,7 +82,7 @@ public class StaticVcrClusterParticipant implements VcrClusterParticipant {
 
   @Override
   public void participate() throws Exception {
-    for (VcrClusterListener listener : listeners) {
+    for (VcrClusterParticipantListener listener : listeners) {
       for (PartitionId partitionId : assignedPartitionIds) {
         listener.onPartitionAdded(partitionId);
       }
@@ -102,7 +102,7 @@ public class StaticVcrClusterParticipant implements VcrClusterParticipant {
   }
 
   @Override
-  public void addListener(VcrClusterListener listener) {
+  public void addListener(VcrClusterParticipantListener listener) {
     listeners.add(listener);
   }
 

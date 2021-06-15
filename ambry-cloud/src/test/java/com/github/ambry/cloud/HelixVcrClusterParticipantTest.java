@@ -19,7 +19,7 @@ import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipantListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -40,7 +40,7 @@ import org.mockito.Mockito;
 
 
 /**
- * Tests of HelixVcrCluster.
+ * Tests of HixVcrClusterParticipant.
  */
 public class HelixVcrClusterParticipantTest {
   private static final String ZK_SERVER_HOSTNAME = "localhost";
@@ -72,7 +72,7 @@ public class HelixVcrClusterParticipantTest {
    * Test addReplica and removeReplica of {@link HelixVcrClusterParticipant}
    */
   @Test
-  public void helixVcrClusterTest() throws Exception {
+  public void helixVcrClusterParticipant() throws Exception {
     StrictMatchExternalViewVerifier helixBalanceVerifier =
         new StrictMatchExternalViewVerifier(ZK_CONNECT_STRING, VCR_CLUSTER_NAME,
             Collections.singleton(VcrTestUtil.helixResource), null);
@@ -80,7 +80,7 @@ public class HelixVcrClusterParticipantTest {
     VcrClusterParticipant helixInstance1 = createHelixVcrClusterParticipant(8123, 10123);
     Collection<? extends PartitionId> expectedPartitions =
         Collections.unmodifiableCollection(mockClusterMap.getAllPartitionIds(null));
-    MockVcrListener mockVcrListener = new MockVcrListener();
+    MockVcrParticipantListener mockVcrListener = new MockVcrParticipantListener();
     helixInstance1.addListener(mockVcrListener);
     helixInstance1.participate();
     TestUtils.checkAndSleep(true, () -> helixInstance1.getAssignedPartitionIds().size() > 0, 1000);
@@ -147,11 +147,11 @@ public class HelixVcrClusterParticipantTest {
         collection1);
   }
 
-  private static class MockVcrListener implements VcrClusterListener {
+  private static class MockVcrParticipantListener implements VcrClusterParticipantListener {
 
     private final Set<PartitionId> partitionSet = ConcurrentHashMap.newKeySet();
 
-    MockVcrListener() {
+    MockVcrParticipantListener() {
 
     }
 

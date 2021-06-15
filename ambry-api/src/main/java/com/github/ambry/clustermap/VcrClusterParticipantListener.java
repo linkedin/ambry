@@ -15,9 +15,9 @@
 package com.github.ambry.clustermap;
 
 /**
- * {@link VcrClusterListener} takes actions on {@link VcrClusterParticipant} partition add or removal.
+ * {@link VcrClusterParticipantListener} takes actions on {@link VcrClusterParticipant} partition add or removal.
  */
-public interface VcrClusterListener {
+public interface VcrClusterParticipantListener {
 
   /**
    * Action to take when new Partition is added.

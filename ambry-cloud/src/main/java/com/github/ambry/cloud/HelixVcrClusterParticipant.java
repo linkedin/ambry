@@ -20,7 +20,7 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipantListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -60,7 +60,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   private final Map<String, PartitionId> partitionIdMap;
   private final Set<PartitionId> assignedPartitionIds = ConcurrentHashMap.newKeySet();
   private final HelixVcrClusterMetrics metrics;
-  private final List<VcrClusterListener> listeners = new ArrayList<>();
+  private final List<VcrClusterParticipantListener> listeners = new ArrayList<>();
   private final CloudConfig cloudConfig;
   private final StoreConfig storeConfig;
   private final AccountService accountService;
@@ -108,7 +108,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     PartitionId partitionId = partitionIdMap.get(partitionIdStr);
     if (partitionId != null) {
       if (assignedPartitionIds.add(partitionId)) {
-        for (VcrClusterListener listener : listeners) {
+        for (VcrClusterParticipantListener listener : listeners) {
           listener.onPartitionAdded(partitionId);
         }
         logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
@@ -133,7 +133,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     PartitionId partitionId = partitionIdMap.get(partitionIdStr);
     if (partitionId != null) {
       if (assignedPartitionIds.remove(partitionId)) {
-        for (VcrClusterListener listener : listeners) {
+        for (VcrClusterParticipantListener listener : listeners) {
           listener.onPartitionRemoved(partitionId);
         }
         logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
@@ -211,7 +211,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   }
 
   @Override
-  public void addListener(VcrClusterListener listener) {
+  public void addListener(VcrClusterParticipantListener listener) {
     listeners.add(listener);
   }
 

@@ -32,7 +32,7 @@ public class StaticVcrClusterAgentFactory implements VcrClusterAgentFactory {
   private final CloudConfig cloudConfig;
   private final ClusterMapConfig clusterMapConfig;
   private final ClusterMap clusterMap;
-  private VcrClusterParticipant _vcrClusterParticipant;
+  private VcrClusterParticipant vcrClusterParticipant;
 
   public StaticVcrClusterAgentFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
       AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination,
@@ -44,10 +44,10 @@ public class StaticVcrClusterAgentFactory implements VcrClusterAgentFactory {
 
   @Override
   synchronized public VcrClusterParticipant getVcrClusterParticipant() {
-    if (_vcrClusterParticipant == null) {
-      _vcrClusterParticipant = new StaticVcrClusterParticipant(cloudConfig, clusterMapConfig, clusterMap);
+    if (vcrClusterParticipant == null) {
+      vcrClusterParticipant = new StaticVcrClusterParticipant(cloudConfig, clusterMapConfig, clusterMap);
     }
-    return _vcrClusterParticipant;
+    return vcrClusterParticipant;
   }
 
   @Override

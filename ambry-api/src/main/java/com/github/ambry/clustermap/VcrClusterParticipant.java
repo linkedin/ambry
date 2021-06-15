@@ -55,8 +55,8 @@ public interface VcrClusterParticipant extends AutoCloseable {
   boolean isPartitionAssigned(String partitionPath);
 
   /**
-   * Add {@link VcrClusterListener} to listen for cluster change.
+   * Add {@link VcrClusterParticipantListener} to listen for cluster change.
    * @param listener to add.
    */
-  void addListener(VcrClusterListener listener);
+  void addListener(VcrClusterParticipantListener listener);
 }

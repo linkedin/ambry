@@ -18,7 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterListener;
+import com.github.ambry.clustermap.VcrClusterParticipantListener;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -90,7 +90,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   public void start() throws ReplicationException {
     // Add listener for new coming assigned partition
-    vcrClusterParticipant.addListener(new VcrClusterListener() {
+    vcrClusterParticipant.addListener(new VcrClusterParticipantListener() {
       @Override
       public void onPartitionAdded(PartitionId partitionId) {
         try {
