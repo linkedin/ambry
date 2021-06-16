@@ -41,11 +41,8 @@ class BatchOperationCallbackTracker {
    * @param blobIds the {@link BlobId}s being tracked
    * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
    * @param callback the {@link Callback} to be triggered once acks are received for all blobs
+   * @param completionCallback The {@link Callback} to be triggered once the entire batch is complete.
    */
-  BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult, Callback<Void> callback) {
-    this(blobIds, futureResult, callback, null);
-  }
-
   BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult, Callback<Void> callback, Callback<Void> completionCallback) {
     numBlobIds = blobIds.size();
     blobIds.forEach(blobId -> blobIdToAck.put(blobId, false));

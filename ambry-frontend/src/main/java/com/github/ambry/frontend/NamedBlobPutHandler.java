@@ -252,7 +252,7 @@ public class NamedBlobPutHandler {
           retryExecutor.runWithRetries(retryPolicy,
               callback ->
                   router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                      QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true)),
+                      QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)),
               this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {

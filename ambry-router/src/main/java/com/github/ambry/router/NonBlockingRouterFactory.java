@@ -120,11 +120,6 @@ public class NonBlockingRouterFactory implements RouterFactory {
     cryptoService = cryptoServiceFactory.getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
     defaultPartitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
-    FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    AccountStatsStore accountStatsStore =
-        Utils.<AccountStatsStoreFactory>getObj(frontendConfig.accountStatsStoreFactory, verifiableProperties,
-            clusterMapConfig, new StatsManagerConfig(verifiableProperties),
-            clusterMap.getMetricRegistry()).getAccountStatsStore();
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 

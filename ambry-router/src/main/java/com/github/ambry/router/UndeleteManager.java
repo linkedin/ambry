@@ -107,7 +107,7 @@ public class UndeleteManager {
     if (blobIds.size() == 1) {
       UndeleteOperation undeleteOperation =
           new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, time.milliseconds(),
-              callback, time, futureResult);
+              callback, time, futureResult, quotaChargeCallback);
       undeleteOperations.add(undeleteOperation);
     } else {
       BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback, ((result, exception) -> {
