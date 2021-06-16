@@ -110,15 +110,8 @@ public class UndeleteManager {
               callback, time, futureResult, quotaChargeCallback);
       undeleteOperations.add(undeleteOperation);
     } else {
-      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback, ((result, exception) -> {
-        if (quotaChargeCallback != null) {
-          try {
-            quotaChargeCallback.chargeQuota();
-          } catch (RouterException routerException) {
-            LOGGER.info("Exception {} while charging quota for undelete operation", routerException.toString());
-          }
-        }
-      }));
+      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback,
+          quotaChargeCallback);
       long operationTimeMs = time.milliseconds();
       for (BlobId blobId : blobIds) {
         UndeleteOperation undeleteOperation =

@@ -107,15 +107,8 @@ class TtlUpdateManager {
               time.milliseconds(), callback, time, futureResult, quotaChargeCallback);
       ttlUpdateOperations.add(ttlUpdateOperation);
     } else {
-      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback, (result, exception) -> {
-        if(quotaChargeCallback != null) {
-          try {
-            quotaChargeCallback.chargeQuota();
-          } catch (RouterException rEx) {
-            LOGGER.info("Exception {} while charging quota for ttl operation", rEx.toString());
-          }
-        }
-      });
+      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback,
+          quotaChargeCallback);
       long operationTimeMs = time.milliseconds();
       for (BlobId blobId : blobIds) {
         TtlUpdateOperation ttlUpdateOperation =
