@@ -360,7 +360,6 @@ class GetBlobInfoOperation extends GetOperation {
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
       BlobInfo blobInfo = new BlobInfo(serverBlobProperties, userMetadata.array(), messageInfo.getLifeVersion());
-      handleQuotaEvent();
       operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
     } else {
       // submit decrypt job
@@ -378,7 +377,6 @@ class GetBlobInfoOperation extends GetOperation {
               logger.trace("Successfully updating decrypt job callback results for {}", blobId);
               BlobInfo blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(),
                   messageInfo.getLifeVersion());
-              handleQuotaEvent();
               operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
               progressTracker.setCryptoJobSuccess();
             } else {
@@ -445,6 +443,14 @@ class GetBlobInfoOperation extends GetOperation {
     }
 
     if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
+      if (quotaChargeCallback != null) {
+        try {
+          quotaChargeCallback.chargeQuota();
+        } catch (RouterException routerException) {
+          // No exception should be thrown when doing quota charge for blobinfo operation.
+          logger.trace("Unexpected exception {} thrown on handling quota event for {}", routerException, blobId);
+        }
+      }
       Exception e = operationException.get();
       if (operationResult == null && e == null) {
         e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
@@ -461,20 +467,6 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);
       }
       NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
-    }
-  }
-
-  /**
-   * Handle events that should do a callback for quota accounting.
-   */
-  private void handleQuotaEvent() {
-    if(quotaChargeCallback != null) {
-      try {
-        quotaChargeCallback.chargeQuota();
-      } catch (RouterException routerException) {
-        // No exception should be thrown when doing quota charge for blobinfo operation.
-        logger.trace("Unexpected exception {} thrown on handling quota event for {}", routerException, blobId);
-      }
     }
   }
 

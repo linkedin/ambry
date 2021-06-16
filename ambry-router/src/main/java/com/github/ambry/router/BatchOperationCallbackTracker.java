@@ -86,7 +86,7 @@ class BatchOperationCallbackTracker {
    */
   private void complete(Exception e) {
     if (completed.compareAndSet(false, true)) {
-      if(quotaChargeCallback != null) {
+      if (quotaChargeCallback != null) {
         try {
           quotaChargeCallback.chargeQuota();
         } catch (RouterException rEx) {

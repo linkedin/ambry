@@ -362,7 +362,7 @@ public class UndeleteOperation {
         operationException.set(
             new RouterException("UndeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
-      if(quotaChargeCallback != null) {
+      if (quotaChargeCallback != null) {
         try {
           quotaChargeCallback.chargeQuota();
         } catch (RouterException routerException) {

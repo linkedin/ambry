@@ -848,12 +848,11 @@ class GetBlobOperation extends GetOperation {
         chunkCompleted = true;
       }
       if (chunkCompleted) {
-        if (quotaChargeCallback != null) {
+        if (state != ChunkState.Complete && quotaChargeCallback != null) {
           try {
             quotaChargeCallback.chargeQuota();
           } catch (RouterException routerException) {
-            logger.info("Exception {} occurred during the quota charge event of blob {}", routerException,
-                blobId.getID());
+            logger.info("Exception {} occurred during the quota charge event of blob {}", routerException, blobId.getID());
           }
         }
         setOperationException(chunkException);
