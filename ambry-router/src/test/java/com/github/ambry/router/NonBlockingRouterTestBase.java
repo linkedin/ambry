@@ -74,7 +74,6 @@ import static com.github.ambry.utils.TestUtils.*;
 /**
  * Base class for {@link NonBlockingRouter} tests.
  */
-@RunWith(Parameterized.class)
 public class NonBlockingRouterTestBase {
   protected static final int MAX_PORTS_PLAIN_TEXT = 3;
   protected static final int MAX_PORTS_SSL = 3;
@@ -114,16 +113,6 @@ public class NonBlockingRouterTestBase {
   protected GetManager getManager;
   protected DeleteManager deleteManager;
   protected final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
-
-  /**
-   * Initialize parameters common to all tests.
-   * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
-   * @param metadataContentVersion the metadata content version to test with.
-   * @throws Exception if initialization fails
-   */
-  public NonBlockingRouterTestBase(boolean testEncryption, int metadataContentVersion) throws Exception {
-    this(testEncryption, metadataContentVersion, false);
-  }
 
   /**
    * Initialize parameters common to all tests. This constructor is exposed for use by {@link CloudRouterTest}.

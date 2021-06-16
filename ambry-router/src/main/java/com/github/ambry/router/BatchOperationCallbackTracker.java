@@ -85,14 +85,14 @@ class BatchOperationCallbackTracker {
    * @param e the {@link Exception} that occurred (if any).
    */
   private void complete(Exception e) {
-    if(quotaChargeCallback != null) {
-      try {
-        quotaChargeCallback.chargeQuota();
-      } catch (RouterException rEx) {
-        LOGGER.info("Exception {} while charging quota for ttl operation", rEx.toString());
-      }
-    }
     if (completed.compareAndSet(false, true)) {
+      if(quotaChargeCallback != null) {
+        try {
+          quotaChargeCallback.chargeQuota();
+        } catch (RouterException rEx) {
+          LOGGER.info("Exception {} while charging quota for ttl operation", rEx.toString());
+        }
+      }
       NonBlockingRouter.completeOperation(futureResult, callback, null, e, false);
     }
   }

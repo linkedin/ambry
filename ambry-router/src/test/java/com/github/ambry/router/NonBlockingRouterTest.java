@@ -67,6 +67,7 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
@@ -83,6 +84,7 @@ import static org.mockito.Mockito.*;
 /**
  * Class to test the {@link NonBlockingRouter}.
  */
+@RunWith(Parameterized.class)
 public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterTest.class);
 
