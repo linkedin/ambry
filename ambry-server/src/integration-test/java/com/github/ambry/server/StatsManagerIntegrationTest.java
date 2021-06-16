@@ -14,7 +14,6 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.Account;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.DataNodeId;
@@ -36,8 +35,6 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -107,11 +105,12 @@ public class StatsManagerIntegrationTest {
    */
   @Before
   public void before() throws Exception {
-    Connection dbConnection = accountStatsMySqlStore.getMySqlDataAccessor().getDatabaseConnection(true);
-    Statement statement = dbConnection.createStatement();
-    for (String table : AccountStatsMySqlStore.TABLES) {
-      statement.executeUpdate("DELETE FROM " + table);
-    }
+    accountStatsMySqlStore.cleanupTables();
+  }
+
+  @After
+  public void after() {
+    accountStatsMySqlStore.shutdown();
   }
 
   /**
