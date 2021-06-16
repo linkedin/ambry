@@ -22,8 +22,6 @@ import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.utils.Utils;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -54,12 +52,7 @@ public class PartitionClassReportsDaoTest {
 
   @Before
   public void before() throws Exception {
-    try (Connection connection = mySqlStore.getDataSource().getConnection()) {
-      Statement statement = connection.createStatement();
-      for (String table : AccountStatsMySqlStore.TABLES) {
-        statement.executeUpdate("DELETE FROM " + table);
-      }
-    }
+    mySqlStore.cleanupTables();
   }
 
   @After

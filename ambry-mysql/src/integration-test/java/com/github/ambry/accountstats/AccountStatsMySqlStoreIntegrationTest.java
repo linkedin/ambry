@@ -81,7 +81,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
   @Before
   public void before() throws Exception {
-    cleanup(mySqlStore.getConnection());
+    mySqlStore.cleanupTables();
   }
 
   @After
@@ -518,14 +518,6 @@ public class AccountStatsMySqlStoreIntegrationTest {
       storeSnapshots.add(TestUtils.generateStoreStats(numAccounts, numContainers, random, reportType));
     }
     return TestUtils.generateNodeStats(storeSnapshots, 1000, reportType);
-  }
-
-  private void cleanup(Connection connection) throws SQLException {
-    Statement statement = connection.createStatement();
-    for (String table : AccountStatsMySqlStore.TABLES) {
-      statement.executeUpdate("DELETE FROM " + table);
-    }
-    connection.close();
   }
 
   private void assertTableSize(Connection connection, int expectedNumRows) throws SQLException {

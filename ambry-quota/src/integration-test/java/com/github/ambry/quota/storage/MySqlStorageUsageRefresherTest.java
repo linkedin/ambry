@@ -23,7 +23,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
@@ -32,9 +31,6 @@ import com.github.ambry.utils.Utils;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -43,6 +39,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
@@ -73,7 +70,12 @@ public class MySqlStorageUsageRefresherTest {
 
   @Before
   public void before() throws Exception {
-    cleanup(accountStatsMySqlStore.getMySqlDataAccessor());
+    accountStatsMySqlStore.cleanupTables();
+  }
+
+  @After
+  public void after() {
+    accountStatsMySqlStore.shutdown();
   }
 
   @AfterClass
@@ -321,17 +323,6 @@ public class MySqlStorageUsageRefresherTest {
     }
   }
 
-  /**
-   * clean up the tables in database.
-   */
-  private void cleanup(MySqlDataAccessor dataAccessor) throws SQLException {
-    Connection dbConnection = dataAccessor.getDatabaseConnection(true);
-    Statement statement = dbConnection.createStatement();
-    for (String table : AccountStatsMySqlStore.TABLES) {
-      statement.executeUpdate("DELETE FROM " + table);
-    }
-  }
-
   private Properties createProperties() throws Exception {
     Path tempDir = Files.createTempDirectory("MySqlStorageUsageRefresherTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
@@ -349,8 +340,9 @@ public class MySqlStorageUsageRefresherTest {
 
   private AccountStatsMySqlStore createAccountStatsMySqlStore() throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties, new ClusterMapConfig(verifiableProperties),
-        new StatsManagerConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
+    return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
+        new ClusterMapConfig(verifiableProperties), new StatsManagerConfig(verifiableProperties),
+        new MetricRegistry()).getAccountStatsStore();
   }
 
   private Map<String, Map<String, Long>> cloneMap(Map<String, Map<String, Long>> origin) {

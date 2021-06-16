@@ -27,6 +27,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -684,6 +685,18 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     storeMetrics.queryPartitionClassStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return new StatsWrapper(new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, timestamp.get(),
         partitionAccountContainerUsage.size(), partitionAccountContainerUsage.size(), null), hostStats);
+  }
+
+  /**
+   * Remove all the data in the all account stats related tables; This is only used in test.
+   */
+  public void cleanupTables() throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      Statement statement = connection.createStatement();
+      for (String table : AccountStatsMySqlStore.TABLES) {
+        statement.executeUpdate("DELETE FROM " + table);
+      }
+    }
   }
 
   /**
