@@ -28,5 +28,5 @@ public interface VcrClusterAgentFactory {
   VcrClusterParticipant getVcrClusterParticipant() throws Exception;
 
 
-  VcrClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig);
+  VcrClusterSpectator getVcrClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig);
 }

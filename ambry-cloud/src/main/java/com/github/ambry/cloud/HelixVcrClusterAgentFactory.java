@@ -71,7 +71,7 @@ public class HelixVcrClusterAgentFactory implements VcrClusterAgentFactory {
   }
 
   @Override
-  public VcrClusterSpectator getClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
+  public VcrClusterSpectator getVcrClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
     return new HelixVcrClusterSpectator(cloudConfig, clusterMapConfig);
   }
 

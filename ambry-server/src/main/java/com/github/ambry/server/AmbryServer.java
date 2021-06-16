@@ -251,7 +251,7 @@ public class AmbryServer {
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
         logger.info("Creating Helix cluster spectator for cloud to store replication.");
-        vcrClusterSpectator = vcrClusterAgentFactory.getClusterSpectator(cloudConfig, clusterMapConfig);
+        vcrClusterSpectator = vcrClusterAgentFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
         cloudToStoreReplicationManager =
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                 storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
