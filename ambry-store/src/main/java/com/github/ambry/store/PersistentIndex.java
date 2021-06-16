@@ -273,8 +273,7 @@ class PersistentIndex {
    * @return {@code true} if the index file needs to be set to seal status.
    */
   private boolean determineSealStatusForIndexFiles(int index, List<File> indexFiles) {
-    return index < indexFiles.size() - 1 || (config.storeAutoCloseLastLogSegmentEnabled
-        && indexFileNotInLastLogSegment(index, indexFiles));
+    return index < indexFiles.size() - 1;
   }
 
   /**
