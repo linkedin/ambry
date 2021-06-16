@@ -2734,7 +2734,6 @@ public class BlobStoreCompactorTest {
     state.properties.put("store.auto.close.last.log.segment.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
     if (enableAutoCloseLastLogSegment) {
       state.properties.put("store.compaction.policy.factory", "com.github.ambry.store.HybridCompactionPolicyFactory");
-      state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(0));
       state.properties.put("store.container.deletion.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
     }
     state.properties.put("store.compaction.purge.delete.tombstone", Boolean.toString(purgeDeleteTombstone));
