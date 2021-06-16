@@ -23,6 +23,8 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -81,6 +83,7 @@ public class NamedBlobPutHandler {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final String clusterName;
+  private final QuotaManager quotaManager;
   private final RetryPolicy retryPolicy = RetryPolicies.defaultPolicy();
   private final RetryExecutor retryExecutor = new RetryExecutor(Executors.newScheduledThreadPool(2));
   private final Set<RouterErrorCode> retriableRouterError =
@@ -96,10 +99,11 @@ public class NamedBlobPutHandler {
    * @param frontendConfig the {@link FrontendConfig} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterName the name of the storage cluster that the router communicates with
+   * @param quotaManager The {@link QuotaManager} class to account for quota usage in serving requests.
    */
   NamedBlobPutHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
       Router router, AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics, String clusterName) {
+      FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
@@ -108,6 +112,7 @@ public class NamedBlobPutHandler {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.clusterName = clusterName;
+    this.quotaManager = quotaManager;
   }
 
   /**
@@ -184,7 +189,8 @@ public class NamedBlobPutHandler {
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo));
+              routerPutBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
+                  true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -213,7 +219,8 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
+              routerStitchBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
+                  true)), uri, LOGGER, finalCallback);
     }
 
     /**
@@ -243,7 +250,10 @@ public class NamedBlobPutHandler {
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback), this::isRetriable,
+              callback ->
+                  router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
+                      QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)),
+              this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,

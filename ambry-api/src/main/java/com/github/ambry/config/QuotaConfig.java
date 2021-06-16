@@ -28,11 +28,13 @@ public class QuotaConfig {
   public static final String QUOTA_CONFIG_PREFIX = "quota.";
   public static final String REQUEST_THROTTLING_ENABLED = QUOTA_CONFIG_PREFIX + "request.throttling.enabled";
   public static final String THROTTLING_MODE = QUOTA_CONFIG_PREFIX + "throttling.mode";
+  public static final String THROTTLE_IN_PROGRESS_REQUESTS = QUOTA_CONFIG_PREFIX + "throttle.in.progress.requests";
   public static final String REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON =
       QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
   public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manager.factory";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
+  public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
   public StorageQuotaConfig storageQuotaConfig;
 
   /**
@@ -77,6 +79,12 @@ public class QuotaConfig {
   public QuotaMode throttlingMode;
 
   /**
+   * Should requests in progress be throttled if they exceed their quota.
+   */
+  @Config(THROTTLE_IN_PROGRESS_REQUESTS)
+  public boolean throttleInProgressRequests;
+
+  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
@@ -88,6 +96,8 @@ public class QuotaConfig {
             buildDefaultQuotaEnforcerSourceInfoPairJson().toString());
     quotaManagerFactory = verifiableProperties.getString(QUOTA_MANAGER_FACTORY, DEFAULT_QUOTA_MANAGER_FACTORY);
     throttlingMode = QuotaMode.valueOf(verifiableProperties.getString(THROTTLING_MODE, DEFAULT_QUOTA_THROTTLING_MODE));
+    throttleInProgressRequests =
+        verifiableProperties.getBoolean(THROTTLE_IN_PROGRESS_REQUESTS, DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS);
   }
 
   /**

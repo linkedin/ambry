@@ -88,7 +88,7 @@ public class TtlUpdateHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            accountAndContainerInjector, metrics, CLUSTER_MAP);
+            accountAndContainerInjector, metrics, CLUSTER_MAP, null);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
     blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
         .get(1, TimeUnit.SECONDS);

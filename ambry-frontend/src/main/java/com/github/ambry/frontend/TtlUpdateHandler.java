@@ -15,11 +15,13 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import java.util.GregorianCalendar;
@@ -41,6 +43,7 @@ class TtlUpdateHandler {
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
+  private final QuotaManager quotaManager;
 
   /**
    * Constructs a handler for handling requests for updating TTLs of blobs
@@ -50,15 +53,18 @@ class TtlUpdateHandler {
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param metrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterMap the {@link ClusterMap} in use.
+   * @param quotaManager {@link QuotaManager} object.
    */
   TtlUpdateHandler(Router router, SecurityService securityService, IdConverter idConverter,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
+      QuotaManager quotaManager) {
     this.router = router;
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.metrics = metrics;
     this.clusterMap = clusterMap;
+    this.quotaManager = quotaManager;
   }
 
   /**
@@ -137,7 +143,8 @@ class TtlUpdateHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time, routerCallback());
+        router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(),
+            QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 

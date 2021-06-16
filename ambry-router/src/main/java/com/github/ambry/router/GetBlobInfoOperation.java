@@ -31,6 +31,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
@@ -58,6 +59,8 @@ class GetBlobInfoOperation extends GetOperation {
   private final OperationTracker operationTracker;
   // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
   private final ProgressTracker progressTracker;
+  // listener for events that should charge towards quota (like chunk download)
+  private final QuotaChargeCallback quotaChargeCallback;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // metrics tracker to track decrypt jobs
@@ -87,10 +90,11 @@ class GetBlobInfoOperation extends GetOperation {
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted, QuotaChargeCallback quotaChargeCallback) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
+    this.quotaChargeCallback = quotaChargeCallback;
     operationTracker =
         getOperationTracker(blobId.getPartition(), blobId.getDatacenterId(), RouterOperation.GetBlobInfoOperation);
     progressTracker = new ProgressTracker(operationTracker);
@@ -439,6 +443,14 @@ class GetBlobInfoOperation extends GetOperation {
     }
 
     if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
+      if (quotaChargeCallback != null) {
+        try {
+          quotaChargeCallback.chargeQuota();
+        } catch (RouterException routerException) {
+          // No exception should be thrown when doing quota charge for blobinfo operation.
+          logger.trace("Unexpected exception {} thrown on handling quota event for {}", routerException, blobId);
+        }
+      }
       Exception e = operationException.get();
       if (operationResult == null && e == null) {
         e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);

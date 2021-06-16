@@ -317,9 +317,11 @@ project(':ambry-replication') {
                 project(':ambry-commons'),
                 project(':ambry-protocol'),
                 project(':ambry-store'),
-                project(':ambry-network')
+                project(':ambry-network'),
+                project(':ambry-clustermap')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-store')
+        testCompile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')

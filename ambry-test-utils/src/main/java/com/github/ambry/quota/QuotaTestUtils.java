@@ -15,6 +15,8 @@ package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.rest.RestRequest;
 import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
@@ -48,5 +50,44 @@ public class QuotaTestUtils {
     properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
         new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString());
     return new QuotaConfig(new VerifiableProperties(properties));
+  }
+
+  public static QuotaManager createDummyQuotaManager() {
+    return new QuotaManager() {
+      @Override
+      public void init() {
+      }
+
+      @Override
+      public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) {
+        return null;
+      }
+
+      @Override
+      public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+          Map<QuotaName, Double> requestCostMap) {
+        return null;
+      }
+
+      @Override
+      public ThrottlingRecommendation charge(RestRequest restRequest) {
+        return null;
+      }
+
+      @Override
+      public QuotaConfig getQuotaConfig() {
+        return null;
+      }
+
+      @Override
+      public void shutdown() {
+
+      }
+    };
+  }
+
+  public static QuotaChargeCallback createDummyQuotaChargeEventListener() {
+    return () -> {
+    };
   }
 }

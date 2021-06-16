@@ -23,6 +23,8 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.SocketNetworkClient;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.router.RouterTestHelpers.*;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
@@ -67,6 +69,7 @@ public class DeleteManagerTest {
   private String blobIdString;
   private PartitionId partition;
   private Future<Void> future;
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * A checker that either asserts that a delete operation succeeds or returns the specified error code.
@@ -151,7 +154,7 @@ public class DeleteManagerTest {
                     callbackCalled.countDown();
                     throw new RuntimeException("Throwing an exception in the user callback");
                   }
-                }));
+                }, quotaChargeCallback));
               } else {
                 futures.add(router.deleteBlob(blobIdString, null));
               }
@@ -395,7 +398,8 @@ public class DeleteManagerTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-            future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch));
+            future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch),
+                quotaChargeCallback);
             do {
               // increment mock time
               mockTime.sleep(1000);
@@ -427,7 +431,7 @@ public class DeleteManagerTest {
       mockSelectorState.set(state);
       setServerErrorCodes(serverErrorCodes, partition, serverLayout);
       CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-      future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch));
+      future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeCallback);
       do {
         // increment mock time
         mockTime.sleep(1000);

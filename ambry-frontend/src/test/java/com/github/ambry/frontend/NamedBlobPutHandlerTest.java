@@ -27,6 +27,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -468,7 +469,8 @@ public class NamedBlobPutHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME);
+            idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
+            QuotaTestUtils.createDummyQuotaManager());
   }
 
   /**

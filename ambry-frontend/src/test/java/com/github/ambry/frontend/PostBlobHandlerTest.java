@@ -18,6 +18,7 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
@@ -27,6 +28,11 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
@@ -65,6 +71,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -81,6 +88,7 @@ public class PostBlobHandlerTest {
   private static final Container REF_CONTAINER;
   private static final Container REF_CONTAINER_WITH_TTL_REQUIRED;
   private static final ClusterMap CLUSTER_MAP;
+  private static final QuotaManager QUOTA_MANAGER;
 
   private static final int TIMEOUT_SECS = 10;
   private static final String SERVICE_ID = "test-app";
@@ -100,6 +108,13 @@ public class PostBlobHandlerTest {
       REF_ACCOUNT = ACCOUNT_SERVICE.getAccountById(newAccount.getId());
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
       REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+      try {
+        QUOTA_MANAGER =
+            new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
+                new MaxThrottlePolicy(), Mockito.mock(AccountService.class), null, new MetricRegistry());
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -271,7 +286,7 @@ public class PostBlobHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     postBlobHandler =
         new PostBlobHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            idSigningService, router, injector, time, frontendConfig, metrics, CLUSTER_NAME);
+            idSigningService, router, injector, time, frontendConfig, metrics, CLUSTER_NAME, QUOTA_MANAGER);
   }
 
   // ttlRequiredEnforcementTest() helpers

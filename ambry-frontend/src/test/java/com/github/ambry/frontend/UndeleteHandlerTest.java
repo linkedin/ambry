@@ -89,7 +89,7 @@ public class UndeleteHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     undeleteHandler =
         new UndeleteHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            accountAndContainerInjector, metrics, CLUSTER_MAP);
+            accountAndContainerInjector, metrics, CLUSTER_MAP, null);
   }
 
   /**

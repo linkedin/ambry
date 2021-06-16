@@ -50,6 +50,8 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.RouterTestHelpers.*;
@@ -154,6 +156,7 @@ public class GetBlobOperationTest {
 
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToGetOperation);
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * A checker that either asserts that a get operation succeeds or returns the specified error code.
@@ -249,6 +252,7 @@ public class GetBlobOperationTest {
     putContent = new byte[blobSize];
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+    // TODO fix null quota charge event listener
     blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
   }
@@ -324,7 +328,8 @@ public class GetBlobOperationTest {
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
-        getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false);
+        getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
+        quotaChargeCallback);
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
@@ -335,7 +340,8 @@ public class GetBlobOperationTest {
     try {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
           new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
-          getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false);
+          getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
+          quotaChargeCallback);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -482,7 +488,6 @@ public class GetBlobOperationTest {
     // We can't just delete the data chunks by calling router.deleteBlob, we have to remove them from the mock servers.
     mockServerLayout.getMockServers()
         .forEach(server -> dataChunkIds.forEach(chunkId -> server.getBlobs().remove(chunkId)));
-
     GetBlobResult result = router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build()).get();
     Future<Long> future = result.getBlobDataChannel().readInto(new ByteBufferAsyncWritableChannel(), null);
     try {
@@ -1635,7 +1640,7 @@ public class GetBlobOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
-            routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false);
+            routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     return op;
   }

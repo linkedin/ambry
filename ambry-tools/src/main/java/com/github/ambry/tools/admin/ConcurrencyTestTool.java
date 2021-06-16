@@ -24,6 +24,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -100,6 +101,7 @@ public class ConcurrencyTestTool {
   private static final String SERVER_PUT_GET_HELPER = "com.github.ambry.tools.admin.ServerPutGetHelperFactory";
   private static final AtomicBoolean putComplete = new AtomicBoolean(false);
   private static final Random random = new Random();
+  private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = () -> {};
 
   public static void main(String args[]) throws Exception {
     InvocationOptions options = new InvocationOptions(args);
@@ -643,7 +645,7 @@ public class ConcurrencyTestTool {
               callback.onCompletion(toReturn, exceptionToReturn);
             }
           }
-        });
+        }, QUOTA_CHARGE_EVENT_LISTENER);
       } catch (Exception e) {
         futureResult.done(null, e);
         if (callback != null) {
@@ -706,7 +708,7 @@ public class ConcurrencyTestTool {
               }
             }
           }
-        });
+        }, QUOTA_CHARGE_EVENT_LISTENER);
       } catch (Exception e) {
         futureResult.done(null, e);
         if (callback != null) {
@@ -849,7 +851,7 @@ public class ConcurrencyTestTool {
               callback.onCompletion(null, exceptionToReturn.get());
             }
           }
-        });
+        }, QUOTA_CHARGE_EVENT_LISTENER);
       } catch (Exception e) {
         futureResult.done(null, e);
         if (callback != null) {

@@ -166,7 +166,7 @@ class AmbrySecurityService implements SecurityService {
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
     setRequestCostHeader(requestCost, responseChannel);
     if (quotaManager != null) {
-      ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, blobInfo, requestCost);
+      ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
       if (throttlingRecommendation != null) {
         RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)
             .entrySet()

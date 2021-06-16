@@ -28,6 +28,8 @@ import com.github.ambry.network.Selector;
 import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
@@ -71,6 +73,8 @@ class RouterServerTestFramework {
   private final MockNotificationSystem notificationSystem;
   private final Router router;
   private boolean testEncryption = false;
+  private final QuotaChargeCallback quotaChargeCallback =
+      QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   final InMemAccountService accountService = new InMemAccountService(false, true);
 
@@ -296,7 +300,7 @@ class RouterServerTestFramework {
     };
     Future<String> future =
         router.putBlob(opChain.properties, opChain.userMetadata, putChannel, new PutBlobOptionsBuilder().build(),
-            callback);
+            callback, quotaChargeCallback);
     TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", false), opChain) {
       @Override
       void check() throws Exception {
@@ -316,7 +320,7 @@ class RouterServerTestFramework {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
     Future<GetBlobResult> future = router.getBlob(opChain.blobId,
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).getOption(options).build(),
-        callback);
+        callback, quotaChargeCallback);
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlobInfo", checkDeleted), opChain) {
           @Override
@@ -341,7 +345,7 @@ class RouterServerTestFramework {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
     Future<GetBlobResult> future = router.getBlob(opChain.blobId,
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).getOption(options).build(),
-        callback);
+        callback, quotaChargeCallback);
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlob", checkDeleted), opChain) {
           @Override
@@ -388,7 +392,7 @@ class RouterServerTestFramework {
     Future<GetBlobResult> future = router.getBlob(fraudId.getID(),
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
             .getOption(GetOption.Include_All)
-            .build(), callback);
+            .build(), callback, quotaChargeCallback);
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlobAuthorizationFail", true), opChain) {
           @Override
@@ -426,7 +430,7 @@ class RouterServerTestFramework {
       opChain.testFutures.add(testFuture);
       return;
     }
-    Future<Void> future = router.deleteBlob(fraudId.getID(), null, callback);
+    Future<Void> future = router.deleteBlob(fraudId.getID(), null, callback, quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlobAuthorizationFail", true), opChain) {
       @Override
       void check() throws Exception {
@@ -442,7 +446,8 @@ class RouterServerTestFramework {
    */
   private void startTtlUpdate(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    Future<Void> future = router.updateBlobTtl(opChain.blobId, null, Utils.Infinite_Time, callback);
+    Future<Void> future = router.updateBlobTtl(opChain.blobId, null, Utils.Infinite_Time, callback,
+        quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("updateBlobTtl", false), opChain) {
       @Override
       void check() throws Exception {
@@ -459,7 +464,7 @@ class RouterServerTestFramework {
    */
   private void startDeleteBlob(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    Future<Void> future = router.deleteBlob(opChain.blobId, null, callback);
+    Future<Void> future = router.deleteBlob(opChain.blobId, null, callback, quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", false), opChain) {
       @Override
       void check() throws Exception {
@@ -475,7 +480,7 @@ class RouterServerTestFramework {
    */
   private void startUndeleteBlob(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    Future<Void> future = router.undeleteBlob(opChain.blobId, null, callback);
+    Future<Void> future = router.undeleteBlob(opChain.blobId, null, callback, quotaChargeCallback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("undeleteBlob", false), opChain) {
       @Override
       void check() throws Exception {
