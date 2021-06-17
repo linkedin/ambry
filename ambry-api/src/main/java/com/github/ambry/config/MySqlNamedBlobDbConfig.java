@@ -39,7 +39,7 @@ public class MySqlNamedBlobDbConfig {
   /**
    * Number of connections and threads to use for executing transactions against databases in a remote datacenter.
    */
-  @Config(LOCAL_POOL_SIZE)
+  @Config(REMOTE_POOL_SIZE)
   @Default("1")
   public final int remotePoolSize;
 

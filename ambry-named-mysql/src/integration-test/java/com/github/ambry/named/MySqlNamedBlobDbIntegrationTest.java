@@ -63,7 +63,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     MockClusterMap clusterMap = new MockClusterMap();
     partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MySqlNamedBlobDbFactory namedBlobDbFactory =
-        new MySqlNamedBlobDbFactory(new VerifiableProperties(properties), new MetricRegistry(), accountService, accountService.getScheduler());
+        new MySqlNamedBlobDbFactory(new VerifiableProperties(properties), new MetricRegistry(), accountService);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
 
     cleanup();

@@ -23,7 +23,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import java.util.concurrent.ExecutorService;
 
 
 public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
@@ -31,20 +30,18 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   private final String localDatacenter;
   private final MetricRegistry metricRegistry;
   private final AccountService accountService;
-  private final ExecutorService scheduler;
 
   public MySqlNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      AccountService accountService, ExecutorService scheduler) {
+      AccountService accountService) {
     config = new MySqlNamedBlobDbConfig(verifiableProperties);
     localDatacenter = verifiableProperties.getString(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME);
     this.metricRegistry = metricRegistry;
     this.accountService = accountService;
-    this.scheduler = scheduler;
   }
 
   @Override
   public MySqlNamedBlobDb getNamedBlobDb() {
-    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter, scheduler);
+    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter);
   }
 
   /**

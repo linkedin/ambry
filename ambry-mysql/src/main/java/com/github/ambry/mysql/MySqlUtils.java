@@ -14,10 +14,10 @@
 package com.github.ambry.mysql;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.PriorityQueue;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -56,19 +56,20 @@ public class MySqlUtils {
    * Parses DB information JSON string and returns a list of datacenter name.
    * @param dbInfoJsonString the string containing the MySql DB info.
    * @param localDatacenter name of the local data center
-   * @return The {@link PriorityQueue} of remote datacenter names with alphabetical order.
+   * @return The {@link List} of remote datacenter names with alphabetical order.
    */
-  public static PriorityQueue<String> getRemoteDcFromDbInfo(String dbInfoJsonString, String localDatacenter) {
-    PriorityQueue<String> minHeap = new PriorityQueue<>();
+  public static List<String> getRemoteDcFromDbInfo(String dbInfoJsonString, String localDatacenter) {
+    List<String> remoteDatacenters = new ArrayList<>();
     JSONArray dbInfo = new JSONArray(dbInfoJsonString);
     for (int i = 0; i < dbInfo.length(); i++) {
       JSONObject entry = dbInfo.getJSONObject(i);
       DbEndpoint dbEndpoint = DbEndpoint.fromJson(entry);
       if (!localDatacenter.equals(dbEndpoint.datacenter)) {
-        minHeap.add(dbEndpoint.datacenter);
+        remoteDatacenters.add(dbEndpoint.datacenter);
       }
     }
-    return minHeap;
+    Collections.sort(remoteDatacenters);
+    return Collections.unmodifiableList(remoteDatacenters);
   }
 
   /**

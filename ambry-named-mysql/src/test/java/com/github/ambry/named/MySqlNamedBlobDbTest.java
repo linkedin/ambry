@@ -34,9 +34,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -55,8 +57,9 @@ import static org.mockito.Mockito.*;
  * Tests for {@link MySqlNamedBlobDb} that require a mocked data source.
  */
 public class MySqlNamedBlobDbTest {
-  private final List<String> datacenters = Arrays.asList("dc1", "dc2", "dc3");
-  private final String localDatacenter = datacenters.get(0);
+  private final List<String> datacenters = Arrays.asList("dc3", "dc2", "dc1");
+  private static final Set<String> notFoundDatacenters = new HashSet<>();;
+  private final String localDatacenter = "dc1";
   private final MockDataSourceFactory dataSourceFactory = new MockDataSourceFactory();
   private final InMemAccountService accountService = new InMemAccountService(false, false);
   private final MySqlNamedBlobDb namedBlobDb;
@@ -77,12 +80,13 @@ public class MySqlNamedBlobDbTest {
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
-        dataSourceFactory, localDatacenter, accountService.getScheduler());
+        dataSourceFactory, localDatacenter);
     account = accountService.createAndAddRandomAccount();
     container = account.getAllContainers().iterator().next();
     MockClusterMap clusterMap = new MockClusterMap();
     partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     id = getBlobId(account, container);
+    notFoundDatacenters.addAll(Arrays.asList("dc1", "dc2"));
   }
 
   @Test
@@ -91,6 +95,10 @@ public class MySqlNamedBlobDbTest {
     dataSourceFactory.triggerQueryExecutionErrorForLocalDataCenter(datacenters);
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
+    NamedBlobRecord namedBlobRecord1 = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
+    assertEquals("Blob Id is not matched with the record", id, namedBlobRecord1.getBlobId());
+    dataSourceFactory.triggerQueryExecutionErrorForAllDataCenters(datacenters);
+    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), "blobName"), RestServiceErrorCode.NotFound);
   }
 
   @Test
@@ -181,7 +189,7 @@ public class MySqlNamedBlobDbTest {
           reset(dataSource);
           PreparedStatement statement = mock(PreparedStatement.class);
           ResultSet resultSet = mock(ResultSet.class);
-          if (localDatacenter.equals(datacenter)) {
+          if (notFoundDatacenters.contains(datacenter)) {
             when(resultSet.next()).thenReturn(false);
             when(statement.executeQuery()).thenReturn(resultSet);
             Connection connection = mock(Connection.class);
@@ -195,6 +203,24 @@ public class MySqlNamedBlobDbTest {
             when(connection.prepareStatement(any())).thenReturn(statement);
             when(dataSource.getConnection()).thenReturn(connection);
           }
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+
+    private void triggerQueryExecutionErrorForAllDataCenters(List<String> datacenters) {
+      for (String datacenter : datacenters) {
+        try {
+          DataSource dataSource = dataSources.get(datacenter);
+          reset(dataSource);
+          PreparedStatement statement = mock(PreparedStatement.class);
+          ResultSet resultSet = mock(ResultSet.class);
+          when(resultSet.next()).thenReturn(false);
+          when(statement.executeQuery()).thenReturn(resultSet);
+          Connection connection = mock(Connection.class);
+          when(connection.prepareStatement(any())).thenReturn(statement);
+          when(dataSource.getConnection()).thenReturn(connection);
         } catch (SQLException e) {
           throw new RuntimeException(e);
         }

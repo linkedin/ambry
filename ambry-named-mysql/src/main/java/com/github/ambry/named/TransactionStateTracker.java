@@ -17,7 +17,7 @@ package com.github.ambry.named;
  * An operation to determine if a request should be retried on another datacenter based on an exception received from the last datacenter
  * tried (processFailure). If processFailure returned true, the next call to getDatacenter should return the datacenter to retry on.
  */
-public interface TransactionStateTracker {
+interface TransactionStateTracker {
   /**
    * This method should also set state such that getNextDatacenter will return correct DC next call.
    * @return true if the error can be retried, false if the error is terminal

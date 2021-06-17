@@ -37,10 +37,8 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.PriorityQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
@@ -120,17 +118,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   private final AccountService accountService;
   private final String localDatacenter;
-  private final PriorityQueue<String> remoteDatacenters;
+  private final List<String> remoteDatacenters;
   private final RetryExecutor retryExecutor;
   private final Map<String, TransactionExecutor> transactionExecutors;
   private final MySqlNamedBlobDbConfig config;
 
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
-      String localDatacenter, ExecutorService scheduler) {
+      String localDatacenter) {
     this.accountService = accountService;
     this.config = config;
     this.localDatacenter = localDatacenter;
-    this.retryExecutor = new RetryExecutor((ScheduledExecutorService) scheduler);
+    this.retryExecutor = new RetryExecutor(null);
     this.transactionExecutors = MySqlUtils.getDbEndpointsPerDC(config.dbInfo)
         .values()
         .stream()
@@ -145,7 +143,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
-    TransactionStateTracker transactionStateTracker = new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+    TransactionStateTracker transactionStateTracker =
+        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
         statement.setInt(1, accountId);
@@ -358,7 +357,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     TransactionExecutor(String datacenter, DataSource dataSource, int numThreads) {
       this.dataSource = dataSource;
-      executor = Utils.newScheduler(numThreads, "Thread-"+datacenter, false);
+      executor = Utils.newScheduler(numThreads, "Thread-" + datacenter, false);
     }
 
     <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,

@@ -145,10 +145,6 @@ public class InMemAccountService implements AccountService {
     // no op
   }
 
-  public ExecutorService getScheduler() {
-    return scheduler;
-  }
-
   /**
    * Clears all the accounts in this {@code AccountService}.
    */

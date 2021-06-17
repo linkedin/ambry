@@ -15,6 +15,7 @@ package com.github.ambry.named;
 
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import java.util.List;
 import java.util.PriorityQueue;
 
 
@@ -25,20 +26,20 @@ import java.util.PriorityQueue;
  */
 public class GetTransactionStateTracker implements TransactionStateTracker{
   private String nextDatacenter;
-  private final PriorityQueue<String> remoteDatacenters;
+  private int counter;
+  private final List<String> remoteDatacenters;
 
   /**
    * Constructor for {@link GetTransactionStateTracker}.
    * @param remoteDatacenters list of the remote datacenter names.
    * @param localDatacenter the name of the local datacenter.
    */
-  GetTransactionStateTracker(PriorityQueue<String> remoteDatacenters, String localDatacenter) {
+  GetTransactionStateTracker(List<String> remoteDatacenters, String localDatacenter) {
     this.remoteDatacenters = remoteDatacenters;
     this.nextDatacenter = localDatacenter;
   }
 
   /**
-   * // if its something like a not found, maybe handling of delete in tthe future
    * @param throwable The {@link Throwable} thrown in execution of retrying.
    * @return {@code true} if the {@link Throwable} is {@link RestServiceException} and Get request return not found.
    */
@@ -46,13 +47,12 @@ public class GetTransactionStateTracker implements TransactionStateTracker{
   public boolean processFailure(Throwable throwable) {
     boolean isRetriable = throwable instanceof RestServiceException && RestServiceErrorCode.NotFound.equals(
         ((RestServiceException) throwable).getErrorCode());
-    if (!remoteDatacenters.isEmpty() && isRetriable) {
-      nextDatacenter = remoteDatacenters.poll();
-    } else if (remoteDatacenters.isEmpty()) {
-      //Retried all datacenters
+    if (isRetriable) {
+      nextDatacenter = remoteDatacenters.get(counter++);
+      return true;
+    } else {
       return false;
     }
-    return isRetriable;
   }
 
   @Override
