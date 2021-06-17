@@ -2745,7 +2745,7 @@ public class BlobStoreCompactorTest {
     metrics.initializeDiskMetrics("/disk/mount/path", 200);
     return new BlobStoreCompactor(tempDirStr, STORE_ID, STORE_KEY_FACTORY, config, metrics, metrics, ioScheduler,
         StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log, state.time, state.sessionId, state.incarnationId,
-        accountService, remoteTokenTracker);
+        accountService, remoteTokenTracker, null);
   }
 
   /**
@@ -4306,7 +4306,7 @@ public class BlobStoreCompactorTest {
     InterruptionInducingLog(int addSegmentCallCountToInterruptAt, int dropSegmentCallCountToInterruptAt)
         throws StoreException {
       super(tempDirStr, state.log.getCapacityInBytes(), StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-          createStoreConfig(state.log.getSegmentCapacity(), true), new StoreMetrics(new MetricRegistry()));
+          createStoreConfig(state.log.getSegmentCapacity(), true), new StoreMetrics(new MetricRegistry()), null);
       // set end offsets correctly
       LogSegment original = state.log.getFirstSegment();
       while (original != null) {

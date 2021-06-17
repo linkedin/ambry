@@ -43,6 +43,7 @@ class Log implements Write {
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final StoreConfig config;
   private final StoreMetrics metrics;
+  private final DiskMetrics diskMetrics;
   private final Iterator<Pair<LogSegmentName, String>> segmentNameAndFileNameIterator;
   private final ConcurrentSkipListMap<LogSegmentName, LogSegment> segmentsByName = new ConcurrentSkipListMap<>();
   private static final Logger logger = LoggerFactory.getLogger(Log.class);
@@ -61,19 +62,21 @@ class Log implements Write {
    * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
    * @param config The store config used to initialize this log.
    * @param metrics the {@link StoreMetrics} instance to use.
+   * @param diskMetrics the {@link DiskMetrics} instance to use.
    * @throws StoreException if there is any store exception loading the segment files.
    * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
   Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
-      StoreMetrics metrics) throws StoreException {
+      StoreMetrics metrics, DiskMetrics diskMetrics) throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = totalCapacityInBytes > config.storeSegmentSizeInBytes;
     this.diskSpaceAllocator = diskSpaceAllocator;
     this.config = config;
     this.metrics = metrics;
+    this.diskMetrics = diskMetrics;
     this.segmentNameAndFileNameIterator = Collections.emptyIterator();
     storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
 
@@ -99,6 +102,7 @@ class Log implements Write {
    * @param segmentNameAndFileNameIterator an {@link Iterator} that provides the name and filename for newly allocated
    *                                       log segments. Once the iterator ends, the active segment name is used to
    *                                       generate the names of the subsequent segments.
+   * @param diskMetrics the {@link DiskMetrics} instance to use.
    * @throws StoreException if there is any store exception loading the segment files.
    * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
@@ -106,13 +110,15 @@ class Log implements Write {
    */
   Log(String dataDir, long totalCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator, StoreConfig config,
       StoreMetrics metrics, boolean isLogSegmented, List<LogSegment> segmentsToLoad,
-      Iterator<Pair<LogSegmentName, String>> segmentNameAndFileNameIterator) throws StoreException {
+      Iterator<Pair<LogSegmentName, String>> segmentNameAndFileNameIterator, DiskMetrics diskMetrics)
+      throws StoreException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = isLogSegmented;
     this.diskSpaceAllocator = diskSpaceAllocator;
     this.config = config;
     this.metrics = metrics;
+    this.diskMetrics = diskMetrics;
     this.segmentNameAndFileNameIterator = segmentNameAndFileNameIterator;
     storeId = dataDir.substring(dataDir.lastIndexOf(File.separator) + File.separator.length());
 
@@ -656,5 +662,9 @@ class Log implements Write {
       throw new IllegalStateException("Args indicate that blob is not wholly contained within a single segment");
     }
     return new FileSpan(new Offset(segment.getName(), startOffset), new Offset(segment.getName(), startOffset + size));
+  }
+
+  public DiskMetrics getDiskMetrics() {
+    return diskMetrics;
   }
 }

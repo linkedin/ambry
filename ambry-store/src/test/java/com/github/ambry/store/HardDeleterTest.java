@@ -192,7 +192,8 @@ public class HardDeleterTest {
     // case where the endToken does not reach the journal.
     props.setProperty("store.hard.delete.operations.bytes.per.sec", "40");
     StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-    log = new Log(rootDirectory.getAbsolutePath(), 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, config, metrics);
+    log = new Log(rootDirectory.getAbsolutePath(), 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, config, metrics,
+        null);
     StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
     time = new MockTime(SystemTime.getInstance().milliseconds());
 

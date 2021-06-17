@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.codahale.metrics.Histogram;
 
 
 /**
@@ -46,6 +45,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final Offset offset;
   private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
+  private final DiskMetrics diskMetrics;
   private static final Logger logger = LoggerFactory.getLogger(BlobReadOptions.class);
   private ByteBuf prefetchedData;
   private long prefetchedDataRelativeOffset = -1;
@@ -67,6 +67,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     segmentView = segment.getView();
     this.offset = offset;
     this.info = info;
+    diskMetrics = log.getDiskMetrics();
     logger.trace("BlobReadOption offset {} size {} MessageInfo {} ", offset, info.getSize(), info);
   }
 
@@ -166,10 +167,9 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     prefetchedData = PooledByteBufAllocator.DEFAULT.ioBuffer((int) sizeToRead);
     long fetchStartTime = SystemTime.getInstance().milliseconds();
     prefetchedData.writeBytes(getChannel(), offset.getOffset() + relativeOffset, (int) sizeToRead);
-    String diskMountPath = segment.getDiskMountPath();
-    Histogram diskReadTimePerMbInMs = segment.getMetrics().diskReadTimePerMbInMs.get(diskMountPath);
-    if (diskReadTimePerMbInMs != null) {
-      diskReadTimePerMbInMs.update(((SystemTime.getInstance().milliseconds() - fetchStartTime) << 20) / sizeToRead);
+    if (diskMetrics != null) {
+      diskMetrics.diskReadTimePerMbInMs.update(
+          ((SystemTime.getInstance().milliseconds() - fetchStartTime) << 20) / sizeToRead);
     }
     prefetchedDataRelativeOffset = relativeOffset;
   }

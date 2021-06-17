@@ -259,13 +259,15 @@ public class CompactionVerifier implements Closeable {
     // load "src compaction" log and index
     // the segment size is derived from existing log file not from store config, so it's safe to use passed-in store config
     srcLog =
-        new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, srcMetrics);
+        new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, srcMetrics,
+            null);
     srcIndex = new PersistentIndex(srcDir.getAbsolutePath(), "src", null, srcLog, storeConfig, storeKeyFactory, null,
         hardDelete, diskIOScheduler, srcMetrics, SystemTime.getInstance(), sessionId, incarnationId);
 
     // load "tgt" compaction log and index
     tgtLog =
-        new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, tgtMetrics);
+        new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, diskSpaceAllocator, storeConfig, tgtMetrics,
+            null);
     tgtIndex = new PersistentIndex(tgtDir.getAbsolutePath(), "tgt", null, tgtLog, storeConfig, storeKeyFactory, null,
         hardDelete, diskIOScheduler, tgtMetrics, SystemTime.getInstance(), sessionId, incarnationId);
   }
