@@ -2742,7 +2742,6 @@ public class BlobStoreCompactorTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
-    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     return new BlobStoreCompactor(tempDirStr, STORE_ID, STORE_KEY_FACTORY, config, metrics, metrics, ioScheduler,
         StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log, state.time, state.sessionId, state.incarnationId,
         accountService, remoteTokenTracker, null);

@@ -520,7 +520,7 @@ public class CompactionManagerTest {
 
     MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, CountDownLatch compactCallsCountdown,
         CompactionDetails details) {
-      super(StoreTestUtils.createMockReplicaId("", 0, "/mnt/10/ambrydata/1"), config, null, null, null, null, metrics, metrics, null,
+      super(StoreTestUtils.createMockReplicaId("", 0, null), config, null, null, null, null, metrics, metrics, null,
           null, null, null, time, new InMemAccountService(false, false), null);
       this.compactCallsCountdown = compactCallsCountdown;
       this.details = details;

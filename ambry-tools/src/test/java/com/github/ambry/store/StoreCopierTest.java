@@ -100,7 +100,6 @@ public class StoreCopierTest {
     setupTestState();
     time.sleep(TimeUnit.SECONDS.toMillis(TestUtils.TTL_SECS + 1));
     StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
-    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     storeCopier = new StoreCopier("test_store", srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig, metrics,
         STORE_KEY_FACTORY, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, Collections.emptyList(),
         time);
@@ -127,7 +126,6 @@ public class StoreCopierTest {
     storeCopier.close();
     // copy the store descriptor file over
     StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
-    storeMetrics.initializeDiskMetrics("/disk/mount/path", 200);
     Files.copy(new File(srcDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(),
         new File(tgtDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
     BlobStore tgt =
@@ -177,7 +175,6 @@ public class StoreCopierTest {
    */
   private void setupTestState() throws IOException, StoreException {
     StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
-    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     long expiryTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(TestUtils.TTL_SECS);
     temporaryPutExpiryTimeMs =
         Utils.getTimeInMsToTheNearestSec(SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(1));

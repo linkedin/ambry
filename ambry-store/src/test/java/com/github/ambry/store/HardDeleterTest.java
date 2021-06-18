@@ -181,7 +181,6 @@ public class HardDeleterTest {
     scheduler = Utils.newScheduler(1, false);
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
-    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     Properties props = new Properties();
     // the test will set the tokens, so disable the index persistor.
     props.setProperty("store.data.flush.interval.seconds", "3600");
