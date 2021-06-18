@@ -92,19 +92,19 @@ public class MySqlNamedBlobDbTest {
   @Test
   public void testRetryGetNamedBlobFromDiffDcs() throws Exception {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
-    dataSourceFactory.triggerQueryExecutionErrorForLocalDataCenter(datacenters);
+    dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
     NamedBlobRecord namedBlobRecord1 = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord1.getBlobId());
-    dataSourceFactory.triggerQueryExecutionErrorForAllDataCenters(datacenters);
+    dataSourceFactory.triggerEmptyResultSetForAllDataCenters(datacenters);
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), "blobName"), RestServiceErrorCode.NotFound);
   }
 
   @Test
   public void testRetryDeleteNamedBlob() throws Exception {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
-    dataSourceFactory.triggerQueryExecutionErrorForLocalDataCenter(datacenters);
+    dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
     checkErrorCode(() -> namedBlobDb.delete(account.getName(), container.getName(), "blobName"), RestServiceErrorCode.NotFound);
   }
 
@@ -182,7 +182,7 @@ public class MySqlNamedBlobDbTest {
       }
     }
 
-    private void triggerQueryExecutionErrorForLocalDataCenter(List<String> datacenters) {
+    private void triggerEmptyResultSetForLocalDataCenter(List<String> datacenters) {
       for (String datacenter : datacenters) {
         try {
           DataSource dataSource = dataSources.get(datacenter);
@@ -209,7 +209,7 @@ public class MySqlNamedBlobDbTest {
       }
     }
 
-    private void triggerQueryExecutionErrorForAllDataCenters(List<String> datacenters) {
+    private void triggerEmptyResultSetForAllDataCenters(List<String> datacenters) {
       for (String datacenter : datacenters) {
         try {
           DataSource dataSource = dataSources.get(datacenter);

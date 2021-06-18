@@ -16,7 +16,6 @@ package com.github.ambry.named;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import java.util.List;
-import java.util.PriorityQueue;
 
 
 /**
@@ -24,7 +23,7 @@ import java.util.PriorityQueue;
  * datacenter based on an exception received from the last datacenter tried (processFailure). If processFailure returned
  * true, the next call to getDatacenter should return the datacenter to retry on.
  */
-public class GetTransactionStateTracker implements TransactionStateTracker{
+class GetTransactionStateTracker implements TransactionStateTracker {
   private String nextDatacenter;
   private int counter;
   private final List<String> remoteDatacenters;
