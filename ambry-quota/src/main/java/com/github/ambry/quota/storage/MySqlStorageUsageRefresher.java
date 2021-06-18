@@ -136,21 +136,19 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     }
 
     if (containerStorageUsageMonthlyBase == null) {
-      synchronized (accountStatsStore) {
-        try {
-          // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
-          logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
-          containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
-          // If the monthly base is indeed for this month, then try to persist it in the backup file.
-          // There is a chance that the database has a snapshot from last month since the aggregation task is executed
-          // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
-          // would have the snapshot of last month.
-          if (currentMonth.equals(accountStatsStore.queryRecordedMonth())) {
-            tryPersistMonthlyUsage();
-          }
-        } catch (Exception e) {
-          throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
+      try {
+        // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
+        logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
+        containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
+        // If the monthly base is indeed for this month, then try to persist it in the backup file.
+        // There is a chance that the database has a snapshot from last month since the aggregation task is executed
+        // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
+        // would have the snapshot of last month.
+        if (currentMonth.equals(accountStatsStore.queryRecordedMonth())) {
+          tryPersistMonthlyUsage();
         }
+      } catch (Exception e) {
+        throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
       }
     }
     metrics.mysqlRefresherInitTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -176,22 +174,19 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
    */
   private void fetchMonthlyStorageUsageAndMaybeRetry() {
     boolean shouldRetry = false;
-    synchronized (accountStatsStore) {
-      try {
-        String monthValue = accountStatsStore.queryRecordedMonth();
-        if (monthValue.equals(currentMonth)) {
-          logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}",
-              currentMonth);
-          containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
-        } else {
-          logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
-              monthValue);
-          shouldRetry = true;
-        }
-      } catch (Exception e) {
-        logger.error("Failed to refresh monthly storage usage", e);
+    try {
+      String monthValue = accountStatsStore.queryRecordedMonth();
+      if (monthValue.equals(currentMonth)) {
+        logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}", currentMonth);
+        containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
+      } else {
+        logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
+            monthValue);
         shouldRetry = true;
       }
+    } catch (Exception e) {
+      logger.error("Failed to refresh monthly storage usage", e);
+      shouldRetry = true;
     }
 
     if (shouldRetry) {
@@ -254,24 +249,22 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
    */
   private void initialFetchAndSchedule() {
     Runnable updater = () -> {
-      synchronized (accountStatsStore) {
-        try {
-          long startTimeMs = System.currentTimeMillis();
-          Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
-          Map<String, Map<String, Long>> storageUsage = accountStatsStore.queryAggregatedAccountStats();
-          if (storageUsage != null) {
-            subtract(storageUsage, base);
-            containerStorageUsageForCurrentMonthRef.set(storageUsage);
-            if (listener.get() != null) {
-              listener.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));
-            }
-            metrics.mysqlRefresherRefreshUsageTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      try {
+        long startTimeMs = System.currentTimeMillis();
+        Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
+        Map<String, Map<String, Long>> storageUsage = accountStatsStore.queryAggregatedAccountStats();
+        if (storageUsage != null) {
+          subtract(storageUsage, base);
+          containerStorageUsageForCurrentMonthRef.set(storageUsage);
+          if (listener.get() != null) {
+            listener.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));
           }
-        } catch (Exception e) {
-          logger.error("Failed to retrieve the container usage from mysql", e);
-          // If we already have a container usage map in memory, then don't replace it with empty map.
-          containerStorageUsageForCurrentMonthRef.compareAndSet(null, Collections.EMPTY_MAP);
+          metrics.mysqlRefresherRefreshUsageTimeMs.update(System.currentTimeMillis() - startTimeMs);
         }
+      } catch (Exception e) {
+        logger.error("Failed to retrieve the container usage from mysql", e);
+        // If we already have a container usage map in memory, then don't replace it with empty map.
+        containerStorageUsageForCurrentMonthRef.compareAndSet(null, Collections.EMPTY_MAP);
       }
     };
     updater.run();
