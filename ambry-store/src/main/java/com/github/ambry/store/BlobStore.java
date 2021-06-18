@@ -65,6 +65,7 @@ public class BlobStore implements Store {
 
   private final String storeId;
   private final String dataDir;
+  private final DiskMetrics diskMetrics;
   private final ScheduledExecutorService taskScheduler;
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
@@ -136,16 +137,18 @@ public class BlobStore implements Store {
    * @param replicaStatusDelegates delegates used to communicate BlobStore write status(sealed/unsealed, stopped/started)
    * @param time the {@link Time} instance to use.
    * @param accountService  the {@link AccountService} instance to use.
+   * @param diskMetrics the {@link DiskMetrics} for the disk of this {@link BlobStore}
    */
   public BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService) {
+      List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService,
+      DiskMetrics diskMetrics) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
         replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService,
-        null);
+        null, diskMetrics);
   }
 
   /**
@@ -171,7 +174,8 @@ public class BlobStore implements Store {
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time) {
     this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator, metrics,
-        storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null, null);
+        storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null, null,
+        null);
   }
 
   BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
@@ -179,10 +183,11 @@ public class BlobStore implements Store {
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates, Time time,
-      AccountService accountService, BlobStoreStats blobStoreStats) {
+      AccountService accountService, BlobStoreStats blobStoreStats, DiskMetrics diskMetrics) {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
+    this.diskMetrics = diskMetrics;
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
@@ -245,10 +250,10 @@ public class BlobStore implements Store {
         }
 
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, config);
-        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics);
+        log = new Log(dataDir, capacityInBytes, diskSpaceAllocator, config, metrics, diskMetrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
-            accountService, remoteTokenTracker);
+            accountService, remoteTokenTracker, diskMetrics);
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
@@ -489,7 +494,11 @@ public class BlobStore implements Store {
             Offset endOffsetOfLastMessage = log.getEndOffset();
             long diskWriteStartTime = time.milliseconds();
             long sizeWritten = messageSetToWrite.writeTo(log);
-            metrics.diskWriteTimePerMbInMs.update(((time.milliseconds() - diskWriteStartTime) << 20) / sizeWritten);
+
+            if (diskMetrics != null) {
+              diskMetrics.diskWriteTimePerMbInMs.update(
+                  ((time.milliseconds() - diskWriteStartTime) << 20) / sizeWritten);
+            }
             logger.trace("Store : {} message set written to log", dataDir);
 
             List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();

@@ -181,7 +181,6 @@ public class HardDeleterTest {
     scheduler = Utils.newScheduler(1, false);
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
-    metrics.initializeDiskMetrics("/disk/mount/path", 200);
     Properties props = new Properties();
     // the test will set the tokens, so disable the index persistor.
     props.setProperty("store.data.flush.interval.seconds", "3600");
@@ -192,7 +191,8 @@ public class HardDeleterTest {
     // case where the endToken does not reach the journal.
     props.setProperty("store.hard.delete.operations.bytes.per.sec", "40");
     StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-    log = new Log(rootDirectory.getAbsolutePath(), 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, config, metrics);
+    log = new Log(rootDirectory.getAbsolutePath(), 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, config, metrics,
+        null);
     StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
     time = new MockTime(SystemTime.getInstance().milliseconds());
 
