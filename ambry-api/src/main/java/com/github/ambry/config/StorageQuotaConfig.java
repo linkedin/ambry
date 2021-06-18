@@ -25,6 +25,7 @@ public class StorageQuotaConfig {
       STORAGE_QUOTA_PREFIX + "mysql.monthly.base.fetch.offset.sec";
   public static final String MYSQL_STORE_RETRY_BACKOFF_MS = STORAGE_QUOTA_PREFIX + "mysql.store.retry.backoff.ms";
   public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
+  public static final String SHOULD_THROTTLE = STORAGE_QUOTA_PREFIX + "should.throttle";
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -85,6 +86,13 @@ public class StorageQuotaConfig {
   public final long mysqlMonthlyBaseFetchOffsetSec;
 
   /**
+   * True to enable throttle for storage quota enforcer.
+   */
+  @Config(SHOULD_THROTTLE)
+  @Default("true")
+  public final boolean shouldThrottle;
+
+  /**
    * Constructor to create a {@link StorageQuotaConfig}.
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
@@ -96,5 +104,6 @@ public class StorageQuotaConfig {
     mysqlStoreRetryBackoffMs = verifiableProperties.getLong(MYSQL_STORE_RETRY_BACKOFF_MS, 10 * 60 * 1000);
     mysqlStoreRetryMaxCount = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX_COUNT, 1);
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
+    shouldThrottle = verifiableProperties.getBoolean(SHOULD_THROTTLE, true);
   }
 }
