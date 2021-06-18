@@ -67,8 +67,16 @@ public class RetryExecutor {
           int waitTimeMs = policy.waitTimeMs(currAttempts);
           logger.info("{} of {} attempts failed, will keep retrying after a {} ms backoff. exception='{}'",
               currAttempts, policy.maxAttempts(), waitTimeMs, exception);
-          scheduler.schedule(() -> recursiveAsyncRetry(call, isRetriable, policy, userCallback, currAttempts), waitTimeMs,
-              TimeUnit.MILLISECONDS);
+          //Don't need the scheduler if no need to wait for retry and show warn message if scheduler is null but wait time larger than 0;
+          if (scheduler == null) {
+            if (waitTimeMs > 0) {
+              logger.warn("No scheduler for delay execution. waitTimeMs: {}", waitTimeMs);
+            }
+            recursiveAsyncRetry(call, isRetriable, policy, userCallback, currAttempts);
+          } else {
+            scheduler.schedule(() -> recursiveAsyncRetry(call, isRetriable, policy, userCallback, currAttempts),
+                waitTimeMs, TimeUnit.MILLISECONDS);
+          }
         } else {
           logger.info("{} of {} attempts failed, completing operation. exception='{}'", currAttempts,
               policy.maxAttempts(), exception);
