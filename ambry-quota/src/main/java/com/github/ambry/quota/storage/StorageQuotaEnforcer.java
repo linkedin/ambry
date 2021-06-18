@@ -24,7 +24,6 @@ import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
-import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
@@ -151,7 +150,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
       // There is no quota set for the given account/container
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
-    boolean shouldThrottle = currentUsage >= quotaValue;
+    boolean shouldThrottle = config.shouldThrottle && currentUsage >= quotaValue;
     float usagePercentage = currentUsage >= quotaValue ? 100f : ((float) currentUsage) / quotaValue * 100f;
     return new QuotaRecommendation(shouldThrottle, usagePercentage, QuotaName.STORAGE_IN_GB,
         shouldThrottle ? HTTP_STATUS_THROTTLE : HTTP_STATUS_ALLOW, NO_RETRY);
