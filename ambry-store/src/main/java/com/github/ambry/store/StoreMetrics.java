@@ -307,7 +307,8 @@ public class StoreMetrics {
   }
 
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress,
-      AtomicReference<CompactionDetails> compactionDetailsAtomicReference, AtomicLong compactedLogCount) {
+      AtomicReference<CompactionDetails> compactionDetailsAtomicReference, AtomicLong compactedLogCount,
+      AtomicLong logSegmentCount) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
@@ -333,6 +334,9 @@ public class StoreMetrics {
     Gauge<Long> compactedLogCountGauge = compactedLogCount::get;
     registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactedLogCount"),
         () -> compactedLogCountGauge);
+    Gauge<Long> logSegmentCountGauge = logSegmentCount::get;
+    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "LogSegmentCount"),
+        () -> logSegmentCountGauge);
   }
 
   /**
