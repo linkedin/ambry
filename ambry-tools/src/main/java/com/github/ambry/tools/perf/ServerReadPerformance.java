@@ -173,7 +173,7 @@ public class ServerReadPerformance {
 
       ToolUtils.ensureOrExit(listOpt, options, parser);
 
-      long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * TimeUnit.SECONDS.toNanos(1);
+      long measurementIntervalNs = TimeUnit.SECONDS.toNanos(options.valueOf(measurementIntervalOpt));
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
           sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 

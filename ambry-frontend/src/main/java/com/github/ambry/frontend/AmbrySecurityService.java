@@ -371,7 +371,7 @@ class AmbrySecurityService implements SecurityService {
     Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
     if (container.isCacheable()) {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
-          new Date(System.currentTimeMillis() + frontendConfig.cacheValiditySeconds * TimeUnit.SECONDS.toMillis(1)));
+          new Date(System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(frontendConfig.cacheValiditySeconds)));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.cacheValiditySeconds);
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, restResponseChannel.getHeader(RestUtils.Headers.DATE));

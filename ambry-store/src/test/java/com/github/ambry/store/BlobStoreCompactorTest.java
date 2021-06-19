@@ -215,12 +215,12 @@ public class BlobStoreCompactorTest {
     LogSegmentName secondLogSegmentName = state.log.getNextSegment(state.log.getSegment(firstLogSegmentName)).getName();
     LogSegmentName lastLogSegmentName = state.referenceIndex.lastKey().getName();
 
-    CompactionDetails details = new CompactionDetails(state.time.milliseconds() + TimeUnit.SECONDS.toMicros(1),
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds() + TimeUnit.SECONDS.toMillis(1),
         Arrays.asList(firstLogSegmentName, lastLogSegmentName), null);
     ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
 
     // compaction range contains segments in the wrong order
-    details = new CompactionDetails(state.time.milliseconds() + TimeUnit.SECONDS.toMicros(1),
+    details = new CompactionDetails(state.time.milliseconds() + TimeUnit.SECONDS.toMillis(1),
         Arrays.asList(secondLogSegmentName, firstLogSegmentName), null);
     ensureArgumentFailure(details, "Should have failed because segments are in the wrong order");
 
