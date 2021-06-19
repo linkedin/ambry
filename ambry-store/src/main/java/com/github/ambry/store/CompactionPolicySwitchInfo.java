@@ -20,34 +20,26 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 /**
  * The {@link CompactionPolicy} info to determine when to use which {@link CompactionPolicy}.
  */
-@JsonPropertyOrder({"compactionPolicyCounter", "lastCompactionTime"})
+@JsonPropertyOrder({"lastCompactionTime", "nextRoundIsCompactAllPolicy"})
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 public class CompactionPolicySwitchInfo {
-  private CompactionPolicyCounter compactionPolicyCounter;
   private long lastCompactAllTime;
+  private boolean nextRoundIsCompactAllPolicy;
 
   /**
    * Constructor to create {@link CompactionPolicySwitchInfo} object.
-   * @param compactionPolicyCounter Counter used to switch {@link CompactAllPolicy}
    * @param lastCompactAllTime last time when {@link CompactAllPolicy} has been selected.
+   * @param nextRoundIsCompactAllPolicy {@code True} if the next round of compaction policy is compactAll. {@code False} Otherwise.
    */
-  CompactionPolicySwitchInfo(CompactionPolicyCounter compactionPolicyCounter, long lastCompactAllTime) {
-    this.compactionPolicyCounter = compactionPolicyCounter;
+  CompactionPolicySwitchInfo(long lastCompactAllTime, boolean nextRoundIsCompactAllPolicy) {
     this.lastCompactAllTime = lastCompactAllTime;
+    this.nextRoundIsCompactAllPolicy = nextRoundIsCompactAllPolicy;
   }
 
   /**
    * make sure objectMapper can work correctly
    */
   CompactionPolicySwitchInfo() {
-  }
-
-  /**
-   * Get current {@link CompactionPolicyCounter}
-   * @return {@link CompactionPolicyCounter}
-   */
-  CompactionPolicyCounter getCompactionPolicyCounter() {
-    return this.compactionPolicyCounter;
   }
 
   /**
@@ -64,5 +56,19 @@ public class CompactionPolicySwitchInfo {
    */
   void setLastCompactAllTime(long lastCompactAllTime) {
     this.lastCompactAllTime = lastCompactAllTime;
+  }
+
+  /**
+   * @return {@code True} if the next round of compaction policy is compactAll. {@code False} Otherwise.
+   */
+  boolean isNextRoundCompactAllPolicy() {
+    return this.nextRoundIsCompactAllPolicy;
+  }
+
+  /**
+   * Set the nextRoundIsCompactAllPolicy to {@code True} if the next round of compaction policy is compactAll.
+   */
+  void setNextRoundIsCompactAllPolicy(boolean isNextRoundCompactAllPolicy) {
+    this.nextRoundIsCompactAllPolicy = isNextRoundCompactAllPolicy;
   }
 }

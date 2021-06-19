@@ -29,6 +29,8 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
@@ -82,6 +84,8 @@ public class TtlUpdateManagerTest {
   private final TtlUpdateNotificationSystem notificationSystem = new TtlUpdateNotificationSystem();
   private final int serverCount = serverLayout.getMockServers().size();
   private final AccountService accountService = new InMemAccountService(true, false);
+  private final QuotaChargeCallback quotaChargeCallback =
+      QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * Sets up all required components including a blob.
@@ -103,8 +107,7 @@ public class TtlUpdateManagerTest {
       ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(PUT_CONTENT));
       BlobProperties putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
           Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
     }
     ttlUpdateManager =
@@ -133,7 +136,8 @@ public class TtlUpdateManagerTest {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
       TestCallback<Void> callback = new TestCallback<>();
       notificationSystem.reset();
-      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, callback).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, callback, quotaChargeCallback)
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       notificationSystem.checkNotifications(1, null, Utils.Infinite_Time);
       assertTrue("Callback was not called", callback.getLatch().await(10, TimeUnit.MILLISECONDS));
       assertNull("There should be no exception in the callback", callback.getException());
@@ -288,7 +292,7 @@ public class TtlUpdateManagerTest {
     blobIds.add(blobIds.get(0));
     try {
       ttlUpdateManager.submitTtlUpdateOperation(blobIds, UPDATE_SERVICE_ID, Utils.Infinite_Time, new FutureResult<>(),
-          new TestCallback<>());
+          new TestCallback<>(), quotaChargeCallback);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -314,7 +318,8 @@ public class TtlUpdateManagerTest {
     TestCallback<Void> callback = new TestCallback<>();
     NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
     notificationSystem.reset();
-    ttlUpdateManager.submitTtlUpdateOperation(ids, UPDATE_SERVICE_ID, Utils.Infinite_Time, future, callback);
+    ttlUpdateManager.submitTtlUpdateOperation(ids, UPDATE_SERVICE_ID, Utils.Infinite_Time, future, callback,
+        quotaChargeCallback);
     sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests);
     long expectedTtlSecs = TTL_SECS;
     if (expectedErrorCode == null) {

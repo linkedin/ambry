@@ -21,7 +21,6 @@ import java.util.Set;
 
 /**
  * The interface that stores and fetches account stats, aggregated account stats.
- * TODO: add method to deal with replica reassignment.
  */
 public interface AccountStatsStore {
   /**
@@ -38,6 +37,14 @@ public interface AccountStatsStore {
    * @throws Exception
    */
   void storeAggregatedAccountStats(StatsSnapshot snapshot) throws Exception;
+
+  /**
+   * Delete aggregated account stats for the given {@code accountId} and {@code containerId}.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @throws Exception
+   */
+  void deleteAggregatedAccountStatsForContainer(short accountId, short containerId) throws Exception;
 
   /**
    * Return individual ambry server's stats for the given {@code hostname}. This is the stats stored by method {@link #storeAccountStats}.
@@ -103,6 +110,12 @@ public interface AccountStatsStore {
    * @throws Exception
    */
   void takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(String monthValue) throws Exception;
+
+  /**
+   * Delete the snapshot of latest aggregated account stats. This is usually used to prepare for the new snapshot.
+   * @throws Exception
+   */
+  void deleteSnapshotOfAggregatedAccountStats() throws Exception;
 
   /**
    * Return all the partition class names and their corresponding partition ids in a set.
@@ -180,6 +193,17 @@ public interface AccountStatsStore {
    * @throws Exception
    */
   void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws Exception;
+
+  /**
+   * Delete aggregated partition class stats for the given {@code partitionClassName} and the {@code accountContainerKey}.
+   * The {@code accountContainerKey} is the key in the PartitionClass StatsSnapshot. It includes account id and container id.
+   * The account id and container id can be extracted from this key.
+   * @param partitionClassName The partition class name.
+   * @param accountContainerKey The key that contains account id and container id.
+   * @throws Exception
+   */
+  void deleteAggregatedPartitionClassStatsForAccountContainer(String partitionClassName, String accountContainerKey)
+      throws Exception;
 
   /**
    * Return the aggregated partition class stats for given. The returned StatsSnapshot is constructed in the same way

@@ -357,6 +357,66 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests blob store remain sealed status use of {@link ReplicaStatusDelegate}
+   * @throws IOException
+   * @throws StoreException
+   * @throws InterruptedException
+   */
+  @Test
+  public void testCompactionWithReplicaSealed() throws IOException, StoreException, InterruptedException {
+    if (isLogSegmented) {
+      cleanup();
+      scheduler = Utils.newScheduler(1, false);
+      storeStatsScheduler = Utils.newScheduler(1, false);
+      setupTestState(false, false);
+    }
+    properties.setProperty("store.auto.close.last.log.segment.enabled", Boolean.toString(true));
+    properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(true));
+    properties.setProperty("store.unseal.replica.minimum.lag", "5");
+    //Setup threshold test properties, replicaId, mock write status delegate
+    StoreConfig defaultConfig = changeThreshold(65, 5, true);
+    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
+    when(replicaStatusDelegate.unseal(any())).thenReturn(true);
+    when(replicaStatusDelegate.seal(any())).thenReturn(true);
+    //Restart store
+    reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
+    store.setLocalStoreMaxLagFromPeer(10);
+    //Check that after start, replicaStatusDelegate is called to enable replica if it was previously disabled
+    verify(replicaStatusDelegate, times(1)).enableReplica(replicaId);
+    put(1, 50, Utils.Infinite_Time);
+    //Verify that after putting in enough data, the store goes to read only
+    // setupTestState already have created 3 log segments, there we create another 4 segments, it should
+    // be enough to fill up to 65% of the log capacity.
+    List<MockId> addedIds = put(4, (long) (SEGMENT_CAPACITY * 0.8), Utils.Infinite_Time);
+    verify(replicaStatusDelegate, times(1)).seal(replicaId);
+    //Assumes ClusterParticipant sets replicaId status to true
+    replicaId.setSealedState(true);
+    //Remaining tests only relevant for segmented logs
+    if (isLogSegmented) {
+      //Delete added data
+      for (MockId addedId : addedIds) {
+        delete(addedId);
+      }
+
+      //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
+      //By restarting, only last segment will be in journal
+      reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
+      store.setLocalStoreMaxLagFromPeer(10);
+      verify(replicaStatusDelegate, times(2)).enableReplica(replicaId);
+
+      //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
+      //that the store is now read-write
+      time.sleep(TimeUnit.DAYS.toMillis(8));
+      store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)),
+          new byte[PUT_RECORD_SIZE * 2 + 1]);
+      verify(replicaStatusDelegate, times(1)).seal(replicaId);
+    }
+    store.shutdown();
+    properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(false));
+  }
+
+  /**
    * Tests blob store use of {@link ReplicaStatusDelegate}
    * @throws StoreException
    */
@@ -1877,7 +1937,7 @@ public class BlobStoreTest {
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
             storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics, mockStoreKeyFactory, recovery,
-            hardDelete, Collections.singletonList(mockDelegate), time, new InMemAccountService(false, false));
+            hardDelete, Collections.singletonList(mockDelegate), time, new InMemAccountService(false, false), null);
 
     testStore2.start();
     assertTrue("Store should start up", testStore2.isStarted());
@@ -2092,7 +2152,7 @@ public class BlobStoreTest {
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
             diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time,
-            new InMemAccountService(false, false));
+            new InMemAccountService(false, false), null);
     testStore.start();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
     diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
@@ -2209,7 +2269,7 @@ public class BlobStoreTest {
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
             diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete,
-            Collections.singletonList(delegate), time, new InMemAccountService(false, false));
+            Collections.singletonList(delegate), time, new InMemAccountService(false, false), null);
     testStore.start();
     assertEquals("Store current state should be OFFLINE if dynamic participant is adopted", OFFLINE,
         testStore.getCurrentState());
@@ -3371,7 +3431,8 @@ public class BlobStoreTest {
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
         StoreMetrics metrics) {
       super(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
-          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false));
+          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false),
+          null);
     }
 
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
@@ -3379,7 +3440,7 @@ public class BlobStoreTest {
       super(replicaId, replicaId.getPartitionId().toString(), config, scheduler, storeStatsScheduler, diskIOScheduler,
           diskSpaceAllocator, metrics, metrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(),
           STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false),
-          blobStoreStats);
+          blobStoreStats, null);
     }
 
     /**
@@ -3413,7 +3474,7 @@ public class BlobStoreTest {
     volatile IndexValue previousValue;
 
     MockBlobStoreStats(Time time) {
-      super("", null, 0, 0, 0, 0, 0, false, time, null, null, null, null);
+      super("", null, 0, 0, 0, 0, 0, false, true, time, null, null, null, null, 1, false);
     }
 
     @Override

@@ -195,7 +195,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     // Add remoteReplicaInfos to {@link ReplicaThread}.
     addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
     if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
-      replicationMetrics.addLagMetricForPartition(partitionId);
+      replicationMetrics.addLagMetricForPartition(partitionId, true);
     }
     replicationMetrics.addCatchUpPointMetricForPartition(partitionId);
   }
@@ -212,10 +212,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     // Note that in case of cloudReplicaTokens, the actual remote vcr node might not match as the vcr node is chosen at
     // random during initialization. So it's enough to just match the partitionId in the token so that replication
     // can start from cloud from where it left off.
-    return tokenInfo.getReplicaInfo()
-        .getReplicaId()
-        .getPartitionId()
-        .equals(remoteReplicaInfo.getReplicaId().getPartitionId());
+    return tokenInfo.getPartitionId().equals(remoteReplicaInfo.getReplicaId().getPartitionId());
   }
 
   /**

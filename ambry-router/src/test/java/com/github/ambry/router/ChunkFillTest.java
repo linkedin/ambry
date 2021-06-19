@@ -25,6 +25,8 @@ import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -68,6 +70,8 @@ public class ChunkFillTest {
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
+  private final QuotaChargeCallback quotaChargeCallback =
+      QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * Running for both regular and encrypted blobs
@@ -153,7 +157,7 @@ public class ChunkFillTest {
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
             new InMemAccountService(true, false), putUserMetadata, putChannel, PutBlobOptions.DEFAULT, futureResult,
             null, new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<>()), null, null, null,
-            null, new MockTime(), putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            null, new MockTime(), putBlobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
     op.startOperation();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
@@ -264,7 +268,7 @@ public class ChunkFillTest {
         PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
             new InMemAccountService(true, false), putUserMetadata, putChannel, PutBlobOptions.DEFAULT, futureResult,
             null, routerCallback, null, kms, cryptoService, cryptoJobHandler, time, putBlobProperties,
-            MockClusterMap.DEFAULT_PARTITION_CLASS);
+            MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
     op.startOperation();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuf[numChunks];

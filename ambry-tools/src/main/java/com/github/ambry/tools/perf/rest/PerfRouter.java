@@ -15,9 +15,10 @@ package com.github.ambry.tools.perf.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -47,16 +48,14 @@ class PerfRouter implements Router {
 
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   private static final Random random = new Random();
-
-  private static RouterException ROUTER_CLOSED_EXCEPTION =
+  private static final Logger logger = LoggerFactory.getLogger(PerfRouter.class);
+  private static final RouterException ROUTER_CLOSED_EXCEPTION =
       new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-
   private final PerfRouterMetrics perfRouterMetrics;
   private final BlobProperties blobProperties;
   private final byte[] usermetadata;
   private final byte[] chunk;
   private volatile boolean routerOpen = true;
-  private static final Logger logger = LoggerFactory.getLogger(PerfRouter.class);
 
   /**
    * Creates an instance of PerfRouter with configuration as specified in {@code perfRouterConfig}.
@@ -74,7 +73,8 @@ class PerfRouter implements Router {
   }
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received getBlob call");
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     if (!routerOpen) {
@@ -110,7 +110,7 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      PutBlobOptions options, final Callback<String> callback) {
+      PutBlobOptions options, final Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {
@@ -138,7 +138,7 @@ class PerfRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback) {
+      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received stitchBlob call");
     final FutureResult<String> futureResult = new FutureResult<>();
     if (!routerOpen) {
@@ -157,7 +157,8 @@ class PerfRouter implements Router {
    * @return a {@link FutureResult} that will eventually contain the result of the operation.
    */
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received deleteBlob call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!routerOpen) {
@@ -177,7 +178,8 @@ class PerfRouter implements Router {
    * @return a {@link FutureResult} that will eventually contain the result of the operation.
    */
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received updateBlobTtl call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!routerOpen) {
@@ -196,7 +198,8 @@ class PerfRouter implements Router {
    * @return a {@link FutureResult} that will eventually contain the result of the operation.
    */
   @Override
-  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received undeleteBlob call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!routerOpen) {

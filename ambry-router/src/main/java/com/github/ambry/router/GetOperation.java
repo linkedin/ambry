@@ -236,8 +236,8 @@ abstract class GetOperation {
     String trackerType = routerConfig.routerGetOperationTrackerType;
     String originatingDcName = clusterMap.getDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
-      operationTracker =
-          new SimpleOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, true);
+      operationTracker = new SimpleOperationTracker(routerConfig, routerOperation, partitionId, originatingDcName, true,
+          routerMetrics);
     } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
       operationTracker =
           new AdaptiveOperationTracker(routerConfig, routerMetrics, routerOperation, partitionId, originatingDcName,

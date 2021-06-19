@@ -761,7 +761,8 @@ public class IndexTest {
   @Test
   public void getAbsoluteEndPositionOfLastPutTest() throws Exception {
     File testDir = StoreTestUtils.createTempDirectory("indexDirTest-" + TestUtils.getRandomString(10));
-    CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true, false);
+    CuratedLogIndexState indexState = new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true, false,
+        false);
     assertEquals("There should be no PUT record since index is empty", -1,
         indexState.index.getAbsoluteEndPositionOfLastPut());
     long expiresAtMs = indexState.time.milliseconds() + TimeUnit.HOURS.toMillis(1);

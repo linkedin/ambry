@@ -161,12 +161,12 @@ class CuratedLogIndexState {
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes)
       throws IOException, StoreException {
-    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, false);
+    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, false, false);
   }
 
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey)
       throws IOException, StoreException {
-    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, enableResetKey);
+    this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, enableResetKey, false);
   }
 
   /**
@@ -182,11 +182,12 @@ class CuratedLogIndexState {
    * @param addTtlUpdates if {@code true}, adds entries that update TTL.
    * @param addUndeletes if {@code true}, adds undelete entries.
    * @param enableResetKey if {@code true}, use reset key to rebuild find token (if it's been invalidated due to compaction).
+   * @param enableAutoCloseLastLogSegment if {@code true}, enable periodically auto close last log segment during compaction for testing. {@code false} otherwise.
    * @throws IOException
    * @throws StoreException
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean hardDeleteEnabled, boolean initState,
-      boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey) throws IOException, StoreException {
+      boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey, boolean enableAutoCloseLastLogSegment) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     // advance time here so when we set delete's operation time to 0, it will fall within retention day.
     advanceTime(TimeUnit.HOURS.toMillis(CuratedLogIndexState.deleteRetentionHour));
@@ -196,7 +197,7 @@ class CuratedLogIndexState {
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
     metrics = new StoreMetrics(metricRegistry);
     log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-        createStoreConfig(segmentCapacity, true), metrics);
+        createStoreConfig(segmentCapacity, true), metrics, null);
     properties.put("store.index.max.number.of.inmem.elements",
         Integer.toString(CuratedLogIndexState.DEFAULT_MAX_IN_MEM_ELEMENTS));
     properties.put("store.enable.hard.delete", Boolean.toString(hardDeleteEnabled));
@@ -205,6 +206,7 @@ class CuratedLogIndexState {
     // set the delete retention day
     properties.put("store.deleted.message.retention.hours", Integer.toString(CuratedLogIndexState.deleteRetentionHour));
     properties.put("store.rebuild.token.based.on.reset.key", Boolean.toString(enableResetKey));
+    properties.put("store.auto.close.last.log.segment.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
     // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
     time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
     initIndex(null);
@@ -1089,7 +1091,7 @@ class CuratedLogIndexState {
     index.close(false);
     log.close(false);
     log = new Log(tempDirStr, LOG_CAPACITY, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-        createStoreConfig(segmentCapacity, true), metrics);
+        createStoreConfig(segmentCapacity, true), metrics, null);
     index = null;
     if (initIndex) {
       initIndex(null);
@@ -1609,7 +1611,7 @@ class CuratedLogIndexState {
               // check if this is a delete tombstone left by compaction
               boolean isValid = true;
               try {
-                if (index.findKey(key, null, EnumSet.of(PersistentIndex.IndexEntryType.PUT)) == null) {
+                if (getExpectedValue(key, true) == null) {
                   if (currentValue.getExpiresAtMs() == Utils.Infinite_Time || currentValue.isTtlUpdate()) {
                     // TODO check validity of permanent delete tombstone
                     deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
@@ -1617,7 +1619,7 @@ class CuratedLogIndexState {
                   } else {
                     deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().getAndAdd(1);
                     deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().getAndAdd(currentValue.getSize());
-                    if (invalidateExpiredDelete && currentValue.getExpiresAtMs() < time.milliseconds()) {
+                    if (invalidateExpiredDelete && currentValue.getExpiresAtMs() < expiryReferenceTimeMs) {
                       isValid = false;
                       expiredDeletes.getFirst().add(key);
                     }
@@ -1625,7 +1627,7 @@ class CuratedLogIndexState {
                 } else {
                   // if this is a delete with PUT, we check if it has expired and track it in a separate set
                   if (invalidateExpiredDelete && currentValue.getExpiresAtMs() != Utils.Infinite_Time
-                      && currentValue.getExpiresAtMs() < time.milliseconds()) {
+                      && currentValue.getExpiresAtMs() < expiryReferenceTimeMs) {
                     expiredDeletes.getSecond().add(key);
                   }
                 }

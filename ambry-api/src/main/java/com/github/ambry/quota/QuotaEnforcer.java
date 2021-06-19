@@ -36,7 +36,16 @@ public interface QuotaEnforcer {
    * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
    * @return QuotaRecommendation object with the recommendation.
    */
-  QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap);
+  QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
+      Map<QuotaName, Double> requestCostMap);
+
+  /**
+   * Makes an {@link QuotaRecommendation} using the information in {@link RestRequest}. This
+   * method also charges one unit of request cost against the quota.
+   * @param restRequest {@link RestRequest} object.
+   * @return QuotaRecommendation object with the recommendation.
+   */
+  QuotaRecommendation chargeAndRecommend(RestRequest restRequest);
 
   /**
    * Makes an {@link QuotaRecommendation} for the restRequest. This method doesn't know the

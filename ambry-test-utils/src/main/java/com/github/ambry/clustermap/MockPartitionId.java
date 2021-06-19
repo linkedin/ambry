@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -32,12 +33,14 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
  * Mock partition id for unit tests
  */
 public class MockPartitionId implements PartitionId {
-
   final Long partition;
   public List<ReplicaId> replicaIds;
   public Map<ReplicaId, ReplicaState> replicaAndState;
+  public boolean resetAllReplicasToStandbyState = false;
+  public int resetReplicaStateCount = 0;
   private PartitionState partitionState = PartitionState.READ_WRITE;
   private final String partitionClass;
+  private final AtomicInteger invocationCount = new AtomicInteger(0);
 
   public MockPartitionId() {
     this(0L, MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -96,6 +99,16 @@ public class MockPartitionId implements PartitionId {
 
   @Override
   public List<ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
+    invocationCount.incrementAndGet();
+    if (resetAllReplicasToStandbyState) {
+      if (invocationCount.get() == resetReplicaStateCount) {
+        Map<ReplicaId, ReplicaState> replicaStateMap = new HashMap<>();
+        for (ReplicaId replica : replicaAndState.keySet()) {
+          replicaStateMap.put(replica, ReplicaState.STANDBY);
+        }
+        replicaAndState = replicaStateMap;
+      }
+    }
     return replicaIds.stream()
         .filter(r -> replicaAndState.get(r) == state && (dcName == null || r.getDataNodeId()
             .getDatacenterName()

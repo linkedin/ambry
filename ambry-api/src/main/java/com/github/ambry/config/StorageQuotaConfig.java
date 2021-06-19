@@ -13,27 +13,19 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.quota.QuotaMode;
-
-
 /**
  * Config for Storage Quota service.
  */
 public class StorageQuotaConfig {
   public static final String STORAGE_QUOTA_PREFIX = "storage.quota.";
   public static final String REFRESHER_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "refresher.polling.interval.ms";
-  public static final String SOURCE_FACTORY = STORAGE_QUOTA_PREFIX + "source.factory";
   public static final String CONTAINER_STORAGE_QUOTA_IN_JSON = STORAGE_QUOTA_PREFIX + "container.storage.quota.in.json";
-  public static final String SOURCE_POLLING_INTERVAL_MS = STORAGE_QUOTA_PREFIX + "source.polling.interval.ms";
   public static final String BACKUP_FILE_DIR = STORAGE_QUOTA_PREFIX + "backup.file.dir";
   public static final String MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC =
       STORAGE_QUOTA_PREFIX + "mysql.monthly.base.fetch.offset.sec";
   public static final String MYSQL_STORE_RETRY_BACKOFF_MS = STORAGE_QUOTA_PREFIX + "mysql.store.retry.backoff.ms";
   public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
-  public static final String ENFORCER_MODE = STORAGE_QUOTA_PREFIX + "enforcer.mode";
-  private static final String DEFAULT_VALUE_SOURCE_FACTORY =
-      "com.github.ambry.quota.storage.JSONStringStorageQuotaSourceFactory";
-  private static final String DEFAULT_VALUE_ENFORCE_MODE = QuotaMode.TRACKING.name();
+  public static final String SHOULD_THROTTLE = STORAGE_QUOTA_PREFIX + "should.throttle";
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -41,10 +33,6 @@ public class StorageQuotaConfig {
   @Config(REFRESHER_POLLING_INTERVAL_MS)
   @Default("30 * 60 * 1000") // 30 minutes
   public final int refresherPollingIntervalMs;
-
-  @Config(SOURCE_FACTORY)
-  @Default(DEFAULT_VALUE_SOURCE_FACTORY)
-  public final String sourceFactory;
 
   //////////////// Config for JSONStringStorageQuotaSource ///////////////
 
@@ -68,13 +56,6 @@ public class StorageQuotaConfig {
   @Config(CONTAINER_STORAGE_QUOTA_IN_JSON)
   @Default("")
   public final String containerStorageQuotaInJson;
-
-  /**
-   * The interval in milliseconds for quota source to refresh each container's storage quota.
-   */
-  @Config(SOURCE_POLLING_INTERVAL_MS)
-  @Default("30 * 60 * 1000")
-  public final int sourcePollingIntervalMs;
 
   /**
    * The directory to store quota related backup files. If empty, then backup files will be disabled.
@@ -105,10 +86,11 @@ public class StorageQuotaConfig {
   public final long mysqlMonthlyBaseFetchOffsetSec;
 
   /**
-   * The quota mode to set for enforcer. There are two values, "tracking" or "throttling"
+   * True to enable throttle for storage quota enforcer.
    */
-  @Config(ENFORCER_MODE)
-  public final QuotaMode enforcerMode;
+  @Config(SHOULD_THROTTLE)
+  @Default("true")
+  public final boolean shouldThrottle;
 
   /**
    * Constructor to create a {@link StorageQuotaConfig}.
@@ -117,15 +99,11 @@ public class StorageQuotaConfig {
   public StorageQuotaConfig(VerifiableProperties verifiableProperties) {
     refresherPollingIntervalMs =
         verifiableProperties.getIntInRange(REFRESHER_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
-    sourceFactory = verifiableProperties.getString(SOURCE_FACTORY, DEFAULT_VALUE_SOURCE_FACTORY);
     containerStorageQuotaInJson = verifiableProperties.getString(CONTAINER_STORAGE_QUOTA_IN_JSON, "");
-    sourcePollingIntervalMs =
-        verifiableProperties.getIntInRange(SOURCE_POLLING_INTERVAL_MS, 30 * 60 * 1000, 0, Integer.MAX_VALUE);
     backupFileDir = verifiableProperties.getString(BACKUP_FILE_DIR, "");
     mysqlStoreRetryBackoffMs = verifiableProperties.getLong(MYSQL_STORE_RETRY_BACKOFF_MS, 10 * 60 * 1000);
     mysqlStoreRetryMaxCount = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX_COUNT, 1);
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
-    enforcerMode =
-        QuotaMode.valueOf(verifiableProperties.getString(ENFORCER_MODE, DEFAULT_VALUE_ENFORCE_MODE).toUpperCase());
+    shouldThrottle = verifiableProperties.getBoolean(SHOULD_THROTTLE, true);
   }
 }

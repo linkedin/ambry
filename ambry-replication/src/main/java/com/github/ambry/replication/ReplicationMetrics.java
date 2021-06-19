@@ -449,14 +449,18 @@ public class ReplicationMetrics {
   /**
    * Add replication lag metric(local from remote) for given partitionId.
    * @param partitionId partition to add metric for.
+   * @param enableEmmitMetricForReplicaLag If true, replication will register metric for each partition to track lag.
    */
-  public void addLagMetricForPartition(PartitionId partitionId) {
+  public void addLagMetricForPartition(PartitionId partitionId, boolean enableEmmitMetricForReplicaLag) {
     if (!partitionLags.containsKey(partitionId)) {
-      partitionLags.put(partitionId, new HashMap<>());
+      // Use concurrent hash map for the inner value map as well to avoid concurrent modification exception.
+      partitionLags.put(partitionId, new ConcurrentHashMap<>());
       // Set up metrics if and only if no mapping for this partition before.
-      Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
-      registry.register(MetricRegistry.name(ReplicaThread.class,
-          String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())), replicaLag);
+      if (enableEmmitMetricForReplicaLag) {
+        Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
+        registry.register(MetricRegistry.name(ReplicaThread.class,
+            String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())), replicaLag);
+      }
     }
   }
 

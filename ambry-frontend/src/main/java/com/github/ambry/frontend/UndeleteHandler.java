@@ -15,11 +15,13 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.Router;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
@@ -40,6 +42,7 @@ public class UndeleteHandler {
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
+  private final QuotaManager quotaManager;
 
   /**
    * Constructs a handler for handling requests for undelete the blobs
@@ -49,15 +52,18 @@ public class UndeleteHandler {
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param metrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterMap the {@link ClusterMap} in use.
+   * @param quotaManager the {@link QuotaManager} object.
    */
   UndeleteHandler(Router router, SecurityService securityService, IdConverter idConverter,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
+      QuotaManager quotaManager) {
     this.router = router;
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.metrics = metrics;
     this.clusterMap = clusterMap;
+    this.quotaManager = quotaManager;
   }
 
   /**
@@ -136,7 +142,8 @@ public class UndeleteHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.undeleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        router.undeleteBlob(blobId.getID(), serviceId, routerCallback());
+        router.undeleteBlob(blobId.getID(), serviceId, routerCallback(),
+            QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 

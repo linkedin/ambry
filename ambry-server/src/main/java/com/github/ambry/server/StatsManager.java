@@ -509,7 +509,7 @@ class StatsManager {
           Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
           while (!cancelled && iterator.hasNext()) {
             PartitionId partitionId = iterator.next();
-            logger.info("Aggregating account stats for local report started for store {}", partitionId);
+            logger.debug("Aggregating account stats for local report started for store {}", partitionId);
             collectAndAggregateAccountStats(aggregatedSnapshot, partitionId, unreachablePartitions);
           }
           aggregatedSnapshot.updateValue();
@@ -579,7 +579,7 @@ class StatsManager {
           Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
           while (!cancelled && iterator.hasNext()) {
             PartitionId partitionId = iterator.next();
-            logger.info("Aggregating partition class stats for local report started for store {}", partitionId);
+            logger.debug("Aggregating partition class stats for local report started for store {}", partitionId);
             collectAndAggregatePartitionClassStats(aggregatedSnapshot, partitionId, unreachablePartitions);
           }
           aggregatedSnapshot.updateValue();

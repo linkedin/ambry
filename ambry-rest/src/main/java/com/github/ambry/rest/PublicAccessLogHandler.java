@@ -42,6 +42,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private long requestArrivalTimeInMs;
   private long requestLastChunkArrivalTimeInMs;
   private long responseFirstChunkStartTimeInMs;
+  private long responseBytesSent;
   private StringBuilder logMessage;
   private HttpRequest request;
   private StringBuilder sslLogMessage;
@@ -91,6 +92,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
     long startTimeInMs = System.currentTimeMillis();
     boolean shouldReset = msg instanceof LastHttpContent;
+    boolean isHttpContent = msg instanceof HttpContent;
     if (request != null) {
       if (msg instanceof HttpResponse) {
         HttpResponse response = (HttpResponse) msg;
@@ -107,6 +109,10 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         logger.error(
             "Sending response that is not of type HttpResponse or HttpContent. Sending response to {}. Request is of type {}. No action being taken other than logging this unexpected state.",
             ctx.channel().remoteAddress(), msg.getClass());
+      }
+      if (isHttpContent) {
+        HttpContent httpContent = (HttpContent) msg;
+        responseBytesSent += httpContent.content().readableBytes();
       }
       if (shouldReset) {
         logDurations();
@@ -158,6 +164,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
    */
   private void logDurations() {
     long nowMs = System.currentTimeMillis();
+    logMessage.append("bytes sent=").append(responseBytesSent).append(" ");
     logMessage.append("duration=").append(nowMs - requestArrivalTimeInMs).append("ms ");
     if (requestLastChunkArrivalTimeInMs != INIT_TIME) {
       logMessage.append("(chunked request receive=")
@@ -176,6 +183,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
     responseFirstChunkStartTimeInMs = INIT_TIME;
     requestLastChunkArrivalTimeInMs = INIT_TIME;
     requestArrivalTimeInMs = INIT_TIME;
+    responseBytesSent = 0;
     logMessage = new StringBuilder();
     request = null;
   }

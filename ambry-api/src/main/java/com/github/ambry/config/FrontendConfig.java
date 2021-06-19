@@ -15,7 +15,6 @@ package com.github.ambry.config;
 
 import com.github.ambry.accountstats.AccountStatsStoreFactory;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.storage.StorageQuotaServiceFactory;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
@@ -39,8 +38,6 @@ public class FrontendConfig {
       PREFIX + "max.acceptable.ttl.secs.if.ttl.required";
   public static final String MAX_JSON_REQUEST_SIZE_BYTES_KEY = PREFIX + "max.json.request.size.bytes";
   public static final String ENABLE_UNDELETE = PREFIX + "enable.undelete";
-  public static final String ENABLE_STORAGE_QUOTA_SERVICE = PREFIX + "enable.storage.quota.service";
-  public static final String STORAGE_QUOTA_SERVICE_FACTORY = PREFIX + "storage.quota.service.factory";
   public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
   public static final String CONTAINER_METRICS_EXCLUDED_ACCOUNTS = PREFIX + "container.metrics.excluded.accounts";
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
@@ -49,9 +46,6 @@ public class FrontendConfig {
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
   private static final String DEFAULT_ENDPOINTS_STRING =
       "{\"POST\": \"" + DEFAULT_ENDPOINT + "\", \"GET\": \"" + DEFAULT_ENDPOINT + "\"}";
-
-  private static final String DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY =
-      "com.github.ambry.quota.storage.AmbryStorageQuotaServiceFactory";
 
   private static final String DEFAULT_ACCOUNT_STATS_STORE_FACTORY =
       "com.github.ambry.accountstats.InmemoryAccountStatsStoreFactory";
@@ -226,20 +220,6 @@ public class FrontendConfig {
   public final String accountStatsStoreFactory;
 
   /**
-   * Set to true to enable storage quota in frontend.
-   */
-  @Config(ENABLE_STORAGE_QUOTA_SERVICE)
-  @Default("false")
-  public final boolean enableStorageQuotaService;
-
-  /**
-   * The {@link StorageQuotaServiceFactory}.
-   */
-  @Config(STORAGE_QUOTA_SERVICE_FACTORY)
-  @Default(DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY)
-  public final String storageQuotaServiceFactory;
-
-  /**
    * Can be set to a classname that implements {@link com.github.ambry.named.NamedBlobDbFactory} to enable named blob
    * support.
    */
@@ -304,9 +284,6 @@ public class FrontendConfig {
     enableUndelete = verifiableProperties.getBoolean(ENABLE_UNDELETE, false);
     accountStatsStoreFactory =
         verifiableProperties.getString(ACCOUNT_STATS_STORE_FACTORY, DEFAULT_ACCOUNT_STATS_STORE_FACTORY);
-    enableStorageQuotaService = verifiableProperties.getBoolean(ENABLE_STORAGE_QUOTA_SERVICE, false);
-    storageQuotaServiceFactory =
-        verifiableProperties.getString(STORAGE_QUOTA_SERVICE_FACTORY, DEFAULT_STORAGE_QUOTA_SERVICE_FACTORY);
     namedBlobDbFactory = verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
     containerMetricsExcludedAccounts =
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_EXCLUDED_ACCOUNTS, ""), ",");

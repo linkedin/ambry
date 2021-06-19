@@ -24,6 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -43,6 +44,7 @@ import org.slf4j.LoggerFactory;
  * data blobs. The {@code DeleteOperation} is issued only to delete the metadata blob.
  */
 class DeleteOperation {
+  private static final Logger logger = LoggerFactory.getLogger(DeleteOperation.class);
   //Operation arguments
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
@@ -53,23 +55,21 @@ class DeleteOperation {
   private final Time time;
   private final NonBlockingRouterMetrics routerMetrics;
   private final long submissionTimeMs;
-  private final long deletionTimeMs;
 
   // Parameters associated with the state.
-
+  private final long deletionTimeMs;
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
   private final Map<Integer, DeleteRequestInfo> deleteRequestInfos;
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
+  private final QuotaChargeCallback quotaChargeCallback;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
-
-  private static final Logger logger = LoggerFactory.getLogger(DeleteOperation.class);
 
   /**
    * Instantiates a {@link DeleteOperation}.
@@ -84,7 +84,7 @@ class DeleteOperation {
    */
   DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       ResponseHandler responsehandler, BlobId blobId, String serviceId, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -94,13 +94,14 @@ class DeleteOperation {
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
+    this.quotaChargeCallback = quotaChargeCallback;
     this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new TreeMap<Integer, DeleteRequestInfo>();
     byte blobDcId = blobId.getDatacenterId();
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.DeleteOperation, blobId.getPartition(),
-            originatingDcName, false);
+            originatingDcName, false, routerMetrics);
   }
 
   /**
@@ -233,19 +234,6 @@ class DeleteOperation {
   }
 
   /**
-   * A wrapper class that is used to check if a request has been expired.
-   */
-  private class DeleteRequestInfo {
-    final long startTimeMs;
-    final ReplicaId replica;
-
-    DeleteRequestInfo(long submissionTime, ReplicaId replica) {
-      this.startTimeMs = submissionTime;
-      this.replica = replica;
-    }
-  }
-
-  /**
    * Goes through the inflight request list of this {@code DeleteOperation} and remove those that
    * have been timed out.
    * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
@@ -321,19 +309,15 @@ class DeleteOperation {
         operationException.set(
             new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
+      if (quotaChargeCallback != null) {
+        try {
+          quotaChargeCallback.chargeQuota();
+        } catch (RouterException routerException) {
+          logger.error("Exception  {} in quota charge event listener during delete operation", routerException.toString());
+        }
+      }
       operationCompleted = true;
     }
-  }
-
-  /**
-   * Set the exception associated with this operation.
-   * If operationException exists, compare ErrorCodes of exception and existing operation Exception depending
-   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
-   * level. Update the operationException if necessary.
-   * @param exception the {@link RouterException} to possibly set.
-   */
-  void setOperationException(RouterException exception) {
-    RouterUtils.replaceOperationException(operationException, exception, this::getPrecedenceLevel);
   }
 
   /**
@@ -410,6 +394,17 @@ class DeleteOperation {
   }
 
   /**
+   * Set the exception associated with this operation.
+   * If operationException exists, compare ErrorCodes of exception and existing operation Exception depending
+   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
+   * level. Update the operationException if necessary.
+   * @param exception the {@link RouterException} to possibly set.
+   */
+  void setOperationException(RouterException exception) {
+    RouterUtils.replaceOperationException(operationException, exception, this::getPrecedenceLevel);
+  }
+
+  /**
    * Gets the result for this {@code DeleteOperation}. In a {@link DeleteOperation}, nothing is returned
    * to the caller as a result of this operation. Including this {@link Void} result is for consistency
    * with other operations.
@@ -421,5 +416,18 @@ class DeleteOperation {
 
   long getSubmissionTimeMs() {
     return submissionTimeMs;
+  }
+
+  /**
+   * A wrapper class that is used to check if a request has been expired.
+   */
+  private class DeleteRequestInfo {
+    final long startTimeMs;
+    final ReplicaId replica;
+
+    DeleteRequestInfo(long submissionTime, ReplicaId replica) {
+      this.startTimeMs = submissionTime;
+      this.replica = replica;
+    }
   }
 }

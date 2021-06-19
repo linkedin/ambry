@@ -24,6 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory;
  * This class manages the internal state of a {@link TtlUpdateOperation} during its life cycle.
  */
 class TtlUpdateOperation {
+  private static final Logger LOGGER = LoggerFactory.getLogger(TtlUpdateOperation.class);
   //Operation arguments
   private final RouterConfig routerConfig;
   private final BlobId blobId;
@@ -48,6 +50,7 @@ class TtlUpdateOperation {
   private final NonBlockingRouterMetrics routerMetrics;
   private final long expiresAtMs;
   private final long operationTimeMs;
+  private final QuotaChargeCallback quotaChargeCallback;
   // Parameters associated with the state.
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
@@ -60,7 +63,6 @@ class TtlUpdateOperation {
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
-  private static final Logger LOGGER = LoggerFactory.getLogger(TtlUpdateOperation.class);
 
   /**
    * Instantiates a {@link TtlUpdateOperation}.
@@ -78,6 +80,27 @@ class TtlUpdateOperation {
   TtlUpdateOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       BlobId blobId, String serviceId, long expiresAtMs, long operationTimeMs, Callback<Void> callback, Time time,
       FutureResult<Void> futureResult) {
+    this(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs, operationTimeMs, callback, time,
+        futureResult, null);
+  }
+
+  /**
+   * Instantiates a {@link TtlUpdateOperation}.
+   * @param clusterMap the {@link ClusterMap} to use.
+   * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
+   * @param blobId The {@link BlobId} whose TTL needs to be updated by this {@link TtlUpdateOperation}.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+   * @param expiresAtMs the new time at which the blob should expire.
+   * @param operationTimeMs the time at which the operation occurred.
+   * @param callback The {@link Callback} that is supplied by the caller.
+   * @param time A {@link Time} reference.
+   * @param futureResult The {@link FutureResult} that is returned to the caller.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
+   */
+  TtlUpdateOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      BlobId blobId, String serviceId, long expiresAtMs, long operationTimeMs, Callback<Void> callback, Time time,
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
@@ -91,7 +114,8 @@ class TtlUpdateOperation {
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
-            originatingDcName, false);
+            originatingDcName, false, routerMetrics);
+    this.quotaChargeCallback = quotaChargeCallback;
   }
 
   /**
@@ -225,19 +249,6 @@ class TtlUpdateOperation {
   }
 
   /**
-   * A wrapper class that is used to check if a request has been expired.
-   */
-  private class TtlUpdateRequestInfo {
-    final long startTimeMs;
-    final ReplicaId replica;
-
-    TtlUpdateRequestInfo(long submissionTime, ReplicaId replica) {
-      this.startTimeMs = submissionTime;
-      this.replica = replica;
-    }
-  }
-
-  /**
    * Goes through the inflight request list of this {@link TtlUpdateOperation} and remove those that
    * have been timed out.
    * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
@@ -320,19 +331,15 @@ class TtlUpdateOperation {
         operationException.set(
             new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
+      if (quotaChargeCallback != null) {
+        try {
+          quotaChargeCallback.chargeQuota();
+        } catch (RouterException rEx) {
+          LOGGER.info("Exception {} while charging quota for ttl update operation.", rEx.toString());
+        }
+      }
       operationCompleted = true;
     }
-  }
-
-  /**
-   * Set the exception associated with this operation.
-   * If operationException exists, compare ErrorCodes of exception and existing operation Exception depending
-   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
-   * level. Update the operationException if necessary.
-   * @param exception the {@link RouterException} to possibly set.
-   */
-  void setOperationException(RouterException exception) {
-    RouterUtils.replaceOperationException(operationException, exception, this::getPrecedenceLevel);
   }
 
   /**
@@ -413,6 +420,17 @@ class TtlUpdateOperation {
   }
 
   /**
+   * Set the exception associated with this operation.
+   * If operationException exists, compare ErrorCodes of exception and existing operation Exception depending
+   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
+   * level. Update the operationException if necessary.
+   * @param exception the {@link RouterException} to possibly set.
+   */
+  void setOperationException(RouterException exception) {
+    RouterUtils.replaceOperationException(operationException, exception, this::getPrecedenceLevel);
+  }
+
+  /**
    * Gets the result for this {@link TtlUpdateOperation}. In a {@link TtlUpdateOperation}, nothing is returned
    * to the caller as a result of this operation. Including this {@link Void} result is for consistency
    * with other operations.
@@ -434,5 +452,18 @@ class TtlUpdateOperation {
    */
   long getExpiresAtMs() {
     return expiresAtMs;
+  }
+
+  /**
+   * A wrapper class that is used to check if a request has been expired.
+   */
+  private class TtlUpdateRequestInfo {
+    final long startTimeMs;
+    final ReplicaId replica;
+
+    TtlUpdateRequestInfo(long submissionTime, ReplicaId replica) {
+      this.startTimeMs = submissionTime;
+      this.replica = replica;
+    }
   }
 }

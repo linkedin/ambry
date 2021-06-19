@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -44,6 +45,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final Offset offset;
   private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
+  private final DiskMetrics diskMetrics;
   private static final Logger logger = LoggerFactory.getLogger(BlobReadOptions.class);
   private ByteBuf prefetchedData;
   private long prefetchedDataRelativeOffset = -1;
@@ -65,6 +67,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     segmentView = segment.getView();
     this.offset = offset;
     this.info = info;
+    diskMetrics = log.getDiskMetrics();
     logger.trace("BlobReadOption offset {} size {} MessageInfo {} ", offset, info.getSize(), info);
   }
 
@@ -162,7 +165,12 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   void doPrefetch(long relativeOffset, long size) throws IOException {
     long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
     prefetchedData = PooledByteBufAllocator.DEFAULT.ioBuffer((int) sizeToRead);
+    long fetchStartTime = SystemTime.getInstance().milliseconds();
     prefetchedData.writeBytes(getChannel(), offset.getOffset() + relativeOffset, (int) sizeToRead);
+    if (diskMetrics != null) {
+      diskMetrics.diskReadTimePerMbInMs.update(
+          ((SystemTime.getInstance().milliseconds() - fetchStartTime) << 20) / sizeToRead);
+    }
     prefetchedDataRelativeOffset = relativeOffset;
   }
 

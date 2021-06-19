@@ -23,6 +23,8 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -81,6 +83,7 @@ public class NamedBlobPutHandler {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final String clusterName;
+  private final QuotaManager quotaManager;
   private final RetryPolicy retryPolicy = RetryPolicies.defaultPolicy();
   private final RetryExecutor retryExecutor = new RetryExecutor(Executors.newScheduledThreadPool(2));
   private final Set<RouterErrorCode> retriableRouterError =
@@ -96,10 +99,11 @@ public class NamedBlobPutHandler {
    * @param frontendConfig the {@link FrontendConfig} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterName the name of the storage cluster that the router communicates with
+   * @param quotaManager The {@link QuotaManager} class to account for quota usage in serving requests.
    */
   NamedBlobPutHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
       Router router, AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics, String clusterName) {
+      FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager) {
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
@@ -108,6 +112,7 @@ public class NamedBlobPutHandler {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.clusterName = clusterName;
+    this.quotaManager = quotaManager;
   }
 
   /**
@@ -183,12 +188,9 @@ public class NamedBlobPutHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
-          if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
-            // For blob with infinite time, the procedure is putBlob, record insert to database, and ttlUpdate.
-            blobInfo.getBlobProperties().setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
-          }
-          router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo));
+          router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
+              routerPutBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
+                  true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -215,9 +217,10 @@ public class NamedBlobPutHandler {
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
+          bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback(blobInfo)), uri, LOGGER, finalCallback);
+              routerStitchBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
+                  true)), uri, LOGGER, finalCallback);
     }
 
     /**
@@ -242,12 +245,15 @@ public class NamedBlobPutHandler {
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
-        if (RestUtils.getTtlFromRequestHeader(restRequest.getArgs()) == Utils.Infinite_Time) {
+        if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
-          String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
+          String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback), this::isRetriable,
+              callback ->
+                  router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
+                      QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)),
+              this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
@@ -410,6 +416,25 @@ public class NamedBlobPutHandler {
             + stitchedBlobProperties.getAccountId() + ", " + stitchedBlobProperties.getContainerId() + ")",
             RestServiceErrorCode.BadRequest);
       }
+    }
+
+    /**
+     * Create a {@link BlobProperties} for the router upload (putBlob or stitchBlob) with a finite TTL such that
+     * orphaned blobs will not be created if the write to the named blob metadata DB fails.
+     * @param blobInfoFromRequest the {@link BlobInfo} parsed from the request.
+     * @return a {@link BlobProperties} for a TTL-ed initial router call.
+     */
+    BlobProperties getPropertiesForRouterUpload(BlobInfo blobInfoFromRequest) {
+      BlobProperties properties;
+      if (blobInfoFromRequest.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+        properties = new BlobProperties(blobInfoFromRequest.getBlobProperties());
+        // For blob with infinite time, the procedure is putBlob with a TTL, record insert to database with
+        // infinite TTL, and ttlUpdate.
+        properties.setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
+      } else {
+        properties = blobInfoFromRequest.getBlobProperties();
+      }
+      return properties;
     }
   }
 }

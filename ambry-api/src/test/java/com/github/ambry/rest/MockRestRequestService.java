@@ -15,11 +15,11 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.ByteBufferRSC;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -45,14 +45,23 @@ public class MockRestRequestService implements RestRequestService {
   public final static String SEND_RESPONSE_RUNTIME_EXCEPTION = "mbssResponseRuntimeException";
   public final static String SEND_RESPONSE_REST_SERVICE_EXCEPTION = "mbssRestServiceException";
   public final static String REST_ERROR_CODE = "mock.rest.request.service.rest.error.code";
-
-  private RestResponseHandler responseHandler;
   private final Router router;
-
+  private RestResponseHandler responseHandler;
   private VerifiableProperties verifiableProperties;
   private volatile boolean serviceRunning = false;
   private volatile boolean blocking = false;
   private volatile CountDownLatch blockLatch = new CountDownLatch(0);
+
+  /**
+   * Creates an instance of {@link MockRestRequestService} with {@code router} as the backing {@link Router} and
+   * {@code verifiableProperties} defining the behavior of this instance.
+   * @param verifiableProperties the {@link VerifiableProperties} that defines the behavior of this instance.
+   * @param router the {@link Router} that will back this instance.
+   */
+  public MockRestRequestService(VerifiableProperties verifiableProperties, Router router) {
+    setVerifiableProperties(verifiableProperties);
+    this.router = router;
+  }
 
   /**
    * Changes the {@link VerifiableProperties} instance with this instance so that the behaviour can be changed on the
@@ -64,14 +73,13 @@ public class MockRestRequestService implements RestRequestService {
   }
 
   /**
-   * Creates an instance of {@link MockRestRequestService} with {@code router} as the backing {@link Router} and
-   * {@code verifiableProperties} defining the behavior of this instance.
-   * @param verifiableProperties the {@link VerifiableProperties} that defines the behavior of this instance.
-   * @param router the {@link Router} that will back this instance.
+   * Determines the blob ID desired by the request.
+   * @param restRequest a {@link RestRequest} that represents the request.
+   * @return the blob ID desired by the request.
    */
-  public MockRestRequestService(VerifiableProperties verifiableProperties, Router router) {
-    setVerifiableProperties(verifiableProperties);
-    this.router = router;
+  protected static String getBlobId(RestRequest restRequest) {
+    String path = restRequest.getPath();
+    return path.startsWith("/") ? path.substring(1) : path;
   }
 
   @Override
@@ -98,7 +106,7 @@ public class MockRestRequestService implements RestRequestService {
       String blobId = getBlobId(restRequest);
       MockGetCallback callback = new MockGetCallback(this, restRequest, restResponseChannel);
       router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
-          callback);
+          callback, null);
     }
   }
 
@@ -111,7 +119,7 @@ public class MockRestRequestService implements RestRequestService {
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
         router.putBlob(blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
-            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties));
+            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null);
       } catch (RestServiceException e) {
         handleResponse(restRequest, restResponseChannel, null, e);
       }
@@ -135,7 +143,7 @@ public class MockRestRequestService implements RestRequestService {
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.deleteBlob(blobId, null, new MockDeleteCallback(this, restRequest, restResponseChannel));
+      router.deleteBlob(blobId, null, new MockDeleteCallback(this, restRequest, restResponseChannel), null);
     }
   }
 
@@ -144,7 +152,7 @@ public class MockRestRequestService implements RestRequestService {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
       router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
-          new MockHeadCallback(this, restRequest, restResponseChannel));
+          new MockHeadCallback(this, restRequest, restResponseChannel), null);
     }
   }
 
@@ -258,16 +266,6 @@ public class MockRestRequestService implements RestRequestService {
           new RestServiceException("RestRequestService not running", RestServiceErrorCode.ServiceUnavailable));
     }
     return serviceRunning;
-  }
-
-  /**
-   * Determines the blob ID desired by the request.
-   * @param restRequest a {@link RestRequest} that represents the request.
-   * @return the blob ID desired by the request.
-   */
-  protected static String getBlobId(RestRequest restRequest) {
-    String path = restRequest.getPath();
-    return path.startsWith("/") ? path.substring(1, path.length()) : path;
   }
 
   /**

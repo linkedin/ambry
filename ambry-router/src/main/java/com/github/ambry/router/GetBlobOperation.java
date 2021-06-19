@@ -38,9 +38,13 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -90,6 +94,7 @@ class GetBlobOperation extends GetOperation {
   private final BlobIdFactory blobIdFactory;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
+  private final QuotaChargeCallback quotaChargeCallback;
   // Associated with all data chunks in the case of composite blobs. Only a fixed number of these are initialized.
   // Each of these is initialized with the information required to fetch a data chunk and is responsible for
   // retrieving and adding it to the list of chunk buffers. Once complete, they are reused to fetch subsequent data
@@ -98,7 +103,7 @@ class GetBlobOperation extends GetOperation {
   // the total number of data chunks associated with this blob.
   private int numChunksTotal;
   // the total number of data chunks retrieved so far (and may or may not have been written out yet).
-  private AtomicInteger numChunksRetrieved = new AtomicInteger();
+  private final AtomicInteger numChunksRetrieved = new AtomicInteger();
   // the total size of the object being fetched in this operation
   private long totalSize;
   // a byte range with defined start/end offsets that has been verified to be within the total blob size
@@ -136,11 +141,12 @@ class GetBlobOperation extends GetOperation {
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted) {
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
+    this.quotaChargeCallback = quotaChargeCallback;
     firstChunk = new FirstGetChunk();
   }
 
@@ -386,7 +392,7 @@ class GetBlobOperation extends GetOperation {
     // whether this object has called the readIntoCallback yet.
     private final AtomicBoolean readIntoCallbackCalled = new AtomicBoolean(false);
     // whether this ReadableStreamChannel is open.
-    private AtomicBoolean isOpen = new AtomicBoolean(true);
+    private final AtomicBoolean isOpen = new AtomicBoolean(true);
     // whether readInto() has been called yet by the caller on this ReadableStreamChannel.
     private volatile boolean readCalled = false;
     // The channel to write chunks of the blob into. This will be initialized when the caller calls the readInto().
@@ -396,9 +402,11 @@ class GetBlobOperation extends GetOperation {
     // the future to mark as done when all the chunks are successfully written out into the asyncWritableChannel.
     private FutureResult<Long> readIntoFuture;
     // the number of bytes written out to the asyncWritableChannel. This would be the size of the blob eventually.
-    private AtomicLong bytesWritten = new AtomicLong(0);
+    private final AtomicLong bytesWritten = new AtomicLong(0);
     // the number of chunks that have been written out to the asyncWritableChannel.
     private AtomicInteger numChunksWrittenOut = new AtomicInteger(0);
+    // the time of last chunk written done
+    private AtomicLong lastChunkWrittenDoneTime = new AtomicLong(0);
     // the callback that is passed into the asyncWritableChannel write() operation.
     private final Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
       @Override
@@ -412,6 +420,7 @@ class GetBlobOperation extends GetOperation {
         if (byteBuf != null) {
           byteBuf.release();
         }
+        lastChunkWrittenDoneTime.set(SystemTime.getInstance().milliseconds());
         numChunksWrittenOut.incrementAndGet();
         routerCallback.onPollReady();
       }
@@ -505,6 +514,14 @@ class GetBlobOperation extends GetOperation {
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
         Exception e = operationException.get();
+        if (e instanceof RouterException) {
+          RouterException routerException = (RouterException) e;
+          if (routerException.getErrorCode() == RouterErrorCode.UnexpectedInternalError) {
+            // Client deserves to know why there is an unexpected internal error
+            e = new RestServiceException(routerException.getMessage(), RestServiceErrorCode.InternalServerError, true,
+                false, null);
+          }
+        }
         readIntoFuture.done(bytesWritten.get(), e);
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten.get(), e);
@@ -512,6 +529,10 @@ class GetBlobOperation extends GetOperation {
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
+          logger.warn(
+              "GetBlobOperationError BlobId: {}, numChunksRetrieved:{}, numChunksWrittenOut: {}. Time since last chunk write done: {}ms",
+              blobId, numChunksRetrieved, numChunksWrittenOut,
+              SystemTime.getInstance().milliseconds() - lastChunkWrittenDoneTime.get(), e);
           routerMetrics.onGetBlobError(e, options, isEncrypted);
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
@@ -827,6 +848,13 @@ class GetBlobOperation extends GetOperation {
         chunkCompleted = true;
       }
       if (chunkCompleted) {
+        if (state != ChunkState.Complete && quotaChargeCallback != null) {
+          try {
+            quotaChargeCallback.chargeQuota();
+          } catch (RouterException routerException) {
+            logger.info("Exception {} occurred during the quota charge event of blob {}", routerException, blobId.getID());
+          }
+        }
         setOperationException(chunkException);
         state = ChunkState.Complete;
       }

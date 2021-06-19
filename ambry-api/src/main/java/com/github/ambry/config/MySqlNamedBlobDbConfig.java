@@ -18,7 +18,8 @@ package com.github.ambry.config;
 public class MySqlNamedBlobDbConfig {
   private static final String PREFIX = "mysql.named.blob.";
   public static final String DB_INFO = PREFIX + "db.info";
-  public static final String POOL_SIZE = PREFIX + "pool.size";
+  public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
+  public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
   public static final String  LIST_MAX_RESULTS = PREFIX + "list.max.results";
 
   /**
@@ -29,11 +30,18 @@ public class MySqlNamedBlobDbConfig {
   public final String dbInfo;
 
   /**
-   * Number of connections and threads to use for executing transactions.
+   * Number of connections and threads to use for executing transactions against databases in the local datacenter.
    */
-  @Config(POOL_SIZE)
-  @Default("10")
-  public final int poolSize;
+  @Config(LOCAL_POOL_SIZE)
+  @Default("5")
+  public final int localPoolSize;
+
+  /**
+   * Number of connections and threads to use for executing transactions against databases in a remote datacenter.
+   */
+  @Config(REMOTE_POOL_SIZE)
+  @Default("1")
+  public final int remotePoolSize;
 
   /**
    * The maximum number of entries to return per response page when listing blobs.
@@ -44,7 +52,8 @@ public class MySqlNamedBlobDbConfig {
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
-    this.poolSize = verifiableProperties.getIntInRange(POOL_SIZE, 10, 1, Integer.MAX_VALUE);
+    this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
+    this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
   }
 }

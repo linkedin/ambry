@@ -14,6 +14,7 @@
 package com.github.ambry.mysql;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +50,26 @@ public class MySqlUtils {
       dcToDbEndpoints.computeIfAbsent(dbEndpoint.datacenter, key -> new ArrayList<>()).add(dbEndpoint);
     }
     return dcToDbEndpoints;
+  }
+
+  /**
+   * Parses DB information JSON string and returns a list of datacenter name.
+   * @param dbInfoJsonString the string containing the MySql DB info.
+   * @param localDatacenter name of the local data center
+   * @return The {@link List} of remote datacenter names with alphabetical order.
+   */
+  public static List<String> getRemoteDcFromDbInfo(String dbInfoJsonString, String localDatacenter) {
+    List<String> remoteDatacenters = new ArrayList<>();
+    JSONArray dbInfo = new JSONArray(dbInfoJsonString);
+    for (int i = 0; i < dbInfo.length(); i++) {
+      JSONObject entry = dbInfo.getJSONObject(i);
+      DbEndpoint dbEndpoint = DbEndpoint.fromJson(entry);
+      if (!localDatacenter.equals(dbEndpoint.datacenter)) {
+        remoteDatacenters.add(dbEndpoint.datacenter);
+      }
+    }
+    Collections.sort(remoteDatacenters);
+    return Collections.unmodifiableList(remoteDatacenters);
   }
 
   /**

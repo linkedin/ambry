@@ -50,6 +50,10 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.RouterTestHelpers.*;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
@@ -71,11 +75,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -150,6 +156,7 @@ public class GetBlobOperationTest {
 
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToGetOperation);
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * A checker that either asserts that a get operation succeeds or returns the specified error code.
@@ -245,6 +252,7 @@ public class GetBlobOperationTest {
     putContent = new byte[blobSize];
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+    // TODO fix null quota charge event listener
     blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
   }
@@ -320,7 +328,8 @@ public class GetBlobOperationTest {
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
-        getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false);
+        getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
+        quotaChargeCallback);
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
@@ -331,7 +340,8 @@ public class GetBlobOperationTest {
     try {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
           new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
-          getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false);
+          getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
+          quotaChargeCallback);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -458,6 +468,37 @@ public class GetBlobOperationTest {
     blobSize = 0;
     doPut();
     getAndAssertSuccess();
+  }
+
+  /**
+   * Test when data chunks are missing, the getBlob should return RestServiceException.
+   * @throws Exception
+   */
+  @Test
+  public void testMissingDataChunkException() throws Exception {
+    // Make sure we have two data chunks
+    blobSize = maxChunkSize + maxChunkSize / 2;
+    doPut();
+
+    // Now remove the all the data chunks, first collect data chunk ids and remove blob id
+    Set<String> dataChunkIds = new HashSet<>();
+    mockServerLayout.getMockServers().forEach(server -> dataChunkIds.addAll(server.getBlobs().keySet()));
+    dataChunkIds.remove(blobIdStr);
+    Assert.assertEquals(2, dataChunkIds.size());
+    // We can't just delete the data chunks by calling router.deleteBlob, we have to remove them from the mock servers.
+    mockServerLayout.getMockServers()
+        .forEach(server -> dataChunkIds.forEach(chunkId -> server.getBlobs().remove(chunkId)));
+    GetBlobResult result = router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build()).get();
+    Future<Long> future = result.getBlobDataChannel().readInto(new ByteBufferAsyncWritableChannel(), null);
+    try {
+      future.get();
+      Assert.fail("Should fail with exception");
+    } catch (Exception e) {
+      Throwable cause = e.getCause();
+      Assert.assertTrue(cause instanceof RestServiceException);
+      Assert.assertEquals(RestServiceErrorCode.InternalServerError, ((RestServiceException) cause).getErrorCode());
+      Assert.assertTrue(((RestServiceException) cause).shouldIncludeExceptionMessageInResponse());
+    }
   }
 
   /**
@@ -702,9 +743,10 @@ public class GetBlobOperationTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             GetBlobOperation op = createOperationAndComplete(null);
-            // Local dc is the origin DC, only two NOT_FOUND would terminate the operation.
-            Assert.assertEquals("Must have attempted sending requests to all replicas", 2,
-                correlationIdToGetOperation.size());
+            // Local dc is the origin DC, need at least three NOT_FOUND responses from origin DC to terminate the operation.
+            // Note that the default parallelism is 2 for GET. To terminate on not found, 4 requests may be sent out.
+            Assert.assertTrue("Must have attempted sending requests to all 3 originating dc replicas",
+                correlationIdToGetOperation.size() >= 3);
             assertFailureAndCheckErrorCode(op, expectedError);
           }
         });
@@ -1598,7 +1640,7 @@ public class GetBlobOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
-            routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false);
+            routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     return op;
   }

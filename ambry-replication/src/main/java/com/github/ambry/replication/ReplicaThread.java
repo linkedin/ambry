@@ -44,17 +44,16 @@ import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -613,11 +612,6 @@ public class ReplicaThread implements Runnable {
                   }
                 }
 
-                // add exchangeMetadataResponse to list after replicaSyncUpManager(if not null) has completed update. The
-                // reason is replicaSyncUpManager may also throw exception and add one more exchangeMetadataResponse
-                // associated with same RemoteReplicaInfo.
-                exchangeMetadataResponseList.add(exchangeMetadataResponse);
-
                 // If remote token has not moved forward, wait for back off time before resending next metadata request
                 if (remoteReplicaInfo.getToken().equals(exchangeMetadataResponse.remoteToken)) {
                   remoteReplicaInfo.setReEnableReplicationTime(
@@ -636,12 +630,22 @@ public class ReplicaThread implements Runnable {
 
                 replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                     exchangeMetadataResponse.localLagFromRemoteInBytes);
+                long maxLag =
+                    replicationMetrics.getMaxLagForPartition(remoteReplicaInfo.getReplicaId().getPartitionId());
+                if (remoteReplicaInfo.getLocalStore() instanceof BlobStore) {
+                  ((BlobStore) remoteReplicaInfo.getLocalStore()).setLocalStoreMaxLagFromPeer(maxLag);
+                }
                 if (replicaMetadataResponseInfo.getMessageInfoList().size() > 0) {
                   replicationMetrics.updateCatchupPointMetricForCloudReplica(remoteReplicaInfo,
                       replicaMetadataResponseInfo.getMessageInfoList()
                           .get(replicaMetadataResponseInfo.getMessageInfoList().size() - 1)
                           .getOperationTimeMs());
                 }
+
+                // Add exchangeMetadataResponse to list at the end after operations such as replicaSyncUpManager(if not null)
+                // has completed update, etc. The reason is we may get exceptions in between (for ex: replicaSyncUpManager may
+                // throw exception) and end up adding one more exchangeMetadataResponse associated with same RemoteReplicaInfo.
+                exchangeMetadataResponseList.add(exchangeMetadataResponse);
               } catch (Exception e) {
                 if (e instanceof StoreException
                     && ((StoreException) e).getErrorCode() == StoreErrorCodes.Store_Not_Started) {

@@ -25,6 +25,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.UndeleteResponse;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -35,6 +36,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -42,6 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * operations that are assigned to it, and manages their states and life cycles.
  */
 public class UndeleteManager {
+  private static final Logger LOGGER = LoggerFactory.getLogger(UndeleteManager.class);
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
   private final Time time;
@@ -82,10 +86,11 @@ public class UndeleteManager {
    * @param serviceId The service ID of the service undeleting the blob(s). This can be null if unknown.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitUndeleteOperation(Collection<String> blobIdStrs, String serviceId, FutureResult<Void> futureResult,
-      Callback<Void> callback) throws RouterException {
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
     if (!isOpen()) {
       throw new IllegalStateException("UndeleteManager is closed");
     }
@@ -102,10 +107,11 @@ public class UndeleteManager {
     if (blobIds.size() == 1) {
       UndeleteOperation undeleteOperation =
           new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, time.milliseconds(),
-              callback, time, futureResult);
+              callback, time, futureResult, quotaChargeCallback);
       undeleteOperations.add(undeleteOperation);
     } else {
-      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback);
+      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback,
+          quotaChargeCallback);
       long operationTimeMs = time.milliseconds();
       for (BlobId blobId : blobIds) {
         UndeleteOperation undeleteOperation =

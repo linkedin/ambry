@@ -21,7 +21,7 @@ import java.util.Objects;
  * Resource for which quota is specified for enforced.
  */
 public class QuotaResource {
-  private final static String DELIM = "_";
+  public final static String DELIM = "_";
   private final String resourceId; // unique identifier for Ambry account, container or host.
   private final QuotaResourceType quotaResourceType;
 
@@ -81,6 +81,6 @@ public class QuotaResource {
    * Type of Ambry resource for which quota can be applied.
    */
   public enum QuotaResourceType {
-    ACCOUNT, CONTAINER
+    ACCOUNT, CONTAINER, SERVICE
   }
 }

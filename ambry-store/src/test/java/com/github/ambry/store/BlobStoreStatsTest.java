@@ -87,10 +87,11 @@ public class BlobStoreStatsTest {
     bucketingEnabled = isBucketingEnabled;
   }
 
+  //TODO: currently the valid data size background job is not tested and needs changes to the logic to check the number of throttling events
   private BlobStoreStats setupBlobStoreStats(int bucketCount, long logSegmentForecastOffsetMs) {
     return new BlobStoreStats("", state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs,
-        QUEUE_PROCESSOR_PERIOD_IN_Ms, DEFAULT_WAIT_TIMEOUT_SECS, true, state.time, indexScannerScheduler,
-        queueProcessorScheduler, diskIOScheduler, METRICS);
+        QUEUE_PROCESSOR_PERIOD_IN_Ms, DEFAULT_WAIT_TIMEOUT_SECS, true, true, state.time, indexScannerScheduler,
+        queueProcessorScheduler, diskIOScheduler, METRICS, 1, false);
   }
 
   /**
@@ -171,6 +172,22 @@ public class BlobStoreStatsTest {
       TimeRange timeRange = new TimeRange(i, 0L);
       verifyAndGetLogSegmentValidSize(blobStoreStats, timeRange);
     }
+    blobStoreStats.close();
+  }
+
+  @Test
+  public void testLogSegementValidDataSizeWithZeroValidByteSegment() throws StoreException {
+    assumeTrue(!bucketingEnabled);
+    BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
+    long requiredCount = state.index.getLogSegmentCount() + 1;
+    long requiredBytes = requiredCount * state.log.getSegmentCapacity();
+    // Fill up these segments with expired PUTs
+    long numPuts = (requiredBytes - state.index.getLogUsedCapacity()) / PUT_RECORD_SIZE;
+    state.addPutEntries((int) numPuts, PUT_RECORD_SIZE, 0);
+
+    long currentTimeInMs = state.time.milliseconds();
+    TimeRange timeRange = new TimeRange(currentTimeInMs, 0L);
+    verifyAndGetLogSegmentValidSize(blobStoreStats, timeRange);
     blobStoreStats.close();
   }
 
@@ -731,7 +748,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false, false);
     int bucketCount = bucketingEnabled ? 1 : 0;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -751,7 +768,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + TestUtils.getRandomString(10));
-    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false);
+    state = new CuratedLogIndexState(true, tempDir, false, false, true, true, false, false);
     MockThrottler mockThrottler = new MockThrottler(new CountDownLatch(0), new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int bucketCount = 50;
@@ -807,8 +824,8 @@ public class BlobStoreStatsTest {
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int expectedMinimumThrottleCount = 2 * state.referenceIndex.size();
     BlobStoreStats blobStoreStats =
-        new BlobStoreStats("", state.index, 10, BUCKET_SPAN_IN_MS, 0, QUEUE_PROCESSOR_PERIOD_IN_Ms, 1, true, state.time,
-            indexScannerScheduler, queueProcessorScheduler, diskIOScheduler, METRICS);
+        new BlobStoreStats("", state.index, 10, BUCKET_SPAN_IN_MS, 0, QUEUE_PROCESSOR_PERIOD_IN_Ms, 1, true, true,
+            state.time, indexScannerScheduler, queueProcessorScheduler, diskIOScheduler, METRICS, 1, false);
     // proceed only when the scan is started
     assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
     advanceTimeToNextSecond();

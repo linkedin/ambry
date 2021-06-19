@@ -551,4 +551,8 @@ class LogSegment implements Read, Write {
     return "(File: [" + file + " ], Capacity: [" + capacityInBytes + "], Start offset: [" + startOffset
         + "], End offset: [" + endOffset + "])";
   }
+
+  public StoreMetrics getMetrics() {
+    return metrics;
+  }
 }

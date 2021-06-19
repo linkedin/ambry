@@ -25,6 +25,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -81,6 +83,8 @@ public class GetManagerTest {
   private ReadableStreamChannel putChannel;
   private GetBlobOptions options = new GetBlobOptionsBuilder().build();
   private List<ChunkInfo> chunkInfos;
+  private final QuotaChargeCallback quotaChargeCallback =
+      QuotaTestUtils.createDummyQuotaChargeEventListener();
 
   /**
    * Pre-initialization common to all tests.
@@ -384,8 +388,8 @@ public class GetManagerTest {
             getBlobInfoCallbackCalled.countDown();
             throw new RuntimeException("Throwing an exception in the user callback");
           }
-        }));
-        getBlobDataFutures.add(router.getBlob(blobId, dataOptions, getBlobCallback));
+        }, quotaChargeCallback));
+        getBlobDataFutures.add(router.getBlob(blobId, dataOptions, getBlobCallback, quotaChargeCallback));
       } else {
         getBlobInfoFutures.add(router.getBlob(blobId, infoOptions));
         getBlobDataFutures.add(router.getBlob(blobId, dataOptions));

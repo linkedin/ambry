@@ -15,22 +15,27 @@ package com.github.ambry.router;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaChargeCallback;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Tracks callbacks for {@link TtlUpdateOperation} and {@link UndeleteOperation} over multiple chunks of a single blob
  */
 class BatchOperationCallbackTracker {
+  private static final Logger LOGGER = LoggerFactory.getLogger(BatchOperationCallbackTracker.class);
   static final FutureResult<Void> DUMMY_FUTURE = new FutureResult<>();
 
   private final FutureResult<Void> futureResult;
   private final Callback<Void> callback;
   private final long numBlobIds;
+  private final QuotaChargeCallback quotaChargeCallback;
   private final ConcurrentMap<BlobId, Boolean> blobIdToAck = new ConcurrentHashMap<>();
   private final AtomicLong ackedCount = new AtomicLong(0);
   private final AtomicBoolean completed = new AtomicBoolean(false);
@@ -40,8 +45,9 @@ class BatchOperationCallbackTracker {
    * @param blobIds the {@link BlobId}s being tracked
    * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
    * @param callback the {@link Callback} to be triggered once acks are received for all blobs
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
    */
-  BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult, Callback<Void> callback) {
+  BatchOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     numBlobIds = blobIds.size();
     blobIds.forEach(blobId -> blobIdToAck.put(blobId, false));
     if (blobIdToAck.size() != numBlobIds) {
@@ -49,6 +55,7 @@ class BatchOperationCallbackTracker {
     }
     this.futureResult = futureResult;
     this.callback = callback;
+    this.quotaChargeCallback = quotaChargeCallback;
   }
 
   /**
@@ -79,6 +86,13 @@ class BatchOperationCallbackTracker {
    */
   private void complete(Exception e) {
     if (completed.compareAndSet(false, true)) {
+      if (quotaChargeCallback != null) {
+        try {
+          quotaChargeCallback.chargeQuota();
+        } catch (RouterException rEx) {
+          LOGGER.info("Exception {} while charging quota for ttl operation", rEx.toString());
+        }
+      }
       NonBlockingRouter.completeOperation(futureResult, callback, null, e, false);
     }
   }

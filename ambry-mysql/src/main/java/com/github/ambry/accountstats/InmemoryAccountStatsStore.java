@@ -56,6 +56,10 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
+  public void deleteAggregatedAccountStatsForContainer(short accountId, short containerId) throws Exception {
+  }
+
+  @Override
   public StatsWrapper queryAccountStatsByHost(String hostname, int port) throws Exception {
     if (hostname.equals(this.hostname)) {
       return currentHostStatsWrapper;
@@ -65,6 +69,9 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   private Map<String, Map<String, Long>> fromAggregatedAccountStats(StatsSnapshot snapshot) {
+    if (snapshot == null) {
+      return null;
+    }
     Map<String, Map<String, Long>> result = new HashMap<>();
     for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
       String accountIdKey = accountMapEntry.getKey();
@@ -112,6 +119,11 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
+  public void deleteSnapshotOfAggregatedAccountStats() throws Exception {
+
+  }
+
+  @Override
   public Map<String, Set<Integer>> queryPartitionNameAndIds() throws Exception {
     return null;
   }
@@ -130,6 +142,12 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   @Override
   public void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws Exception {
     aggregatedPartitionClassStats = statsSnapshot;
+  }
+
+  @Override
+  public void deleteAggregatedPartitionClassStatsForAccountContainer(String partitionClassName,
+      String accountContainerKey) throws Exception {
+
   }
 
   @Override

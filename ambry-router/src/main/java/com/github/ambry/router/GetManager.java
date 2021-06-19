@@ -24,6 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
@@ -105,7 +106,7 @@ class GetManager {
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitGetBlobOperation(String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback) throws RouterException {
+      Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
     GetOperation getOperation;
     BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     boolean isEncrypted = false;
@@ -125,11 +126,12 @@ class GetManager {
         && options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       getOperation =
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
+              routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeCallback);
     } else {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
+              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
+              quotaChargeCallback);
     }
     getOperations.add(getOperation);
   }

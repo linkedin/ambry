@@ -116,6 +116,10 @@ public class StoreMetrics {
     this("", registry);
   }
 
+  public MetricRegistry getRegistry() {
+    return registry;
+  }
+
   public StoreMetrics(String prefix, MetricRegistry registry) {
     this.registry = registry;
     String name = !prefix.isEmpty() ? prefix + SEPARATOR : "";
@@ -241,7 +245,7 @@ public class StoreMetrics {
   }
 
   void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes,
-      BlobStoreStats blobStoreStats) {
+      BlobStoreStats blobStoreStats, boolean enableStoreCurrentInvalidSize) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> currentCapacityUsed = index::getLogUsedCapacity;
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"), currentCapacityUsed);
@@ -249,17 +253,11 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity"), percentageUsedCapacity);
     Gauge<Long> currentSegmentCount = index::getLogSegmentCount;
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"), currentSegmentCount);
-    Gauge<Long> currentInvalidDataSize = () -> {
-      long invalidDataSize = -1;
-      try {
-        invalidDataSize = index.getLogUsedCapacity() - blobStoreStats.getValidSize(
-            new TimeRange(System.currentTimeMillis(), blobStoreStats.getBucketSpanTimeInMs())).getSecond();
-      } catch (StoreException e) {
-        logger.error("Failed to get invalidDataSize on store: {},", storeId, e);
-      }
-      return invalidDataSize;
-    };
-    registry.register(MetricRegistry.name(Log.class, prefix + "CurrentInvalidDataSize"), currentInvalidDataSize);
+    if (enableStoreCurrentInvalidSize) {
+      Gauge<Long> currentInvalidDataSize =
+          () -> index.getLogUsedCapacity() - blobStoreStats.getCachedValidSize().getSecond();
+      registry.register(MetricRegistry.name(Log.class, prefix + "CurrentInvalidDataSize"), currentInvalidDataSize);
+    }
   }
 
   /**

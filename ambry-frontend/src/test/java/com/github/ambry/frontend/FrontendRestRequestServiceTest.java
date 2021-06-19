@@ -41,6 +41,7 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
@@ -2970,6 +2971,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
   String translation = null;
   boolean returnInputIfTranslationNull = false;
   volatile String lastInput = null;
+  volatile BlobInfo lastBlobInfo = null;
   volatile String lastConvertedId = null;
 
   @Override
@@ -2982,10 +2984,15 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
 
     @Override
     public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
+      return convert(restRequest, input, null, callback);
+    }
+
+    @Override
+    public Future<String> convert(RestRequest restRequest, String input, BlobInfo blobInfo, Callback<String> callback) {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
-      return completeOperation(input, callback);
+      return completeOperation(input, blobInfo, callback);
     }
 
     @Override
@@ -2996,11 +3003,13 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
     /**
      * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
      * @param input the original input ID received
+     * @param blobInfo the blob info received.
      * @param callback the {@link Callback} to invoke. Can be null.
      * @return the created {@link Future}.
      */
-    private Future<String> completeOperation(String input, Callback<String> callback) {
+    private Future<String> completeOperation(String input, BlobInfo blobInfo, Callback<String> callback) {
       lastInput = input;
+      lastBlobInfo = blobInfo;
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
@@ -3132,7 +3141,7 @@ class FrontendTestRouter implements Router {
   String undeleteServiceId = null;
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
     GetBlobResult result;
     switch (options.getOperationType()) {
       case BlobInfo:
@@ -3154,30 +3163,33 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      PutBlobOptions options, Callback<String> callback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.PutBlob);
   }
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback) {
+      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     return completeOperation(TestUtils.getRandomString(10), callback, OpType.StitchBlob);
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     deleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.DeleteBlob);
   }
 
   @Override
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     ttlUpdateServiceId = serviceId;
     return completeOperation(null, callback, OpType.UpdateBlobTtl);
   }
 
   @Override
-  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+  public Future<Void> undeleteBlob(String blobId, String serviceId, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     undeleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.UndeleteBlob);
   }

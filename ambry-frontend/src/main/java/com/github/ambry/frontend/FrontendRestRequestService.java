@@ -23,6 +23,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -175,16 +176,16 @@ class FrontendRestRequestService implements RestRequestService {
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName);
+            SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager);
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName);
+            frontendConfig, frontendMetrics, clusterName, quotaManager);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap);
+            clusterMap, quotaManager);
     undeleteHandler =
         new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap);
+            clusterMap, quotaManager);
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
@@ -748,14 +749,16 @@ class FrontendRestRequestService implements RestRequestService {
           }
           if (subResource == null) {
             getCallback.markStartTime();
-            router.getBlob(convertedId, getCallback.options, getCallback);
+            router.getBlob(convertedId, getCallback.options, getCallback,
+                QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
           } else {
             switch (subResource) {
               case BlobInfo:
               case UserMetadata:
               case Segment:
                 getCallback.markStartTime();
-                router.getBlob(convertedId, getCallback.options, getCallback);
+                router.getBlob(convertedId, getCallback.options, getCallback,
+                    QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
                 break;
               case Replicas:
                 response = getReplicasHandler.getReplicas(convertedId, restResponseChannel);
@@ -774,11 +777,13 @@ class FrontendRestRequestService implements RestRequestService {
           headCallback.markStartTime();
           router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
               .getOption(getOption)
-              .build(), headCallback);
+              .build(), headCallback,
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
           break;
         case DELETE:
           deleteCallback.markStartTime();
-          router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback);
+          router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback,
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
           break;
         default:
           throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
@@ -859,8 +864,7 @@ class FrontendRestRequestService implements RestRequestService {
      * @param restRequest the {@link RestRequest} for whose response this is a callback.
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
-     * @param options the {@link GetBlobOptions} associated with the
-     *                {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
+     * @param options the {@link GetBlobOptions} associated with the {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
      */
     GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, SubResource subResource,
         GetBlobOptions options) {

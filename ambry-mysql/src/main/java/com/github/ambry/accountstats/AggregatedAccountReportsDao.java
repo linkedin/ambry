@@ -67,12 +67,17 @@ public class AggregatedAccountReportsDao {
           MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
           STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN,
           AGGREGATED_ACCOUNT_REPORTS_TABLE, UPDATED_AT_COLUMN);
+  private static final String deleteMonthlySqlForCluster =
+      String.format("DELETE FROM %s WHERE %s=?", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
   private static final String queryMonthSqlForCluster =
       String.format("SELECT %s FROM %s WHERE %s = ?", MONTH_COLUMN, AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
           CLUSTER_NAME_COLUMN);
   private static final String insertMonthSql =
       String.format("INSERT INTO %s (%s, %s) VALUES (?, ?) ON DUPLICATE KEY UPDATE %s=?",
           AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE, CLUSTER_NAME_COLUMN, MONTH_COLUMN, MONTH_COLUMN);
+  private static final String deleteSql =
+      String.format("DELETE FROM %s WHERE %s = ? AND %s = ? AND %s = ?", AGGREGATED_ACCOUNT_REPORTS_TABLE,
+          CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
 
   private final MySqlDataAccessor dataAccessor;
 
@@ -86,6 +91,7 @@ public class AggregatedAccountReportsDao {
 
   /**
    * Update the storage usage for the given account/container.
+   * @param clusterName The clusterName
    * @param accountId The account id.
    * @param containerId The container id.
    * @param storageUsage The storage usage in bytes.
@@ -110,6 +116,30 @@ public class AggregatedAccountReportsDao {
       logger.error(
           String.format("Failed to execute updated on %s, with parameter %d %d %d", AGGREGATED_ACCOUNT_REPORTS_TABLE,
               accountId, containerId, storageUsage), e);
+      throw e;
+    }
+  }
+
+  /**
+   * Delete the storage usage row for the given account/container.
+   * @param clusterName The clusterName
+   * @param accountId The account id
+   * @param containerId The container id
+   * @throws SQLException
+   */
+  void deleteStorageUsage(String clusterName, short accountId, short containerId) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteSql, true);
+      deleteStatement.setString(1, clusterName);
+      deleteStatement.setInt(2, accountId);
+      deleteStatement.setInt(3, containerId);
+      deleteStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      logger.error("Failed to execute delete {}, with parameter {} {}", AGGREGATED_ACCOUNT_REPORTS_TABLE, accountId,
+          containerId, e);
       throw e;
     }
   }
@@ -182,6 +212,26 @@ public class AggregatedAccountReportsDao {
       logger.error(
           String.format("Failed to execute copy on %s, with parameter %s", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
               clusterName), e);
+      throw e;
+    }
+  }
+
+  /**
+   * Delete the rows in table {@link #MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE}.
+   * @param clusterName The cluster name.
+   * @throws SQLException
+   */
+  void deleteAggregatedUsageFromMonthlyAggregatedTableForCluster(String clusterName) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteMonthlySqlForCluster, true);
+      deleteStatement.setString(1, clusterName);
+      deleteStatement.executeUpdate();
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      logger.error("Failed to execute delete on {}, with parameter {}", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
+          clusterName, e);
       throw e;
     }
   }

@@ -76,6 +76,7 @@ class BlobStoreCompactor {
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreCompactor.class);
   private final File dataDir;
   private final String storeId;
+  private final DiskMetrics diskMetrics;
   private final StoreKeyFactory storeKeyFactory;
   private final StoreConfig config;
   private final StoreMetrics srcMetrics;
@@ -118,14 +119,17 @@ class BlobStoreCompactor {
    * @param incarnationId the incarnation ID of the store.
    * @param accountService the {@link AccountService} instance to use.
    * @param remoteTokenTracker the {@link RemoteTokenTracker} that tracks tokens from all peer replicas.
+   * @param diskMetrics the {@link DiskMetrics}
    * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
       StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId,
-      AccountService accountService, RemoteTokenTracker remoteTokenTracker) throws IOException, StoreException {
+      AccountService accountService, RemoteTokenTracker remoteTokenTracker, DiskMetrics diskMetrics)
+      throws IOException, StoreException {
     this.dataDir = new File(dataDir);
+    this.diskMetrics = diskMetrics;
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
     this.config = config;
@@ -211,6 +215,14 @@ class BlobStoreCompactor {
     currentCompactionDetails.set(details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details, config);
     resumeCompaction(bundleReadBuffer);
+  }
+
+  /**
+   * Closes the last log segment periodically if replica is in sealed status.
+   * @throws StoreException if any store exception occurred as part of ensuring capacity.
+   */
+  boolean closeLastLogSegmentIfQualified() throws StoreException {
+    return srcLog.autoCloseLastLogSegmentIfQualified();
   }
 
   /**
@@ -364,8 +376,10 @@ class BlobStoreCompactor {
    */
   private void checkSanity(CompactionDetails details) {
     List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
-    // all segments should be available and should not have anything in the journal
-    // segments should be in order
+    // 1. all segments should be available
+    // 2. all segments should be in order
+    // 3. all segments should be a list of continuous log segments without skipping any one in the middle
+    // 4. all segments should not have anything in the journal
     LogSegmentName prevSegmentName = null;
     for (LogSegmentName segmentName : segmentsUnderCompaction) {
       LogSegment segment = srcLog.getSegment(segmentName);
@@ -375,9 +389,16 @@ class BlobStoreCompactor {
       if (prevSegmentName != null && prevSegmentName.compareTo(segmentName) >= 0) {
         throw new IllegalArgumentException("Ordering of " + segmentsUnderCompaction + " is incorrect");
       }
+      if (prevSegmentName != null && !prevSegmentName.equals(srcLog.getPrevSegment(segment).getName())) {
+        throw new IllegalArgumentException(
+            segmentsUnderCompaction + " is incorrect because it's not continuous. " + segment.getName()
+                + "'s previous log segment should be " + srcLog.getPrevSegment(segment).getName() + " not "
+                + prevSegmentName);
+      }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
-      if (segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
+      if (srcIndex.journal.getFirstOffset() != null
+          && segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
         throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
       }
       prevSegmentName = segment.getName();
@@ -521,7 +542,7 @@ class BlobStoreCompactor {
     logger.debug("Target log capacity is {} for {}. Existing log segments are {}. Future names and files are {}",
         targetLogTotalCapacity, storeId, existingTargetLogSegments, targetSegmentNamesAndFilenames);
     tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, diskSpaceAllocator, config, tgtMetrics, true,
-        existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
+        existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator(), diskMetrics);
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
     tgtIndex =
@@ -722,6 +743,29 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Calculate the desired rate based on current disk latency and threshold.
+   * @param diskTimePerMbInMs current disk latency per MB in ms.
+   * @param latencyThreshold the threshold.
+   * @return the adjusted compaction speed.
+   */
+  int getDesiredSpeedPerSecond(double diskTimePerMbInMs, int latencyThreshold) {
+    int currentLatency = diskTimePerMbInMs > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) diskTimePerMbInMs;
+    int desiredRatePerSec = config.storeCompactionOperationsBytesPerSec;
+    if (currentLatency > latencyThreshold) {
+      desiredRatePerSec = (int) (config.storeCompactionMinOperationsBytesPerSec +
+          (config.storeCompactionOperationsBytesPerSec - config.storeCompactionMinOperationsBytesPerSec)
+              * latencyThreshold / currentLatency / config.storeCompactionOperationsAdjustK);
+      if (desiredRatePerSec < config.storeCompactionMinOperationsBytesPerSec) {
+        desiredRatePerSec = config.storeCompactionMinOperationsBytesPerSec;
+      }
+      if (desiredRatePerSec > config.storeCompactionOperationsBytesPerSec) {
+        desiredRatePerSec = config.storeCompactionOperationsBytesPerSec;
+      }
+    }
+    return desiredRatePerSec;
+  }
+
+  /**
    * Copies the given {@code srcIndexEntries} from the given log segment into the swap spaces.
    * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param srcIndexEntries the {@link IndexEntry}s to copy.
@@ -736,7 +780,6 @@ class BlobStoreCompactor {
     boolean copiedAll = true;
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
-    long totalCopiedBytes = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
       // byte[] for both general IO and direct IO.
       byte[] byteArrayToUse;
@@ -783,8 +826,28 @@ class BlobStoreCompactor {
           long usedCapacity = tgtIndex.getLogUsedCapacity();
           if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
-            // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
+            if (config.storeCompactionMinOperationsBytesPerSec < config.storeCompactionOperationsBytesPerSec
+                && diskMetrics != null) {
+              // Enable dynamic desired rate based on disk latency.
+              double currentReadTimePerMbInMs = diskMetrics.diskReadTimePerMbInMs.getSnapshot().get95thPercentile();
+              int desiredReadPerSecond = getDesiredSpeedPerSecond(currentReadTimePerMbInMs,
+                  config.storeCompactionIoPerMbReadLatencyThresholdMs);
+              double currentWriteTimePerMbInMs = diskMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile();
+              int desiredWritePerSecond = getDesiredSpeedPerSecond(currentWriteTimePerMbInMs,
+                  config.storeCompactionIoPerMbWriteLatencyThresholdMs);
+              logger.debug(
+                  "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
+                  currentReadTimePerMbInMs, currentWriteTimePerMbInMs, desiredReadPerSecond, desiredWritePerSecond);
+              diskIOScheduler.updateThrottlerDesiredRate(COMPACTION_CLEANUP_JOB_NAME,
+                  Math.min(desiredReadPerSecond, desiredWritePerSecond));
+            } else {
+              logger.debug(
+                  "Adaptive compaction is not enabled: storeCompactionMinOperationsBytesPerSec: {}, storeCompactionOperationsBytesPerSec: {}",
+                  config.storeCompactionMinOperationsBytesPerSec, config.storeCompactionOperationsBytesPerSec);
+            }
+            // call into diskIOScheduler to make sure we can proceed.
             diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
+
             if (useDirectIO) {
               // do direct IO write
               tgtLog.appendFromDirectly(byteArrayToUse, (int) (srcValue.getOffset().getOffset() - startOffset),
@@ -860,6 +923,9 @@ class BlobStoreCompactor {
             tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
             writtenLastTime = srcValue.getSize();
             srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
+            if (diskMetrics != null) {
+              diskMetrics.diskCompactionCopyRateInBytes.mark(srcValue.getSize());
+            }
           } else if (!isActive) {
             logger.info("Stopping copying in {} because shutdown is in progress", storeId);
             copiedAll = false;
@@ -1238,14 +1304,14 @@ class BlobStoreCompactor {
         // source. If we are here, then there is no duplicate at all, this might be an error.
         logger.info(
             "Processing IndexSegment {} with duplicate search span {} in {}, we probably should have duplicates.",
-            indexSegment, duplicateSearchSpan, storeId);
+            indexSegment.toString(), duplicateSearchSpan, storeId);
         logger.info("IndexSegments in source persistent index with {}", storeId);
         srcIndex.getIndexSegments().values().forEach(seg -> logger.info("{}", seg.getFile()));
         Map<PersistentIndex.IndexEntryType, Long> collect = copyCandidates.stream()
             .collect(Collectors.groupingBy(entry -> entry.getValue().getIndexValueType(), Collectors.counting()));
         logger.info("{} with {}", collect.entrySet()
             .stream()
-            .map(ent -> String.format("{} {}", ent.getValue(), ent.getKey()))
+            .map(ent -> ent.getValue().toString() + " " + String.valueOf(ent.getKey()))
             .collect(Collectors.joining(",")), storeId);
         logger.info("Valid entry size {}, number of keys found: {}", validEntriesSize, numKeysFoundInDuplicateChecking);
       }
@@ -1279,15 +1345,7 @@ class BlobStoreCompactor {
       // TTL update + DELETE -> DELETE
       // PUT + TTL update -> PUT (the one relevant to this comment)
       // PUT + TTL update + DELETE -> DELETE
-      // TODO: move this blob store stats
-      Offset startOffsetOfLastIndexSegmentForDeleteCheck = getStartOffsetOfLastIndexSegmentForDeleteCheck();
-      // deletes are in effect if this index segment does not have any deletes that are less than
-      // StoreConfig#storeDeletedMessageRetentionDays days old. If there are such deletes, then they are not counted as
-      // deletes and the PUT records are still valid as far as compaction is concerned
-      boolean deletesInEffect = startOffsetOfLastIndexSegmentForDeleteCheck != null
-          && indexSegment.getStartOffset().compareTo(startOffsetOfLastIndexSegmentForDeleteCheck) < 0;
-      logger.trace("Deletes in effect is {} for index segment with start offset {} in {}", deletesInEffect,
-          indexSegment.getStartOffset(), storeId);
+      long deleteReferenceTime = compactionLog.getCompactionDetails().getReferenceTimeMs();
       List<IndexEntry> validEntries = new ArrayList<>();
       for (IndexEntry indexEntry : allIndexEntries) {
         IndexValue value = indexEntry.getValue();
@@ -1296,7 +1354,7 @@ class BlobStoreCompactor {
           if (putValue != null) {
             // In PersistentIndex.markAsDeleted(), the expiry time of the put/ttl update value is copied into the
             // delete value. So it is safe to check for isExpired() on the delete value.
-            if (deletesInEffect || srcIndex.isExpired(value)) {
+            if (value.getOperationTimeInMs() < deleteReferenceTime || srcIndex.isExpired(value)) {
               // still have to evaluate whether the TTL update has to be copied
               NavigableSet<IndexValue> values = indexSegment.find(indexEntry.getKey());
               IndexValue secondVal = values.lower(values.last());
@@ -1333,20 +1391,14 @@ class BlobStoreCompactor {
           // Doesn't matter whether we get the PUT or DELETE entry for the expiry test
           if (!srcIndex.isExpired(valueFromIdx)) {
             // unexpired PUT entry.
-            if (deletesInEffect) {
-              if (!hasDeleteEntryInSpan(indexEntry.getKey(), indexSegment.getStartOffset(),
-                  startOffsetOfLastIndexSegmentForDeleteCheck)) {
-                // PUT entry that has not expired and is not considered deleted.
-                // Add all values in this index segment (to account for the presence of TTL updates)
-                addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
-              } else {
-                logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
-                    indexEntry, indexSegment.getStartOffset(), storeId);
-              }
-            } else {
-              // valid PUT entry
+            if (!hasDeleteEntryOutOfRetention(indexEntry.getKey(), indexSegment.getStartOffset(),
+                deleteReferenceTime)) {
+              // PUT entry that has not expired and is not considered deleted.
               // Add all values in this index segment (to account for the presence of TTL updates)
               addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
+            } else {
+              logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
+                  indexEntry, indexSegment.getStartOffset(), storeId);
             }
           } else {
             logger.trace("{} in index segment with start offset {} in {} is not valid because it is an expired PUT",
@@ -1355,31 +1407,6 @@ class BlobStoreCompactor {
         }
       }
       return validEntries;
-    }
-
-    /**
-     * @return the start {@link Offset} of the index segment up until which delete records are considered applicable. Any
-     * delete records of blobs in subsequent index segments do not count and the blob is considered as not deleted.
-     * <p/>
-     * Returns {@code null} if none of the delete records are considered applicable.
-     */
-    private Offset getStartOffsetOfLastIndexSegmentForDeleteCheck() {
-      // TODO: move this to BlobStoreStats
-      Offset cutoffOffset = compactionLog.getStartOffsetOfLastIndexSegmentForDeleteCheck();
-      if (cutoffOffset == null || !srcIndex.getIndexSegments().containsKey(cutoffOffset)) {
-        long referenceTimeMs = compactionLog.getCompactionDetails().getReferenceTimeMs();
-        for (IndexSegment indexSegment : srcIndex.getIndexSegments().descendingMap().values()) {
-          if (indexSegment.getLastModifiedTimeMs() < referenceTimeMs) {
-            cutoffOffset = indexSegment.getEndOffset();
-            break;
-          }
-        }
-        if (cutoffOffset != null) {
-          compactionLog.setStartOffsetOfLastIndexSegmentForDeleteCheck(cutoffOffset);
-          logger.info("Start offset of last index segment for delete check is {} for {}", cutoffOffset, storeId);
-        }
-      }
-      return cutoffOffset;
     }
 
     /**
@@ -1453,14 +1480,16 @@ class BlobStoreCompactor {
     /**
      * @param key the {@link StoreKey} to check
      * @param searchStartOffset the start offset of the search for delete entry
-     * @param searchEndOffset the end offset of the search for delete entry
-     * @return {@code true} if the key has a delete entry in the given search span.
+     * @param deleteReferenceTime the timestamp to reference when deciding a delete is out of retention
+     * @return {@code true} if the key has a delete entry that is out of retention
      * @throws StoreException if there are any problems using the index
      */
-    private boolean hasDeleteEntryInSpan(StoreKey key, Offset searchStartOffset, Offset searchEndOffset)
+    private boolean hasDeleteEntryOutOfRetention(StoreKey key, Offset searchStartOffset, long deleteReferenceTime)
         throws StoreException {
-      FileSpan deleteSearchSpan = new FileSpan(searchStartOffset, searchEndOffset);
-      return srcIndex.findKey(key, deleteSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.DELETE)) != null;
+      FileSpan deleteSearchSpan = new FileSpan(searchStartOffset, srcIndex.getCurrentEndOffset());
+      IndexValue deleteValue =
+          srcIndex.findKey(key, deleteSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.DELETE));
+      return deleteValue != null && deleteValue.getOperationTimeInMs() < deleteReferenceTime;
     }
 
     @Override

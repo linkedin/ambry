@@ -119,6 +119,7 @@ public class HelixParticipantTest {
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     helixManagerFactory = new MockHelixManagerFactory();
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
+
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", "DC0",
         DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false, stateModelDef,
         BootstrapCluster, dataNodeConfigSourceType, false);

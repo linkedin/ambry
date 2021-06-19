@@ -182,7 +182,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       try {
         String monthValue = accountStatsStore.queryRecordedMonth();
         if (monthValue.equals(currentMonth)) {
-          logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}", currentMonth);
+          logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}",
+              currentMonth);
           containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
         } else {
           logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
@@ -262,12 +263,14 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
           long startTimeMs = System.currentTimeMillis();
           Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
           Map<String, Map<String, Long>> storageUsage = accountStatsStore.queryAggregatedAccountStats();
-          subtract(storageUsage, base);
-          containerStorageUsageForCurrentMonthRef.set(storageUsage);
-          if (listener.get() != null) {
-            listener.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));
+          if (storageUsage != null) {
+            subtract(storageUsage, base);
+            containerStorageUsageForCurrentMonthRef.set(storageUsage);
+            if (listener.get() != null) {
+              listener.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));
+            }
+            metrics.mysqlRefresherRefreshUsageTimeMs.update(System.currentTimeMillis() - startTimeMs);
           }
-          metrics.mysqlRefresherRefreshUsageTimeMs.update(System.currentTimeMillis() - startTimeMs);
         } catch (Exception e) {
           logger.error("Failed to retrieve the container usage from mysql", e);
           // If we already have a container usage map in memory, then don't replace it with empty map.

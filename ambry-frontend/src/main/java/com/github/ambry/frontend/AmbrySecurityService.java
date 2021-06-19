@@ -167,7 +167,7 @@ class AmbrySecurityService implements SecurityService {
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
     setRequestCostHeader(requestCost, responseChannel);
     if (quotaManager != null) {
-      ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, blobInfo, requestCost);
+      ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
       if (throttlingRecommendation != null) {
         RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)
             .entrySet()
@@ -235,6 +235,7 @@ class AmbrySecurityService implements SecurityService {
                 setCacheHeaders(restRequest, responseChannel);
               } else {
                 if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
+                  setBlobInfoHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                   responseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
@@ -397,11 +398,19 @@ class AmbrySecurityService implements SecurityService {
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
     }
-    if (blobProperties.getContentEncoding() != null) {
-      restResponseChannel.setHeader(Headers.CONTENT_ENCODING, blobProperties.getContentEncoding());
-    }
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
+    }
+  }
+
+  /**
+   * Set the specific required headers for get blob info in the response.
+   * @param blobProperties the {@link BlobProperties} that need to be set in the headers.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   */
+  private void setBlobInfoHeaders(BlobProperties blobProperties, RestResponseChannel restResponseChannel) {
+    if (blobProperties.getContentEncoding() != null) {
+      restResponseChannel.setHeader(Headers.AMBRY_CONTENT_ENCODING, blobProperties.getContentEncoding());
     }
   }
 

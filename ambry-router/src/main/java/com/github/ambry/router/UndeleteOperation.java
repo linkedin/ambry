@@ -23,6 +23,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
@@ -47,6 +48,7 @@ public class UndeleteOperation {
   private final Time time;
   private final NonBlockingRouterMetrics routerMetrics;
   private final long operationTimeMs;
+  private final QuotaChargeCallback quotaChargeCallback;
   // Parameters associated with the state.
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
@@ -80,6 +82,25 @@ public class UndeleteOperation {
   UndeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       BlobId blobId, String serviceId, long operationTimeMs, Callback<Void> callback, Time time,
       FutureResult<Void> futureResult) {
+    this(clusterMap, routerConfig, routerMetrics, blobId, serviceId, operationTimeMs, callback, time, futureResult, null);
+  }
+
+  /**
+   * Instantiates a {@link UndeleteOperation}.
+   * @param clusterMap the {@link ClusterMap} to use.
+   * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
+   * @param blobId The {@link BlobId} needs to be undeleted by this {@link UndeleteOperation}.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+   * @param operationTimeMs the time at which the operation occurred.
+   * @param callback The {@link Callback} that is supplied by the caller.
+   * @param time A {@link Time} reference.
+   * @param futureResult The {@link FutureResult} that is returned to the caller.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
+   */
+  UndeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      BlobId blobId, String serviceId, long operationTimeMs, Callback<Void> callback, Time time,
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
@@ -89,7 +110,8 @@ public class UndeleteOperation {
     this.time = time;
     this.operationTimeMs = operationTimeMs;
     this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
-        clusterMap.getDatacenterName(blobId.getDatacenterId()));
+        clusterMap.getDatacenterName(blobId.getDatacenterId()), routerMetrics);
+    this.quotaChargeCallback = quotaChargeCallback;
   }
 
   /**
@@ -339,6 +361,13 @@ public class UndeleteOperation {
       } else if (operationTracker.hasFailedOnNotFound()) {
         operationException.set(
             new RouterException("UndeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+      }
+      if (quotaChargeCallback != null) {
+        try {
+          quotaChargeCallback.chargeQuota();
+        } catch (RouterException routerException) {
+          LOGGER.info("Exception {} while charging quota for undelete operation", routerException.toString());
+        }
       }
       operationCompleted = true;
     }
