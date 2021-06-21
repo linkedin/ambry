@@ -165,7 +165,7 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
-  public void closeConnection() {
+  public void shutdown() {
 
   }
 }

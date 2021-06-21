@@ -18,12 +18,10 @@ import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.utils.Utils;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -32,6 +30,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -42,21 +41,23 @@ import static org.junit.Assert.*;
  * Unit test for {@link PartitionClassReportsDao}.
  */
 public class PartitionClassReportsDaoTest {
-  private final MySqlDataAccessor dataAccessor;
+  private final AccountStatsMySqlStore mySqlStore;
   private final PartitionClassReportsDao dao;
 
   public PartitionClassReportsDaoTest() throws Exception {
-    dataAccessor = createAccountStatsMySqlStore("clusterName", "hostName", 12345, 100).getMySqlDataAccessor();
-    dao = new PartitionClassReportsDao(dataAccessor);
+    mySqlStore = createAccountStatsMySqlStore("clusterName", "hostName", 12345, 100);
+    dao = new PartitionClassReportsDao(mySqlStore.getDataSource(),
+        new MySqlMetrics(PartitionClassReportsDao.class, new MetricRegistry()));
   }
 
   @Before
   public void before() throws Exception {
-    Connection dbConnection = dataAccessor.getDatabaseConnection(true);
-    Statement statement = dbConnection.createStatement();
-    for (String table : AccountStatsMySqlStore.TABLES) {
-      statement.executeUpdate("DELETE FROM " + table);
-    }
+    mySqlStore.cleanupTables();
+  }
+
+  @After
+  public void after() {
+    mySqlStore.shutdown();
   }
 
   @Test

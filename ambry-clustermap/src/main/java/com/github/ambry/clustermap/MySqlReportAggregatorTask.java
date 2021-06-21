@@ -117,57 +117,54 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     Histogram aggregationTimeMs =
         statsReportType == StatsReportType.ACCOUNT_REPORT ? metrics.accountStatsAggregationTimeMs
             : metrics.partitionClassStatsAggregationTimeMs;
-    synchronized (accountStatsStore) {
-      long startTimeMs = System.currentTimeMillis();
-      try {
-        List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
-        Map<String, StatsWrapper> statsWrappers =
-            statsReportType == StatsReportType.ACCOUNT_REPORT ? fetchAccountStatsWrapperForInstances(instanceNames)
-                : fetchPartitionClassStatsWrapperForInstances(instanceNames);
-        fetchTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        logger.info("Aggregating stats from " + statsWrappers.size() + " hosts");
-        results = clusterAggregator.doWorkOnStatsWrapperMap(statsWrappers, statsReportType);
-        if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
-          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
-            removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
-          }
-          accountStatsStore.storeAggregatedAccountStats(results.getSecond());
-        } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
-          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
-            removeInvalidAggregatedPartitionClassStats(results.getSecond());
-          }
-          accountStatsStore.storeAggregatedPartitionClassStats(results.getSecond());
+    long startTimeMs = System.currentTimeMillis();
+    try {
+      List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
+      Map<String, StatsWrapper> statsWrappers =
+          statsReportType == StatsReportType.ACCOUNT_REPORT ? fetchAccountStatsWrapperForInstances(instanceNames)
+              : fetchPartitionClassStatsWrapperForInstances(instanceNames);
+      fetchTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      logger.info("Aggregating stats from " + statsWrappers.size() + " hosts");
+      results = clusterAggregator.doWorkOnStatsWrapperMap(statsWrappers, statsReportType);
+      if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
+        if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+          removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
         }
+        accountStatsStore.storeAggregatedAccountStats(results.getSecond());
+      } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
+        if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+          removeInvalidAggregatedPartitionClassStats(results.getSecond());
+        }
+        accountStatsStore.storeAggregatedPartitionClassStats(results.getSecond());
+      }
 
-        // Create a base report at the beginning of each month.
-        // Check if there is a base report for this month or not.
-        if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
-            && statsReportType == StatsReportType.ACCOUNT_REPORT) {
-          // Get the month, if not the same month, then copy the aggregated stats and update the month
-          String currentMonthValue =
-              LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET).format(TIMESTAMP_FORMATTER);
-          String recordedMonthValue = accountStatsStore.queryRecordedMonth();
-          if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
-              recordedMonthValue)) {
-            if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
-              accountStatsStore.deleteSnapshotOfAggregatedAccountStats();
-            }
-            logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
-            accountStatsStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonthValue);
+      // Create a base report at the beginning of each month.
+      // Check if there is a base report for this month or not.
+      if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
+          && statsReportType == StatsReportType.ACCOUNT_REPORT) {
+        // Get the month, if not the same month, then copy the aggregated stats and update the month
+        String currentMonthValue =
+            LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET).format(TIMESTAMP_FORMATTER);
+        String recordedMonthValue = accountStatsStore.queryRecordedMonth();
+        if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
+            recordedMonthValue)) {
+          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+            accountStatsStore.deleteSnapshotOfAggregatedAccountStats();
           }
+          logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
+          accountStatsStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonthValue);
         }
-        aggregationTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
-      } catch (Exception e) {
-        logger.error("Exception thrown while aggregating stats from container stats reports across all nodes ", e);
-        exception = e;
-        return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
-      } finally {
-        accountStatsStore.closeConnection();
-        if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null && results != null
-            && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
-          callback.onCompletion(results.getFirst(), exception);
-        }
+      }
+      aggregationTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
+    } catch (Exception e) {
+      logger.error("Exception thrown while aggregating stats from container stats reports across all nodes ", e);
+      exception = e;
+      return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
+    } finally {
+      if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null && results != null
+          && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
+        callback.onCompletion(results.getFirst(), exception);
       }
     }
   }

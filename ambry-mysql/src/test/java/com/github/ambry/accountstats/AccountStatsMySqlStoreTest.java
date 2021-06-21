@@ -17,9 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
-import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
@@ -28,14 +26,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import javax.sql.DataSource;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -47,7 +44,7 @@ import static org.mockito.Mockito.*;
  */
 public class AccountStatsMySqlStoreTest {
   private final Connection mockConnection;
-  private final MySqlDataAccessor dataAccessor;
+  private final DataSource mockDataSource;
   private final MySqlMetrics metrics;
   private static final String clusterName = "Ambry-test";
   private static final String hostname = "test1.ambry_1300";
@@ -67,22 +64,19 @@ public class AccountStatsMySqlStoreTest {
     when(mockInsertStatement.executeUpdate()).thenReturn(1);
 
     metrics = new MySqlMetrics(AccountStatsMySqlStore.class, new MetricRegistry());
-    dataAccessor = getDataAccessor(mockConnection, metrics);
+    mockDataSource = getDataSource(mockConnection);
   }
 
   /**
-   * Utility to get a {@link MySqlDataAccessor}.
+   * Utility to get a {@link DataSource}.
    * @param mockConnection the connection to use.
-   * @return the {@link MySqlDataAccessor}.
+   * @return the {@link DataSource}.
    * @throws SQLException
    */
-  static MySqlDataAccessor getDataAccessor(Connection mockConnection, MySqlMetrics metrics) throws SQLException {
-    Driver mockDriver = mock(Driver.class);
-    when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
-    MySqlUtils.DbEndpoint dbEndpoint =
-        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/ambry_container_storage_stats", "dc1", true, "ambry",
-            "ambry");
-    return new MySqlDataAccessor(Collections.singletonList(dbEndpoint), mockDriver, metrics);
+  static DataSource getDataSource(Connection mockConnection) throws SQLException {
+    DataSource mockDataSource = mock(DataSource.class);
+    when(mockDataSource.getConnection()).thenReturn(mockConnection);
+    return mockDataSource;
   }
 
   @Test
@@ -91,7 +85,7 @@ public class AccountStatsMySqlStoreTest {
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(config, mockDataSource, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
     assertNull(store.getPreviousStats());
     // Second, save a backup file.
@@ -102,7 +96,7 @@ public class AccountStatsMySqlStoreTest {
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
     store =
-        new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(config, mockDataSource, clusterName, hostname, localBackupFilePath.toString(), null,
             new MetricRegistry());
 
     StatsWrapper backupWrapper = store.getPreviousStats();
