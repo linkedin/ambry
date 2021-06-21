@@ -687,6 +687,28 @@ public class ClusterChangeHandlerTest {
     helixClusterManager.close();
   }
 
+  @Test
+  public void diskCapacityUpdateTest() throws Exception {
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+    // disk capacity after initialization should equal to original value (100L * 1024 * 1024 * 1024)
+    PartitionId partitionId = helixClusterManager.getAllPartitionIds(null).get(0);
+    assertEquals("Mismatch in disk capacity", 100L * 1024 * 1024 * 1024, partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
+    // update disk capacity
+    testHardwareLayout.updateDiskCapacity(500L * 1024 * 1024 * 1024);
+    //JSONObject jsonObject = testHardwareLayout.getHardwareLayout().toJSONObject();
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
+    partitionId = helixClusterManager.getAllPartitionIds(null).get(0);
+    assertEquals("Mismatch in disk capacity", 500L * 1024 * 1024 * 1024, partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
+    helixClusterManager.close();
+  }
+
   /**
    * Get data nodes that hold given partition in certain datacenter
    * @param partitionId the partition which the nodes should hold.

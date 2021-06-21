@@ -1111,8 +1111,8 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
-      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      ZNRecord zNRecord =
+          propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
       assertNull("Partition override config should no longer exist", zNRecord);
     }
   }

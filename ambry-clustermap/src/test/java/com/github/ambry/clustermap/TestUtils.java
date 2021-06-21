@@ -25,16 +25,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -192,6 +189,12 @@ public class TestUtils {
       int basePort, int sslPort, int http2Port, HardwareState hardwareState, JSONArray disks) throws JSONException {
     for (int i = dataNodeJsonArray.length(); i < dataNodeCount; ++i) {
       dataNodeJsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, http2Port + i, hardwareState, disks));
+    }
+  }
+
+  private static void updateDataNodeJsonArrayWithNewDiskCapacity(JSONArray dataNodeJsonArray, JSONArray disks) {
+    for (int i = 0; i < dataNodeJsonArray.length(); ++i) {
+      ((JSONObject) dataNodeJsonArray.get(i)).put("disks", disks);
     }
   }
 
@@ -638,10 +641,10 @@ public class TestUtils {
       }
     }
 
-    protected JSONArray getDatacenters(boolean createNew) throws JSONException {
-      List<String> names = new ArrayList<String>(datacenterCount);
+    protected JSONArray getDatacenters(boolean createNew, boolean updateDisks) throws JSONException {
+      List<String> names = new ArrayList<>(datacenterCount);
       if (createNew) {
-        datanodeJSONArrays = new ArrayList<JSONArray>(datacenterCount);
+        datanodeJSONArrays = new ArrayList<>(datacenterCount);
       }
 
       int curBasePort = basePort;
@@ -649,10 +652,14 @@ public class TestUtils {
       int http2Port = sslPort + 10000;
       for (int i = 0; i < datacenterCount; i++) {
         names.add(i, "DC" + i);
+        JSONArray disksArray = getDisks();
         if (createNew) {
-          datanodeJSONArrays.add(i, getDataNodes(curBasePort, sslPort, http2Port, getDisks()));
+          datanodeJSONArrays.add(i, getDataNodes(curBasePort, sslPort, http2Port, disksArray));
         } else {
-          updateDataNodeJsonArray(datanodeJSONArrays.get(i), curBasePort, sslPort, http2Port, getDisks());
+          updateDataNodeJsonArray(datanodeJSONArrays.get(i), curBasePort, sslPort, http2Port, disksArray);
+        }
+        if (updateDisks) {
+          updateDataNodeJsonArrayWithNewDiskCapacity(datanodeJSONArrays.get(i), disksArray);
         }
         curBasePort += dataNodeCount;
       }
@@ -677,12 +684,18 @@ public class TestUtils {
       properties.setProperty("clustermap.host.name", "localhost");
       clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
       this.hardwareLayout =
-          new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true)), clusterMapConfig);
+          new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true, false)), clusterMapConfig);
     }
 
     void addNewDataNodes(int i) throws JSONException {
       this.dataNodeCount += i;
-      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false)),
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false, false)),
+          new ClusterMapConfig(new VerifiableProperties(properties)));
+    }
+
+    void updateDiskCapacity(long newCapacityInBytes) {
+      diskCapacityInBytes = newCapacityInBytes;
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false, true)),
           new ClusterMapConfig(new VerifiableProperties(properties)));
     }
 
@@ -813,7 +826,7 @@ public class TestUtils {
     // Finds diskCount disks, each on distinct random datanodes.
     public List<Disk> getIndependentDisks(int diskCount) {
       List<DataNode> dataNodes = getIndependentDataNodes(diskCount);
-      List<Disk> disks = new ArrayList<Disk>(diskCount);
+      List<Disk> disks = new ArrayList<>(diskCount);
       for (DataNode dataNode : dataNodes) {
         disks.add(dataNode.getDisks().get(new Random().nextInt(dataNode.getDisks().size())));
       }
