@@ -86,6 +86,7 @@ public class ClusterMapUtils {
   static final String DATACENTER_ID_STR = "id";
   static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final String XID_STR = "xid";
+  static final String DISK_CAPACITY_DELIM_STR = ",";
   static final long DEFAULT_XID = Long.MIN_VALUE;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
