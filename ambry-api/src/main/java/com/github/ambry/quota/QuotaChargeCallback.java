@@ -51,7 +51,7 @@ public interface QuotaChargeCallback {
             .equals(RouterErrorCode.TooManyRequests)) {
           throw ex;
         }
-        logger.error("Unexpected exception {} while charging quota.", ex.toString());
+        logger.error("Unexpected exception while charging quota.", ex);
       }
     };
   }
