@@ -24,6 +24,7 @@ import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Utils;
 import com.zaxxer.hikari.HikariDataSource;
+import java.io.Closeable;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -601,8 +602,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
 
   @Override
   public void shutdown() {
-    if (dataSource instanceof HikariDataSource) {
-      ((HikariDataSource) dataSource).close();
+    if (dataSource instanceof AutoCloseable) {
+      try {
+        ((AutoCloseable) dataSource).close();
+      } catch (Exception e) {
+        logger.error("Failed to close data source: ", e);
+      }
     }
   }
 
@@ -692,9 +697,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   public void cleanupTables() throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      Statement statement = connection.createStatement();
-      for (String table : AccountStatsMySqlStore.TABLES) {
-        statement.executeUpdate("DELETE FROM " + table);
+      try (Statement statement = connection.createStatement()) {
+        for (String table : AccountStatsMySqlStore.TABLES) {
+          statement.executeUpdate("DELETE FROM " + table);
+        }
       }
     }
   }

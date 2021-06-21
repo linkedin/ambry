@@ -106,7 +106,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore2.storeAccountStats(stats2);
     mySqlStore3.storeAccountStats(stats3);
 
-    assertTableSize(mySqlStore1.getConnection(), 3 * 10 * 10);
+    assertTableSize(mySqlStore1, 3 * 10 * 10);
 
     StatsWrapper obtainedStats1 = mySqlStore1.queryAccountStatsByHost(hostname1, port1);
     StatsWrapper obtainedStats2 = mySqlStore2.queryAccountStatsByHost(hostname2, port2);
@@ -520,17 +520,17 @@ public class AccountStatsMySqlStoreIntegrationTest {
     return TestUtils.generateNodeStats(storeSnapshots, 1000, reportType);
   }
 
-  private void assertTableSize(Connection connection, int expectedNumRows) throws SQLException {
-    Statement statement = connection.createStatement();
-    ResultSet resultSet = statement.executeQuery("SELECT * FROM " + AccountReportsDao.ACCOUNT_REPORTS_TABLE);
+  private void assertTableSize(AccountStatsMySqlStore mySqlStore, int expectedNumRows) throws SQLException {
     int numRows = 0;
-    if (resultSet != null) {
-      while (resultSet.next()) {
-        numRows++;
+    try (Connection connection = mySqlStore.getDataSource().getConnection()) {
+      try (Statement statement = connection.createStatement()) {
+        try (ResultSet resultSet = statement.executeQuery("SELECT * FROM " + AccountReportsDao.ACCOUNT_REPORTS_TABLE)) {
+          while (resultSet.next()) {
+            numRows++;
+          }
+        }
       }
-      resultSet.close();
     }
-    connection.close();
     assertEquals(expectedNumRows, numRows);
   }
 

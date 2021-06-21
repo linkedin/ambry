@@ -80,15 +80,20 @@ public class BatchUpdater {
       throw new IllegalArgumentException("MaxBatchSize is not valid: " + maxBatchSize);
     }
     this.maxBatchSize = maxBatchSize;
+    PreparedStatement pstatement = null;
     try {
       // Calling getPreparedStatement first, since it will setup connection if there is none
-      statement = connection.prepareStatement(sql);
-      statement.clearBatch();
+      pstatement = connection.prepareStatement(sql);
+      pstatement.clearBatch();
       autoCommit = connection.getAutoCommit();
       connection.setAutoCommit(false);
+      this.statement = pstatement;
     } catch (SQLException e) {
       metrics.batchUpdateFailureCount.inc();
       logger.error("Failed to prepare for batch insert on {}", tableName, e);
+      if (pstatement != null) {
+        pstatement.close();
+      }
       connection.close();
       throw e;
     }
@@ -115,6 +120,7 @@ public class BatchUpdater {
       currentBatchSize++;
     } catch (SQLException e) {
       rollback(e);
+      statement.close();
       connection.close();
       throw e;
     }
@@ -135,6 +141,7 @@ public class BatchUpdater {
       rollback(e);
       throw e;
     } finally {
+      statement.close();
       connection.close();
     }
   }
