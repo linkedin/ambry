@@ -192,6 +192,11 @@ public class TestUtils {
     }
   }
 
+  /**
+   * Update the given array of JSON data node objects by replacing original disks with given ones.
+   * @param dataNodeJsonArray the datanode JSONArray to update
+   * @param disks a new {@link JSONArray} of disks to replace original ones for each node
+   */
   private static void updateDataNodeJsonArrayWithNewDiskCapacity(JSONArray dataNodeJsonArray, JSONArray disks) {
     for (int i = 0; i < dataNodeJsonArray.length(); ++i) {
       ((JSONObject) dataNodeJsonArray.get(i)).put("disks", disks);

@@ -496,7 +496,7 @@ public class HelixBootstrapUpgradeUtil {
     this.portNum = portNum;
     this.partitionName = partitionName;
     this.helixAdminOperation = helixAdminOperation;
-    this.dataNodeConfigSourceType = dataNodeConfigSourceType == null ? INSTANCE_CONFIG : dataNodeConfigSourceType;
+    this.dataNodeConfigSourceType = dataNodeConfigSourceType == null ? PROPERTY_STORE : dataNodeConfigSourceType;
     this.overrideReplicaStatus = overrideReplicaStatus;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.

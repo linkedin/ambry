@@ -211,8 +211,8 @@ public class HelixBootstrapUpgradeTool {
     OptionSpecBuilder dryRun =
         parser.accepts("dryRun", "(Optional argument) Dry run, do not modify the cluster map in Helix.");
 
-    OptionSpecBuilder disableValidatingClusterManager = parser.accepts("disableVCM",
-        "(Optional argument) whether to disable validating cluster manager(VCM) in Helix bootstrap tool.");
+    OptionSpecBuilder enableValidatingClusterManager = parser.accepts("enableVCM",
+        "(Optional argument) whether to enable validating cluster manager(VCM) in Helix bootstrap tool.");
 
     ArgumentAcceptingOptionSpec<String> adminConfigFilePathOpt = parser.accepts("adminConfigFilePath",
         "The path to a static admin config file. For example, it can be a file that holds a list of partitions"
@@ -222,7 +222,8 @@ public class HelixBootstrapUpgradeTool {
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> dataNodeConfigSourceOpt = parser.accepts("dataNodeConfigSource",
-        "(Optional argument) The type of data node config source. See DataNodeConfigSourceType enum for more details.")
+        "(Optional argument) The type of data node config source (default is PROPERTY_STORE). "
+            + "See DataNodeConfigSourceType enum for more details.")
         .withRequiredArg()
         .describedAs("data_node_config_source")
         .ofType(String.class);
@@ -309,7 +310,7 @@ public class HelixBootstrapUpgradeTool {
         default:
           HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
               clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove), null,
-              !options.has(disableValidatingClusterManager), stateModelDef, operation, dataNodeConfigSourceType,
+              options.has(enableValidatingClusterManager), stateModelDef, operation, dataNodeConfigSourceType,
               options.has(overrideReplicaStatus));
       }
     }

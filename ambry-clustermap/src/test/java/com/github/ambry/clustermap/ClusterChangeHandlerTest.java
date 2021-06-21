@@ -687,6 +687,10 @@ public class ClusterChangeHandlerTest {
     helixClusterManager.close();
   }
 
+  /**
+   * Test the case where the disk capacity is updated dynamically.
+   * @throws Exception
+   */
   @Test
   public void diskCapacityUpdateTest() throws Exception {
     // create a HelixClusterManager with DynamicClusterChangeHandler
@@ -701,7 +705,6 @@ public class ClusterChangeHandlerTest {
     assertEquals("Mismatch in disk capacity", 100L * 1024 * 1024 * 1024, partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
     // update disk capacity
     testHardwareLayout.updateDiskCapacity(500L * 1024 * 1024 * 1024);
-    //JSONObject jsonObject = testHardwareLayout.getHardwareLayout().toJSONObject();
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
     partitionId = helixClusterManager.getAllPartitionIds(null).get(0);
