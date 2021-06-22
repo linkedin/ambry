@@ -144,7 +144,35 @@ jobs:
       ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
       GIT_SECRET: ${{ secrets.GIT_SECRET }}
       PUBLISH: ${{ secrets.PUBLISH }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
     steps:
+      - name: Checkout Ambry
+        uses: actions/checkout@v2
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+
+      - name: Cleanup Gradle Cache
+          # Remove some files from the Gradle cache which might have cached by earlier builds.
+        run: |
+          rm -f ~/.gradle/caches/modules-2/modules-2.lock
+          rm -f ~/.gradle/caches/modules-2/gc.properties
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
       - name: Publish To JFrog artifactory
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
         run: ./travis-publish.sh
