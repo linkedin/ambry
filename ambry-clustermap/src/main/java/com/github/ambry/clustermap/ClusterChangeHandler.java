@@ -41,11 +41,13 @@ public interface ClusterChangeHandler {
   Stream<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state);
 
   /**
-   * Get a snapshot of replica states from given partition.
+   * Get replicas grouped by given states from specific partition.
+   * @param replicasByState a map of replicas grouped by state to be populated.
+   * @param states the required states in which the replicas should stay.
    * @param partition the {@link AmbryPartition} that the replicas belong to.
-   * @return a map whose key is {@link ReplicaState} and value is a list of {@link AmbryReplica} in that state.
    */
-  Map<ReplicaState, List<AmbryReplica>> getSnapshotOfReplicaStates(AmbryPartition partition);
+  void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, Set<ReplicaState> states,
+      AmbryPartition partition);
 
   /**
    * @return a map from ambry data node to its disks.

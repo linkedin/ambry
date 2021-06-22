@@ -307,7 +307,7 @@ public class DynamicClusterManagerComponentsTest {
     }
 
     @Override
-    public Map<ReplicaState, List<AmbryReplica>> getReplicaIdsByStates(AmbryPartition partition,
+    public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, AmbryPartition partition,
         Set<ReplicaState> states, String dcName) {
       throw new UnsupportedOperationException("Temporarily unsupported");
     }

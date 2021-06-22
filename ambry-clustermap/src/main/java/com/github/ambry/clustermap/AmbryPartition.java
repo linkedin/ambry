@@ -17,6 +17,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -76,8 +77,10 @@ public class AmbryPartition implements PartitionId {
   }
 
   @Override
-  public Map<ReplicaState, List<AmbryReplica>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName){
-    return clusterManagerCallback.getReplicaIdsByStates(this,  states, dcName);
+  public Map<ReplicaState, List<AmbryReplica>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName) {
+    Map<ReplicaState, List<AmbryReplica>> replicasByStates = new HashMap<>();
+    clusterManagerCallback.getReplicaIdsByStates(replicasByStates, this, states, dcName);
+    return replicasByStates;
   }
 
   @Override

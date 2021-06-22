@@ -78,7 +78,7 @@ public class Partition implements PartitionId {
         : hardwareLayout.getClusterMapConfig().clusterMapDefaultPartitionClass;
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");
-    this.replicas = new ArrayList<ReplicaId>(jsonObject.getJSONArray("replicas").length());
+    this.replicas = new ArrayList<>(jsonObject.getJSONArray("replicas").length());
     for (int i = 0; i < jsonObject.getJSONArray("replicas").length(); ++i) {
       this.replicas.add(i, new Replica(hardwareLayout, this, jsonObject.getJSONArray("replicas").getJSONObject(i)));
     }
@@ -117,6 +117,7 @@ public class Partition implements PartitionId {
     Map<ReplicaState, List<ReplicaId>> replicaByState = new HashMap<>();
     for (ReplicaState state : states) {
       List<ReplicaId> replicaIds = new ArrayList<>();
+      // for static clustermap we assume all replicas are in StandBy state.
       if (state == ReplicaState.STANDBY) {
         replicaIds.addAll(replicas.stream()
             .filter(k -> dcName == null || k.getDataNodeId().getDatacenterName().equals(dcName))

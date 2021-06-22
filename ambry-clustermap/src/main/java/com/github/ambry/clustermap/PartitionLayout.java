@@ -328,7 +328,7 @@ class PartitionLayout {
     }
 
     @Override
-    public Map<ReplicaState, List<Replica>> getReplicaIdsByStates(Partition partition, Set<ReplicaState> states,
+    public void getReplicaIdsByStates(Map<ReplicaState, List<Replica>> replicasByState, Partition partition, Set<ReplicaState> states,
         String dcName) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }

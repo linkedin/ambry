@@ -51,12 +51,13 @@ interface ClusterManagerCallback<R extends ReplicaId, D extends DiskId, P extend
 
   /**
    * Get replicas (grouped by required states) from given partition in specified datacenter.
+   * @param replicasByState a map of replicas by state to be populated.
    * @param partition the {@link PartitionId} that replicas belong to.
    * @param states a set of required states.
    * @param dcName name of datacenter from which the replicas should come
-   * @return a map whose key is required {@link ReplicaState} and value is a list of {@link ReplicaId} in that state.
    */
-  Map<ReplicaState, List<R>> getReplicaIdsByStates(P partition, Set<ReplicaState> states, String dcName);
+  void getReplicaIdsByStates(Map<ReplicaState, List<R>> replicasByState, P partition, Set<ReplicaState> states,
+      String dcName);
 
   /**
    * Get the counter for the sealed state change for partitions.

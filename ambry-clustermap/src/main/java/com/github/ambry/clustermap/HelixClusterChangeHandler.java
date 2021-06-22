@@ -13,12 +13,11 @@
  */
 package com.github.ambry.clustermap;
 
-import java.util.EnumSet;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
@@ -61,20 +60,18 @@ interface HelixClusterChangeHandler
   }
 
   @Override
-  default Map<ReplicaState, List<AmbryReplica>> getSnapshotOfReplicaStates(AmbryPartition partition) {
+  default void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState,
+      Set<ReplicaState> states, AmbryPartition partition) {
     String resourceName = getPartitionToResourceMap().get(partition.toPathString());
     RoutingTableSnapshot snapshot = getRoutingTableSnapshot();
-    Map<ReplicaState, List<AmbryReplica>> replicasByState = new HashMap<>();
-    for (ReplicaState state : EnumSet.of(ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP, ReplicaState.STANDBY,
-        ReplicaState.LEADER, ReplicaState.INACTIVE)) {
-      List<AmbryReplica> list = snapshot.getInstancesForResource(resourceName, partition.toPathString(), state.name())
+    for (ReplicaState state : states) {
+      List<AmbryReplica> list = replicasByState.computeIfAbsent(state, k -> new ArrayList<>());
+      snapshot.getInstancesForResource(resourceName, partition.toPathString(), state.name())
           .stream()
           .map(instanceConfig -> getDataNode(instanceConfig.getInstanceName()))
           .map(dataNode -> getReplicaId(dataNode, partition.toPathString()))
           .filter(Objects::nonNull)
-          .collect(Collectors.toList());
-      replicasByState.put(state, list);
+          .forEach(list::add);
     }
-    return replicasByState;
   }
 }

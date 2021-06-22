@@ -95,7 +95,8 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
   }
 
   @Override
-  public Map<ReplicaState, List<AmbryReplica>> getSnapshotOfReplicaStates(AmbryPartition partition){
+  public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState,
+      Set<ReplicaState> states, AmbryPartition partition) {
     throw new UnsupportedOperationException("Get snapshot of replica state is temporarily not supported");
   }
 

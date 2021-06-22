@@ -703,23 +703,14 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     @Override
-    public Map<ReplicaState, List<AmbryReplica>> getReplicaIdsByStates(AmbryPartition partition,
+    public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, AmbryPartition partition,
         Set<ReplicaState> states, String dcName) {
-      Map<ReplicaState, List<AmbryReplica>> replicasByState = new HashMap<>();
       for (DcInfo dcInfo : dcToDcInfo.values()) {
         String dc = dcInfo.dcName;
         if (dcName == null || dcName.equals(dc)) {
-          Map<ReplicaState, List<AmbryReplica>> replicaStateMap =
-              dcInfo.clusterChangeHandler.getSnapshotOfReplicaStates(partition);
-          for (Map.Entry<ReplicaState, List<AmbryReplica>> entry : replicaStateMap.entrySet()) {
-            ReplicaState state = entry.getKey();
-            if (states.contains(state)) {
-              replicasByState.computeIfAbsent(state, k -> new ArrayList<>()).addAll(entry.getValue());
-            }
-          }
+          dcInfo.clusterChangeHandler.getReplicaIdsByStates(replicasByState, states, partition);
         }
       }
-      return replicasByState;
     }
 
     /**
