@@ -41,4 +41,4 @@ jobs:
 stages:
   - name: test
   - name: publish
-    if: branch = master and type = push
+    if: branch = master and type = push and env(PUBLISH) = true
