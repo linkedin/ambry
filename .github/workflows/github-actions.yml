@@ -143,8 +143,7 @@ jobs:
       ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
       ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
       GIT_SECRET: ${{ secrets.GIT_SECRET }}
-      PUBLISH: ${{ secrets.PUBLISH }}
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.PUBLISH == 'true'}}
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
