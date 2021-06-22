@@ -13,16 +13,27 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.ThrottlePolicy;
+import com.github.ambry.quota.ThrottlingRecommendation;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
-import io.netty.buffer.ByteBufInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -198,6 +209,75 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
 
       //submission after closing should return a future that is already done.
       assertClosed();
+    }
+  }
+
+  /**
+   * Test default {@link QuotaChargeCallback} doesn't charge anything and doesn't error out when throttling is disabled.
+   */
+  @Test
+  public void testRouterWithDefaultQuotaCallback() throws Exception {
+    try {
+      setRouter();
+      assertExpectedThreadCounts(2, 1);
+      AtomicInteger listenerCalledCount = new AtomicInteger(0);
+      QuotaManager quotaManager =
+          new ChargeTesterQuotaManager(new QuotaConfig(new VerifiableProperties(new Properties())), new MaxThrottlePolicy(),
+              accountService, null, new MetricRegistry(), listenerCalledCount);
+      QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager, true);
+
+      int blobSize = 3000;
+      setOperationParams(blobSize, TTL_SECS);
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
+              quotaChargeCallback).get();
+      assertEquals(0, listenerCalledCount.get());
+      RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+          .get()
+          .getBlobDataChannel()
+          .readInto(retainingAsyncWritableChannel, null)
+          .get();
+      // read out all the chunks.
+      retainingAsyncWritableChannel.consumeContentAsInputStream().close();
+      assertEquals(0, listenerCalledCount.get());
+    } finally {
+      router.close();
+      assertExpectedThreadCounts(0, 0);
+
+      //submission after closing should return a future that is already done.
+      assertClosed();
+    }
+  }
+
+  /**
+   * {@link AmbryQuotaManager} extension to test behavior with default implementation.
+   */
+  static class ChargeTesterQuotaManager extends AmbryQuotaManager {
+    private final AtomicInteger chargeCalledCount;
+
+    /**
+     * Constructor for {@link ChargeTesterQuotaManager}.
+     * @param quotaConfig {@link QuotaConfig} object.
+     * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
+     * @param accountService {@link AccountService} object to get all the accounts and container information.
+     * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
+     * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
+     * @throws ReflectiveOperationException in case of any exception.
+     */
+    public ChargeTesterQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
+        AccountStatsStore accountStatsStore, MetricRegistry metricRegistry, AtomicInteger chargeCalledCount) throws ReflectiveOperationException {
+      super(quotaConfig, throttlePolicy, accountService, accountStatsStore, metricRegistry);
+      this.chargeCalledCount = chargeCalledCount;
+    }
+
+    @Override
+    public ThrottlingRecommendation charge(RestRequest restRequest) {
+      ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest);
+      if(throttlingRecommendation != null) {
+        chargeCalledCount.incrementAndGet();
+      }
+      return throttlingRecommendation;
     }
   }
 }

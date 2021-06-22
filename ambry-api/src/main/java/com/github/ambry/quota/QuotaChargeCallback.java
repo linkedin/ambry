@@ -38,9 +38,9 @@ public interface QuotaChargeCallback {
     return () -> {
       try {
         ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest);
-        if (throttlingRecommendation.shouldThrottle() && shouldThrottle
-            && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
-          if (quotaManager.getQuotaConfig().throttleInProgressRequests) {
+        if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle() && shouldThrottle) {
+          if (quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING &&
+              quotaManager.getQuotaConfig().throttleInProgressRequests) {
             throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
           } else {
             logger.info("Quota exceeded for an in progress request.");
