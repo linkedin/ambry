@@ -143,22 +143,27 @@ jobs:
       ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
       ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
       GIT_SECRET: ${{ secrets.GIT_SECRET }}
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && secrets.PUBLISH == 'true'}}
+      PUBLISH: ${{ secrets.PUBLISH }}
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
+        # environment variables are only supported in step conditionals
+        # TODO once the PUBLISH variable is no longer needed move the if statement up to the job level
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
 
       - name: Set up JDK 11
         uses: actions/setup-java@v2
         with:
           java-version: '11'
           distribution: 'adopt'
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
 
       - name: Cleanup Gradle Cache
           # Remove some files from the Gradle cache which might have cached by earlier builds.
         run: |
           rm -f ~/.gradle/caches/modules-2/modules-2.lock
           rm -f ~/.gradle/caches/modules-2/gc.properties
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
 
       - name: Cache Gradle packages
         uses: actions/cache@v2
@@ -169,9 +174,12 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
 
       - name: Publish To JFrog artifactory
         run: ./travis-publish.sh
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH == 'true'}}
