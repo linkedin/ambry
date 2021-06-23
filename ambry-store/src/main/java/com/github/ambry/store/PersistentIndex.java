@@ -648,10 +648,17 @@ class PersistentIndex {
         logger.trace("Searching for {} in the entire index", key);
         segmentsMapToSearch = indexSegments.descendingMap();
       } else {
-        logger.trace("Searching for {} in index with filespan ranging from {} to {}", key, fileSpan.getStartOffset(),
+        logger.trace("Searching for {} in index with filSpan ranging from {} to {}", key, fileSpan.getStartOffset(),
             fileSpan.getEndOffset());
-        segmentsMapToSearch = indexSegments.subMap(indexSegments.floorKey(fileSpan.getStartOffset()), true,
-            indexSegments.lowerKey(fileSpan.getEndOffset()), true).descendingMap();
+        Offset fromIndexOffset = indexSegments.floorKey(fileSpan.getStartOffset());
+        Offset toIndexOffset = indexSegments.lowerKey(fileSpan.getEndOffset());
+        if (toIndexOffset == null) {
+          segmentsMapToSearch = new ConcurrentSkipListMap<>();
+        } else {
+          segmentsMapToSearch =
+              indexSegments.subMap(fromIndexOffset == null ? indexSegments.firstKey() : fromIndexOffset, true,
+                  toIndexOffset, true).descendingMap();
+        }
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
       int segmentsSearched = 0;
@@ -755,10 +762,17 @@ class PersistentIndex {
         logger.trace("Searching all indexes for {} in the entire index", key);
         segmentsMapToSearch = indexSegments.descendingMap();
       } else {
-        logger.trace("Searching all indexes for {} in index with filespan ranging from {} to {}", key,
+        logger.trace("Searching all indexes for {} in index with fileSpan ranging from {} to {}", key,
             fileSpan.getStartOffset(), fileSpan.getEndOffset());
-        segmentsMapToSearch = indexSegments.subMap(indexSegments.floorKey(fileSpan.getStartOffset()), true,
-            indexSegments.lowerKey(fileSpan.getEndOffset()), true).descendingMap();
+        Offset fromIndexOffset = indexSegments.floorKey(fileSpan.getStartOffset());
+        Offset toIndexOffset = indexSegments.lowerKey(fileSpan.getEndOffset());
+        if (toIndexOffset == null) {
+          segmentsMapToSearch = new ConcurrentSkipListMap<>();
+        } else {
+          segmentsMapToSearch =
+              indexSegments.subMap(fromIndexOffset == null ? indexSegments.firstKey() : fromIndexOffset, true,
+                  indexSegments.lowerKey(fileSpan.getEndOffset()), true).descendingMap();
+        }
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
       int segmentsSearched = 0;
