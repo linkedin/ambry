@@ -17,7 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterAgentFactory;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -25,9 +25,9 @@ import com.github.ambry.config.StoreConfig;
 
 
 /**
- * {@link HelixVcrClusterAgentFactory} to generate {@link HelixVcrClusterParticipant} for dynamic partition assignment.
+ * {@link HelixVcrClusterAgentsFactory} to generate {@link HelixVcrClusterParticipant} for dynamic partition assignment.
  */
-public class HelixVcrClusterAgentFactory implements VcrClusterAgentFactory {
+public class HelixVcrClusterAgentsFactory implements VcrClusterAgentsFactory {
 
   private final CloudConfig cloudConfig;
   private final ClusterMapConfig clusterMapConfig;
@@ -39,7 +39,7 @@ public class HelixVcrClusterAgentFactory implements VcrClusterAgentFactory {
   private final VcrMetrics vcrMetrics;
 
   /**
-   * Constructor for {@link HelixVcrClusterAgentFactory}
+   * Constructor for {@link HelixVcrClusterAgentsFactory}
    * @param cloudConfig {@link CloudConfig} object.
    * @param clusterMapConfig {@link ClusterMapConfig} object.
    * @param clusterMap {@link ClusterMap} object.
@@ -48,7 +48,7 @@ public class HelixVcrClusterAgentFactory implements VcrClusterAgentFactory {
    * @param cloudDestination {@link CloudDestination} object.
    * @param metricRegistry  {@link MetricRegistry} object.
    */
-  public HelixVcrClusterAgentFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
+  public HelixVcrClusterAgentsFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
       AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination,
       MetricRegistry metricRegistry) {
     this.cloudConfig = cloudConfig;

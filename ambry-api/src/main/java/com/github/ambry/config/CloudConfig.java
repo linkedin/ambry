@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.utils.Utils;
 import java.util.HashSet;
 import java.util.Set;
@@ -338,7 +339,7 @@ public class CloudConfig {
   public final int cloudBatchRequestTimeout;
 
   /**
-   * The class used to instantiate {@link com.github.ambry.clustermap.VcrClusterAgentFactory}
+   * The class used to instantiate {@link VcrClusterAgentsFactory}
    */
   @Config(VCR_CLUSTER_AGENT_FACTORY_CLASS)
   @Default(DEFAULT_VCR_CLUSTER_AGENT_FACTORY_CLASS)

@@ -21,7 +21,7 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterAgentFactory;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -154,7 +154,7 @@ public class VcrServer {
       AccountService accountService = accountServiceFactory.getAccountService();
 
       vcrClusterParticipant =
-          ((VcrClusterAgentFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
+          ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
               clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
               registry)).getVcrClusterParticipant();
 

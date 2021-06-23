@@ -17,11 +17,11 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.VcrClusterAgentFactory;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockVcrClusterAgentFactory;
+import com.github.ambry.clustermap.MockVcrClusterAgentsFactory;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
@@ -63,7 +63,7 @@ import static org.junit.Assert.*;
 public class MockCluster {
   private static final Logger logger = LoggerFactory.getLogger(MockCluster.class);
   private final MockClusterAgentsFactory mockClusterAgentsFactory;
-  private MockVcrClusterAgentFactory mockClusterSpectatorFactory;
+  private MockVcrClusterAgentsFactory mockClusterSpectatorFactory;
   private final MockClusterMap clusterMap;
   private final List<AmbryServer> serverList;
   private boolean serverInitialized = false;
@@ -111,7 +111,7 @@ public class MockCluster {
     serverList = new ArrayList<>();
     generalDataNodeIndex = 0;
 
-    mockClusterSpectatorFactory = new MockVcrClusterAgentFactory(cloudDataNodes);
+    mockClusterSpectatorFactory = new MockVcrClusterAgentsFactory(cloudDataNodes);
   }
 
   /**
@@ -229,7 +229,7 @@ public class MockCluster {
     return mockClusterAgentsFactory;
   }
 
-  public VcrClusterAgentFactory getClusterSpectatorFactory() {
+  public VcrClusterAgentsFactory getClusterSpectatorFactory() {
     return mockClusterSpectatorFactory;
   }
 

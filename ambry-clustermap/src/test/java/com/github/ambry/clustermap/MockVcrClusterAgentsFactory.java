@@ -19,16 +19,16 @@ import java.util.List;
 
 
 /**
- * Mock {@link VcrClusterAgentFactory} to instantiate {@link MockVcrClusterSpectator}.
+ * Mock {@link VcrClusterAgentsFactory} to instantiate {@link MockVcrClusterSpectator}.
  */
-public class MockVcrClusterAgentFactory implements VcrClusterAgentFactory {
+public class MockVcrClusterAgentsFactory implements VcrClusterAgentsFactory {
   private final List<MockDataNodeId> cloudDataNodes;
 
   /**
-   * Constructor for {@link MockVcrClusterAgentFactory} object.
+   * Constructor for {@link MockVcrClusterAgentsFactory} object.
    * @param cloudDataNodes list of cloud {@link MockDataNodeId}s in instance config of {@link MockVcrClusterSpectator}.
    */
-  public MockVcrClusterAgentFactory(List<MockDataNodeId> cloudDataNodes) {
+  public MockVcrClusterAgentsFactory(List<MockDataNodeId> cloudDataNodes) {
     this.cloudDataNodes = cloudDataNodes;
   }
 

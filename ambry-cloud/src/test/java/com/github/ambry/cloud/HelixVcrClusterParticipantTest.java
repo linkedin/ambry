@@ -131,7 +131,7 @@ public class HelixVcrClusterParticipantTest {
     props.setProperty(CloudConfig.VCR_CLUSTER_NAME, VCR_CLUSTER_NAME);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
-    return new HelixVcrClusterAgentFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
+    return new HelixVcrClusterAgentsFactory(cloudConfig, clusterMapConfig, mockClusterMap, Mockito.mock(AccountService.class),
         new StoreConfig(verifiableProperties), null, new MetricRegistry()).getVcrClusterParticipant();
   }
 

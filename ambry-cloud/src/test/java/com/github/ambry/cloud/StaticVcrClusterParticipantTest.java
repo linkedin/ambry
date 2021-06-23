@@ -17,7 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterAgentFactory;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -60,8 +60,8 @@ public class StaticVcrClusterParticipantTest {
     VerifiableProperties vProps = new VerifiableProperties(props);
     CloudConfig cloudConfig = new CloudConfig(vProps);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
-    VcrClusterAgentFactory factory =
-        new StaticVcrClusterAgentFactory(cloudConfig, clusterMapConfig, mockClusterMap, null, null, null,
+    VcrClusterAgentsFactory factory =
+        new StaticVcrClusterAgentsFactory(cloudConfig, clusterMapConfig, mockClusterMap, null, null, null,
             new MetricRegistry());
     VcrClusterParticipant vcrClusterParticipant = factory.getVcrClusterParticipant();
     assertEquals("CloudDataNode host name doesn't match", hostName,

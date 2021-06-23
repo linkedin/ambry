@@ -17,7 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.VcrClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterAgentFactory;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -25,16 +25,16 @@ import com.github.ambry.config.StoreConfig;
 
 
 /**
- * {@link StaticVcrClusterAgentFactory} to generate VCR Cluster for static partition assignment.
+ * {@link StaticVcrClusterAgentsFactory} to generate VCR Cluster for static partition assignment.
  */
-public class StaticVcrClusterAgentFactory implements VcrClusterAgentFactory {
+public class StaticVcrClusterAgentsFactory implements VcrClusterAgentsFactory {
 
   private final CloudConfig cloudConfig;
   private final ClusterMapConfig clusterMapConfig;
   private final ClusterMap clusterMap;
   private VcrClusterParticipant vcrClusterParticipant;
 
-  public StaticVcrClusterAgentFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
+  public StaticVcrClusterAgentsFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
       AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination,
       MetricRegistry metricRegistry) {
     this.cloudConfig = cloudConfig;
