@@ -13,7 +13,6 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.utils.Utils;
 import java.util.HashSet;
 import java.util.Set;
