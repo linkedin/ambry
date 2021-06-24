@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
@@ -56,6 +57,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
 import static com.github.ambry.store.StoreFindToken.*;
@@ -77,6 +80,10 @@ public class IndexTest {
   private final CuratedLogIndexState state;
   private final CuratedLogIndexState stateForTokenTest;
   private final short persistentIndexVersion;
+  private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
+  private static final ObjectMapper objectMapper = new ObjectMapper();
+  private static final Logger logger = LoggerFactory.getLogger(IndexTest.class);
+
 
   // TODO: test that verifies that files with "_index" are not picked up if the corresponding log segment is not in log
 
@@ -1157,6 +1164,75 @@ public class IndexTest {
     }
   }
 
+  @Test
+  public void rebuildTokenWhenLastSegmentAutoClosedTestCase1() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    //generate a journal based token mapping to first indexEntry in last index segment. it will return the next journal based token in journal.
+    Offset validOffset =
+        new Offset(lastIndexSegment.getLogSegmentName(), lastIndexSegment.getStartOffset().getOffset());
+    Offset nextOffset = stateForTokenTest.index.journal.getEntriesSince(validOffset, false).get(0).getOffset();
+    StoreFindToken startToken =
+        new StoreFindToken(validOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+            lastIndexSegment.getResetKey(), lastIndexSegment.getResetKeyType(),
+            lastIndexSegment.getResetKeyLifeVersion());
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    StoreFindToken expectedToken =
+        new StoreFindToken(nextOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+            lastIndexSegment.getResetKey(), lastIndexSegment.getResetKeyType(),
+            lastIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+  }
+
+  @Test
+  public void rebuildTokenWhenLastSegmentAutoClosedTestCase2() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    //generate the last journal based token, it will return the original token.(check if it go through the right logic)
+    Offset validOffset = stateForTokenTest.index.journal.getLastOffset();
+    StoreFindToken startToken = new StoreFindToken(validOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+        lastIndexSegment.getResetKey(), lastIndexSegment.getResetKeyType(), lastIndexSegment.getResetKeyLifeVersion());
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    StoreFindToken expectedToken = startToken;
+    compareTokens(expectedToken, token);
+  }
+
+  @Test
+  public void rebuildTokenWhenLastSegmentAutoClosedTestCase4() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    //generate a journal based token and close last log segment, should return the index based token.
+    Offset validOffset = new Offset(lastIndexSegment.getLogSegmentName(), lastIndexSegment.getStartOffset().getOffset());
+    StoreFindToken startToken = new StoreFindToken(validOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+        lastIndexSegment.getResetKey(), lastIndexSegment.getResetKeyType(), lastIndexSegment.getResetKeyLifeVersion());
+    autoCloseLastLogSegmentAndCleanUpJournal();
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    StoreFindToken expectedToken = new StoreFindToken(lastIndexSegment.iterator().next().getKey(), lastIndexSegment.getStartOffset(),
+        stateForTokenTest.sessionId, stateForTokenTest.incarnationId, lastIndexSegment.getResetKey(),
+        lastIndexSegment.getResetKeyType(), lastIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+  }
+
+  @Test
+  public void rebuildTokenWhenLastSegmentAutoClosedTestCase6() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    //generate an index based token for last index segment and close last log segment, it should return the same index token.
+    Offset validOffset = new Offset(lastIndexSegment.getLogSegmentName(), lastIndexSegment.getStartOffset().getOffset());
+    StoreFindToken startToken =
+        new StoreFindToken(lastIndexSegment.iterator().next().getKey(), validOffset, stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, lastIndexSegment.getResetKey(), lastIndexSegment.getResetKeyType(),
+            lastIndexSegment.getResetKeyLifeVersion());
+    autoCloseLastLogSegmentAndCleanUpJournal();
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    StoreFindToken expectedToken = startToken;
+    compareTokens(expectedToken, token);
+  }
+
   /**
    * Tests cases where find token is rebuilt based on reset key.
    * @throws StoreException
@@ -1215,6 +1291,37 @@ public class IndexTest {
         stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
         firstIndexSegment.getResetKeyLifeVersion());
     compareTokens(expectedToken, token);
+  }
+
+  /**
+   * Auto close last log segment and clean up journal.
+   * @throws StoreException
+   */
+  private void autoCloseLastLogSegmentAndCleanUpJournal() throws StoreException {
+    CompactionPolicySwitchInfo compactionPolicySwitchInfo =
+        new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
+    backUpCompactionPolicyInfo(tokenTestDir.toString(), compactionPolicySwitchInfo);
+    stateForTokenTest.index.log.autoCloseLastLogSegmentIfQualified();
+    stateForTokenTest.index.journal.cleanUpJournal();
+  }
+
+  /**
+   * Back up compactionPolicySwitchInfo to file in tempDir.
+   * @param tempDir the dir which stores the compactionPolicySwitchInfo file
+   * @param compactionPolicySwitchInfo the {@link CompactionPolicySwitchInfo} which contains the info for compaction policy switching.
+   */
+  private void backUpCompactionPolicyInfo(String tempDir, CompactionPolicySwitchInfo compactionPolicySwitchInfo) {
+    if (tempDir != null) {
+      File tempFile = new File(tempDir, COMPACT_POLICY_INFO_FILE_NAME_V2 + ".temp");
+      try {
+        tempFile.createNewFile();
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, compactionPolicySwitchInfo);
+        tempFile.renameTo(new File(tempDir, COMPACT_POLICY_INFO_FILE_NAME_V2));
+      } catch (IOException e) {
+        logger.error("Exception while store compaction policy info for local report. Output file path - {}",
+            tempFile.getAbsolutePath(), e);
+      }
+    }
   }
 
   /**
