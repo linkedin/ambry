@@ -21,7 +21,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -307,8 +307,8 @@ public class StoreMetrics {
   }
 
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress,
-      AtomicReference<CompactionDetails> compactionDetailsAtomicReference, AtomicLong compactedLogCount,
-      AtomicLong logSegmentCount) {
+      AtomicReference<CompactionDetails> compactionDetailsAtomicReference, AtomicInteger compactedLogCount,
+      AtomicInteger logSegmentCount) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
@@ -331,10 +331,10 @@ public class StoreMetrics {
       }
     };
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionBenefit"), compactionBenefit);
-    Gauge<Long> compactedLogCountGauge = compactedLogCount::get;
+    Gauge<Integer> compactedLogCountGauge = compactedLogCount::get;
     registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactedLogCount"),
         () -> compactedLogCountGauge);
-    Gauge<Long> logSegmentCountGauge = logSegmentCount::get;
+    Gauge<Integer> logSegmentCountGauge = logSegmentCount::get;
     registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "LogSegmentCount"),
         () -> logSegmentCountGauge);
   }
