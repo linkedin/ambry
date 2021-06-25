@@ -1200,6 +1200,30 @@ public class IndexTest {
   }
 
   @Test
+  public void rebuildTokenWhenLastSegmentAutoClosedTestCase3() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    IndexSegment secondLastIndexSegment =
+        stateForTokenTest.index.getIndexSegments().lowerEntry(lastIndexSegment.getStartOffset()).getValue();
+    //generate a index based token mapping to last indexEntry not in journal. it will return the first journal based token in journal.
+    StoreKey lastStoreKeyInLastIndexSegment =
+        secondLastIndexSegment.listIterator(DEFAULT_MAX_IN_MEM_ELEMENTS - 1).next().getKey();
+    Offset firstOffsetInJournal = stateForTokenTest.index.journal.getFirstOffset();
+    StoreFindToken startToken =
+        new StoreFindToken(lastStoreKeyInLastIndexSegment, secondLastIndexSegment.getStartOffset(),
+            stateForTokenTest.sessionId, stateForTokenTest.incarnationId, secondLastIndexSegment.getResetKey(),
+            secondLastIndexSegment.getResetKeyType(), secondLastIndexSegment.getResetKeyLifeVersion());
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    StoreFindToken expectedToken;
+    expectedToken =
+        new StoreFindToken(firstOffsetInJournal, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false,
+            lastIndexSegment.getResetKey(), lastIndexSegment.getResetKeyType(),
+            lastIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+  }
+
+  @Test
   public void rebuildTokenWhenLastSegmentAutoClosedTestCase4() throws StoreException {
     assumeTrue(isLogSegmented);
     IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
@@ -1210,6 +1234,29 @@ public class IndexTest {
     autoCloseLastLogSegmentAndCleanUpJournal();
     FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
     StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    StoreFindToken expectedToken = new StoreFindToken(lastIndexSegment.iterator().next().getKey(), lastIndexSegment.getStartOffset(),
+        stateForTokenTest.sessionId, stateForTokenTest.incarnationId, lastIndexSegment.getResetKey(),
+        lastIndexSegment.getResetKeyType(), lastIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+  }
+
+  @Test
+  public void rebuildTokenWhenLastSegmentAutoClosedTestCase5() throws StoreException {
+    assumeTrue(isLogSegmented);
+    IndexSegment lastIndexSegment = stateForTokenTest.index.getIndexSegments().lastEntry().getValue();
+    IndexSegment secondLastIndexSegment =
+        stateForTokenTest.index.getIndexSegments().lowerEntry(lastIndexSegment.getStartOffset()).getValue();
+    //generate an index based token for second last index segment and close last log segment, should return index based token with last Index Segment.
+    StoreKey secondLastStoreKeyInSecondLastIndexSegment =
+        secondLastIndexSegment.listIterator(DEFAULT_MAX_IN_MEM_ELEMENTS - 1).next().getKey();
+    StoreFindToken startToken =
+        new StoreFindToken(secondLastStoreKeyInSecondLastIndexSegment, secondLastIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, secondLastIndexSegment.getResetKey(),
+            secondLastIndexSegment.getResetKeyType(), secondLastIndexSegment.getResetKeyLifeVersion());
+    autoCloseLastLogSegmentAndCleanUpJournal();
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    logger.info("Current PersistentIndex version : {}", PersistentIndex.CURRENT_VERSION);
     StoreFindToken expectedToken = new StoreFindToken(lastIndexSegment.iterator().next().getKey(), lastIndexSegment.getStartOffset(),
         stateForTokenTest.sessionId, stateForTokenTest.incarnationId, lastIndexSegment.getResetKey(),
         lastIndexSegment.getResetKeyType(), lastIndexSegment.getResetKeyLifeVersion());
