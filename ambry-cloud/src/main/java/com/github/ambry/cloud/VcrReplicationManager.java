@@ -51,7 +51,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
-  private final StoreConfig storeConfig;
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
   private final CloudStorageCompactor cloudStorageCompactor;
@@ -65,12 +64,11 @@ public class VcrReplicationManager extends ReplicationEngine {
       CloudDestination cloudDestination, ScheduledExecutorService scheduler, ConnectionPool connectionPool,
       VcrMetrics vcrMetrics, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
       String transformerClassName) throws ReplicationException, IllegalStateException {
-    super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler,
+    super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler,
         vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
         storeManager, null);
     this.cloudConfig = cloudConfig;
-    this.storeConfig = storeConfig;
     this.vcrClusterParticipant = vcrClusterParticipant;
     this.vcrMetrics = vcrMetrics;
     this.persistor =
@@ -141,6 +139,8 @@ public class VcrReplicationManager extends ReplicationEngine {
         vcrClusterParticipant.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
         cloudConfig.cloudContainerCompactionStartupDelaySecs,
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudContainerCompactionIntervalHours), "cloud container compaction");
+    started = true;
+    startupLatch.countDown();
   }
 
   /**
