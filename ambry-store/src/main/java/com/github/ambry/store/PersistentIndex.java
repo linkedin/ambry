@@ -1600,14 +1600,19 @@ class PersistentIndex {
       // enough index values so that the findEntriesCondition returns false. But we are still moving to the next index segment
       // because when findEntriesCondition returns false, we will skip the while loop below and return the new find token
       // right away. And if findEntriesCondition returns true, that means we finish scanning of the current index segment so
-      // we can move to the next one.
+      // we can move to the next one. If key is not null and the segmentStartOffset equals to the last index segment's start offset,
+      // segmentToProcess will be set to null since the index based token has pointed to the last index segment and at this moment journal
+      // should be null so we will skip the while loop below and return the new index based token right away.
       segmentStartOffset = indexSegments.higherKey(segmentStartOffset);
-      segmentToProcess = indexSegments.get(segmentStartOffset);
+      segmentToProcess = segmentStartOffset == null ? null : indexSegments.get(segmentStartOffset);
     }
-    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTimeSecs())) {
+    while (segmentToProcess != null && findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
+        segmentToProcess.getLastModifiedTimeSecs())) {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
       Offset journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       Offset journalLastOffsetBeforeCheck = journal.getLastOffset();
+      // If segmentStartOffset is null, then the journal has to be empty and in journal.getEntriesSince method the
+      // first entry in journal will be null and null will be returned right away.
       List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
       Offset endOffsetOfSnapshot = getCurrentEndOffset(indexSegments);
       if (entries != null) {
@@ -1700,19 +1705,22 @@ class PersistentIndex {
   }
 
   /**
-   *
+   * Check if the index based token has pointed to the last entry of the last index segment.
    * @param token the {@link StoreFindToken} need to be checked.
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances.
-   * @return {@code true} if the token point to the last entry of last log segment. Otherwise return {@code false}.
+   * @return {@code true} if the token point to the last entry of last index segment. Otherwise return {@code false}.
    */
   private boolean indexBasedTokenPointToLastEntryOfLastIndexSegment(StoreFindToken token,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
     StoreKey storeKey = token.getStoreKey();
     IndexSegment lastIndexSegment = indexSegments.lastEntry().getValue();
-    StoreKey lastEntryInLastIndexSegment = lastIndexSegment.listIterator(lastIndexSegment.size()).previous().getKey();
-    logger.trace("DataDir {}: StoreKey for token {} is {}, StoreKey in last index segment is {}", dataDir, token,
-        storeKey, lastEntryInLastIndexSegment);
-    return lastEntryInLastIndexSegment.equals(storeKey) && token.getOffset().equals(lastIndexSegment.getStartOffset());
+    if (token.getOffset().equals(lastIndexSegment.getStartOffset())) {
+      StoreKey lastEntryInLastIndexSegment = lastIndexSegment.listIterator(lastIndexSegment.size()).previous().getKey();
+      logger.trace("DataDir {}: StoreKey for token {} is {}, StoreKey in last index segment is {}", dataDir, token,
+          storeKey, lastEntryInLastIndexSegment);
+      return lastEntryInLastIndexSegment.equals(storeKey);
+    }
+    return false;
   }
 
   /**
