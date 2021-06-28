@@ -16,29 +16,30 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.VirtualReplicatorCluster;
-import com.github.ambry.clustermap.VirtualReplicatorClusterFactory;
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 
 
 /**
- * {@link HelixVcrClusterFactory} to generate {@link HelixVcrCluster} for dynamic partition assignment.
+ * {@link HelixVcrClusterAgentsFactory} to generate {@link HelixVcrClusterParticipant} for dynamic partition assignment.
  */
-public class HelixVcrClusterFactory implements VirtualReplicatorClusterFactory {
+public class HelixVcrClusterAgentsFactory implements VcrClusterAgentsFactory {
 
   private final CloudConfig cloudConfig;
   private final ClusterMapConfig clusterMapConfig;
   private final ClusterMap clusterMap;
-  private VirtualReplicatorCluster virtualReplicatorCluster;
+  private VcrClusterParticipant vcrClusterParticipant;
   private final AccountService accountService;
   private final StoreConfig storeConfig;
   private final CloudDestination cloudDestination;
   private final VcrMetrics vcrMetrics;
 
   /**
-   * Constructor for {@link HelixVcrClusterFactory}
+   * Constructor for {@link HelixVcrClusterAgentsFactory}
    * @param cloudConfig {@link CloudConfig} object.
    * @param clusterMapConfig {@link ClusterMapConfig} object.
    * @param clusterMap {@link ClusterMap} object.
@@ -47,7 +48,7 @@ public class HelixVcrClusterFactory implements VirtualReplicatorClusterFactory {
    * @param cloudDestination {@link CloudDestination} object.
    * @param metricRegistry  {@link MetricRegistry} object.
    */
-  public HelixVcrClusterFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
+  public HelixVcrClusterAgentsFactory(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap,
       AccountService accountService, StoreConfig storeConfig, CloudDestination cloudDestination,
       MetricRegistry metricRegistry) {
     this.cloudConfig = cloudConfig;
@@ -60,18 +61,23 @@ public class HelixVcrClusterFactory implements VirtualReplicatorClusterFactory {
   }
 
   @Override
-  synchronized public VirtualReplicatorCluster getVirtualReplicatorCluster() throws Exception {
-    if (virtualReplicatorCluster == null) {
-      virtualReplicatorCluster =
-          new HelixVcrCluster(cloudConfig, clusterMapConfig, storeConfig, clusterMap, accountService, cloudDestination,
+  synchronized public VcrClusterParticipant getVcrClusterParticipant() throws Exception {
+    if (vcrClusterParticipant == null) {
+      vcrClusterParticipant =
+          new HelixVcrClusterParticipant(cloudConfig, clusterMapConfig, storeConfig, clusterMap, accountService, cloudDestination,
               vcrMetrics);
     }
-    return virtualReplicatorCluster;
+    return vcrClusterParticipant;
+  }
+
+  @Override
+  public VcrClusterSpectator getVcrClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
+    return new HelixVcrClusterSpectator(cloudConfig, clusterMapConfig);
   }
 
   public void close() throws Exception {
-    if (virtualReplicatorCluster != null) {
-      virtualReplicatorCluster.close();
+    if (vcrClusterParticipant != null) {
+      vcrClusterParticipant.close();
     }
   }
 }

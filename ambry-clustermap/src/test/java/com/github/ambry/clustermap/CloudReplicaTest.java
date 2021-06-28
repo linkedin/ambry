@@ -20,7 +20,7 @@ import java.io.File;
 import java.util.Properties;
 import org.junit.Test;
 
-import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
+import static com.github.ambry.clustermap.VcrClusterParticipant.*;
 import static org.junit.Assert.*;
 
 

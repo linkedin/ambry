@@ -26,17 +26,17 @@ import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
 
 /**
- * Mock implementation of {@link ClusterSpectator} that can give callback for instance configs.
+ * Mock implementation of {@link VcrClusterSpectator} that can give callback for instance configs.
  */
-public class MockClusterSpectator implements ClusterSpectator {
+public class MockVcrClusterSpectator implements VcrClusterSpectator {
   private final List<InstanceConfig> instanceConfigList;
   private final List<InstanceConfigChangeListener> registeredInstanceConfigChangeListeners;
 
   /**
-   * Constructor for {@link MockClusterSpectator} object.
-   * @param cloudDataNodeList list of cloud {@link MockDataNodeId}s in instance config of {@link MockClusterSpectator}.
+   * Constructor for {@link MockVcrClusterSpectator} object.
+   * @param cloudDataNodeList list of cloud {@link MockDataNodeId}s in instance config of {@link MockVcrClusterSpectator}.
    */
-  public MockClusterSpectator(List<MockDataNodeId> cloudDataNodeList) {
+  public MockVcrClusterSpectator(List<MockDataNodeId> cloudDataNodeList) {
     registeredInstanceConfigChangeListeners = new ArrayList<>();
     this.instanceConfigList = new ArrayList<>();
     for (MockDataNodeId cloudDataNode : cloudDataNodeList) {

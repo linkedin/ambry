@@ -11,8 +11,12 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.clustermap;
+package com.github.ambry.cloud;
 
+import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.clustermap.HelixFactory;
+import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import java.util.LinkedList;
@@ -30,9 +34,9 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
- * Spectator for vcr helix cluster.
+ * Spectator implementation of VCR helix cluster.
  */
-public class HelixClusterSpectator implements ClusterSpectator {
+public class HelixVcrClusterSpectator implements VcrClusterSpectator {
 
   private final ClusterMapConfig clusterMapConfig;
   private final CloudConfig cloudConfig;
@@ -40,11 +44,11 @@ public class HelixClusterSpectator implements ClusterSpectator {
   private final List<LiveInstanceChangeListener> registeredLiveInstanceChangeListeners;
 
   /**
-   * Constructor for {@link HelixClusterSpectator}.
+   * Constructor for {@link HelixVcrClusterSpectator}.
    * @param cloudConfig Cluster config of vcr.
    * @param clusterMapConfig Cluster Map config.
    */
-  public HelixClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
+  public HelixVcrClusterSpectator(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig) {
     this.cloudConfig = cloudConfig;
     this.clusterMapConfig = clusterMapConfig;
     registeredInstanceConfigChangeListeners = new LinkedList<>();

@@ -29,48 +29,48 @@ import org.slf4j.LoggerFactory;
 @StateModelInfo(initialState = "OFFLINE", states = {"LEADER", "STANDBY"})
 public class LeaderStandbyHelixVcrStateModel extends StateModel {
   private static final Logger logger = LoggerFactory.getLogger(LeaderStandbyHelixVcrStateModel.class);
-  private final HelixVcrCluster helixVcrCluster;
+  private final HelixVcrClusterParticipant helixVcrClusterParticipant;
 
-  LeaderStandbyHelixVcrStateModel(HelixVcrCluster helixVcrCluster) {
-    this.helixVcrCluster = helixVcrCluster;
+  LeaderStandbyHelixVcrStateModel(HelixVcrClusterParticipant helixVcrClusterParticipant) {
+    this.helixVcrClusterParticipant = helixVcrClusterParticipant;
   }
 
   @Transition(to = "STANDBY", from = "OFFLINE")
   public void onBecomeStandbyFromOffline(Message message, NotificationContext context) {
-    logger.trace("{} Becoming STANDBY from OFFLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+    logger.trace("{} Becoming STANDBY from OFFLINE of Partition {}", helixVcrClusterParticipant.getCurrentDataNodeId(),
         message.getPartitionName());
   }
 
   @Transition(to = "LEADER", from = "STANDBY")
   public void onBecomeLeaderFromStandby(Message message, NotificationContext context) {
-    logger.info("{} Becoming LEADER from STANDBY of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+    logger.info("{} Becoming LEADER from STANDBY of Partition {}", helixVcrClusterParticipant.getCurrentDataNodeId(),
         message.getPartitionName());
-    helixVcrCluster.addPartition(message.getPartitionName());
+    helixVcrClusterParticipant.addPartition(message.getPartitionName());
   }
 
   @Transition(to = "STANDBY", from = "LEADER")
   public void onBecomeStandbyFromLeader(Message message, NotificationContext context) {
-    logger.info("{} Becoming STANDBY from LEADER of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+    logger.info("{} Becoming STANDBY from LEADER of Partition {}", helixVcrClusterParticipant.getCurrentDataNodeId(),
         message.getPartitionName());
-    helixVcrCluster.removePartition(message.getPartitionName());
+    helixVcrClusterParticipant.removePartition(message.getPartitionName());
   }
 
   @Transition(to = "OFFLINE", from = "STANDBY")
   public void onBecomeOfflineFromStandby(Message message, NotificationContext context) {
-    logger.trace("{} Becoming OFFLINE from STANDBY of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+    logger.trace("{} Becoming OFFLINE from STANDBY of Partition {}", helixVcrClusterParticipant.getCurrentDataNodeId(),
         message.getPartitionName());
   }
 
   @Transition(to = "OFFLINE", from = "LEADER")
   public void onBecomeOfflineFromLeader(Message message, NotificationContext context) {
-    logger.info("{} Becoming OFFLINE from LEADER of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+    logger.info("{} Becoming OFFLINE from LEADER of Partition {}", helixVcrClusterParticipant.getCurrentDataNodeId(),
         message.getPartitionName());
-    helixVcrCluster.removePartition(message.getPartitionName());
+    helixVcrClusterParticipant.removePartition(message.getPartitionName());
   }
 
   @Transition(to = "DROPPED", from = "OFFLINE")
   public void onBecomeDroppedFromOffline(Message message, NotificationContext context) {
-    logger.info("{} Becoming DROPPED from OFFLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
+    logger.info("{} Becoming DROPPED from OFFLINE of Partition {}", helixVcrClusterParticipant.getCurrentDataNodeId(),
         message.getPartitionName());
   }
 

@@ -29,30 +29,30 @@ import org.slf4j.LoggerFactory;
 @StateModelInfo(initialState = "OFFLINE", states = {"OFFLINE", "ONLINE", "DROPPED"})
 public class OnlineOfflineHelixVcrStateModel extends StateModel {
   private static final Logger logger = LoggerFactory.getLogger(OnlineOfflineHelixVcrStateModel.class);
-  private final HelixVcrCluster helixVcrCluster;
+  private final HelixVcrClusterParticipant helixVcrClusterParticipant;
 
-  OnlineOfflineHelixVcrStateModel(HelixVcrCluster helixVcrCluster) {
-    this.helixVcrCluster = helixVcrCluster;
+  OnlineOfflineHelixVcrStateModel(HelixVcrClusterParticipant helixVcrClusterParticipant) {
+    this.helixVcrClusterParticipant = helixVcrClusterParticipant;
   }
 
   @Transition(to = "ONLINE", from = "OFFLINE")
   public void onTransitionToOnlineFromOffline(Message message, NotificationContext context) {
-    logger.info("{} Transitioning to ONLINE from OFFLINE for Partition {}", helixVcrCluster.getCurrentDataNodeId(),
-        message.getPartitionName());
-    helixVcrCluster.addPartition(message.getPartitionName());
+    logger.info("{} Transitioning to ONLINE from OFFLINE for Partition {}",
+        helixVcrClusterParticipant.getCurrentDataNodeId(), message.getPartitionName());
+    helixVcrClusterParticipant.addPartition(message.getPartitionName());
   }
 
   @Transition(to = "OFFLINE", from = "ONLINE")
   public void onTransitionToOfflineFromOnline(Message message, NotificationContext context) {
-    logger.info("{} Transitioning to OFFLINE from ONLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
-        message.getPartitionName());
-    helixVcrCluster.removePartition(message.getPartitionName());
+    logger.info("{} Transitioning to OFFLINE from ONLINE of Partition {}",
+        helixVcrClusterParticipant.getCurrentDataNodeId(), message.getPartitionName());
+    helixVcrClusterParticipant.removePartition(message.getPartitionName());
   }
 
   @Transition(to = "DROPPED", from = "OFFLINE")
   public void onTransitionToDroppedFromOffline(Message message, NotificationContext context) {
-    logger.info("{} Transitioning to DROPPED from OFFLINE of Partition {}", helixVcrCluster.getCurrentDataNodeId(),
-        message.getPartitionName());
+    logger.info("{} Transitioning to DROPPED from OFFLINE of Partition {}",
+        helixVcrClusterParticipant.getCurrentDataNodeId(), message.getPartitionName());
   }
 
   @Override

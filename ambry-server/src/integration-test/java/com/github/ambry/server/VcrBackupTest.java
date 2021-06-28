@@ -356,9 +356,9 @@ public class VcrBackupTest {
         }
       }).collect(Collectors.toSet());
       assertTrue("Each VCR should have some assignment.",
-          vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds().size() > 0);
+          vcrServers.get(i).getVcrClusterParticipant().getAssignedPartitionIds().size() > 0);
       assertTrue("Each VCR should only backup its assigned partitions.",
-          new HashSet<>(vcrServers.get(i).getVirtualReplicatorCluster().getAssignedPartitionIds()).containsAll(
+          new HashSet<>(vcrServers.get(i).getVcrClusterParticipant().getAssignedPartitionIds()).containsAll(
               partitionIdSet));
     }
     logger.info("Phase 1 done.");
@@ -424,7 +424,7 @@ public class VcrBackupTest {
    */
   private void makeSureHelixBalance(VcrServer vcrServer, StrictMatchExternalViewVerifier helixBalanceVerifier) {
     Assert.assertTrue("Helix topology change timeout.", TestUtils.checkAndSleep(true,
-        () -> vcrServer.getVirtualReplicatorCluster().getAssignedPartitionIds().size() > 0, 15000));
+        () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size() > 0, 15000));
     assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(15000));
   }
 

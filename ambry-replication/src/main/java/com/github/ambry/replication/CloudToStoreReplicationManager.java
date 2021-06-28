@@ -18,7 +18,7 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.ClusterSpectator;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
@@ -61,11 +61,12 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 /**
  * {@link CloudToStoreReplicationManager} replicates data from Vcr nodes to ambry data nodes.
+ * Cloud -> Store, run on storage node.
  */
 public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final ClusterMapConfig clusterMapConfig;
   private final StoreConfig storeConfig;
-  private final ClusterSpectator vcrClusterSpectator;
+  private final VcrClusterSpectator vcrClusterSpectator;
   private final ClusterParticipant clusterParticipant;
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
   private AtomicReference<ConcurrentHashMap<String, CloudDataNode>> instanceNameToCloudDataNode;
@@ -89,7 +90,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @param requestNotification {@link NotificationSystem} object to notify on events.
    * @param storeKeyConverterFactory {@link StoreKeyConverterFactory} object.
    * @param transformerClassName name of the class to transform and validate replication messages.
-   * @param vcrClusterSpectator {@link ClusterSpectator} object to get changes in vcr cluster map.
+   * @param vcrClusterSpectator {@link VcrClusterSpectator} object to get changes in vcr cluster map.
    * @param clusterParticipant {@link ClusterParticipant} object to get changes in partition state of partitions on datanodes.
    * @throws ReplicationException
    */
@@ -98,7 +99,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId currentNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
+      VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null);
