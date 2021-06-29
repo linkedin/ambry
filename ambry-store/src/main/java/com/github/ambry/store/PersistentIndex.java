@@ -98,8 +98,8 @@ class PersistentIndex {
   final Journal journal;
   final HardDeleter hardDeleter;
   final Thread hardDeleteThread;
+  final Log log;
 
-  private final Log log;
   private final long maxInMemoryIndexSizeInBytes;
   private final int maxInMemoryNumElements;
   private final String dataDir;
@@ -274,17 +274,6 @@ class PersistentIndex {
    */
   private boolean determineSealStatusForIndexFiles(int index, List<File> indexFiles) {
     return index < indexFiles.size() - 1;
-  }
-
-  /**
-   * @param index the index of the list of indexFiles.
-   * @param indexFiles a list of file with index entry info.
-   * @return {@code true} if index file is not related to last log segment. {@code false} otherwise.
-   */
-  private boolean indexFileNotInLastLogSegment (int index, List<File> indexFiles) {
-    LogSegmentName logSegmentName = IndexSegment.getIndexSegmentStartOffset(indexFiles.get(index).getName()).getName();
-    LogSegmentName lastLogSegmentName = log.getLastSegment().getName();
-    return logSegmentName.compareTo(lastLogSegmentName) < 0;
   }
 
   /**
@@ -1304,7 +1293,13 @@ class PersistentIndex {
           // Get entries starting from the first key in this offset.
           Map.Entry<Offset, IndexSegment> entry = indexSegments.floorEntry(offsetToStart);
           StoreFindToken newToken;
-          if (entry != null && !entry.getKey().equals(indexSegments.lastKey())) {
+          //There are several reasons that we could reach here:
+          //1.StoreFindToken is Uninitialized, and we have more index segments than journal can cover.
+          //2.StoreFindToken is JournalBased, but the journal somehow moved too much ahead, the offset in the FindToken is no longer within journal.
+          //  2.1 There might just be lots of new entries coming to journal so the journal moves ahead.
+          //  2.2 The journal might be cleared and new log segment is created for compaction (auto-close last segment)
+          if (entry != null && !entry.getKey().equals(indexSegments.lastKey())
+              || isJournalEmptyAfterAutoClose()) {
             startTimeInMs = time.milliseconds();
             newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
                 new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
@@ -1332,9 +1327,16 @@ class PersistentIndex {
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
-        StoreFindToken newToken =
-            findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-                new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
+        StoreFindToken newToken;
+        //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
+        //segment auto close, we should return the original index based token instead of getting from journal.
+        if (indexBasedTokenPointsToLastEntryOfLastIndexSegment(storeToken, indexSegments)
+            && isJournalEmptyAfterAutoClose()) {
+          newToken = storeToken;
+        } else {
+          newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
+              new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
+        }
         logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
 
         startTimeInMs = time.milliseconds();
@@ -1583,8 +1585,9 @@ class PersistentIndex {
       List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments, boolean inclusive) throws StoreException {
     Offset segmentStartOffset = initialSegmentStartOffset;
-    if (segmentStartOffset.equals(indexSegments.lastKey()) && !onlyContainsHeaderInLastLogSegment(segmentStartOffset)) {
-      // We would never have given away a token with a segmentStartOffset of the latest segment.
+    if (segmentStartOffset.equals(indexSegments.lastKey()) && !isJournalEmptyAfterAutoClose()) {
+      //We would never have given away a token with a segmentStartOffset of the latest segment unless the journal has
+      //been cleaned up by (auto close last log segment).
       throw new IllegalArgumentException(
           "Index : " + dataDir + " findEntriesFromOffset segment start offset " + segmentStartOffset
               + " is of the last segment");
@@ -1611,15 +1614,19 @@ class PersistentIndex {
       // enough index values so that the findEntriesCondition returns false. But we are still moving to the next index segment
       // because when findEntriesCondition returns false, we will skip the while loop below and return the new find token
       // right away. And if findEntriesCondition returns true, that means we finish scanning of the current index segment so
-      // we can move to the next one.
+      // we can move to the next one. If key is not null and the segmentStartOffset equals to the last index segment's start offset,
+      // segmentToProcess will be set to null since the index based token has pointed to the last index segment and at this moment journal
+      // should be null so we will skip the while loop below and return the new index based token right away.
       segmentStartOffset = indexSegments.higherKey(segmentStartOffset);
-      segmentToProcess = indexSegments.get(segmentStartOffset);
+      segmentToProcess = segmentStartOffset == null ? null : indexSegments.get(segmentStartOffset);
     }
-
-    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTimeSecs())) {
+    while (segmentToProcess != null && findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
+        segmentToProcess.getLastModifiedTimeSecs())) {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
       Offset journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       Offset journalLastOffsetBeforeCheck = journal.getLastOffset();
+      // If segmentStartOffset is null, then the journal has to be empty and in journal.getEntriesSince method the
+      // first entry in journal will be null and null will be returned right away.
       List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
       Offset endOffsetOfSnapshot = getCurrentEndOffset(indexSegments);
       if (entries != null) {
@@ -1657,8 +1664,8 @@ class PersistentIndex {
         break; // we have entered and finished reading from the journal, so we are done.
       }
 
-      if (segmentStartOffset == validIndexSegments.lastKey() && !onlyContainsHeaderInLastLogSegment(
-          segmentStartOffset)) {
+      //if journal is empty due to auto close last log segment, there's no need to check this.
+      if (segmentStartOffset.equals(validIndexSegments.lastKey()) && !isJournalEmptyAfterAutoClose()) {
         /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
          * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
          * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
@@ -1692,14 +1699,14 @@ class PersistentIndex {
       IndexSegment segmentOfToken = indexSegments.floorEntry(newTokenOffsetInJournal).getValue();
       return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false, segmentOfToken.getResetKey(),
           segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
-    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime() && !onlyContainsHeaderInLastLogSegment(initialSegmentStartOffset)) {
+    } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
       // If the condition does not have an end time, then since we have entered a segment, we should return at least one
       // message unless the new log segment only contains headers.
       throw new IllegalStateException(
           "Message entries cannot be null. At least one entry should have been returned, start offset: "
               + initialSegmentStartOffset + ", key: " + key + ", findEntriesCondition: " + findEntriesCondition);
     } else {
-      if (newTokenSegmentStartOffset == null || onlyContainsHeaderInLastLogSegment(newTokenSegmentStartOffset)) {
+      if (newTokenSegmentStartOffset == null) {
         return new StoreFindToken();
       }
       // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
@@ -1712,13 +1719,34 @@ class PersistentIndex {
   }
 
   /**
-   * @param startOffset the index segment start {@link Offset}.
+   * Check if the index based token has pointed to the last entry of the last index segment.
+   * @param token the {@link StoreFindToken} need to be checked.
+   * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances.
+   * @return {@code true} if the token points to the last entry of last index segment. Otherwise return {@code false}.
+   */
+  private boolean indexBasedTokenPointsToLastEntryOfLastIndexSegment(StoreFindToken token,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
+    StoreKey storeKey = token.getStoreKey();
+    IndexSegment lastIndexSegment = indexSegments.lastEntry().getValue();
+    if (token.getOffset().equals(lastIndexSegment.getStartOffset())) {
+      StoreKey lastEntryInLastIndexSegment = lastIndexSegment.listIterator(lastIndexSegment.size()).previous().getKey();
+      logger.trace("DataDir {}: StoreKey for token {} is {}, StoreKey in last index segment is {}", dataDir, token,
+          storeKey, lastEntryInLastIndexSegment);
+      return lastEntryInLastIndexSegment.equals(storeKey);
+    }
+    return false;
+  }
+
+  /**
+   * The method checks three conditions: 1. journal is empty, 2. log segment is empty, 3. it's not the first log segment.
    * @return {@link true} if last log segment only contains the header info after auto closing last log segment during compaction.
    */
-  private boolean onlyContainsHeaderInLastLogSegment(Offset startOffset) {
-    logger.trace("Log segment name {} for start offset {}", startOffset.getName(), startOffset);
-    logger.trace("Current last log segment name {} when check start offset {}", log.getLastSegment().getName(), startOffset);
-    return config.storeAutoCloseLastLogSegmentEnabled && startOffset.getName().compareTo(log.getLastSegment().getName()) < 0;
+  private boolean isJournalEmptyAfterAutoClose() {
+    logger.trace("DataDir: {} journal size is : {}", dataDir, journal.getCurrentNumberOfEntries());
+    logger.trace("DataDir: {} last log segment start offset: {}, end offset: {}", dataDir,
+        log.getLastSegment().getStartOffset(), log.getLastSegment().getEndOffset());
+    return journal.getCurrentNumberOfEntries() == 0 && log.getLastSegment().isEmpty() && !log.getLastSegment()
+        .getName().equals(log.getFirstSegment().getName());
   }
 
   /**

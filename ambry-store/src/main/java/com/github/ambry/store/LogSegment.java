@@ -290,6 +290,13 @@ class LogSegment implements Read, Write {
   }
 
   /**
+   * @return {@code true} if the startOffset and endOffset of this log segment is the same. Otherwise return {@code false}.
+   */
+  boolean isEmpty() {
+    return startOffset == endOffset.get();
+  }
+
+  /**
    * Make sure the size for append is legal.
    * @param size The amount of data in bytes to append.
    */
