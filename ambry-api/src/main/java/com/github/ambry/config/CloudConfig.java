@@ -93,7 +93,7 @@ public class CloudConfig {
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
   public static final int DEFAULT_CLOUD_COMPACTION_NUM_THREADS = 4;
   public static final String DEFAULT_VCR_CLUSTER_AGENT_FACTORY_CLASS =
-      "com.github.ambry.clustermap.HelixVcrClusterAgentFactory";
+      "com.github.ambry.clustermap.HelixVcrClusterAgentsFactory";
   public static final String DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS =
       "com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory";
 
