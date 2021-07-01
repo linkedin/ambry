@@ -178,7 +178,7 @@ public class VcrTestUtil {
       props.setProperty(CloudConfig.VCR_SSL_PORT, Integer.toString(vcrSslPort));
     }
     props.setProperty(CloudConfig.VCR_CLUSTER_NAME, vcrClusterName);
-    props.setProperty(CloudConfig.STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS, HelixVcrClusterAgentsFactory.class.getName());
+    props.setProperty(CloudConfig.VCR_CLUSTER_AGENTS_FACTORY_CLASS, HelixVcrClusterAgentsFactory.class.getName());
     props.setProperty(CloudConfig.VCR_CLUSTER_ZK_CONNECT_STRING, zkConnectString);
     props.setProperty(CloudConfig.KMS_SERVICE_KEY_CONTEXT, TestUtils.getRandomKey(32));
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));

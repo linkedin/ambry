@@ -24,7 +24,6 @@ import java.util.Set;
 public class CloudConfig {
 
   public static final String CLOUD_IS_VCR = "cloud.is.vcr";
-  public static final String STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS = "static.vcr.cluster.agents.factory.class";
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
   public static final String VCR_CLUSTER_ZK_CONNECT_STRING = "vcr.cluster.zk.connect.string";
   public static final String VCR_CLUSTER_NAME = "vcr.cluster.name";
@@ -65,8 +64,6 @@ public class CloudConfig {
   public static final String CLOUD_COMPACTION_NUM_THREADS = "cloud.compaction.num.threads";
   public static final String VCR_HELIX_STATE_MODEL_FACTORY_CLASS = "vcr.helix.state.model.factory.class";
 
-  public static final String DEFAULT_STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS =
-      "com.github.ambry.cloud.StaticVcrClusterAgentsFactory";
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
   public static final String KMS_SERVICE_KEY_CONTEXT = "kms.service.key.context";
@@ -93,7 +90,7 @@ public class CloudConfig {
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
   public static final int DEFAULT_CLOUD_COMPACTION_NUM_THREADS = 4;
   public static final String DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS =
-      "com.github.ambry.clustermap.HelixVcrClusterAgentsFactory";
+      "com.github.ambry.cloud.HelixVcrClusterAgentsFactory";
   public static final String DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS =
       "com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory";
 
@@ -103,13 +100,6 @@ public class CloudConfig {
   @Config(CLOUD_IS_VCR)
   @Default("false")
   public final boolean cloudIsVcr;
-
-  /**
-   * The virtual replicator cluster factory class name.
-   */
-  @Config(STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS)
-  @Default(DEFAULT_STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS)
-  public final String staticVcrClusterAgentsFactoryClass;
 
   /**
    * The cloud destination factory class name.
@@ -364,8 +354,6 @@ public class CloudConfig {
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
-    staticVcrClusterAgentsFactoryClass = verifiableProperties.getString(STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS,
-        DEFAULT_STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS);
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
     vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
@@ -414,8 +402,8 @@ public class CloudConfig {
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
 
-    vcrClusterAgentsFactoryClass = verifiableProperties.getString(VCR_CLUSTER_AGENTS_FACTORY_CLASS,
-        DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS);
+    vcrClusterAgentsFactoryClass =
+        verifiableProperties.getString(VCR_CLUSTER_AGENTS_FACTORY_CLASS, DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS);
 
     vcrSourceDatacenters =
         Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
