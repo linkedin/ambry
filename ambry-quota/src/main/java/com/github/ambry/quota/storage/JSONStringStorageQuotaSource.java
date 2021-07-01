@@ -19,6 +19,7 @@ import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaSource;
 import java.io.IOException;
 import java.util.Collection;
@@ -61,7 +62,7 @@ public class JSONStringStorageQuotaSource implements QuotaSource {
     if (quotaName != QuotaName.STORAGE_IN_GB) {
       return null;
     }
-    if (quotaResource.getQuotaResourceType() != QuotaResource.QuotaResourceType.CONTAINER) {
+    if (quotaResource.getQuotaResourceType() != QuotaResourceType.CONTAINER) {
       return null;
     }
     // We know this is accountId_containerId

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.quota.QuotaResourceType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -66,6 +67,7 @@ import org.json.JSONObject;
  *   ],
  *   "version": 1,
  *   "status": "ACTIVE"
+ *   "quotaResourceType": "CONTAINER"
  * }
  * </code></pre>
  * <p>
@@ -83,6 +85,7 @@ public class Account {
   static final String CONTAINERS_KEY = "containers";
   static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
   static final String ACL_INHERITED_BY_CONTAINER_KEY = "aclInheritedByContainer";
+  static final String QUOTA_RESOURCE_TYPE_KEY = "quotaResourceType";
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
@@ -111,6 +114,7 @@ public class Account {
   private final int snapshotVersion;
   private final long lastModifiedTime;
   private boolean aclInheritedByContainer;
+  private QuotaResourceType quotaResourceType;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
@@ -143,6 +147,12 @@ public class Account {
           }
           updateContainerMap(containers);
         }
+        if(metadata.has(QUOTA_RESOURCE_TYPE_KEY)) {
+          quotaResourceType = QuotaResourceType.valueOf(metadata.getString(QUOTA_RESOURCE_TYPE_KEY));
+        } else {
+          // Quota is enforced at container level by default.
+          quotaResourceType = QuotaResourceType.CONTAINER;
+        }
         break;
 
       default:
@@ -160,7 +170,7 @@ public class Account {
    * @param containers A collection of {@link Container}s to be part of this account.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion, Collection<Container> containers) {
-    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE, QuotaResourceType.CONTAINER);
   }
 
   /**
@@ -172,9 +182,10 @@ public class Account {
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
    * @param lastModifiedTime created/modified time of this Account
+   * @param quotaResourceType {@link QuotaResourceType} object.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, long lastModifiedTime) {
+      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -185,6 +196,7 @@ public class Account {
     if (containers != null) {
       updateContainerMap(containers);
     }
+    this.quotaResourceType = quotaResourceType;
   }
 
   /**
@@ -208,6 +220,7 @@ public class Account {
       containerArray.put(container.toJson());
     }
     metadata.put(CONTAINERS_KEY, containerArray);
+    metadata.put(QUOTA_RESOURCE_TYPE_KEY, quotaResourceType.name());
     return metadata;
   }
 
@@ -300,6 +313,13 @@ public class Account {
    */
   public int getContainerCount() {
     return containerIdToContainerMap.size();
+  }
+
+  /**
+   * @return QuotaResourceType.
+   */
+  public QuotaResourceType getQuotaResourceType() {
+    return quotaResourceType;
   }
 
   /**
