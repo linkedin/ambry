@@ -154,7 +154,7 @@ public class VcrServer {
       AccountService accountService = accountServiceFactory.getAccountService();
 
       vcrClusterParticipant =
-          ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.virtualReplicatorClusterFactoryClass, cloudConfig,
+          ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.staticVcrAgentsFactoryClass, cloudConfig,
               clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
               registry)).getVcrClusterParticipant();
 

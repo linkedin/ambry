@@ -45,7 +45,7 @@ public class AmbryMain {
           Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping AmbryServer");
-      VcrClusterAgentsFactory vcrClusterAgentsFactory = Utils.getObj(cloudConfig.vcrClusterAgentFactoryClass);
+      VcrClusterAgentsFactory vcrClusterAgentsFactory = Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass);
       ambryServer = new AmbryServer(verifiableProperties, clusterAgentsFactory, vcrClusterAgentsFactory,
           SystemTime.getInstance());
       // attach shutdown handler to catch control-c
