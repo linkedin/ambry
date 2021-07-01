@@ -109,7 +109,7 @@ public class CloudConfig {
    */
   @Config(STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS)
   @Default(DEFAULT_STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS)
-  public final String staticVcrAgentsFactoryClass;
+  public final String staticVcrClusterAgentsFactoryClass;
 
   /**
    * The cloud destination factory class name.
@@ -364,7 +364,7 @@ public class CloudConfig {
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
-    staticVcrAgentsFactoryClass = verifiableProperties.getString(STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS,
+    staticVcrClusterAgentsFactoryClass = verifiableProperties.getString(STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS,
         DEFAULT_STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS);
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
