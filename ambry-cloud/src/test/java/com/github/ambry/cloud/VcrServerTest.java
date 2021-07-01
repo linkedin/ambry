@@ -121,7 +121,7 @@ public class VcrServerTest {
   private VerifiableProperties getStaticClusterVcrProps() {
     Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, null);
     props.setProperty(CloudConfig.VCR_ASSIGNED_PARTITIONS, "0,1");
-    props.setProperty(CloudConfig.VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS, StaticVcrClusterAgentsFactory.class.getName());
+    props.setProperty(CloudConfig.STATIC_VCR_CLUSTER_AGENTS_FACTORY_CLASS, StaticVcrClusterAgentsFactory.class.getName());
     // Run this one with compaction disabled
     props.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "false");
     props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
