@@ -37,7 +37,7 @@ public class StorageQuotaConfig {
   //////////////// Config for JSONStringStorageQuotaSource ///////////////
 
   /**
-   * A JSON string representing storage quota for all containers. eg:
+   * A JSON string representing storage quota for all accounts and containers. eg:
    * {
    *   "101": {
    *     "1": 1024000000,
@@ -45,13 +45,15 @@ public class StorageQuotaConfig {
    *   },
    *   "102": {
    *     "1": 10737418240
-   *   }
+   *   },
+   *   "103: 10737418240
    * }
-   * The key of the top object is the acount id and the key of the inner object is the container id.
+   * The key of the top object is the account id and the key of the inner object is the container id.
+   * If there is no inner object, then the value is the storage quota in bytes for this account.
    * The value of the each container id is the storage quota in bytes for this container.
    *
-   * If the targeted container doesn't have a storage quota in this JSON string, it's up to StorageQuotaEnforcer
-   * to decide whether to allow uploads or not.
+   * If the targeted account/container doesn't have a storage quota in this JSON string, it's up to
+   * StorageQuotaEnforcer to decide whether to allow uploads or not.
    */
   @Config(CONTAINER_STORAGE_QUOTA_IN_JSON)
   @Default("")
