@@ -14,6 +14,9 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -31,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -244,14 +248,12 @@ public class AccountUpdateTool {
   void editAccounts(Collection<String> accountNames, boolean ignoreSnapshotVersion)
       throws IOException, InterruptedException, AccountServiceException {
     Path accountJsonPath = Files.createTempFile("account-update-", ".json");
-    JSONArray accountsToEdit = new JSONArray();
-    accountNames.stream()
+    List<Account> accounts = accountNames.stream()
         .map(accountName -> Optional.ofNullable(accountService.getAccountByName(accountName))
-            .orElseThrow(() -> new IllegalArgumentException("Could not find account: " + accountName))
-            .toJson(false))
-        .forEach(accountsToEdit::put);
+            .orElseThrow(() -> new IllegalArgumentException("Could not find account: " + accountName)))
+        .collect(Collectors.toList());
     try (BufferedWriter writer = Files.newBufferedWriter(accountJsonPath)) {
-      accountsToEdit.write(writer, 2, 0);
+      new ObjectMapper().writer(new DefaultPrettyPrinter()).writeValue(writer, accounts);
     }
     ToolUtils.editFile(accountJsonPath);
     System.out.println("The following account metadata will be uploaded:");
@@ -337,12 +339,8 @@ public class AccountUpdateTool {
    * @throws JSONException
    */
   private static Collection<Account> getAccountsFromJson(String accountJsonPath) throws IOException, JSONException {
-    JSONArray accountArray = new JSONArray(Utils.readStringFromFile(accountJsonPath));
-    Collection<Account> accounts = new ArrayList<>();
-    for (int i = 0; i < accountArray.length(); i++) {
-      JSONObject accountJson = accountArray.getJSONObject(i);
-      accounts.add(Account.fromJson(accountJson));
-    }
-    return accounts;
+    return new ObjectMapper().readValue(Utils.readStringFromFile(accountJsonPath),
+        new TypeReference<Collection<Account>>() {
+        });
   }
 }

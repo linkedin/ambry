@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
@@ -22,6 +23,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -298,12 +301,7 @@ public class AccountUpdateToolTest {
    * @throws Exception Any unexpected exception.
    */
   private static void writeAccountsToFile(Collection<Account> accounts, String filePath) throws Exception {
-    JSONArray accountArray = new JSONArray();
-    for (Account account : accounts) {
-      // AccountUpdateTool will re-serialize, so we do not want the snapshot version to be incremented twice.
-      accountArray.put(account.toJson(false));
-    }
-    writeJsonArrayToFile(accountArray, filePath);
+    Files.write(Paths.get(filePath), new ObjectMapper().writeValueAsBytes(accounts));
   }
 
   /**

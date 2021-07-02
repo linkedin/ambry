@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account.mysql;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
@@ -20,13 +21,13 @@ import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.mysql.MySqlDataAccessor;
+import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
-import org.json.JSONObject;
 
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 import static com.github.ambry.utils.Utils.*;
@@ -38,6 +39,7 @@ import static com.github.ambry.utils.Utils.*;
 public class AccountDao {
 
   private final MySqlDataAccessor dataAccessor;
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
   // Account table fields
   public static final String ACCOUNT_TABLE = "Accounts";
@@ -143,11 +145,13 @@ public class AccountDao {
       String accountJson = resultSet.getString(ACCOUNT_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
       int version = resultSet.getInt(VERSION);
-      Account account =
-          new AccountBuilder(Account.fromJson(new JSONObject(accountJson))).lastModifiedTime(lastModifiedTime.getTime())
-              .snapshotVersion(version)
-              .build();
-      accounts.add(account);
+      try {
+        Account account = new AccountBuilder(objectMapper.readValue(accountJson, Account.class)).lastModifiedTime(
+            lastModifiedTime.getTime()).snapshotVersion(version).build();
+        accounts.add(account);
+      } catch (IOException e) {
+        throw new SQLException(String.format("Faild to deserialize string [{}] to account object", accountJson), e);
+      }
     }
     return accounts;
   }
@@ -266,10 +270,16 @@ public class AccountDao {
       String containerJson = resultSet.getString(CONTAINER_INFO);
       Timestamp lastModifiedTime = resultSet.getTimestamp(LAST_MODIFIED_TIME);
       int version = resultSet.getInt(VERSION);
-      Container container = new ContainerBuilder(
-          Container.fromJson(new JSONObject(containerJson), (short) accountId)).setLastModifiedTime(
-          lastModifiedTime.getTime()).setSnapshotVersion(version).build();
-      containers.add(container);
+      try {
+        Container deserialized = objectMapper.readValue(containerJson, Container.class);
+        Container container = new ContainerBuilder(deserialized).setParentAccountId((short) accountId)
+            .setLastModifiedTime(lastModifiedTime.getTime())
+            .setSnapshotVersion(version)
+            .build();
+        containers.add(container);
+      } catch (IOException e) {
+        throw new SQLException(e);
+      }
     }
     return containers;
   }
