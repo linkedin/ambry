@@ -76,7 +76,6 @@ import org.json.JSONObject;
  * </p>
  */
 public class Account {
-  public static final QuotaResourceType QUOTA_RESOURCE_TYPE_DEFAULT_VALUE = QuotaResourceType.CONTAINER;
   /**
    * The id of unknown account.
    */
@@ -89,6 +88,7 @@ public class Account {
    * The id for to save account metadata in ambry.
    */
   public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
+  public static final QuotaResourceType QUOTA_RESOURCE_TYPE_DEFAULT_VALUE = QuotaResourceType.CONTAINER;
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
@@ -144,11 +144,8 @@ public class Account {
           }
           updateContainerMap(containers);
         }
-        if (metadata.has(QUOTA_RESOURCE_TYPE_KEY)) {
-          quotaResourceType = QuotaResourceType.valueOf(metadata.getString(QUOTA_RESOURCE_TYPE_KEY));
-        } else {
-          quotaResourceType = QUOTA_RESOURCE_TYPE_DEFAULT_VALUE;
-        }
+        quotaResourceType =
+            metadata.optEnum(QuotaResourceType.class, QUOTA_RESOURCE_TYPE_KEY, QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
         break;
 
       default:
