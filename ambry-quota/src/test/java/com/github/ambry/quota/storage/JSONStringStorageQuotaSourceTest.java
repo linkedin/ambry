@@ -18,6 +18,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaResourceType;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
@@ -39,7 +40,7 @@ public class JSONStringStorageQuotaSourceTest {
     StorageQuotaConfig config = new StorageQuotaConfig(new VerifiableProperties(properties));
 
     JSONStringStorageQuotaSource source = new JSONStringStorageQuotaSource(config);
-    QuotaResource.QuotaResourceType resourceType = QuotaResource.QuotaResourceType.CONTAINER;
+    QuotaResourceType resourceType = QuotaResourceType.CONTAINER;
     Quota quota = source.getQuota(new QuotaResource("1000_1", resourceType), QuotaName.STORAGE_IN_GB);
     assertNull(quota);
     quota = source.getQuota(new QuotaResource("10_1", resourceType), QuotaName.STORAGE_IN_GB);

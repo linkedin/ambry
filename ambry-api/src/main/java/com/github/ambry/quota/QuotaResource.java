@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import java.util.Objects;
 
@@ -47,6 +48,15 @@ public class QuotaResource {
   }
 
   /**
+   * Create {@link QuotaResource} from {@link Account}.
+   * @param account {@link Account} object.
+   * @return QuotaResource object.
+   */
+  public static QuotaResource fromAccount(Account account) {
+    return new QuotaResource(Integer.toString(account.getId()), QuotaResourceType.ACCOUNT);
+  }
+
+  /**
    * @return the resourceId.
    */
   public String getResourceId() {
@@ -75,12 +85,5 @@ public class QuotaResource {
   @Override
   public int hashCode() {
     return 89 * quotaResourceType.hashCode() + resourceId.hashCode();
-  }
-
-  /**
-   * Type of Ambry resource for which quota can be applied.
-   */
-  public enum QuotaResourceType {
-    ACCOUNT, CONTAINER, SERVICE
   }
 }

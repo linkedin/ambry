@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.quota.QuotaResourceType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -66,6 +67,7 @@ import org.json.JSONObject;
  *   ],
  *   "version": 1,
  *   "status": "ACTIVE"
+ *   "quotaResourceType": "CONTAINER"
  * }
  * </code></pre>
  * <p>
@@ -74,6 +76,19 @@ import org.json.JSONObject;
  * </p>
  */
 public class Account {
+  /**
+   * The id of unknown account.
+   */
+  public static final short UNKNOWN_ACCOUNT_ID = -1;
+  /**
+   * The name of the unknown account.
+   */
+  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
+  /**
+   * The id for to save account metadata in ambry.
+   */
+  public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
+  public static final QuotaResourceType QUOTA_RESOURCE_TYPE_DEFAULT_VALUE = QuotaResourceType.CONTAINER;
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
@@ -83,37 +98,23 @@ public class Account {
   static final String CONTAINERS_KEY = "containers";
   static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
   static final String ACL_INHERITED_BY_CONTAINER_KEY = "aclInheritedByContainer";
+  static final String QUOTA_RESOURCE_TYPE_KEY = "quotaResourceType";
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
   static final boolean ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE = false;
-
-  /**
-   * The id of unknown account.
-   */
-  public static final short UNKNOWN_ACCOUNT_ID = -1;
-
-  /**
-   * The name of the unknown account.
-   */
-  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
-
-  /**
-   * The id for to save account metadata in ambry.
-   */
-  public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
-
   // account member variables
   private final short id;
   private final String name;
-  private AccountStatus status;
   private final int snapshotVersion;
   private final long lastModifiedTime;
-  private boolean aclInheritedByContainer;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
+  private final AccountStatus status;
+  private final boolean aclInheritedByContainer;
+  private final QuotaResourceType quotaResourceType;
 
   /**
    * Constructing an {@link Account} object from account metadata.
@@ -143,6 +144,8 @@ public class Account {
           }
           updateContainerMap(containers);
         }
+        quotaResourceType =
+            metadata.optEnum(QuotaResourceType.class, QUOTA_RESOURCE_TYPE_KEY, QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
         break;
 
       default:
@@ -158,9 +161,12 @@ public class Account {
    * @param aclInheritedByContainer Whether account's acl is inherited by container.
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
+   * @param quotaResourceType {@link QuotaResourceType} on which quota will be enforced for this account.
    */
-  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion, Collection<Container> containers) {
-    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE);
+  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
+      Collection<Container> containers, QuotaResourceType quotaResourceType) {
+    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
+        quotaResourceType);
   }
 
   /**
@@ -172,9 +178,10 @@ public class Account {
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
    * @param lastModifiedTime created/modified time of this Account
+   * @param quotaResourceType {@link QuotaResourceType} object.
    */
   Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
-      Collection<Container> containers, long lastModifiedTime) {
+      Collection<Container> containers, long lastModifiedTime, QuotaResourceType quotaResourceType) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -185,6 +192,17 @@ public class Account {
     if (containers != null) {
       updateContainerMap(containers);
     }
+    this.quotaResourceType = quotaResourceType;
+  }
+
+  /**
+   * Deserializes a {@link JSONObject} to an account object.
+   * @param json The {@link JSONObject} to deserialize.
+   * @return An account object deserialized from the {@link JSONObject}.
+   * @throws JSONException If parsing the {@link JSONObject} fails.
+   */
+  public static Account fromJson(JSONObject json) throws JSONException {
+    return new Account(json);
   }
 
   /**
@@ -208,17 +226,8 @@ public class Account {
       containerArray.put(container.toJson());
     }
     metadata.put(CONTAINERS_KEY, containerArray);
+    metadata.put(QUOTA_RESOURCE_TYPE_KEY, quotaResourceType.name());
     return metadata;
-  }
-
-  /**
-   * Deserializes a {@link JSONObject} to an account object.
-   * @param json The {@link JSONObject} to deserialize.
-   * @return An account object deserialized from the {@link JSONObject}.
-   * @throws JSONException If parsing the {@link JSONObject} fails.
-   */
-  public static Account fromJson(JSONObject json) throws JSONException {
-    return new Account(json);
   }
 
   /**
@@ -303,6 +312,13 @@ public class Account {
   }
 
   /**
+   * @return QuotaResourceType.
+   */
+  public QuotaResourceType getQuotaResourceType() {
+    return quotaResourceType;
+  }
+
+  /**
    * Generates a String representation that uniquely identifies this account. The string is in the format of
    * {@code Account[id]}.
    * @return The String representation of this account.
@@ -332,20 +348,15 @@ public class Account {
     if (status != account.status) {
       return false;
     }
+    if (quotaResourceType != account.quotaResourceType) {
+      return false;
+    }
     return containerIdToContainerMap.equals(account.containerIdToContainerMap);
   }
 
   @Override
   public int hashCode() {
-    return (int) id;
-  }
-
-  /**
-   * The status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
-   * the account has been deactivated.
-   */
-  public enum AccountStatus {
-    ACTIVE, INACTIVE
+    return id;
   }
 
   /**
@@ -407,5 +418,13 @@ public class Account {
               .toString();
       throw new IllegalStateException(errorMessage);
     }
+  }
+
+  /**
+   * The status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
+   * the account has been deactivated.
+   */
+  public enum AccountStatus {
+    ACTIVE, INACTIVE
   }
 }
