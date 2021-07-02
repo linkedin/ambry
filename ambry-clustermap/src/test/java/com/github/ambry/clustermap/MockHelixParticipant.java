@@ -33,6 +33,7 @@ import static org.mockito.Mockito.*;
 
 public class MockHelixParticipant extends HelixParticipant {
   public static MetricRegistry metricRegistry = new MetricRegistry();
+  static HelixFactory mockHelixFactory = new MockHelixManagerFactory();
   public Boolean updateNodeInfoReturnVal = null;
   public Boolean setStoppedStateReturnVal = null;
   public PartitionStateChangeListener mockStatsManagerListener = null;
@@ -48,7 +49,7 @@ public class MockHelixParticipant extends HelixParticipant {
   private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) {
-    this(clusterMapConfig, new MockHelixManagerFactory());
+    this(clusterMapConfig, mockHelixFactory);
     // create mock state change listener for ReplicationManager
     mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
     // mock Bootstrap-To-Standby change

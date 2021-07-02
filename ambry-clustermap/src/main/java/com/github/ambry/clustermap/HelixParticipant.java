@@ -689,7 +689,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
     }
-    logger.info("Clean up disabled state of dropped replica {} in both InstanceConfig and DataNodeConfig",
+    logger.info("Purging disabled state of dropped replica {} in both InstanceConfig and DataNodeConfig",
         partitionName);
     setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
@@ -698,7 +698,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeDroppedFromError(String partitionName) {
-    logger.info("Clean up disabled state of dropped replica {} in both InstanceConfig and DataNodeConfig",
+    logger.info("Purging disabled state of dropped replica {} in both InstanceConfig and DataNodeConfig",
         partitionName);
     setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
