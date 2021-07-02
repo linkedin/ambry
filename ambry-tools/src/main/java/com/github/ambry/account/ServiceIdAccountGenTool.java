@@ -66,7 +66,7 @@ public class ServiceIdAccountGenTool {
       System.exit(0);
     }
     ToolUtils.ensureOrExit(
-        Arrays.asList((OptionSpec) accountJsonFilePathOpt, (OptionSpec) firstAccountIdOpt, (OptionSpec) serviceIdsArg),
+        Arrays.asList(accountJsonFilePathOpt, firstAccountIdOpt, serviceIdsArg),
         options, parser);
     generateAccounts((List<String>) options.nonOptionArguments(), options.valueOf(accountJsonFilePathOpt),
         options.valueOf(firstAccountIdOpt));

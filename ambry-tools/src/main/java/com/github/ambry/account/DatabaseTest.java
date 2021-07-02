@@ -17,8 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
-import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -35,9 +35,9 @@ import org.slf4j.LoggerFactory;
 
 public class DatabaseTest {
   private static final Logger logger = LoggerFactory.getLogger(DatabaseTest.class);
-  private static String PROPSFILE = "propsFile";
+  private static final String PROPSFILE = "propsFile";
 
-  public static void main(String args[]) {
+  public static void main(String[] args) {
     OptionParser parser = new OptionParser();
     ArgumentAcceptingOptionSpec<String> propsFileOpt =
         parser.accepts(PROPSFILE, "Properties file path").withRequiredArg().describedAs(PROPSFILE).ofType(String.class);

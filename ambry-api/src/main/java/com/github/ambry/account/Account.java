@@ -76,6 +76,19 @@ import org.json.JSONObject;
  * </p>
  */
 public class Account {
+  public static final QuotaResourceType QUOTA_RESOURCE_TYPE_DEFAULT_VALUE = QuotaResourceType.CONTAINER;
+  /**
+   * The id of unknown account.
+   */
+  public static final short UNKNOWN_ACCOUNT_ID = -1;
+  /**
+   * The name of the unknown account.
+   */
+  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
+  /**
+   * The id for to save account metadata in ambry.
+   */
+  public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
@@ -91,33 +104,17 @@ public class Account {
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
   static final boolean ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE = false;
-
-  /**
-   * The id of unknown account.
-   */
-  public static final short UNKNOWN_ACCOUNT_ID = -1;
-
-  /**
-   * The name of the unknown account.
-   */
-  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
-
-  /**
-   * The id for to save account metadata in ambry.
-   */
-  public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
-
   // account member variables
   private final short id;
   private final String name;
-  private AccountStatus status;
   private final int snapshotVersion;
   private final long lastModifiedTime;
-  private boolean aclInheritedByContainer;
-  private QuotaResourceType quotaResourceType;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
+  private final AccountStatus status;
+  private final boolean aclInheritedByContainer;
+  private final QuotaResourceType quotaResourceType;
 
   /**
    * Constructing an {@link Account} object from account metadata.
@@ -147,11 +144,10 @@ public class Account {
           }
           updateContainerMap(containers);
         }
-        if(metadata.has(QUOTA_RESOURCE_TYPE_KEY)) {
+        if (metadata.has(QUOTA_RESOURCE_TYPE_KEY)) {
           quotaResourceType = QuotaResourceType.valueOf(metadata.getString(QUOTA_RESOURCE_TYPE_KEY));
         } else {
-          // Quota is enforced at container level by default.
-          quotaResourceType = QuotaResourceType.CONTAINER;
+          quotaResourceType = QUOTA_RESOURCE_TYPE_DEFAULT_VALUE;
         }
         break;
 
@@ -168,9 +164,12 @@ public class Account {
    * @param aclInheritedByContainer Whether account's acl is inherited by container.
    * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
+   * @param quotaResourceType {@link QuotaResourceType} on which quota will be enforced for this account.
    */
-  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion, Collection<Container> containers) {
-    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE, QuotaResourceType.CONTAINER);
+  Account(short id, String name, AccountStatus status, boolean aclInheritedByContainer, int snapshotVersion,
+      Collection<Container> containers, QuotaResourceType quotaResourceType) {
+    this(id, name, status, aclInheritedByContainer, snapshotVersion, containers, LAST_MODIFIED_TIME_DEFAULT_VALUE,
+        quotaResourceType);
   }
 
   /**
@@ -200,6 +199,16 @@ public class Account {
   }
 
   /**
+   * Deserializes a {@link JSONObject} to an account object.
+   * @param json The {@link JSONObject} to deserialize.
+   * @return An account object deserialized from the {@link JSONObject}.
+   * @throws JSONException If parsing the {@link JSONObject} fails.
+   */
+  public static Account fromJson(JSONObject json) throws JSONException {
+    return new Account(json);
+  }
+
+  /**
    * Gets the metadata of the account in {@link JSONObject}. This will increment the snapshot version by one if
    * {@code incrementSnapshotVersion} is {@code true}.
    * @param incrementSnapshotVersion {@code true} to increment the snapshot version by one.
@@ -222,16 +231,6 @@ public class Account {
     metadata.put(CONTAINERS_KEY, containerArray);
     metadata.put(QUOTA_RESOURCE_TYPE_KEY, quotaResourceType.name());
     return metadata;
-  }
-
-  /**
-   * Deserializes a {@link JSONObject} to an account object.
-   * @param json The {@link JSONObject} to deserialize.
-   * @return An account object deserialized from the {@link JSONObject}.
-   * @throws JSONException If parsing the {@link JSONObject} fails.
-   */
-  public static Account fromJson(JSONObject json) throws JSONException {
-    return new Account(json);
   }
 
   /**
@@ -352,20 +351,15 @@ public class Account {
     if (status != account.status) {
       return false;
     }
+    if (quotaResourceType != account.quotaResourceType) {
+      return false;
+    }
     return containerIdToContainerMap.equals(account.containerIdToContainerMap);
   }
 
   @Override
   public int hashCode() {
-    return (int) id;
-  }
-
-  /**
-   * The status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
-   * the account has been deactivated.
-   */
-  public enum AccountStatus {
-    ACTIVE, INACTIVE
+    return id;
   }
 
   /**
@@ -427,5 +421,13 @@ public class Account {
               .toString();
       throw new IllegalStateException(errorMessage);
     }
+  }
+
+  /**
+   * The status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
+   * the account has been deactivated.
+   */
+  public enum AccountStatus {
+    ACTIVE, INACTIVE
   }
 }

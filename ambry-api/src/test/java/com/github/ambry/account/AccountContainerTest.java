@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -47,12 +48,13 @@ public class AccountContainerTest {
   private static final short LATEST_CONTAINER_JSON_VERSION = Container.JSON_VERSION_2;
 
   // Reference Account fields
-  private short refAccountId;
-  private String refAccountName;
-  private AccountStatus refAccountStatus;
-  private int refAccountSnapshotVersion;
-  private JSONObject refAccountJson;
-  private boolean refAccountAclInheritedByContainer;
+  private final short refAccountId;
+  private final String refAccountName;
+  private final AccountStatus refAccountStatus;
+  private final QuotaResourceType refQuotaResourceType;
+  private final int refAccountSnapshotVersion;
+  private final JSONObject refAccountJson;
+  private final boolean refAccountAclInheritedByContainer;
 
   // Reference Container fields
   private List<Short> refContainerIds;
@@ -77,26 +79,19 @@ public class AccountContainerTest {
   private List<Container> refContainers;
 
   /**
-   * Run this test for all versions of the container schema.
-   * @return the constructor arguments to use.
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{Container.JSON_VERSION_1}, {Container.JSON_VERSION_2}});
-  }
-
-  /**
    * Initialize the metadata in JsonObject for account and container.
    * @param containerJsonVersion the container JSON version to use in the test.
+   * @param quotaResourceType {@link QuotaResourceType} object.
    * @throws JSONException
    */
-  public AccountContainerTest(short containerJsonVersion) throws JSONException {
+  public AccountContainerTest(short containerJsonVersion, QuotaResourceType quotaResourceType) throws JSONException {
     Container.setCurrentJsonVersion(containerJsonVersion);
     refAccountId = Utils.getRandomShort(random);
     refAccountName = UUID.randomUUID().toString();
     refAccountStatus = random.nextBoolean() ? AccountStatus.ACTIVE : AccountStatus.INACTIVE;
     refAccountAclInheritedByContainer = random.nextBoolean();
     refAccountSnapshotVersion = random.nextInt();
+    refQuotaResourceType = quotaResourceType;
     initializeRefContainers();
     refAccountJson = new JSONObject();
     refAccountJson.put(Account.JSON_VERSION_KEY, Account.JSON_VERSION_1);
@@ -105,8 +100,29 @@ public class AccountContainerTest {
     refAccountJson.put(Account.STATUS_KEY, refAccountStatus.name());
     refAccountJson.put(ACL_INHERITED_BY_CONTAINER_KEY, refAccountAclInheritedByContainer);
     refAccountJson.put(Account.SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion);
+    refAccountJson.put(QUOTA_RESOURCE_TYPE_KEY, refQuotaResourceType.name());
     refAccountJson.put(CONTAINERS_KEY, containerJsonList);
     refAccountJson.put(Account.LAST_MODIFIED_TIME_KEY, 0);
+  }
+
+  /**
+   * Run this test for all versions of the container schema and all values of {@link QuotaResourceType}.
+   * @return the constructor arguments to use.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{Container.JSON_VERSION_1, QuotaResourceType.CONTAINER},
+        {Container.JSON_VERSION_2, QuotaResourceType.CONTAINER}, {Container.JSON_VERSION_1, QuotaResourceType.ACCOUNT},
+        {Container.JSON_VERSION_2, QuotaResourceType.ACCOUNT}});
+  }
+
+  /**
+   * @param original the {@link JSONObject} to deep copy.
+   * @return a deep copy of {@code original}.
+   * @throws JSONException
+   */
+  private static JSONObject deepCopy(JSONObject original) throws JSONException {
+    return new JSONObject(original.toString());
   }
 
   /**
@@ -124,7 +140,7 @@ public class AccountContainerTest {
   public void testConstructAccountAndContainerFromArguments() throws JSONException {
     Account accountFromArguments =
         new Account(refAccountId, refAccountName, refAccountStatus, refAccountAclInheritedByContainer,
-            refAccountSnapshotVersion, refContainers);
+            refAccountSnapshotVersion, refContainers, refQuotaResourceType);
     assertAccountAgainstReference(accountFromArguments, true, true);
   }
 
@@ -343,6 +359,8 @@ public class AccountContainerTest {
     TestUtils.assertException(IllegalStateException.class, () -> Container.fromJson(badMetadata7, refAccountId), null);
   }
 
+  // Tests for builders
+
   /**
    * Tests {@code toString()} methods.
    * @throws JSONException
@@ -357,8 +375,6 @@ public class AccountContainerTest {
     }
   }
 
-  // Tests for builders
-
   /**
    * Tests building an {@link Account} using {@link AccountBuilder}.
    * @throws JSONException
@@ -367,8 +383,8 @@ public class AccountContainerTest {
   public void testAccountBuilder() throws JSONException {
     // build an account with arguments supplied
     AccountBuilder accountBuilder =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).snapshotVersion(refAccountSnapshotVersion)
-            .aclInheritedByContainer(refAccountAclInheritedByContainer);
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, refQuotaResourceType).snapshotVersion(
+            refAccountSnapshotVersion).aclInheritedByContainer(refAccountAclInheritedByContainer);
     Account accountByBuilder = accountBuilder.build();
     assertAccountAgainstReference(accountByBuilder, false, false);
 
@@ -948,7 +964,7 @@ public class AccountContainerTest {
       Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass,
         () -> new Account(refAccountId, refAccountName, refAccountStatus, refAccountAclInheritedByContainer,
-            Account.SNAPSHOT_VERSION_DEFAULT_VALUE, containers), null);
+            Account.SNAPSHOT_VERSION_DEFAULT_VALUE, containers, refQuotaResourceType), null);
   }
 
   /**
@@ -1113,14 +1129,5 @@ public class AccountContainerTest {
         throw new IllegalStateException("Unsupported container json version=" + Container.getCurrentJsonVersion());
     }
     return containerJson;
-  }
-
-  /**
-   * @param original the {@link JSONObject} to deep copy.
-   * @return a deep copy of {@code original}.
-   * @throws JSONException
-   */
-  private static JSONObject deepCopy(JSONObject original) throws JSONException {
-    return new JSONObject(original.toString());
   }
 }

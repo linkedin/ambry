@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.quota.QuotaResourceType;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,10 +31,11 @@ public class AccountBuilder {
   private short id;
   private String name;
   private AccountStatus status;
+  private QuotaResourceType quotaResourceType = QUOTA_RESOURCE_TYPE_DEFAULT_VALUE;
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
   private boolean aclInheritedByContainer = ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE;
-  private Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
+  private final Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
 
   /**
    * Constructor. This will build a new {@link Account} from an existing {@link Account} object. The builder will
@@ -53,6 +55,7 @@ public class AccountBuilder {
     for (Container container : origin.getAllContainers()) {
       idToContainerMetadataMap.put(container.getId(), container);
     }
+    quotaResourceType = origin.getQuotaResourceType();
   }
 
   /**
@@ -65,9 +68,24 @@ public class AccountBuilder {
    *           calling {@link #build()}.
    */
   public AccountBuilder(short id, String name, AccountStatus status) {
+    this(id, name, status, QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
+  }
+
+  /**
+   * Constructor. The builder will not include any {@link Container} information.
+   * @param id The id of the {@link Account} to build. Can be {@code null}, but should be set before
+   *           calling {@link #build()}.
+   * @param name The name of the {@link Account}. Can be {@code null}, but should be set before
+   *           calling {@link #build()}.
+   * @param status The status of the {@link Account}. Can be {@code null}, but should be set before
+   *           calling {@link #build()}.
+   * @param quotaResourceType The {@link QuotaResourceType} object for which quota enforcement will happen in this account.
+   */
+  public AccountBuilder(short id, String name, AccountStatus status, QuotaResourceType quotaResourceType) {
     this.id = id;
     this.name = name;
     this.status = status;
+    this.quotaResourceType = quotaResourceType;
   }
 
   /**
@@ -131,6 +149,16 @@ public class AccountBuilder {
   }
 
   /**
+   * Specifies the {@link QuotaResourceType} for the account.
+   * @param quotaResourceType {@link QuotaResourceType} for the account.
+   * @return This builder.
+   */
+  public AccountBuilder quotaResourceType(QuotaResourceType quotaResourceType) {
+    this.quotaResourceType = quotaResourceType;
+    return this;
+  }
+
+  /**
    * Clear the set of containers for the {@link Account} to build and add the provided ones.
    * @param containers A collection of {@link Container}s to use. Can be {@code null} to just remove all containers.
    * @return This builder.
@@ -182,6 +210,7 @@ public class AccountBuilder {
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
   public Account build() {
-    return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(), lastModifiedTime);
+    return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(),
+        lastModifiedTime, quotaResourceType);
   }
 }
