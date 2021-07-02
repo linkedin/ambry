@@ -181,6 +181,7 @@ project(':ambry-api') {
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
         compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
+        compile "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
         compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')

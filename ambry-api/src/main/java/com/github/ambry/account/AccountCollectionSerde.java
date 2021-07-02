@@ -13,10 +13,17 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.frontend.Operations;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -39,6 +46,13 @@ public class AccountCollectionSerde {
     return new JSONObject().put(ACCOUNTS_KEY, accountArray);
   }
 
+  public static byte[] serializeAccountsInJson(ObjectMapper objectMapper, Collection<Account> accounts)
+      throws IOException {
+    Map<String, Collection<Account>> resultObj = new HashMap<>();
+    resultObj.put(ACCOUNTS_KEY, accounts);
+    return objectMapper.writeValueAsBytes(resultObj);
+  }
+
   /**
    * Deserialize a json object representing a collection of accounts.
    * @param json the {@link JSONObject} to deserialize.
@@ -56,6 +70,14 @@ public class AccountCollectionSerde {
       }
       return accounts;
     }
+  }
+
+  public static Collection<Account> accountsFromInputStreamInJson(ObjectMapper objectMapper, InputStream inputStream)
+      throws IOException {
+    Map<String, Collection<Account>> map =
+        objectMapper.readValue(inputStream, new TypeReference<Map<String, Collection<Account>>>() {
+        });
+    return map.getOrDefault(ACCOUNTS_KEY, Collections.emptyList());
   }
 
   /**
@@ -80,6 +102,13 @@ public class AccountCollectionSerde {
     return new JSONObject().put(Account.CONTAINERS_KEY, containerArray);
   }
 
+  public static byte[] serializeContainersInJson(ObjectMapper objectMapper, Collection<Container> containers)
+      throws IOException {
+    Map<String, Collection<Container>> resultObj = new HashMap<>();
+    resultObj.put(Account.CONTAINERS_KEY, containers);
+    return objectMapper.writeValueAsBytes(resultObj);
+  }
+
   /**
    * Deserialize a json object representing a collection of containers.
    * @param json the {@link JSONObject} to deserialize.
@@ -97,6 +126,21 @@ public class AccountCollectionSerde {
         containers.add(Container.fromJson(containerJson, accountId));
       }
       return containers;
+    }
+  }
+
+  public static Collection<Container> containersFromInputStreamInJson(ObjectMapper objectMapper,
+      InputStream inputStream, short accountId) throws IOException {
+    Map<String, Collection<Container>> map =
+        objectMapper.readValue(inputStream, new TypeReference<Map<String, Collection<Container>>>() {
+        });
+    if (!map.containsKey(Account.CONTAINERS_KEY)) {
+      return Collections.emptyList();
+    } else {
+      Collection<Container> containers = map.get(Account.CONTAINERS_KEY);
+      return containers.stream()
+          .map(c -> new ContainerBuilder(c).setParentAccountId(accountId).build())
+          .collect(Collectors.toList());
     }
   }
 }

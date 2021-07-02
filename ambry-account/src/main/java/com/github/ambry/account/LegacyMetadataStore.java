@@ -121,7 +121,9 @@ class LegacyMetadataStore extends AccountMetadataStore {
       } else {
         for (Account account : accountsToUpdate) {
           try {
-            accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
+            String accountJsonStr = objectMapper.writeValueAsString(
+                new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() + 1).build());
+            accountMap.put(String.valueOf(account.getId()), accountJsonStr);
           } catch (Exception e) {
             errorMessage = "Updating accounts failed because unexpected exception occurred when updating accountId="
                 + account.getId() + " accountName=" + account.getName();

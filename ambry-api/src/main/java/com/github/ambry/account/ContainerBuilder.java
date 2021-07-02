@@ -13,6 +13,9 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import java.util.Set;
 
 import static com.github.ambry.account.Container.*;
@@ -24,13 +27,15 @@ import static com.github.ambry.account.Container.*;
  * in two ways: 1) from an existing {@link Container} object; and 2) by supplying required fields of a {@link Container}.
  * This class is not thread safe.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonPOJOBuilder(withPrefix="set")
 public class ContainerBuilder {
   // necessary
   private short id;
   private String name;
   private ContainerStatus status;
-  private String description;
-  private short parentAccountId;
+  private short parentAccountId = Account.UNINITIALIZED_ACCOUNT_ID;
+  private String description = "";
 
   // optional
   private long deleteTriggerTime = CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE;
@@ -81,6 +86,12 @@ public class ContainerBuilder {
   }
 
   /**
+   * Constructor for jackson to deserialize {@link Container}.
+   */
+  public ContainerBuilder() {
+  }
+
+  /**
    * Constructor for a {@link ContainerBuilder} taking individual arguments.
    * @param id The id of the {@link Container} to build.
    * @param name The name of the {@link Container}.
@@ -101,6 +112,7 @@ public class ContainerBuilder {
    * @param id The ID to set.
    * @return This builder.
    */
+  @JsonProperty(CONTAINER_ID_KEY)
   public ContainerBuilder setId(short id) {
     this.id = id;
     return this;
@@ -111,6 +123,7 @@ public class ContainerBuilder {
    * @param name The name to set.
    * @return This builder.
    */
+  @JsonProperty(CONTAINER_NAME_KEY)
   public ContainerBuilder setName(String name) {
     this.name = name;
     return this;

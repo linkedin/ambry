@@ -13,13 +13,15 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -30,16 +32,13 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,6 +73,7 @@ class BackupFileManager {
   static final Pattern newStateFilenamePattern = Pattern.compile("^(\\d{8}T\\d{6})\\." + NEW_STATE_SUFFIX + "$");
 
   private static final Logger logger = LoggerFactory.getLogger(BackupFileManager.class);
+  private final ObjectMapper objectMapper = new ObjectMapper();
   private final AccountServiceMetrics accountServiceMetrics;
   private final Path backupDirPath;
   private final int maxBackupFileCount;
@@ -88,6 +88,7 @@ class BackupFileManager {
    */
   public BackupFileManager(AccountServiceMetrics accountServiceMetrics, String backupDir, int maxBackupFileCount)
       throws IOException {
+    this.objectMapper.writer(new DefaultPrettyPrinter());
     this.accountServiceMetrics = accountServiceMetrics;
     backupDirPath = backupDir.isEmpty() ? null : Files.createDirectories(Paths.get(backupDir));
     this.maxBackupFileCount = maxBackupFileCount;
@@ -204,15 +205,15 @@ class BackupFileManager {
 
   /**
    * Persist account map to local storage, with associated version and modified time information.
-   * @param accountMap The account map
+   * @param accounts The account collection
    * @param version The version of the account
    * @param modifiedTimeInSec modified time in seconds
    */
-  void persistAccountMap(Map<String, String> accountMap, int version, long modifiedTimeInSec) {
+  void persistAccountMap(Collection<Account> accounts, int version, long modifiedTimeInSec) {
     if (backupDirPath == null) {
       return;
     }
-    Objects.requireNonNull(accountMap, "Invalid account map");
+    Objects.requireNonNull(accounts, "Invalid account collection");
     if (backupFileInfos.containsKey(version)) {
       logger.trace("Version {} already has a backup file {}, skip persisting the state", version,
           backupFileInfos.get(version).getFilename());
@@ -231,7 +232,7 @@ class BackupFileManager {
 
     long startTimeInMs = System.currentTimeMillis();
     try {
-      writeAccountMapToFile(tempFilePath, accountMap);
+      writeAccountsToFile(tempFilePath, objectMapper, accounts);
       Files.move(tempFilePath, filePath);
     } catch (IOException e) {
       logger.error("Failed to persist state to file: {}", fileName, e);
@@ -274,7 +275,7 @@ class BackupFileManager {
    * @param latestTimeAllowedInSecond The unix epoch time which the latest backup's modifiedTime must be greater than.
    * @return The account map from the latest backup file.
    */
-  Map<String, String> getLatestAccountMap(long latestTimeAllowedInSecond) {
+  Collection<Account> getLatestAccounts(long latestTimeAllowedInSecond) {
     if (backupDirPath == null) {
       return null;
     }
@@ -301,7 +302,7 @@ class BackupFileManager {
       long startTimeInMs = System.currentTimeMillis();
       byte[] bytes = Files.readAllBytes(filepath);
       accountServiceMetrics.backupReadTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
-      return deserializeAccountMap(bytes);
+      return deserializeAccounts(objectMapper, bytes);
     } catch (IOException e) {
       accountServiceMetrics.backupErrorCount.inc();
       logger.error("Failed to read all bytes out from file {} {}", filepath, e.getMessage());
@@ -354,53 +355,47 @@ class BackupFileManager {
   }
 
   /**
-   * Persist the account map to the given file.
+   * Persist the account collection to the given file.
    * @param filepath The filepath to persist account map.
-   * @param accountMap Account map.
+   * @param accounts The {@link Collection} of {@link Account}s
    * @throws IOException Any I/O error.
    */
-  static void writeAccountMapToFile(Path filepath, Map<String, String> accountMap) throws IOException {
+  static void writeAccountsToFile(Path filepath, ObjectMapper objectMapper, Collection<Account> accounts)
+      throws IOException {
     try (FileChannel channel = FileChannel.open(filepath, StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-      ByteBuffer buffer = serializeAccountMap(accountMap);
+      ByteBuffer buffer = serializeAccounts(objectMapper, accounts);
       channel.write(buffer);
     } catch (IOException e) {
       // Failed to persist file
-      logger.error("Failed to persist account map to file {}", filepath, e);
+      logger.error("Failed to persist accounts to file {}", filepath, e);
       throw e;
     }
   }
 
   /**
-   * Convert given account map to an array of {@link Account}s and serialize it in json format in a {@link ByteBuffer}.
-   * @param accountMap The account map.
+   * Serialize given account collection in json format in a {@link ByteBuffer}.
+   * @param accounts The {@link Collection} of {@link Account}s.
    * @return {@link ByteBuffer} that contains the serialized bytes.
    */
-  static ByteBuffer serializeAccountMap(Map<String, String> accountMap) {
-    JSONArray array = new JSONArray();
-    for (Map.Entry<String, String> entry : accountMap.entrySet()) {
-      array.put(new JSONObject(entry.getValue()));
-    }
-    return ByteBuffer.wrap(array.toString(2).getBytes(StandardCharsets.UTF_8));
+  static ByteBuffer serializeAccounts(ObjectMapper objectMapper, Collection<Account> accounts) throws IOException {
+    return ByteBuffer.wrap(objectMapper.writeValueAsBytes(accounts));
   }
 
   /**
-   * Deserialize the given byte array to an account map, which essentially just a map from string to string.
+   * Deserialize the given byte array to an account collection.
    * It returns null at any exception. This function assume the bytes are in json format.
+   * @param objectMapper {@link ObjectMapper}.
    * @param bytes The byte array to deserialize.
-   * @return An account map.
+   * @return The {@link Collection} of {@link Account}s.
    */
-  static Map<String, String> deserializeAccountMap(byte[] bytes) {
+  static Collection<Account> deserializeAccounts(ObjectMapper objectMapper, byte[] bytes) {
     try {
-      JSONArray array = new JSONArray(new String(bytes, StandardCharsets.UTF_8));
-      Map<String, String> result = new HashMap<>();
-      for (int i = 0; i < array.length(); i++) {
-        Account account = Account.fromJson(array.getJSONObject(i));
-        result.put(String.valueOf(account.getId()), array.getJSONObject(i).toString());
-      }
-      return result;
-    } catch (JSONException e) {
-      logger.error("Failed to deserialized bytes to account map: {}", e.getMessage());
+      Collection<Account> accounts = objectMapper.readValue(bytes, new TypeReference<Collection<Account>>() {
+      });
+      return accounts;
+    } catch (IOException e) {
+      logger.error("Failed to deserialized bytes to account collection: {}", e.getMessage());
       return null;
     }
   }

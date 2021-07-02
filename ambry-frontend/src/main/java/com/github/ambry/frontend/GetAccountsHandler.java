@@ -14,11 +14,13 @@
 
 package com.github.ambry.frontend;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -27,6 +29,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
+import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.GregorianCalendar;
@@ -39,6 +42,7 @@ import static com.github.ambry.frontend.Operations.*;
 
 class GetAccountsHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(GetAccountsHandler.class);
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
   private final SecurityService securityService;
   private final AccountService accountService;
@@ -118,16 +122,17 @@ class GetAccountsHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        ReadableStreamChannel channel;
+        byte[] serialized;
         if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
           LOGGER.debug("Received request for getting single container with arguments: {}", restRequest.getArgs());
           Container container = getContainer();
-          channel =
-              serializeJsonToChannel(AccountCollectionSerde.containersToJson(Collections.singletonList(container)));
+          serialized =
+              AccountCollectionSerde.serializeContainersInJson(objectMapper, Collections.singletonList(container));
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID, container.getParentAccountId());
         } else {
-          channel = serializeJsonToChannel(AccountCollectionSerde.accountsToJson(getAccounts()));
+          serialized = AccountCollectionSerde.serializeAccountsInJson(objectMapper, getAccounts());
         }
+        ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());

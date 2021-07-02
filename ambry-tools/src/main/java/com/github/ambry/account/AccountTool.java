@@ -14,6 +14,8 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.CommonUtils;
@@ -43,9 +45,7 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
-import org.json.JSONArray;
 import org.json.JSONException;
-import org.json.JSONObject;
 
 
 /**
@@ -494,8 +494,9 @@ public class AccountTool {
   public void rollback(int version) throws Exception {
     Collection<String> accountJsons = viewAccountMetadata(version);
     Collection<Account> accounts = new ArrayList<>();
+    ObjectMapper objectMapper = new ObjectMapper();
     for (String accountJson : accountJsons) {
-      accounts.add(Account.fromJson(new JSONObject(accountJson)));
+      accounts.add(objectMapper.readValue(accountJson, Account.class));
     }
     updateAccounts(accounts);
   }
@@ -523,14 +524,10 @@ public class AccountTool {
    * @throws IOException
    * @throws JSONException
    */
-  private static Collection<Account> getAccountsFromJson(String accountJsonPath) throws IOException, JSONException {
-    JSONArray accountArray = new JSONArray(Utils.readStringFromFile(accountJsonPath));
-    Collection<Account> accounts = new ArrayList<>();
-    for (int i = 0; i < accountArray.length(); i++) {
-      JSONObject accountJson = accountArray.getJSONObject(i);
-      accounts.add(Account.fromJson(accountJson));
-    }
-    return accounts;
+  private static Collection<Account> getAccountsFromJson(String accountJsonPath) throws IOException {
+    return new ObjectMapper().readValue(Utils.readStringFromFile(accountJsonPath),
+        new TypeReference<Collection<Account>>() {
+        });
   }
 
   /**

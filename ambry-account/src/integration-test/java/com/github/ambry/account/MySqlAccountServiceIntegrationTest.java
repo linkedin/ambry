@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
@@ -36,9 +37,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -119,11 +118,11 @@ public class MySqlAccountServiceIntegrationTest {
     Account testAccount =
         new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).lastModifiedTime(lastModifiedTime)
             .build();
-    Map<String, String> accountMap = new HashMap<>();
-    accountMap.put(Short.toString(testAccount.getId()), testAccount.toJson(false).toString());
+    Collection<Account> accounts = new ArrayList<>();
+    accounts.add(testAccount);
     String filename = BackupFileManager.getBackupFilename(1, SystemTime.getInstance().seconds());
     Path filePath = accountBackupDir.resolve(filename);
-    BackupFileManager.writeAccountMapToFile(filePath, accountMap);
+    BackupFileManager.writeAccountsToFile(filePath, new ObjectMapper(), accounts);
 
     mySqlAccountService = getAccountService();
 
