@@ -17,6 +17,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -33,12 +34,11 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.commons.Callback;
-import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
@@ -1142,7 +1142,8 @@ public class StorageManagerTest {
   public void residualDirDeletionTest() throws Exception {
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
-    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    MockClusterParticipant mockHelixParticipant = Mockito.spy(new MockClusterParticipant());
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
     // create an extra store dir at one of the mount paths
     String mountPath = replicas.get(0).getMountPath();
     String extraPartitionName = "1000";
@@ -1165,6 +1166,7 @@ public class StorageManagerTest {
     assertTrue("Could not make readable", invalidDir.setReadable(true));
     // trigger OFFLINE -> DROPPED transition on extra partition. Storage manager should delete residual store dir.
     mockHelixParticipant.onPartitionBecomeDroppedFromOffline(extraPartitionName);
+    verify(mockHelixParticipant).setPartitionDisabledState(extraPartitionName, false);
     assertFalse("Extra store dir should not exist", extraStoreDir.exists());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
@@ -1414,6 +1416,11 @@ public class StorageManagerTest {
     @Override
     public void close() {
       // no op
+    }
+
+    @Override
+    public void setPartitionDisabledState(String partitionName, boolean disable) {
+      super.setPartitionDisabledState(partitionName, disable);
     }
   }
 

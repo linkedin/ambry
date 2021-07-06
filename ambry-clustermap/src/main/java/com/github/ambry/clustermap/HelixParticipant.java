@@ -308,7 +308,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param partitionName name of partition on local node
    * @param disable if {@code true}, disable given partition on current node. {@code false} otherwise.
    */
-  private void setPartitionDisabledState(String partitionName, boolean disable) {
+  protected void setPartitionDisabledState(String partitionName, boolean disable) {
     synchronized (helixAdministrationLock) {
       // 1. update disabled replica list in DataNodeConfig. This modifies ListFields only
       boolean dataNodeConfigChanged = false;
@@ -689,7 +689,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
     }
-    logger.info("Purging disabled state of dropped replica {} in both InstanceConfig and DataNodeConfig",
+    logger.info("Purging disabled state of dropped replica {} from both InstanceConfig and DataNodeConfig",
         partitionName);
     setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
@@ -698,7 +698,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
   @Override
   public void onPartitionBecomeDroppedFromError(String partitionName) {
-    logger.info("Purging disabled state of dropped replica {} in both InstanceConfig and DataNodeConfig",
+    logger.info("Purging disabled state of dropped replica {} from both InstanceConfig and DataNodeConfig",
         partitionName);
     setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
