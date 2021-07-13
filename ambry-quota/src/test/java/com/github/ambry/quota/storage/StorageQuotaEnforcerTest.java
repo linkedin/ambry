@@ -57,8 +57,7 @@ public class StorageQuotaEnforcerTest {
         new JSONStringStorageQuotaSource(new HashMap<>(), new InMemAccountService(false, false));
     StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, quotaSource, (StorageUsageRefresher) null);
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
-    assertEquals(Collections.EMPTY_MAP, enforcer.getContainerStorageUsage());
-    assertEquals(Collections.EMPTY_MAP, enforcer.getAccountStorageUsage());
+    assertEquals(Collections.EMPTY_MAP, enforcer.getStorageUsages());
   }
 
   /**
@@ -68,8 +67,7 @@ public class StorageQuotaEnforcerTest {
   public void testInitStorageUsage() throws Exception {
     Map<String, Map<String, Long>> containerUsage = TestUtils.makeStorageMap(10, 10, 1000, 100);
     InMemAccountService accountService = new InMemAccountService(false, false);
-    Map<String, Map<String, Long>> expectedContainerStorageUsage = new HashMap<>();
-    Map<String, Long> expectedAccountStorageUsage = new HashMap<>();
+    Map<QuotaResource, Long> expectedStorageUsages = new HashMap<>();
     // Account and container id's base is 1, not 0
     for (int i = 1; i <= 10; i++) {
       QuotaResourceType resourceType =
@@ -83,10 +81,13 @@ public class StorageQuotaEnforcerTest {
       }
       accountService.updateAccounts(Collections.singleton(accountBuilder.build()));
       if (resourceType == QuotaResourceType.ACCOUNT) {
-        expectedAccountStorageUsage.put(String.valueOf(i),
+        expectedStorageUsages.put(QuotaResource.fromAccountId((short) i),
             containerUsage.get(String.valueOf(i)).values().stream().mapToLong(Long::longValue).sum());
       } else {
-        expectedContainerStorageUsage.put(String.valueOf(i), containerUsage.get(String.valueOf(i)));
+        for (Map.Entry<String, Long> containerEntry : containerUsage.get(String.valueOf(i)).entrySet()) {
+          expectedStorageUsages.put(QuotaResource.fromContainerId((short) i, Short.valueOf(containerEntry.getKey())),
+              containerEntry.getValue());
+        }
       }
     }
 
@@ -94,8 +95,7 @@ public class StorageQuotaEnforcerTest {
         new StorageQuotaEnforcer(config, new JSONStringStorageQuotaSource(new HashMap<>(), accountService),
             (StorageUsageRefresher) null);
     enforcer.initStorageUsage(containerUsage);
-    assertEquals(expectedContainerStorageUsage, enforcer.getContainerStorageUsage());
-    assertEquals(expectedAccountStorageUsage, enforcer.getAccountStorageUsage());
+    assertEquals(expectedStorageUsages, enforcer.getStorageUsages());
   }
 
   /**
@@ -106,8 +106,7 @@ public class StorageQuotaEnforcerTest {
     int initNumAccounts = 10;
     Map<String, Map<String, Long>> containerUsage = TestUtils.makeStorageMap(initNumAccounts, 10, 10000, 1000);
     InMemAccountService accountService = new InMemAccountService(false, false);
-    Map<String, Map<String, Long>> expectedContainerStorageUsage = new HashMap<>();
-    Map<String, Long> expectedAccountStorageUsage = new HashMap<>();
+    Map<QuotaResource, Long> expectedStorageUsages = new HashMap<>();
     // Account and container id's base is 1, not 0
     for (int i = 1; i <= initNumAccounts; i++) {
       QuotaResourceType resourceType =
@@ -121,10 +120,13 @@ public class StorageQuotaEnforcerTest {
       }
       accountService.updateAccounts(Collections.singleton(accountBuilder.build()));
       if (resourceType == QuotaResourceType.ACCOUNT) {
-        expectedAccountStorageUsage.put(String.valueOf(i),
+        expectedStorageUsages.put(QuotaResource.fromAccountId((short) i),
             containerUsage.get(String.valueOf(i)).values().stream().mapToLong(Long::longValue).sum());
       } else {
-        expectedContainerStorageUsage.put(String.valueOf(i), containerUsage.get(String.valueOf(i)));
+        for (Map.Entry<String, Long> containerEntry : containerUsage.get(String.valueOf(i)).entrySet()) {
+          expectedStorageUsages.put(QuotaResource.fromContainerId((short) i, Short.valueOf(containerEntry.getKey())),
+              containerEntry.getValue());
+        }
       }
     }
     StorageQuotaEnforcer enforcer =
@@ -142,8 +144,7 @@ public class StorageQuotaEnforcerTest {
         containerUsage.put(String.valueOf(accountId), additionalUsage.remove("1"));
         QuotaResourceType resourceType = i % 4 == 0 ? QuotaResourceType.CONTAINER : QuotaResourceType.ACCOUNT;
         AccountBuilder accountBuilder =
-            new AccountBuilder((short) accountId, String.valueOf(accountId), Account.AccountStatus.ACTIVE,
-                resourceType);
+            new AccountBuilder(accountId, String.valueOf(accountId), Account.AccountStatus.ACTIVE, resourceType);
         for (int j = 1; j <= 10; j++) {
           accountBuilder.addOrUpdateContainer(
               new ContainerBuilder((short) j, String.valueOf(j), Container.ContainerStatus.ACTIVE, "",
@@ -151,10 +152,13 @@ public class StorageQuotaEnforcerTest {
         }
         accountService.updateAccounts(Collections.singleton(accountBuilder.build()));
         if (resourceType == QuotaResourceType.ACCOUNT) {
-          expectedAccountStorageUsage.put(String.valueOf(accountId),
+          expectedStorageUsages.put(QuotaResource.fromAccountId(accountId),
               containerUsage.get(String.valueOf(accountId)).values().stream().mapToLong(Long::longValue).sum());
         } else {
-          expectedContainerStorageUsage.put(String.valueOf(accountId), containerUsage.get(String.valueOf(accountId)));
+          for (Map.Entry<String, Long> containerEntry : containerUsage.get(String.valueOf(accountId)).entrySet()) {
+            expectedStorageUsages.put(QuotaResource.fromContainerId(accountId, Short.valueOf(containerEntry.getKey())),
+                containerEntry.getValue());
+          }
         }
       } else {
         // change existing storage usage
@@ -165,15 +169,14 @@ public class StorageQuotaEnforcerTest {
         long oldValue = containerUsage.get(String.valueOf(accountId)).get(String.valueOf(containerId));
         containerUsage.get(String.valueOf(accountId)).put(String.valueOf(containerId), newValue);
         if (accountService.getAccountById((short) accountId).getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
-          expectedAccountStorageUsage.put(String.valueOf(accountId),
-              expectedAccountStorageUsage.get(String.valueOf(accountId)) - oldValue + newValue);
+          QuotaResource resource = QuotaResource.fromAccountId((short) accountId);
+          expectedStorageUsages.put(resource, expectedStorageUsages.get(resource) - oldValue + newValue);
         } else {
-          expectedContainerStorageUsage.get(String.valueOf(accountId)).put(String.valueOf(containerId), newValue);
+          expectedStorageUsages.put(QuotaResource.fromContainerId((short) accountId, (short) containerId), newValue);
         }
       }
       listener.onNewContainerStorageUsage(containerUsage);
-      assertEquals(expectedContainerStorageUsage, enforcer.getContainerStorageUsage());
-      assertEquals(expectedAccountStorageUsage, enforcer.getAccountStorageUsage());
+      assertEquals(expectedStorageUsages, enforcer.getStorageUsages());
     }
   }
 

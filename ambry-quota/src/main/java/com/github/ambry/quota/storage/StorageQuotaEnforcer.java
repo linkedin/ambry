@@ -32,7 +32,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,10 +62,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   protected final StorageQuotaServiceMetrics metrics;
   protected final ScheduledExecutorService scheduler;
   protected final AccountService accountService;
-  // The map that stores container storage usages for all containers who enforce storage quota in container level
-  protected volatile Map<String, Map<String, Long>> containerStorageUsage;
-  // The map that stores account storage usages for all accounts who enforce storage quota in account level
-  protected volatile Map<String, Long> accountStorageUsage;
+  protected volatile Map<QuotaResource, Long> storageUsages;
 
   /**
    * Constructor to instantiate a new {@link StorageQuotaEnforcer}.
@@ -193,25 +189,16 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    */
   void initStorageUsage(Map<String, Map<String, Long>> usage) {
     logger.info("Initializing storage usage for {} accounts", usage.size());
-    accountStorageUsage = new ConcurrentHashMap<>();
-    containerStorageUsage = new ConcurrentHashMap<>();
-    initMap(usage, accountStorageUsage, containerStorageUsage);
+    storageUsages = new ConcurrentHashMap<>();
+    initMap(usage, storageUsages);
   }
 
   /**
    * Only for testing.
-   * @return The unmodified version of container storage usage.
+   * @return The unmodified version of storage usages.
    */
-  Map<String, Map<String, Long>> getContainerStorageUsage() {
-    return Collections.unmodifiableMap(containerStorageUsage);
-  }
-
-  /**
-   * Only for testing.
-   * @return The unmodified version of account storage usage.
-   */
-  Map<String, Long> getAccountStorageUsage() {
-    return Collections.unmodifiableMap(accountStorageUsage);
+  Map<QuotaResource, Long> getStorageUsages() {
+    return Collections.unmodifiableMap(storageUsages);
   }
 
   /**
@@ -230,30 +217,31 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     return containerStorageUsage -> {
       logger.trace("UsageRefresherListener invoked with new container storage usage");
       logger.debug("New usage: {}", containerStorageUsage);
-      initMap(containerStorageUsage, this.accountStorageUsage, this.containerStorageUsage);
+      initMap(containerStorageUsage, this.storageUsages);
     };
   }
 
   /**
    * Initialize the map with another given map and replace the value in the map with the value from given map.
    * @param mapWithValue The given map used to initialize a different map.
-   * @param accountMapToInit The account storage usage map to be initialized.
-   * @param containerMapToInit The container storage usage map to be initialized.
+   * @param mapToInit The storage usage map to be initialized.
    */
-  private void initMap(Map<String, Map<String, Long>> mapWithValue, Map<String, Long> accountMapToInit,
-      Map<String, Map<String, Long>> containerMapToInit) {
+  private void initMap(Map<String, Map<String, Long>> mapWithValue, Map<QuotaResource, Long> mapToInit) {
     for (Map.Entry<String, Map<String, Long>> mapEntry : mapWithValue.entrySet()) {
       Account account = accountService.getAccountById(Short.valueOf(mapEntry.getKey()));
-      if (account != null && account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
-        // Put this in account storage usage
-        long accountUsage = mapEntry.getValue().values().stream().mapToLong(Long::longValue).sum();
-        accountMapToInit.put(mapEntry.getKey(), accountUsage);
-      } else {
-        Map<String, Long> innerMap =
-            containerMapToInit.computeIfAbsent(mapEntry.getKey(), k -> new ConcurrentHashMap<>());
-        for (Map.Entry<String, Long> innerMapEntry : mapEntry.getValue().entrySet()) {
-          // Replace the value in the map anyway.
-          innerMap.put(innerMapEntry.getKey(), innerMapEntry.getValue());
+      if (account != null) {
+        if (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
+          // Put this in account storage usage
+          long accountUsage = mapEntry.getValue().values().stream().mapToLong(Long::longValue).sum();
+          mapToInit.put(QuotaResource.fromAccount(account), accountUsage);
+        } else {
+          for (Map.Entry<String, Long> innerMapEntry : mapEntry.getValue().entrySet()) {
+            // Replace the value in the map anyway.
+            Container container = account.getContainerById(Short.valueOf(innerMapEntry.getKey()));
+            if (container != null) {
+              mapToInit.put(QuotaResource.fromContainer(container), innerMapEntry.getValue());
+            }
+          }
         }
       }
     }
@@ -272,18 +260,13 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     long currentUsage = 0L;
     try {
       Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
-      if (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
-        quotaValue = getQuotaValueForResource(QuotaResource.fromAccount(account));
-        if (quotaValue != -1L) {
-          currentUsage = accountStorageUsage.getOrDefault(String.valueOf(account.getId()), 0L);
-        }
-      } else {
-        Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
-        quotaValue = getQuotaValueForResource(QuotaResource.fromContainer(container));
-        if (quotaValue != -1L) {
-          currentUsage = containerStorageUsage.computeIfAbsent(String.valueOf(container.getParentAccountId()),
-              k -> new HashMap<>()).getOrDefault(String.valueOf(container.getId()), 0L);
-        }
+      Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+      QuotaResource quotaResource =
+          account.getQuotaResourceType() == QuotaResourceType.ACCOUNT ? QuotaResource.fromAccount(account)
+              : QuotaResource.fromContainer(container);
+      quotaValue = getQuotaValueForResource(quotaResource);
+      if (quotaValue != -1L) {
+        currentUsage = storageUsages.getOrDefault(quotaResource, 0L);
       }
     } catch (Exception e) {
       logger.error("Failed to getQuotaAndUsage for RestRequest {}", restRequest, e);
@@ -305,34 +288,21 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     long usageAfterCharge = 0L;
     try {
       Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
-      if (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
-        quotaValue = getQuotaValueForResource(QuotaResource.fromAccount(account));
-        if (quotaValue != -1L) {
-          AtomicLong existingUsage = new AtomicLong();
-          accountStorageUsage.compute(String.valueOf(account.getId()), (k, v) -> {
-            existingUsage.set(v == null ? 0 : v);
-            if (v == null) {
-              return usage;
-            }
-            return v + usage;
-          });
-          usageAfterCharge = existingUsage.addAndGet(usage);
-        }
-      } else {
-        Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
-        quotaValue = getQuotaValueForResource(QuotaResource.fromContainer(container));
-        if (quotaValue != -1L) {
-          AtomicLong existingUsage = new AtomicLong();
-          containerStorageUsage.computeIfAbsent(String.valueOf(container.getParentAccountId()),
-              k -> new ConcurrentHashMap<>()).compute(String.valueOf(container.getId()), (k, v) -> {
-            existingUsage.set(v == null ? 0 : v);
-            if (v == null) {
-              return usage;
-            }
-            return v + usage;
-          });
-          usageAfterCharge = existingUsage.addAndGet(usage);
-        }
+      Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+      QuotaResource quotaResource =
+          account.getQuotaResourceType() == QuotaResourceType.ACCOUNT ? QuotaResource.fromAccount(account)
+              : QuotaResource.fromContainer(container);
+      quotaValue = getQuotaValueForResource(quotaResource);
+      if (quotaValue != -1L) {
+        AtomicLong existingUsage = new AtomicLong();
+        storageUsages.compute(quotaResource, (k, v) -> {
+          existingUsage.set(v == null ? 0 : v);
+          if (v == null) {
+            return usage;
+          }
+          return v + usage;
+        });
+        usageAfterCharge = existingUsage.addAndGet(usage);
       }
     } catch (Exception e) {
       logger.error("Failed to charge for RestRequest {}", restRequest, e);
