@@ -2422,6 +2422,8 @@ public class IndexTest {
     state.appendToLog(2 * CuratedLogIndexState.PUT_RECORD_SIZE);
 
     state.reloadIndex(true, false);
+    assertEquals("Journal should only include entry for last log segment",
+        state.index.journal.getFirstOffset().getName(), state.index.log.getLastSegment().getName());
     assertEquals("End offset not as expected", expectedSegmentEndOffset, activeSegment.getEndOffset());
     infos.forEach(this::checkRecoveryInfoEquivalence);
   }
@@ -2499,10 +2501,11 @@ public class IndexTest {
     long nextSegmentExpectedEndOffset = state.log.getNextSegment(activeSegment).getEndOffset();
     // write a little "extra" data
     state.appendToLog(2 * CuratedLogIndexState.PUT_RECORD_SIZE);
-
     state.reloadIndex(true, false);
     assertEquals("End offset of former active segment not as expected", activeSegmentExpectedEndOffset,
         activeSegment.getEndOffset());
+    assertEquals("Journal should only include entry for last log segment",
+        state.index.journal.getFirstOffset().getName(), state.index.log.getLastSegment().getName());
     activeSegment = state.log.getNextSegment(activeSegment);
     assertNotNull("A new segment has not been created", activeSegment);
     assertEquals("End offset active segment not as expected", nextSegmentExpectedEndOffset,
