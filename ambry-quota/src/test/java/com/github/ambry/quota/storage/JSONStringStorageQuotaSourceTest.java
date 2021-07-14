@@ -43,7 +43,7 @@ public class JSONStringStorageQuotaSourceTest {
         "{`10`: {`1`: 1000, `2`: 3000}, `20`: {`4`: 2000, `5`: 1000}, `30`: 4000, `40`: 5000, `50`: {`6`: 6000}}".replace(
             "`", "\"");
     Properties properties = new Properties();
-    properties.setProperty(StorageQuotaConfig.CONTAINER_STORAGE_QUOTA_IN_JSON, json);
+    properties.setProperty(StorageQuotaConfig.STORAGE_QUOTA_IN_JSON, json);
     StorageQuotaConfig config = new StorageQuotaConfig(new VerifiableProperties(properties));
 
     // Setting up accounts and account service

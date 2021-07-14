@@ -39,7 +39,7 @@ import java.util.Map;
 
 /**
  * A JSON string implementation of {@link QuotaSource} interface. The entire storage quota is encoded as json
- * string in {@link StorageQuotaConfig#containerStorageQuotaInJson}.
+ * string in {@link StorageQuotaConfig#storageQuotaInJson}.
  */
 public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEnforcer.AccountServiceSupplier {
 
@@ -54,10 +54,10 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
    */
   public JSONStringStorageQuotaSource(StorageQuotaConfig config, AccountService accountService) throws IOException {
     Map<String, Long> quota = new HashMap<>();
-    if (config.containerStorageQuotaInJson != null && !config.containerStorageQuotaInJson.trim().isEmpty()) {
+    if (config.storageQuotaInJson != null && !config.storageQuotaInJson.trim().isEmpty()) {
       ObjectMapper objectMapper = new ObjectMapper();
       Map<String, MapOrNumber> tempQuotas =
-          objectMapper.readValue(config.containerStorageQuotaInJson, new TypeReference<Map<String, MapOrNumber>>() {
+          objectMapper.readValue(config.storageQuotaInJson, new TypeReference<Map<String, MapOrNumber>>() {
           });
       for (Map.Entry<String, MapOrNumber> entry : tempQuotas.entrySet()) {
         Account account = accountService.getAccountById(Short.valueOf(entry.getKey()));
