@@ -341,6 +341,14 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
         // TODO support dynamically adding disk in the future
         continue;
       }
+      // update disk capacity if needed
+      if (disk.getRawCapacityInBytes() != diskConfig.getDiskCapacityInBytes()) {
+        long prevDiskCapacity = disk.getRawCapacityInBytes();
+        logger.info("Capacity of disk at {} on {} has changed. Previous was: {} bytes, new capacity is {} bytes",
+            mountPath, instanceName, prevDiskCapacity, diskConfig.getDiskCapacityInBytes());
+        disk.setDiskCapacityInBytes(diskConfig.getDiskCapacityInBytes());
+        clusterChangeHandlerCallback.addClusterWideRawCapacity(diskConfig.getDiskCapacityInBytes() - prevDiskCapacity);
+      }
       for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
         // partition name and replica name are the same.
         String partitionName = replicaEntry.getKey();

@@ -513,7 +513,12 @@ public class HelixBootstrapUpgradeToolTest {
         String instanceName =
             diskForNewReplica.getDataNode().getHostname() + "_" + diskForNewReplica.getDataNode().getPort();
         assertTrue("Instance name doesn't exist", newReplicaMap.containsKey(instanceName));
-        assertEquals("Mount path is not expected", diskForNewReplica.getMountPath(), newReplicaMap.get(instanceName));
+        String[] mountPathAndDiskCapacity = newReplicaMap.get(instanceName).split(DISK_CAPACITY_DELIM_STR);
+        String mountPath = mountPathAndDiskCapacity[0];
+        String diskCapacity = mountPathAndDiskCapacity[1];
+        assertEquals("Mount path is not expected", diskForNewReplica.getMountPath(), mountPath);
+        assertEquals("Disk capacity is not expected", diskForNewReplica.getRawCapacityInBytes(),
+            Long.parseLong(diskCapacity));
       }
     }
     // test deleting replica addition config (failure case)
@@ -1106,8 +1111,8 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      String getPath = ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH;
-      ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
+      ZNRecord zNRecord =
+          propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
       assertNull("Partition override config should no longer exist", zNRecord);
     }
   }

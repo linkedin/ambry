@@ -444,16 +444,22 @@ public class HelixClusterManager implements ClusterMap {
     ClusterChangeHandler localClusterChangeHandler =
         dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).clusterChangeHandler;
     AmbryDataNode dataNode = localClusterChangeHandler.getDataNode(instanceName);
-    String mountPathFromHelix = replicaInfos.get(instanceName);
+    String mountPathAndDiskCapacityFromHelix = replicaInfos.get(instanceName);
+    String[] segments = mountPathAndDiskCapacityFromHelix.split(DISK_CAPACITY_DELIM_STR);
+    String mountPath = segments[0];
+    String diskCapacityStr = segments.length >= 2 ? segments[1] : null;
     Set<AmbryDisk> disks = dataNode != null ? localClusterChangeHandler.getDisks(dataNode) : null;
     Optional<AmbryDisk> potentialDisk =
-        disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPathFromHelix)).findAny()
-            : Optional.empty();
+        disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPath)).findAny() : Optional.empty();
     if (potentialDisk.isPresent()) {
       try {
+        AmbryDisk targetDisk = potentialDisk.get();
+        if (diskCapacityStr != null) {
+          // update disk capacity if bootstrap replica info contains disk capacity in bytes.
+          targetDisk.setDiskCapacityInBytes(Long.parseLong(diskCapacityStr));
+        }
         bootstrapReplica =
-            new AmbryServerReplica(clusterMapConfig, currentPartition, potentialDisk.get(), true, replicaCapacity,
-                false);
+            new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity, false);
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
