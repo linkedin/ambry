@@ -14,9 +14,9 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.commons.Callback;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.commons.Callback;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
@@ -33,6 +33,7 @@ import static org.mockito.Mockito.*;
 
 public class MockHelixParticipant extends HelixParticipant {
   public static MetricRegistry metricRegistry = new MetricRegistry();
+  static HelixFactory mockHelixFactory = new MockHelixManagerFactory();
   public Boolean updateNodeInfoReturnVal = null;
   public Boolean setStoppedStateReturnVal = null;
   public PartitionStateChangeListener mockStatsManagerListener = null;
@@ -48,7 +49,7 @@ public class MockHelixParticipant extends HelixParticipant {
   private PartitionStateChangeListener mockReplicationManagerListener;
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig) {
-    this(clusterMapConfig, new MockHelixManagerFactory());
+    this(clusterMapConfig, mockHelixFactory);
     // create mock state change listener for ReplicationManager
     mockReplicationManagerListener = Mockito.mock(PartitionStateChangeListener.class);
     // mock Bootstrap-To-Standby change
@@ -163,6 +164,11 @@ public class MockHelixParticipant extends HelixParticipant {
   @Override
   public void close() {
     // no op
+  }
+
+  @Override
+  public void setPartitionDisabledState(String partitionName, boolean disable) {
+    super.setPartitionDisabledState(partitionName, disable);
   }
 
   /**

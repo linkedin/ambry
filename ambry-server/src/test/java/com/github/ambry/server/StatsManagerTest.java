@@ -75,11 +75,13 @@ import java.util.concurrent.CountDownLatch;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.store.StoreStats.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -633,13 +635,16 @@ public class StatsManagerTest {
     // 3. success case (remove another replica because previous replica has been removed from in-mem data structures)
     ReplicaId replica = localReplicas.get(1);
     storageManager.shutdownBlobStore(replica.getPartitionId());
-    clusterParticipant.onPartitionBecomeDroppedFromOffline(replica.getPartitionId().toPathString());
+    MockHelixParticipant mockHelixParticipant = Mockito.spy(clusterParticipant);
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
+    mockHelixParticipant.onPartitionBecomeDroppedFromOffline(replica.getPartitionId().toPathString());
     // verify that the replica is no longer present in StorageManager
     assertNull("Store of removed replica should not exist", storageManager.getStore(replica.getPartitionId(), true));
     // purposely remove the same replica in ReplicationManager again to verify it no longer exists
     assertFalse("Should return false because replica no longer exists", mockReplicationManager.removeReplica(replica));
     // purposely remove the same replica in StatsManager again to verify it no longer exists
     assertFalse("Should return false because replica no longer exists", mockStatsManager.removeReplica(replica));
+    verify(mockHelixParticipant).setPartitionDisabledState(replica.getPartitionId().toPathString(), false);
     storageManager.shutdown();
     mockStatsManager.shutdown();
   }

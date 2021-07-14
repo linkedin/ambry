@@ -14,12 +14,12 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
@@ -267,40 +267,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
     }
-    synchronized (helixAdministrationLock) {
-      String partitionName = replicaId.getPartitionId().toPathString();
-
-      // 1. update disabled replica list in DataNodeConfig. This modifies ListFields only
-      boolean dataNodeConfigChanged = false;
-      DataNodeConfig dataNodeConfig = getDataNodeConfig();
-      if (!disable && dataNodeConfig.getDisabledReplicas().remove(partitionName)) {
-        logger.info("Removing the partition {} from disabledReplicas list", partitionName);
-        dataNodeConfigChanged = true;
-      } else if (disable && dataNodeConfig.getDisabledReplicas().add(partitionName)) {
-        logger.info("Adding the partition {} to disabledReplicas list", partitionName);
-        dataNodeConfigChanged = true;
-      }
-      if (dataNodeConfigChanged) {
-        logger.info("Setting config with list of disabled replicas: {}", dataNodeConfig.getDisabledReplicas());
-        if (!dataNodeConfigSource.set(dataNodeConfig)) {
-          participantMetrics.setReplicaDisabledStateErrorCount.inc();
-          logger.warn("setReplicaDisabledState() failed DataNodeConfig update");
-        }
-
-        // 2. If the DataNodeConfig was changed, invoke Helix native method to enable/disable partition on local node,
-        //    this will trigger subsequent state transition on given replica. This method modifies MapFields in
-        //    InstanceConfig.
-        InstanceConfig instanceConfig = getInstanceConfig();
-        String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
-        logger.info("{} replica {} on current node", disable ? "Disabling" : "Enabling", partitionName);
-        instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
-        if (!helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig)) {
-          participantMetrics.setReplicaDisabledStateErrorCount.inc();
-          logger.warn("setReplicaDisabledState() failed InstanceConfig update");
-        }
-      }
-      logger.info("Disabled state of partition {} is updated", partitionName);
-    }
+    setPartitionDisabledState(replicaId.getPartitionId().toPathString(), disable);
   }
 
   @Override
@@ -334,6 +301,46 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   protected void markDisablePartitionComplete() {
     disablePartitionsComplete = true;
+  }
+
+  /**
+   * Disable/enable partition on local node. This method will update both InstanceConfig and DataNodeConfig in PropertyStore.
+   * @param partitionName name of partition on local node
+   * @param disable if {@code true}, disable given partition on current node. {@code false} otherwise.
+   */
+  protected void setPartitionDisabledState(String partitionName, boolean disable) {
+    synchronized (helixAdministrationLock) {
+      // 1. update disabled replica list in DataNodeConfig. This modifies ListFields only
+      boolean dataNodeConfigChanged = false;
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+      if (!disable && dataNodeConfig.getDisabledReplicas().remove(partitionName)) {
+        logger.info("Removing the partition {} from disabledReplicas list", partitionName);
+        dataNodeConfigChanged = true;
+      } else if (disable && dataNodeConfig.getDisabledReplicas().add(partitionName)) {
+        logger.info("Adding the partition {} to disabledReplicas list", partitionName);
+        dataNodeConfigChanged = true;
+      }
+      if (dataNodeConfigChanged) {
+        logger.info("Setting config with list of disabled replicas: {}", dataNodeConfig.getDisabledReplicas());
+        if (!dataNodeConfigSource.set(dataNodeConfig)) {
+          participantMetrics.setReplicaDisabledStateErrorCount.inc();
+          logger.warn("setReplicaDisabledState() failed DataNodeConfig update");
+        }
+
+        // 2. If the DataNodeConfig was changed, invoke Helix native method to enable/disable partition on local node,
+        //    this will trigger subsequent state transition on given replica. This method modifies MapFields in
+        //    InstanceConfig.
+        InstanceConfig instanceConfig = getInstanceConfig();
+        String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+        logger.info("{} replica {} on current node", disable ? "Disabling" : "Enabling", partitionName);
+        instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
+        if (!helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig)) {
+          participantMetrics.setReplicaDisabledStateErrorCount.inc();
+          logger.warn("setReplicaDisabledState() failed InstanceConfig update");
+        }
+      }
+      logger.info("Disabled state of partition {} is updated", partitionName);
+    }
   }
 
   /**
@@ -682,12 +689,18 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
     }
+    logger.info("Purging disabled state of dropped replica {} from both InstanceConfig and DataNodeConfig",
+        partitionName);
+    setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
     participantMetrics.partitionDroppedCount.inc();
   }
 
   @Override
   public void onPartitionBecomeDroppedFromError(String partitionName) {
+    logger.info("Purging disabled state of dropped replica {} from both InstanceConfig and DataNodeConfig",
+        partitionName);
+    setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
     participantMetrics.partitionDroppedCount.inc();
   }

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
@@ -35,14 +36,13 @@ import org.apache.helix.NotificationContext;
 import org.apache.helix.PreConnectCallback;
 import org.apache.helix.PropertyKey;
 import org.apache.helix.ScopedConfigChangeListener;
+import org.apache.helix.api.listeners.ClusterConfigChangeListener;
+import org.apache.helix.api.listeners.ConfigChangeListener;
 import org.apache.helix.api.listeners.CustomizedStateChangeListener;
 import org.apache.helix.api.listeners.CustomizedStateConfigChangeListener;
 import org.apache.helix.api.listeners.CustomizedStateRootChangeListener;
 import org.apache.helix.api.listeners.CustomizedViewChangeListener;
 import org.apache.helix.api.listeners.CustomizedViewRootChangeListener;
-import org.apache.helix.zookeeper.datamodel.ZNRecord;
-import org.apache.helix.api.listeners.ClusterConfigChangeListener;
-import org.apache.helix.api.listeners.ConfigChangeListener;
 import org.apache.helix.api.listeners.ResourceConfigChangeListener;
 import org.apache.helix.controller.pipeline.Pipeline;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
@@ -53,18 +53,28 @@ import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
 
 public class MockHelixManagerFactory extends HelixFactory {
+  static boolean overrideGetHelixManager = false;
   private final MockHelixManager participantHelixManager;
   private final MockHelixManager spectatorHelixManager;
+  private final DataNodeConfigSource dataNodeConfigSource;
+  private final HelixManager mockHelixManager;
 
   /**
    * Construct this factory.
    */
   public MockHelixManagerFactory() {
+    this(null, null);
+  }
+
+  public MockHelixManagerFactory(DataNodeConfigSource configSource, HelixManager mockHelixManager) {
     participantHelixManager = new MockHelixManager();
     spectatorHelixManager = new MockHelixManager();
+    dataNodeConfigSource = configSource;
+    this.mockHelixManager = mockHelixManager;
   }
 
   /**
@@ -83,6 +93,24 @@ public class MockHelixManagerFactory extends HelixFactory {
 
   public MockHelixManager getHelixManager(InstanceType instanceType) {
     return instanceType == InstanceType.PARTICIPANT ? participantHelixManager : spectatorHelixManager;
+  }
+
+  @Override
+  public DataNodeConfigSource getDataNodeConfigSource(ClusterMapConfig clusterMapConfig, String zkAddr,
+      DataNodeConfigSourceMetrics metrics) {
+    if (dataNodeConfigSource != null) {
+      return dataNodeConfigSource;
+    }
+    return super.getDataNodeConfigSource(clusterMapConfig, zkAddr, metrics);
+  }
+
+  @Override
+  public HelixManager getZkHelixManagerAndConnect(String clusterName, String instanceName, InstanceType instanceType,
+      String zkAddr) throws Exception {
+    if (overrideGetHelixManager) {
+      return mockHelixManager;
+    }
+    return super.getZkHelixManagerAndConnect(clusterName, instanceName, instanceType, zkAddr);
   }
 
   /**

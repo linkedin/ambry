@@ -42,7 +42,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * Mock implementation of {@link HelixAdmin} which stores all information internally.
  */
 public class MockHelixAdmin implements HelixAdmin {
-  private final Map<String, InstanceConfig> instanceNameToinstanceConfigs = new HashMap<>();
+  private final Map<String, InstanceConfig> instanceNameToInstanceConfigs = new HashMap<>();
   private final Map<String, IdealState> resourcesToIdealStates = new HashMap<>();
   private final Set<String> upInstances = new HashSet<>();
   private final Set<String> downInstances = new HashSet<>();
@@ -88,7 +88,7 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public void addInstance(String clusterName, InstanceConfig instanceConfig) {
-    instanceNameToinstanceConfigs.put(instanceConfig.getInstanceName(), instanceConfig);
+    instanceNameToInstanceConfigs.put(instanceConfig.getInstanceName(), instanceConfig);
     upInstances.add(instanceConfig.getInstanceName());
     Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
     totalDiskCount += diskInfos.size();
@@ -135,23 +135,23 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public List<String> getInstancesInCluster(String clusterName) {
-    return new ArrayList<>(instanceNameToinstanceConfigs.keySet());
+    return new ArrayList<>(instanceNameToInstanceConfigs.keySet());
   }
 
   List<InstanceConfig> getInstanceConfigs(String clusterName) {
-    return new ArrayList<>(instanceNameToinstanceConfigs.values());
+    return new ArrayList<>(instanceNameToInstanceConfigs.values());
   }
 
   @Override
   public InstanceConfig getInstanceConfig(String clusterName, String instanceName) {
-    return instanceNameToinstanceConfigs.get(instanceName);
+    return instanceNameToInstanceConfigs.get(instanceName);
   }
 
   @Override
   public boolean setInstanceConfig(String clusterName, String instanceName, InstanceConfig instanceConfig) {
     setInstanceConfigCallCount++;
     removeDisabledReplicasIfNeeded(instanceConfig);
-    instanceNameToinstanceConfigs.put(instanceName, instanceConfig);
+    instanceNameToInstanceConfigs.put(instanceName, instanceConfig);
     return true;
   }
 
@@ -428,7 +428,7 @@ public class MockHelixAdmin implements HelixAdmin {
    * @return the count of disks registered for the given node via this admin.
    */
   long getDiskCountOnNode(String instanceName) {
-    InstanceConfig instanceConfig = instanceNameToinstanceConfigs.get(instanceName);
+    InstanceConfig instanceConfig = instanceNameToInstanceConfigs.get(instanceName);
     return instanceConfig.getRecord().getMapFields().size();
   }
 
