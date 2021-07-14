@@ -1492,6 +1492,10 @@ public class BlobStoreCompactorTest {
     state.addUndeleteEntry((MockId) p12.getKey(), (short) 2);
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
 
+    // Index Segment 1.3 P2 -> P2
+    IndexEntry p13 = state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short)2).get(0);
+    state.addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
+
     // Make sure we have 3 log segments
     writeDataToMeetRequiredSegmentCount(3, null);
     state.reloadIndex(true, false);
@@ -1617,9 +1621,9 @@ public class BlobStoreCompactorTest {
       compactor.close(0);
     }
     // Before compaction, the records in the log are
-    // P11 U11 P P P| P12 D12 U12 U12 P
+    // P11 U11 P P P| P12 D12 U12 U12 P | P13(2) P P P P
     // After compaction, the records in the log are
-    // P P P P12 U12
+    // P P P P12 U12| P P13(2)
     cleanedUpSize = (ps + us) + (ds + us);
     compactedLogSegmentName = logSegmentName.getNextGenerationName();
     assertEquals("End offset of log segment not as expected after compaction",
@@ -1646,6 +1650,16 @@ public class BlobStoreCompactorTest {
     verifyIndexEntry(indexEntries.get(4), (MockId) p12.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
         false, true, (short) 2);
     currentExpectedOffset += us;
+
+    // Get the entries in the second segment
+    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    currentExpectedOffset += ps; // skip one put
+    verifyIndexEntry(indexEntries.get(1), (MockId) p13.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
+        false, false, (short) 2);
 
     // no clean shutdown file should exist
     assertFalse("Clean shutdown file not deleted",

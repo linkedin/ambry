@@ -916,9 +916,11 @@ class BlobStoreCompactor {
               throw new StoreException("Cannot insert duplicate PUT entry for " + srcIndexEntry.getKey(),
                   StoreErrorCodes.Unknown_Error);
             } else {
+              // Add a PUT IndexValue with the same info (especially same lifeVersion).
               IndexValue tgtValue =
-                  new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                      srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
+                  new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE,
+                      srcValue.getExpiresAtMs(), fileSpan.getStartOffset().getOffset(), srcValue.getOperationTimeInMs(),
+                      srcValue.getAccountId(), srcValue.getContainerId(), srcValue.getLifeVersion());
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
             }
             long lastModifiedTimeSecsToSet =
@@ -1161,7 +1163,7 @@ class BlobStoreCompactor {
           // eg: log segment under compaction [0_23, 130_16, 144_3]
           //     log segment after compaction [0_24, 130_24, 155_0, 166_0]
           // log segment 144_3's position doesn't exist in the compaction log, so we have one log segment compacted.
-          compactedLogCount.set((int)logSegmentPositionsUnderCompaction.stream()
+          compactedLogCount.set((int) logSegmentPositionsUnderCompaction.stream()
               .filter(p -> !logSegmentPositionsAfterCompaction.contains(p))
               .count());
         }
