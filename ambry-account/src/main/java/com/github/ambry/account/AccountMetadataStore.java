@@ -84,7 +84,7 @@ abstract class AccountMetadataStore {
   /**
    * fetchAccountMetadata would fetch the latest full set of {@link Account} metadata from the store. It returns null
    * when there is no {@link Account} created.
-   * @return {@link Account} metadata in a map.
+   * @return A collection of {@link Account} metadata.
    */
   Collection<Account> fetchAccountMetadata() {
     long startTimeMs = System.currentTimeMillis();
@@ -103,29 +103,31 @@ abstract class AccountMetadataStore {
     Map<String, Account> nameToAccountMap = new HashMap<>();
     for (Map.Entry<String, String> entry : newAccountMap.entrySet()) {
       String idKey = entry.getKey();
+      if (idKey == null) {
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        throw new IllegalStateException("Invalid account record when reading accountMap because idKey=null");
+      }
       String valueString = entry.getValue();
+      Account account;
       try {
-        Account account = objectMapper.readValue(valueString, Account.class);
-        if (idKey == null) {
-          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          throw new IllegalStateException("Invalid account record when reading accountMap because idKey=null");
-        }
-        if (account.getId() != Short.parseShort(idKey)) {
-          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          throw new IllegalStateException(
-              "Invalid account record when reading accountMap because idKey and accountId do not match. idKey=" + idKey
-                  + " accountId=" + account.getId());
-        }
-        if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
-          throw new IllegalStateException(
-              "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
-        }
-        idToAccountMap.put(account.getId(), account);
-        nameToAccountMap.put(account.getName(), account);
+        account = objectMapper.readValue(valueString, Account.class);
       } catch (JsonProcessingException e) {
         logger.error("Failed to deserialize {} to an Account object", valueString, e);
         throw new RuntimeException(e);
       }
+
+      if (account.getId() != Short.parseShort(idKey)) {
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        throw new IllegalStateException(
+            "Invalid account record when reading accountMap because idKey and accountId do not match. idKey=" + idKey
+                + " accountId=" + account.getId());
+      }
+      if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
+        throw new IllegalStateException(
+            "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
+      }
+      idToAccountMap.put(account.getId(), account);
+      nameToAccountMap.put(account.getName(), account);
     }
     if (newAccountMap != null) {
       backupFileManager.persistAccountMap(idToAccountMap.values(), stat.getVersion(), stat.getMtime() / 1000);

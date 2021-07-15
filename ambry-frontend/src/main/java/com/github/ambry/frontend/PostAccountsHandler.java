@@ -14,7 +14,6 @@
 
 package com.github.ambry.frontend;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
@@ -53,7 +52,6 @@ class PostAccountsHandler {
   private final AccountService accountService;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
-  private final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * Constructs a handler for handling requests updating account metadata.
@@ -149,7 +147,7 @@ class PostAccountsHandler {
           logger.debug("Got request for {} with payload", ACCOUNTS_CONTAINERS);
           Pair<Account, Collection<Container>> accountAndUpdatedContainers = updateContainers(channel);
           outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(
-              AccountCollectionSerde.serializeContainersInJson(objectMapper, accountAndUpdatedContainers.getSecond())));
+              AccountCollectionSerde.serializeContainersInJson(accountAndUpdatedContainers.getSecond())));
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID,
               accountAndUpdatedContainers.getFirst().getId());
         } else {
@@ -189,7 +187,7 @@ class PostAccountsHandler {
       Collection<Container> containersToUpdate;
       try {
         containersToUpdate =
-            AccountCollectionSerde.containersFromInputStreamInJson(objectMapper, channel.consumeContentAsInputStream(),
+            AccountCollectionSerde.containersFromInputStreamInJson(channel.consumeContentAsInputStream(),
                 accountId);
       } catch (IOException e) {
         throw new RestServiceException("Bad container update request body", e, RestServiceErrorCode.BadRequest);
@@ -211,8 +209,7 @@ class PostAccountsHandler {
     private void updateAccounts(RetainingAsyncWritableChannel channel) throws RestServiceException {
       Collection<Account> accountsToUpdate;
       try {
-        accountsToUpdate =
-            AccountCollectionSerde.accountsFromInputStreamInJson(objectMapper, channel.consumeContentAsInputStream());
+        accountsToUpdate = AccountCollectionSerde.accountsFromInputStreamInJson(channel.consumeContentAsInputStream());
       } catch (IOException e) {
         throw new RestServiceException("Bad account update request body", e, RestServiceErrorCode.BadRequest);
       }

@@ -34,6 +34,7 @@ import org.json.JSONObject;
  */
 public class AccountCollectionSerde {
   private static final String ACCOUNTS_KEY = Operations.ACCOUNTS;
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * Serialize a collection of accounts to a json object that can be used in requests/responses.
@@ -46,8 +47,12 @@ public class AccountCollectionSerde {
     return new JSONObject().put(ACCOUNTS_KEY, accountArray);
   }
 
-  public static byte[] serializeAccountsInJson(ObjectMapper objectMapper, Collection<Account> accounts)
-      throws IOException {
+  /**
+   * Serialize a collection of accounts to json bytes that can be used in requests/responses.
+   * @param accounts the {@link Account}s to serialize.
+   * @return the serialized bytes in json format.
+   */
+  public static byte[] serializeAccountsInJson(Collection<Account> accounts) throws IOException {
     Map<String, Collection<Account>> resultObj = new HashMap<>();
     resultObj.put(ACCOUNTS_KEY, accounts);
     return objectMapper.writeValueAsBytes(resultObj);
@@ -72,8 +77,12 @@ public class AccountCollectionSerde {
     }
   }
 
-  public static Collection<Account> accountsFromInputStreamInJson(ObjectMapper objectMapper, InputStream inputStream)
-      throws IOException {
+  /**
+   * Deserialize a collection of {@link Account} in json from given InputStream.
+   * @param inputStream the {@link InputStream} that contains serialized json bytes.
+   * @return a {@link Collection} of {@link Account}s.
+   */
+  public static Collection<Account> accountsFromInputStreamInJson(InputStream inputStream) throws IOException {
     Map<String, Collection<Account>> map =
         objectMapper.readValue(inputStream, new TypeReference<Map<String, Collection<Account>>>() {
         });
@@ -102,8 +111,12 @@ public class AccountCollectionSerde {
     return new JSONObject().put(Account.CONTAINERS_KEY, containerArray);
   }
 
-  public static byte[] serializeContainersInJson(ObjectMapper objectMapper, Collection<Container> containers)
-      throws IOException {
+  /**
+   * Serialize a collection of containers to json bytes that can be used in requests/responses.
+   * @param containers the {@link Container}s to serialize.
+   * @return the serialized bytes in json format.
+   */
+  public static byte[] serializeContainersInJson(Collection<Container> containers) throws IOException {
     Map<String, Collection<Container>> resultObj = new HashMap<>();
     resultObj.put(Account.CONTAINERS_KEY, containers);
     return objectMapper.writeValueAsBytes(resultObj);
@@ -129,8 +142,14 @@ public class AccountCollectionSerde {
     }
   }
 
-  public static Collection<Container> containersFromInputStreamInJson(ObjectMapper objectMapper,
-      InputStream inputStream, short accountId) throws IOException {
+  /**
+   * Deserialize a collection of {@link Container}s in json from given InputStream.
+   * @param inputStream the {@link InputStream} that contains serialized json bytes.
+   * @param accountId the account id for these containers.
+   * @return a {@link Collection} of {@link Container}s.
+   */
+  public static Collection<Container> containersFromInputStreamInJson(InputStream inputStream, short accountId)
+      throws IOException {
     Map<String, Collection<Container>> map =
         objectMapper.readValue(inputStream, new TypeReference<Map<String, Collection<Container>>>() {
         });

@@ -73,11 +73,15 @@ class BackupFileManager {
   static final Pattern newStateFilenamePattern = Pattern.compile("^(\\d{8}T\\d{6})\\." + NEW_STATE_SUFFIX + "$");
 
   private static final Logger logger = LoggerFactory.getLogger(BackupFileManager.class);
-  private final ObjectMapper objectMapper = new ObjectMapper();
+  private static final ObjectMapper objectMapper = new ObjectMapper();
   private final AccountServiceMetrics accountServiceMetrics;
   private final Path backupDirPath;
   private final int maxBackupFileCount;
   private final ConcurrentSkipListMap<Integer, BackupFileInfo> backupFileInfos;
+
+  static {
+    objectMapper.writer(new DefaultPrettyPrinter());
+  }
 
   /**
    * Constructor to create an instance of {@link BackupFileManager}.
@@ -88,7 +92,6 @@ class BackupFileManager {
    */
   public BackupFileManager(AccountServiceMetrics accountServiceMetrics, String backupDir, int maxBackupFileCount)
       throws IOException {
-    this.objectMapper.writer(new DefaultPrettyPrinter());
     this.accountServiceMetrics = accountServiceMetrics;
     backupDirPath = backupDir.isEmpty() ? null : Files.createDirectories(Paths.get(backupDir));
     this.maxBackupFileCount = maxBackupFileCount;
@@ -232,7 +235,7 @@ class BackupFileManager {
 
     long startTimeInMs = System.currentTimeMillis();
     try {
-      writeAccountsToFile(tempFilePath, objectMapper, accounts);
+      writeAccountsToFile(tempFilePath, accounts);
       Files.move(tempFilePath, filePath);
     } catch (IOException e) {
       logger.error("Failed to persist state to file: {}", fileName, e);
@@ -302,7 +305,7 @@ class BackupFileManager {
       long startTimeInMs = System.currentTimeMillis();
       byte[] bytes = Files.readAllBytes(filepath);
       accountServiceMetrics.backupReadTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
-      return deserializeAccounts(objectMapper, bytes);
+      return deserializeAccounts(bytes);
     } catch (IOException e) {
       accountServiceMetrics.backupErrorCount.inc();
       logger.error("Failed to read all bytes out from file {} {}", filepath, e.getMessage());
@@ -360,11 +363,10 @@ class BackupFileManager {
    * @param accounts The {@link Collection} of {@link Account}s
    * @throws IOException Any I/O error.
    */
-  static void writeAccountsToFile(Path filepath, ObjectMapper objectMapper, Collection<Account> accounts)
-      throws IOException {
+  static void writeAccountsToFile(Path filepath, Collection<Account> accounts) throws IOException {
     try (FileChannel channel = FileChannel.open(filepath, StandardOpenOption.CREATE,
         StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
-      ByteBuffer buffer = serializeAccounts(objectMapper, accounts);
+      ByteBuffer buffer = serializeAccounts(accounts);
       channel.write(buffer);
     } catch (IOException e) {
       // Failed to persist file
@@ -378,18 +380,17 @@ class BackupFileManager {
    * @param accounts The {@link Collection} of {@link Account}s.
    * @return {@link ByteBuffer} that contains the serialized bytes.
    */
-  static ByteBuffer serializeAccounts(ObjectMapper objectMapper, Collection<Account> accounts) throws IOException {
+  static ByteBuffer serializeAccounts(Collection<Account> accounts) throws IOException {
     return ByteBuffer.wrap(objectMapper.writeValueAsBytes(accounts));
   }
 
   /**
    * Deserialize the given byte array to an account collection.
    * It returns null at any exception. This function assume the bytes are in json format.
-   * @param objectMapper {@link ObjectMapper}.
    * @param bytes The byte array to deserialize.
    * @return The {@link Collection} of {@link Account}s.
    */
-  static Collection<Account> deserializeAccounts(ObjectMapper objectMapper, byte[] bytes) {
+  static Collection<Account> deserializeAccounts(byte[] bytes) {
     try {
       Collection<Account> accounts = objectMapper.readValue(bytes, new TypeReference<Collection<Account>>() {
       });

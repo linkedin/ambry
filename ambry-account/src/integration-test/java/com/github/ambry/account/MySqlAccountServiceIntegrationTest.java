@@ -14,7 +14,6 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
@@ -42,8 +41,6 @@ import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
@@ -59,7 +56,6 @@ import static org.mockito.Mockito.*;
  */
 public class MySqlAccountServiceIntegrationTest {
 
-  private static final Logger logger = LoggerFactory.getLogger(MySqlAccountServiceIntegrationTest.class);
   private static final String DESCRIPTION = "Indescribable";
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private final Properties mySqlConfigProps;
@@ -122,7 +118,7 @@ public class MySqlAccountServiceIntegrationTest {
     accounts.add(testAccount);
     String filename = BackupFileManager.getBackupFilename(1, SystemTime.getInstance().seconds());
     Path filePath = accountBackupDir.resolve(filename);
-    BackupFileManager.writeAccountsToFile(filePath, new ObjectMapper(), accounts);
+    BackupFileManager.writeAccountsToFile(filePath, accounts);
 
     mySqlAccountService = getAccountService();
 

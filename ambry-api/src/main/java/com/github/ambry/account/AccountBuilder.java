@@ -33,9 +33,9 @@ import static com.github.ambry.account.Account.*;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonPOJOBuilder(withPrefix = "")
 public class AccountBuilder {
-  private short id;
-  private String name;
-  private AccountStatus status;
+  private short id = UNINITIALIZED_ACCOUNT_ID;
+  private String name = UNINITIALIZED_ACCOUNT_NAME;
+  private AccountStatus status = AccountStatus.ACTIVE;
   private QuotaResourceType quotaResourceType = QUOTA_RESOURCE_TYPE_DEFAULT_VALUE;
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
@@ -223,6 +223,9 @@ public class AccountBuilder {
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
   public Account build() {
+    if (id == UNINITIALIZED_ACCOUNT_ID || name.equals(UNINITIALIZED_ACCOUNT_NAME)) {
+      throw new IllegalStateException("Account id or account name is not present");
+    }
     // Did we check the container parent account id here?
     for (Map.Entry<Short, Container> entry : idToContainerMetadataMap.entrySet()) {
       if (entry.getValue().getParentAccountId() == UNINITIALIZED_ACCOUNT_ID) {
