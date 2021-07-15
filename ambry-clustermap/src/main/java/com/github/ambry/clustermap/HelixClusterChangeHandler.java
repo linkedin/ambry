@@ -13,7 +13,11 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
@@ -53,5 +57,21 @@ interface HelixClusterChangeHandler
         .stream()
         .map(instanceConfig -> getDataNode(instanceConfig.getInstanceName()))
         .map(dataNode -> getReplicaId(dataNode, partition.toPathString())).filter(Objects::nonNull);
+  }
+
+  @Override
+  default void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState,
+      Set<ReplicaState> states, AmbryPartition partition) {
+    String resourceName = getPartitionToResourceMap().get(partition.toPathString());
+    RoutingTableSnapshot snapshot = getRoutingTableSnapshot();
+    for (ReplicaState state : states) {
+      List<AmbryReplica> list = replicasByState.computeIfAbsent(state, k -> new ArrayList<>());
+      snapshot.getInstancesForResource(resourceName, partition.toPathString(), state.name())
+          .stream()
+          .map(instanceConfig -> getDataNode(instanceConfig.getInstanceName()))
+          .map(dataNode -> getReplicaId(dataNode, partition.toPathString()))
+          .filter(Objects::nonNull)
+          .forEach(list::add);
+    }
   }
 }

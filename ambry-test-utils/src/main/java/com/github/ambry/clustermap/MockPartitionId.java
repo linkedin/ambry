@@ -117,6 +117,17 @@ public class MockPartitionId implements PartitionId {
   }
 
   @Override
+  public Map<ReplicaState, List<ReplicaId>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName) {
+    Map<ReplicaState, List<ReplicaId>> replicasByState = new HashMap<>();
+    for (Map.Entry<ReplicaId, ReplicaState> entry : replicaAndState.entrySet()) {
+      if (states.contains(entry.getValue())) {
+        replicasByState.computeIfAbsent(entry.getValue(), k -> new ArrayList<>()).add(entry.getKey());
+      }
+    }
+    return replicasByState;
+  }
+
+  @Override
   public PartitionState getPartitionState() {
     return partitionState;
   }

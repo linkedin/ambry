@@ -18,8 +18,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.json.JSONArray;
@@ -76,7 +78,7 @@ public class Partition implements PartitionId {
         : hardwareLayout.getClusterMapConfig().clusterMapDefaultPartitionClass;
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");
-    this.replicas = new ArrayList<ReplicaId>(jsonObject.getJSONArray("replicas").length());
+    this.replicas = new ArrayList<>(jsonObject.getJSONArray("replicas").length());
     for (int i = 0; i < jsonObject.getJSONArray("replicas").length(); ++i) {
       this.replicas.add(i, new Replica(hardwareLayout, this, jsonObject.getJSONArray("replicas").getJSONObject(i)));
     }
@@ -108,6 +110,22 @@ public class Partition implements PartitionId {
           .collect(Collectors.toList());
     }
     return Collections.unmodifiableList(result);
+  }
+
+  @Override
+  public Map<ReplicaState, List<ReplicaId>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName) {
+    Map<ReplicaState, List<ReplicaId>> replicaByState = new HashMap<>();
+    for (ReplicaState state : states) {
+      List<ReplicaId> replicaIds = new ArrayList<>();
+      // for static clustermap we assume all replicas are in StandBy state.
+      if (state == ReplicaState.STANDBY) {
+        replicaIds.addAll(replicas.stream()
+            .filter(k -> dcName == null || k.getDataNodeId().getDatacenterName().equals(dcName))
+            .collect(Collectors.toList()));
+      }
+      replicaByState.put(state, replicaIds);
+    }
+    return replicaByState;
   }
 
   @Override

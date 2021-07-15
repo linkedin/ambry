@@ -21,13 +21,11 @@ import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -149,14 +147,22 @@ class SimpleOperationTracker implements OperationTracker {
     cloudReplicaSuccessTarget = routerConfig.routerCloudSuccessTarget;
     cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
     List<ReplicaId> eligibleReplicas;
+    List<ReplicaId> offlineReplicas = new ArrayList<>();
     switch (routerOperation) {
       case GetBlobOperation:
       case GetBlobInfoOperation:
         diskReplicaSuccessTarget = routerConfig.routerGetSuccessTarget;
         diskReplicaParallelism = routerConfig.routerGetRequestParallelism;
         crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
-        eligibleReplicas = getEligibleReplicas(partitionId, null,
-            EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE));
+        Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(partitionId, null,
+            EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE,
+                ReplicaState.OFFLINE));
+        offlineReplicas = replicasByState.getOrDefault(ReplicaState.OFFLINE, new ArrayList<>());
+        eligibleReplicas = new ArrayList<>();
+        replicasByState.values().forEach(eligibleReplicas::addAll);
+        // Whether to add offline replicas to replica pool is controlled by "routerOperationTrackerIncludeDownReplicas"
+        // config. For now, we remove them from eligible replica list.
+        eligibleReplicas.removeAll(offlineReplicas);
         break;
       case PutOperation:
         eligibleReplicas =
@@ -275,14 +281,8 @@ class SimpleOperationTracker implements OperationTracker {
       // ambry servers are still up.
       if (routerOperation == RouterOperation.GetBlobOperation
           || routerOperation == RouterOperation.GetBlobInfoOperation) {
-        Set<ReplicaId> replicasInPool = new HashSet<>(replicas);
-        Set<ReplicaId> replicasIncludingOffline = new HashSet<>(getEligibleReplicas(partitionId, null,
-            EnumSet.of(ReplicaState.OFFLINE, ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
-                ReplicaState.INACTIVE)));
-        // This is to address race condition where some original OFFLINE replicas transit to BOOTSTRAP or STANDBY state
-        replicasIncludingOffline.removeAll(replicasInPool);
         List<ReplicaId> remoteOfflineReplicas = new ArrayList<>();
-        for (ReplicaId replica : replicasIncludingOffline) {
+        for (ReplicaId replica : offlineReplicas) {
           if (replica.getDataNodeId().getDatacenterName().equals(this.originatingDcName)) {
             numReplicasInOriginatingDc++;
           }
@@ -463,9 +463,25 @@ class SimpleOperationTracker implements OperationTracker {
    * @return a list of eligible replicas that are in specified states.
    */
   private List<ReplicaId> getEligibleReplicas(PartitionId partitionId, String dcName, EnumSet<ReplicaState> states) {
-    Set<ReplicaId> eligibleReplicas = new HashSet<>();
-    states.forEach(state -> eligibleReplicas.addAll(partitionId.getReplicaIdsByState(state, dcName)));
-    return new ArrayList<>(eligibleReplicas);
+    Map<ReplicaState, List<ReplicaId>> replicasByState =
+        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(states, dcName);
+    List<ReplicaId> eligibleReplicas = new ArrayList<>();
+    for (List<ReplicaId> replicas : replicasByState.values()) {
+      eligibleReplicas.addAll(replicas);
+    }
+    return eligibleReplicas;
+  }
+
+  /**
+   * Get replicas in required states from given partition.
+   * @param partitionId the {@link PartitionId} the replicas belong to.
+   * @param dcName the name of data center from which the replicas should come from. This can be {@code null}.
+   * @param states a set of {@link ReplicaState}(s) that replicas should match.
+   * @return a map whose key is {@link ReplicaState} and value is a list of {@link ReplicaId}(s) in that state.
+   */
+  private Map<ReplicaState, List<ReplicaId>> getReplicasByState(PartitionId partitionId, String dcName,
+      EnumSet<ReplicaState> states) {
+    return (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(states, dcName);
   }
 
   public boolean hasFailed() {

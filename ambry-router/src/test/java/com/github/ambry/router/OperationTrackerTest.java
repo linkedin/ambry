@@ -1173,18 +1173,33 @@ public class OperationTrackerTest {
   public void buildOperationTrackerWithStateTransitionTest() {
     assumeTrue(replicasStateEnabled);
     initialize();
-    // pick one replica and set it to OFFLINE initially
+    originatingDcName = localDcName;
+    // pick one replica from originating dc and set it to OFFLINE initially
     ReplicaId originatingReplica = mockPartition.replicaIds.stream()
         .filter(r -> r.getDataNodeId().getDatacenterName().equals(localDcName))
         .findAny()
         .get();
+    // pick another replica from remote dc and set it to OFFLINE initially
+    ReplicaId remoteReplica = mockPartition.replicaIds.stream()
+        .filter(r -> !r.getDataNodeId().getDatacenterName().equals(localDcName))
+        .findAny()
+        .get();
+    mockPartition.replicaAndState.put(remoteReplica, ReplicaState.OFFLINE);
     mockPartition.replicaAndState.put(originatingReplica, ReplicaState.OFFLINE);
-    // induce concurrent state transition between 1st and 2nd "getEligibleReplicas()"
+    // induce concurrent state transition between "getEligibleReplicas()" and "routerOperationTrackerIncludeDownReplicas"
     mockPartition.resetReplicaStateCount = 5;
     mockPartition.resetAllReplicasToStandbyState = true;
     SimpleOperationTracker ot =
         (SimpleOperationTracker) getOperationTracker(true, 2, 3, RouterOperation.GetBlobOperation, true);
     assertEquals("Mismatch in replica count in the pool", 12, ot.getReplicaPoolSize());
+    Iterator<ReplicaId> iterator = ot.getReplicaIterator();
+    List<ReplicaId> orderedReplicas = new ArrayList<>();
+    while(iterator.hasNext()){
+      orderedReplicas.add(iterator.next());
+    }
+    assertEquals("Mismatch in last replica", remoteReplica, orderedReplicas.get(orderedReplicas.size() - 1));
+    assertEquals("Mismatch in last but one replica", originatingReplica,
+        orderedReplicas.get(orderedReplicas.size() - 2));
     mockPartition.resetAllReplicasToStandbyState = false;
   }
 

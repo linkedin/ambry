@@ -708,6 +708,17 @@ public class HelixClusterManager implements ClusterMap {
       return replicas;
     }
 
+    @Override
+    public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, AmbryPartition partition,
+        Set<ReplicaState> states, String dcName) {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        String dc = dcInfo.dcName;
+        if (dcName == null || dcName.equals(dc)) {
+          dcInfo.clusterChangeHandler.getReplicaIdsByStates(replicasByState, states, partition);
+        }
+      }
+    }
+
     /**
      * Get the value counter representing the sealed state change for partitions.
      * @return the value of the counter representing the sealed state change for partitions.
