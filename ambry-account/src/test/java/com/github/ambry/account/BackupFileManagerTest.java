@@ -14,7 +14,6 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
@@ -44,7 +43,6 @@ import static org.junit.Assert.*;
  * Unit test for {@link BackupFileManager}
  */
 public class BackupFileManagerTest {
-  private static final ObjectMapper objectMapper = new ObjectMapper();
   private final AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
   private final Properties helixConfigProps = new Properties();
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
@@ -297,14 +295,14 @@ public class BackupFileManagerTest {
   public void testSerializationAndDeserialization() throws IOException {
     // Since the account metadata is stored in an map from string to string, so here we only test map<string, string>
     Collection<Account> state = new ArrayList<>();
-    ByteBuffer buffer = BackupFileManager.serializeAccounts(objectMapper, state);
-    Collection<Account> deserializedState = BackupFileManager.deserializeAccounts(objectMapper, buffer.array());
+    ByteBuffer buffer = BackupFileManager.serializeAccounts(state);
+    Collection<Account> deserializedState = BackupFileManager.deserializeAccounts(buffer.array());
     assertEquals(state, deserializedState);
 
     // Put a real account's json string
     state.add(refAccount);
-    buffer = BackupFileManager.serializeAccounts(objectMapper, state);
-    deserializedState = BackupFileManager.deserializeAccounts(objectMapper, buffer.array());
+    buffer = BackupFileManager.serializeAccounts(state);
+    deserializedState = BackupFileManager.deserializeAccounts(buffer.array());
     assertEquals(state, deserializedState);
   }
 
@@ -406,7 +404,7 @@ public class BackupFileManagerTest {
    */
   private static void saveAccountsToFile(Collection<Account> accounts, Path filePath) {
     try {
-      BackupFileManager.writeAccountsToFile(filePath, objectMapper, accounts);
+      BackupFileManager.writeAccountsToFile(filePath, accounts);
     } catch (Exception e) {
       fail("Fail to write state to file: " + filePath.toString());
     }

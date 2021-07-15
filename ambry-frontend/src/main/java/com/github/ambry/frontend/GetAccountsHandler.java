@@ -14,7 +14,6 @@
 
 package com.github.ambry.frontend;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
@@ -42,7 +41,6 @@ import static com.github.ambry.frontend.Operations.*;
 
 class GetAccountsHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(GetAccountsHandler.class);
-  private final ObjectMapper objectMapper = new ObjectMapper();
 
   private final SecurityService securityService;
   private final AccountService accountService;
@@ -126,11 +124,10 @@ class GetAccountsHandler {
         if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
           LOGGER.debug("Received request for getting single container with arguments: {}", restRequest.getArgs());
           Container container = getContainer();
-          serialized =
-              AccountCollectionSerde.serializeContainersInJson(objectMapper, Collections.singletonList(container));
+          serialized = AccountCollectionSerde.serializeContainersInJson(Collections.singletonList(container));
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID, container.getParentAccountId());
         } else {
-          serialized = AccountCollectionSerde.serializeAccountsInJson(objectMapper, getAccounts());
+          serialized = AccountCollectionSerde.serializeAccountsInJson(getAccounts());
         }
         ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());

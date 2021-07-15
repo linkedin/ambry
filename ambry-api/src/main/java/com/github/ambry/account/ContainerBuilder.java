@@ -28,12 +28,12 @@ import static com.github.ambry.account.Container.*;
  * This class is not thread safe.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-@JsonPOJOBuilder(withPrefix="set")
+@JsonPOJOBuilder(withPrefix = "set")
 public class ContainerBuilder {
   // necessary
-  private short id;
-  private String name;
-  private ContainerStatus status;
+  private short id = UNINITIALIZED_CONTAINER_ID;
+  private String name = UNINITIALIZED_CONTAINER_NAME;
+  private ContainerStatus status = ContainerStatus.ACTIVE;
   private short parentAccountId = Account.UNINITIALIZED_ACCOUNT_ID;
   private String description = "";
 
@@ -306,6 +306,9 @@ public class ContainerBuilder {
    * @throws IllegalStateException If any required fields is not set.
    */
   public Container build() {
+    if (id == UNINITIALIZED_CONTAINER_ID || name.equals(UNINITIALIZED_CONTAINER_NAME)) {
+      throw new IllegalStateException("Container id or container name is not present");
+    }
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode, parentAccountId,

@@ -14,7 +14,6 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.commons.Notifier;
@@ -91,7 +90,7 @@ public class MySqlAccountServiceTest {
     accounts.add(testAccount);
     String filename = BackupFileManager.getBackupFilename(1, SystemTime.getInstance().seconds());
     Path filePath = accountBackupDir.resolve(filename);
-    BackupFileManager.writeAccountsToFile(filePath, new ObjectMapper(), accounts);
+    BackupFileManager.writeAccountsToFile(filePath, accounts);
 
     mySqlAccountService = getAccountService();
 

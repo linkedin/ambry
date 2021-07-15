@@ -38,12 +38,12 @@ import org.slf4j.LoggerFactory;
  * </p>
  */
 class AccountInfoMap {
-  private final static Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
+  private static final ObjectMapper objectMapper = new ObjectMapper();
   private final Map<String, Account> nameToAccountMap;
   private final Map<Short, Account> idToAccountMap;
   // used to track last modified time of the accounts and containers in this cache
   private long lastModifiedTime = 0;
-  private final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * Constructor for an empty {@code AccountInfoMap}.
@@ -70,29 +70,31 @@ class AccountInfoMap {
     idToAccountMap = new HashMap<>();
     for (Map.Entry<String, String> entry : accountMap.entrySet()) {
       String idKey = entry.getKey();
+      if (idKey == null) {
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        throw new IllegalStateException("Invalid account record when reading accountMap because idKey=null");
+      }
       String valueString = entry.getValue();
+      Account account;
       try {
-        Account account = objectMapper.readValue(valueString, Account.class);
-        if (idKey == null) {
-          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          throw new IllegalStateException("Invalid account record when reading accountMap because idKey=null");
-        }
-        if (account.getId() != Short.parseShort(idKey)) {
-          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
-          throw new IllegalStateException(
-              "Invalid account record when reading accountMap because idKey and accountId do not match. idKey=" + idKey
-                  + " accountId=" + account.getId());
-        }
-        if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
-          throw new IllegalStateException(
-              "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
-        }
-        idToAccountMap.put(account.getId(), account);
-        nameToAccountMap.put(account.getName(), account);
+        account = objectMapper.readValue(valueString, Account.class);
       } catch (JsonProcessingException e) {
         logger.error("Failed to deserialize {} to an Account object", valueString, e);
         throw new RuntimeException(e);
       }
+
+      if (account.getId() != Short.parseShort(idKey)) {
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        throw new IllegalStateException(
+            "Invalid account record when reading accountMap because idKey and accountId do not match. idKey=" + idKey
+                + " accountId=" + account.getId());
+      }
+      if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
+        throw new IllegalStateException(
+            "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
+      }
+      idToAccountMap.put(account.getId(), account);
+      nameToAccountMap.put(account.getName(), account);
     }
   }
 

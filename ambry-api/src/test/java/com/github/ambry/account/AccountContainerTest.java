@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
 import com.github.ambry.quota.QuotaResourceType;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,6 +55,7 @@ public class AccountContainerTest {
   private static final Random random = new Random();
   private static final int CONTAINER_COUNT = 10;
   private static final short LATEST_CONTAINER_JSON_VERSION = Container.JSON_VERSION_2;
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   // Reference Account fields
   private final short refAccountId;
@@ -824,7 +826,6 @@ public class AccountContainerTest {
     try (Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
       refAccountJson.write(writer);
     }
-    ObjectMapper objectMapper = new ObjectMapper();
     Account deserialized = objectMapper.readValue(outputStream.toByteArray(), Account.class);
     Account fromJson = Account.fromJson(refAccountJson);
     assertTrue(deserialized.equals(fromJson));
@@ -834,6 +835,62 @@ public class AccountContainerTest {
     JSONObject jsonObject = new JSONObject(serialized);
     fromJson = Account.fromJson(jsonObject);
     assertTrue(deserialized.equals(fromJson));
+  }
+
+  @Test
+  public void testAccountAndContainerSerDeWithoutIdAndName() throws IOException {
+    assumeTrue(Container.getCurrentJsonVersion() == JSON_VERSION_2);
+    // remove account id
+    JSONObject newRefAccountJson = new JSONObject(refAccountJson, JSONObject.getNames(refAccountJson));
+    newRefAccountJson.remove(ACCOUNT_ID_KEY);
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    try (Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
+      newRefAccountJson.write(writer);
+    }
+    try {
+      objectMapper.readValue(outputStream.toByteArray(), Account.class);
+      fail("Missing account id should fail");
+    } catch (ValueInstantiationException e) {
+      assertTrue(e.getCause() instanceof IllegalStateException);
+    }
+
+    newRefAccountJson = new JSONObject(refAccountJson, JSONObject.getNames(refAccountJson));
+    newRefAccountJson.remove(ACCOUNT_NAME_KEY);
+    outputStream = new ByteArrayOutputStream();
+    try (Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
+      newRefAccountJson.write(writer);
+    }
+    try {
+      objectMapper.readValue(outputStream.toByteArray(), Account.class);
+      fail("Missing account name should fail");
+    } catch (ValueInstantiationException e) {
+      assertTrue(e.getCause() instanceof IllegalStateException);
+    }
+
+    newRefAccountJson = new JSONObject(refAccountJson, JSONObject.getNames(refAccountJson));
+    newRefAccountJson.getJSONArray(CONTAINERS_KEY).getJSONObject(0).remove(CONTAINER_ID_KEY);
+    outputStream = new ByteArrayOutputStream();
+    try (Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
+      newRefAccountJson.write(writer);
+    }
+    try {
+      objectMapper.readValue(outputStream.toByteArray(), Account.class);
+      fail("Missing container id should fail");
+    } catch (ValueInstantiationException e) {
+      assertTrue(e.getCause() instanceof IllegalStateException);
+    }
+    newRefAccountJson = new JSONObject(refAccountJson, JSONObject.getNames(refAccountJson));
+    newRefAccountJson.getJSONArray(CONTAINERS_KEY).getJSONObject(0).remove(CONTAINER_NAME_KEY);
+    outputStream = new ByteArrayOutputStream();
+    try (Writer writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8)) {
+      newRefAccountJson.write(writer);
+    }
+    try {
+      objectMapper.readValue(outputStream.toByteArray(), Account.class);
+      fail("Missing container name should fail");
+    } catch (ValueInstantiationException e) {
+      assertTrue(e.getCause() instanceof IllegalStateException);
+    }
   }
 
   /**
