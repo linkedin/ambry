@@ -124,7 +124,7 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
   }
 
   /**
-   * A helper class to represent a number of a map of string to number. This is used in deserializing json string from
+   * A helper class to represent a number or a map of string to number. This is used in deserializing json string from
    * configuration for account/container quota.
    */
   @JsonDeserialize(using = MapOrNumberDeserializer.class)
