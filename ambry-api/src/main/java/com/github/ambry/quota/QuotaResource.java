@@ -48,12 +48,31 @@ public class QuotaResource {
   }
 
   /**
+   * Create {@link QuotaResource} from account id and container id.
+   * @param accountId The account id.
+   * @param containerId The container id.
+   * @return QuotaResource object.
+   */
+  public static QuotaResource fromContainerId(short accountId, short containerId) {
+    return new QuotaResource(String.format("%d_%d", accountId, containerId), QuotaResourceType.CONTAINER);
+  }
+
+  /**
    * Create {@link QuotaResource} from {@link Account}.
    * @param account {@link Account} object.
    * @return QuotaResource object.
    */
   public static QuotaResource fromAccount(Account account) {
     return new QuotaResource(Integer.toString(account.getId()), QuotaResourceType.ACCOUNT);
+  }
+
+  /**
+   * Create {@link QuotaResource} from account id.
+   * @param accountId The account id.
+   * @return QuotaResource object.
+   */
+  public static QuotaResource fromAccountId(short accountId) {
+    return new QuotaResource(Integer.toString(accountId), QuotaResourceType.ACCOUNT);
   }
 
   /**

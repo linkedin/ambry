@@ -279,10 +279,10 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   }
 
   /**
-   * Subtract values of {@code base} from values of {@code storageUsage}.
-   * If values exist in {@code storageUsage} but not in {@code base}, then nothing happens.
-   * If values exist in {@code base} but not in {@code storageUsage}, then nothing happens either.
-   * If values in {@code storageUsage} are less than values in {@code base}, then the result is 0.
+   * Subtract values of {@code base} from values of {@code containerStorageUsage}.
+   * If values exist in {@code containerStorageUsage} but not in {@code base}, then nothing happens.
+   * If values exist in {@code base} but not in {@code containerStorageUsage}, then nothing happens either.
+   * If values in {@code containerStorageUsage} are less than values in {@code base}, then the result is 0.
    * @param storageUsage
    * @param base
    */
