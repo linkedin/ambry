@@ -598,8 +598,8 @@ class IndexSegment implements Iterable<IndexEntry> {
       long operationTimeInMs = entry.getValue().getOperationTimeInMs();
       if (operationTimeInMs == Utils.Infinite_Time) {
         lastModifiedTimeSec.set(time.seconds());
-      } else if ((operationTimeInMs / Time.MsPerSec) > lastModifiedTimeSec.get()) {
-        lastModifiedTimeSec.set(operationTimeInMs / Time.MsPerSec);
+      } else if (TimeUnit.MILLISECONDS.toSeconds(operationTimeInMs) > lastModifiedTimeSec.get()) {
+        lastModifiedTimeSec.set(TimeUnit.MILLISECONDS.toSeconds(operationTimeInMs));
       }
       if (valueSize == VALUE_SIZE_INVALID_VALUE) {
         valueSize = entry.getValue().getBytes().capacity();

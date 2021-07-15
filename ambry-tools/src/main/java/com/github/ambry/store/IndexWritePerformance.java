@@ -36,6 +36,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -164,7 +165,7 @@ public class IndexWritePerformance {
             System.out.println(
                 "Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTakenInNs.get()
                     + " Nano Seconds  Average time taken per write "
-                    + ((double) totalWrites.get() / totalTimeTakenInNs.get()) / SystemTime.NsPerSec + " Seconds");
+                    + ((double) totalWrites.get() / totalTimeTakenInNs.get()) / TimeUnit.SECONDS.toNanos(1) + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }

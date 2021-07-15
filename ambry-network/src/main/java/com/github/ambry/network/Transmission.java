@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -114,8 +115,8 @@ public abstract class Transmission {
     sendCompleteTime = time.milliseconds();
     long sendTimeMs = sendCompleteTime - networkSend.getSendStartTimeInMs();
     metrics.transmissionSendAllTime.update(sendTimeMs);
-    double sendBytesRate = networkSend.getPayload().sizeInBytes() / ((double) sendTimeMs / SystemTime.MsPerSec);
-    metrics.transmissionSendBytesRate.mark((long) sendBytesRate);
+    long sendBytesRate = networkSend.getPayload().sizeInBytes() / TimeUnit.MILLISECONDS.toSeconds(sendTimeMs);
+    metrics.transmissionSendBytesRate.mark(sendBytesRate);
   }
 
   /**
@@ -124,9 +125,9 @@ public abstract class Transmission {
   public void onReceiveComplete() {
     long receiveTimeMs = time.milliseconds() - networkReceive.getReceiveStartTimeInMs();
     metrics.transmissionReceiveAllTime.update(receiveTimeMs);
-    double receiveBytesRate =
-        networkReceive.getReceivedBytes().sizeRead() / ((double) receiveTimeMs / SystemTime.MsPerSec);
-    metrics.transmissionReceiveBytesRate.mark((long) receiveBytesRate);
+    long receiveBytesRate =
+        networkReceive.getReceivedBytes().sizeRead() / TimeUnit.MILLISECONDS.toSeconds(receiveTimeMs);
+    metrics.transmissionReceiveBytesRate.mark(receiveBytesRate);
   }
 
   /**

@@ -82,7 +82,7 @@ class NonBlockingRouter implements Router {
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
   private final AtomicInteger currentBackgroundOperationsCount = new AtomicInteger(0);
-  static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
+  static final long SHUTDOWN_WAIT_MS = TimeUnit.SECONDS.toMillis(10);
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
 
   /**
