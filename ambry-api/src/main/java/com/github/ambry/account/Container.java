@@ -139,11 +139,6 @@ public class Container {
   public static final String UNKNOWN_CONTAINER_NAME = "ambry-unknown-container";
 
   /**
-   * The name to use when deserializing from json string but no container name is present.
-   */
-  public static final String UNINITIALIZED_CONTAINER_NAME = "__uninitialized_container_name__";
-
-  /**
    * The name for the containers to be associated with the blobs that are put without specifying a target container,
    * but are specified public. {@link #DEFAULT_PUBLIC_CONTAINER} is one of the containers that use it.
    */
