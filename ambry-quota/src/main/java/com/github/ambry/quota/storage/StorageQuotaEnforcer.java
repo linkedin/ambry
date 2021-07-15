@@ -74,7 +74,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   public StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, QuotaSource quotaSource,
       AccountStatsStore accountStatsStore) throws Exception {
     Objects.requireNonNull(accountStatsStore, "AccountStatsStore is null");
-    if (quotaSource instanceof AccountServiceSupplier) {
+    if (!(quotaSource instanceof AccountServiceSupplier)) {
       throw new IllegalArgumentException("QuotaSource has to be able to return AccountService");
     }
     this.accountService = ((AccountServiceSupplier) quotaSource).getAccountService();
