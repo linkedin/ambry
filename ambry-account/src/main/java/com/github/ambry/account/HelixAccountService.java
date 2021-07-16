@@ -19,7 +19,6 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.router.Router;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -158,12 +157,12 @@ public class HelixAccountService extends AbstractAccountService {
    * @param isCalledFromListener True is this function is invoked in the {@link TopicListener}.
    */
   private synchronized void fetchAndUpdateCache(boolean isCalledFromListener) {
-    Map<String, String> accountMap = accountMetadataStore.fetchAccountMetadata();
-    if (accountMap == null) {
-      logger.debug("No account map returned");
+    Collection<Account> accounts = accountMetadataStore.fetchAccountMetadata();
+    if (accounts == null) {
+      logger.debug("No account collection returned");
     } else {
       logger.trace("Start parsing remote account data");
-      AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
+      AccountInfoMap newAccountInfoMap = new AccountInfoMap(accounts);
       AccountInfoMap oldAccountInfoMap = accountInfoMapRef.getAndSet(newAccountInfoMap);
 
       //Notify modified accounts to consumers
@@ -201,13 +200,13 @@ public class HelixAccountService extends AbstractAccountService {
 
     // accountInfoMapRef's reference is empty doesn't mean that fetchAndUpdateCache failed, it would just be that there
     // is no account metadata for the time being. Theoretically local storage shouldn't have any backup files. So
-    // backup.getLatestAccountMap should return null. And in case we have a very old backup file just mentioned above, a threshold
+    // backup.getLatestAccounts should return null. And in case we have a very old backup file just mentioned above, a threshold
     // would solve the problem.
     if (accountInfoMapRef.get().isEmpty() && config.enableServeFromBackup && !backupFileManager.isEmpty()) {
       long aMonthAgo = System.currentTimeMillis() / 1000 - TimeUnit.DAYS.toSeconds(30);
-      Map<String, String> accountMap = backupFileManager.getLatestAccountMap(aMonthAgo);
-      if (accountMap != null) {
-        AccountInfoMap newAccountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
+      Collection<Account> accounts = backupFileManager.getLatestAccounts(aMonthAgo);
+      if (accounts != null) {
+        AccountInfoMap newAccountInfoMap = new AccountInfoMap(accounts);
         accountInfoMapRef.set(newAccountInfoMap);
 
         // Notify accounts to consumers

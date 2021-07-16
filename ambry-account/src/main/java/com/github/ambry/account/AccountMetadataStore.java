@@ -13,7 +13,10 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import org.apache.helix.AccessOption;
 import org.apache.helix.store.HelixPropertyStore;
@@ -29,6 +32,7 @@ import org.slf4j.LoggerFactory;
  */
 abstract class AccountMetadataStore {
   private static final Logger logger = LoggerFactory.getLogger(AccountMetadataStore.class);
+  protected final ObjectMapper objectMapper = new ObjectMapper();
 
   protected final AccountServiceMetrics accountServiceMetrics;
   protected final BackupFileManager backupFileManager;
@@ -80,9 +84,9 @@ abstract class AccountMetadataStore {
   /**
    * fetchAccountMetadata would fetch the latest full set of {@link Account} metadata from the store. It returns null
    * when there is no {@link Account} created.
-   * @return {@link Account} metadata in a map.
+   * @return A collection of {@link Account} metadata.
    */
-  Map<String, String> fetchAccountMetadata() {
+  Collection<Account> fetchAccountMetadata() {
     long startTimeMs = System.currentTimeMillis();
     logger.trace("Start reading ZNRecord from path={}", znRecordPath);
     Stat stat = new Stat();
@@ -95,10 +99,40 @@ abstract class AccountMetadataStore {
       return null;
     }
     Map<String, String> newAccountMap = fetchAccountMetadataFromZNRecord(znRecord);
-    if (newAccountMap != null) {
-      backupFileManager.persistAccountMap(newAccountMap, stat.getVersion(), stat.getMtime() / 1000);
+    Map<Short, Account> idToAccountMap = new HashMap<>();
+    Map<String, Account> nameToAccountMap = new HashMap<>();
+    for (Map.Entry<String, String> entry : newAccountMap.entrySet()) {
+      String idKey = entry.getKey();
+      if (idKey == null) {
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        throw new IllegalStateException("Invalid account record when reading accountMap because idKey=null");
+      }
+      String valueString = entry.getValue();
+      Account account;
+      try {
+        account = objectMapper.readValue(valueString, Account.class);
+      } catch (JsonProcessingException e) {
+        logger.error("Failed to deserialize {} to an Account object", valueString, e);
+        throw new RuntimeException(e);
+      }
+
+      if (account.getId() != Short.parseShort(idKey)) {
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        throw new IllegalStateException(
+            "Invalid account record when reading accountMap because idKey and accountId do not match. idKey=" + idKey
+                + " accountId=" + account.getId());
+      }
+      if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
+        throw new IllegalStateException(
+            "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
+      }
+      idToAccountMap.put(account.getId(), account);
+      nameToAccountMap.put(account.getName(), account);
     }
-    return newAccountMap;
+    if (newAccountMap != null) {
+      backupFileManager.persistAccountMap(idToAccountMap.values(), stat.getVersion(), stat.getMtime() / 1000);
+    }
+    return idToAccountMap.values();
   }
 
   /**

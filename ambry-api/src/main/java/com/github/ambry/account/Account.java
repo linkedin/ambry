@@ -14,12 +14,17 @@
 package com.github.ambry.account;
 
 import com.github.ambry.quota.QuotaResourceType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -75,6 +80,7 @@ import org.json.JSONObject;
  *   account object with updated field(s).
  * </p>
  */
+@JsonDeserialize(builder = AccountBuilder.class)
 public class Account {
   /**
    * The id of unknown account.
@@ -88,6 +94,7 @@ public class Account {
    * The id for to save account metadata in ambry.
    */
   public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
+  public static final short UNINITIALIZED_ACCOUNT_ID = -3;
   public static final QuotaResourceType QUOTA_RESOURCE_TYPE_DEFAULT_VALUE = QuotaResourceType.CONTAINER;
   // static variables
   static final String JSON_VERSION_KEY = "version";
@@ -104,17 +111,26 @@ public class Account {
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
   static final boolean ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE = false;
+
   // account member variables
+  @JsonProperty(ACCOUNT_ID_KEY)
   private final short id;
+  @JsonProperty(ACCOUNT_NAME_KEY)
   private final String name;
   private final int snapshotVersion;
   private final long lastModifiedTime;
-  // internal data structure
-  private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
-  private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
   private final AccountStatus status;
   private final boolean aclInheritedByContainer;
   private final QuotaResourceType quotaResourceType;
+  @JsonProperty(CONTAINERS_KEY)
+  private final Set<Container> containers = new HashSet<>();
+  @JsonProperty(JSON_VERSION_KEY)
+  private final int version = CURRENT_JSON_VERSION;
+  // internal data structure
+  @JsonIgnore
+  private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
+  @JsonIgnore
+  private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
 
   /**
    * Constructing an {@link Account} object from account metadata.
@@ -300,6 +316,7 @@ public class Account {
    * Gets all the containers of this account in a Collection.
    * @return All the containers of this account.
    */
+  @JsonIgnore
   public Collection<Container> getAllContainers() {
     return Collections.unmodifiableCollection(containerIdToContainerMap.values());
   }
@@ -307,6 +324,7 @@ public class Account {
   /**
    * @return the number of containers in this account.
    */
+  @JsonIgnore
   public int getContainerCount() {
     return containerIdToContainerMap.size();
   }
@@ -369,6 +387,7 @@ public class Account {
       checkDuplicateContainerNameOrId(container);
       containerIdToContainerMap.put(container.getId(), container);
       containerNameToContainerMap.put(container.getName(), container);
+      this.containers.add(container);
     }
   }
 

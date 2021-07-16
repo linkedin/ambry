@@ -31,11 +31,10 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.Pair;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.GregorianCalendar;
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -143,16 +142,16 @@ class PostAccountsHandler {
      */
     private Callback<Long> fetchAccountUpdateBodyCallback(RetainingAsyncWritableChannel channel) {
       return buildCallback(frontendMetrics.postAccountsReadRequestMetrics, bytesRead -> {
-        JSONObject jsonPayload = readJsonFromChannel(channel);
         ReadableStreamChannel outputChannel;
         if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
-          logger.debug("Got request for {} with payload {}", ACCOUNTS_CONTAINERS, jsonPayload);
-          Pair<Account, JSONObject> accountAndUpdatedContainers = updateContainers(jsonPayload);
-          outputChannel = serializeJsonToChannel(accountAndUpdatedContainers.getSecond());
+          logger.debug("Got request for {} with payload", ACCOUNTS_CONTAINERS);
+          Pair<Account, Collection<Container>> accountAndUpdatedContainers = updateContainers(channel);
+          outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(
+              AccountCollectionSerde.serializeContainersInJson(accountAndUpdatedContainers.getSecond())));
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID,
               accountAndUpdatedContainers.getFirst().getId());
         } else {
-          updateAccounts(jsonPayload);
+          updateAccounts(channel);
           outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
         }
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
@@ -164,11 +163,12 @@ class PostAccountsHandler {
 
     /**
      * Process the request json and call {@link AccountService#updateContainers} to add or update containers.
-     * @param containersPayload the request json containing the containers to update.
+     * @param channel The {@link RetainingAsyncWritableChannel} to read the bytes out
      * @return a pair of account and its updated containers.
      * @throws RestServiceException
      */
-    private Pair<Account, JSONObject> updateContainers(JSONObject containersPayload) throws RestServiceException {
+    private Pair<Account, Collection<Container>> updateContainers(RetainingAsyncWritableChannel channel)
+        throws RestServiceException {
       Short accountId = RestUtils.getNumericalHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_ID, false,
           Short::parseShort);
       String accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, false);
@@ -186,13 +186,15 @@ class PostAccountsHandler {
 
       Collection<Container> containersToUpdate;
       try {
-        containersToUpdate = AccountCollectionSerde.containersFromJson(containersPayload, accountId);
-      } catch (JSONException e) {
+        containersToUpdate =
+            AccountCollectionSerde.containersFromInputStreamInJson(channel.consumeContentAsInputStream(),
+                accountId);
+      } catch (IOException e) {
         throw new RestServiceException("Bad container update request body", e, RestServiceErrorCode.BadRequest);
       }
       try {
         Collection<Container> updatedContainers = accountService.updateContainers(accountName, containersToUpdate);
-        return new Pair<>(account, AccountCollectionSerde.containersToJson(updatedContainers));
+        return new Pair<>(account, updatedContainers);
       } catch (AccountServiceException ex) {
         throw new RestServiceException("Container update failed for accountId " + accountId,
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
@@ -201,14 +203,14 @@ class PostAccountsHandler {
 
     /**
      * Process the request json and call {@link AccountService#updateAccounts} to update accounts.
-     * @param accountUpdateJson the request json containing the accounts to update.
+     * @param channel The {@link RetainingAsyncWritableChannel} to read the bytes out
      * @throws RestServiceException
      */
-    private void updateAccounts(JSONObject accountUpdateJson) throws RestServiceException {
+    private void updateAccounts(RetainingAsyncWritableChannel channel) throws RestServiceException {
       Collection<Account> accountsToUpdate;
       try {
-        accountsToUpdate = AccountCollectionSerde.accountsFromJson(accountUpdateJson);
-      } catch (JSONException e) {
+        accountsToUpdate = AccountCollectionSerde.accountsFromInputStreamInJson(channel.consumeContentAsInputStream());
+      } catch (IOException e) {
         throw new RestServiceException("Bad account update request body", e, RestServiceErrorCode.BadRequest);
       }
       try {

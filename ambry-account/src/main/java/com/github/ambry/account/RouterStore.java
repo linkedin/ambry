@@ -341,7 +341,9 @@ class RouterStore extends AccountMetadataStore {
 
       for (Account account : this.accounts) {
         try {
-          accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
+          String accountJsonStr = objectMapper.writeValueAsString(
+              new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() + 1).build());
+          accountMap.put(String.valueOf(account.getId()), accountJsonStr);
         } catch (Exception e) {
           logAndThrowIllegalStateException(
               "Updating accounts failed because unexpected exception occurred when updating accountId="

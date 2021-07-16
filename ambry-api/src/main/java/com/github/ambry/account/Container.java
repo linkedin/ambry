@@ -13,6 +13,9 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Objects;
@@ -54,6 +57,7 @@ import org.json.JSONObject;
  *  {@link AccountBuilder}.
  *  </p>
  */
+@JsonDeserialize(builder = ContainerBuilder.class)
 public class Container {
 
   // constants
@@ -111,6 +115,11 @@ public class Container {
    * The id for HelixAccountService to store {@link Account} metadata.
    */
   public static final short HELIX_ACCOUNT_SERVICE_CONTAINER_ID = -2;
+
+  /**
+   * The id to use when deserializing from json string but no container id is present.
+   */
+  public static final short UNINITIALIZED_CONTAINER_ID = -3;
 
   /**
    * The id for the containers to be associated with the blobs that are put without specifying a target container,
@@ -338,12 +347,15 @@ public class Container {
           LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE);
 
   // container field variables
+  @JsonProperty(CONTAINER_ID_KEY)
   private final short id;
+  @JsonProperty(CONTAINER_NAME_KEY)
   private final String name;
   private final ContainerStatus status;
   private final long deleteTriggerTime;
   private final String description;
   private final boolean encrypted;
+  @JsonProperty(PREVIOUSLY_ENCRYPTED_KEY)
   private final boolean previouslyEncrypted;
   private final boolean cacheable;
   private final boolean backupEnabled;
@@ -351,12 +363,15 @@ public class Container {
   private final String replicationPolicy;
   private final boolean ttlRequired;
   private final boolean securePathRequired;
+  @JsonProperty(OVERRIDE_ACCOUNT_ACL_KEY)
   private final boolean overrideAccountAcl;
   private final NamedBlobMode namedBlobMode;
   private final Set<String> contentTypeWhitelistForFilenamesOnDownload;
   private final short parentAccountId;
   private final long lastModifiedTime;
   private final int snapshotVersion;
+  @JsonProperty(JSON_VERSION_KEY)
+  private final int version = JSON_VERSION_2; // the default version is 2
 
   /**
    * Constructing an {@link Container} object from container metadata.
@@ -721,6 +736,7 @@ public class Container {
    * Gets the if of the {@link Account} that owns this container.
    * @return The id of the parent {@link Account} of this container.
    */
+  @JsonIgnore
   public short getParentAccountId() {
     return parentAccountId;
   }

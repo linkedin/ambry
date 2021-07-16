@@ -13,12 +13,14 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +38,8 @@ import org.slf4j.LoggerFactory;
  * </p>
  */
 class AccountInfoMap {
-  private final static Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(AccountInfoMap.class);
+  private static final ObjectMapper objectMapper = new ObjectMapper();
   private final Map<String, Account> nameToAccountMap;
   private final Map<Short, Account> idToAccountMap;
   // used to track last modified time of the accounts and containers in this cache
@@ -61,27 +64,44 @@ class AccountInfoMap {
    *   {@code AccountInfoMap} will fail.
    * </p>
    * @param accountMap A map of {@link Account}s in the form of (accountIdString, accountJSONString).
-   * @throws JSONException If parsing account data in json fails.
    */
-  AccountInfoMap(AccountServiceMetrics accountServiceMetrics, Map<String, String> accountMap) throws JSONException {
+  AccountInfoMap(AccountServiceMetrics accountServiceMetrics, Map<String, String> accountMap) {
     nameToAccountMap = new HashMap<>();
     idToAccountMap = new HashMap<>();
     for (Map.Entry<String, String> entry : accountMap.entrySet()) {
       String idKey = entry.getKey();
-      String valueString = entry.getValue();
-      Account account;
-      JSONObject accountJson = new JSONObject(valueString);
       if (idKey == null) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException("Invalid account record when reading accountMap because idKey=null");
       }
-      account = Account.fromJson(accountJson);
+      String valueString = entry.getValue();
+      Account account;
+      try {
+        account = objectMapper.readValue(valueString, Account.class);
+      } catch (JsonProcessingException e) {
+        logger.error("Failed to deserialize {} to an Account object", valueString, e);
+        throw new RuntimeException(e);
+      }
+
       if (account.getId() != Short.parseShort(idKey)) {
         accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
         throw new IllegalStateException(
             "Invalid account record when reading accountMap because idKey and accountId do not match. idKey=" + idKey
                 + " accountId=" + account.getId());
       }
+      if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
+        throw new IllegalStateException(
+            "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
+      }
+      idToAccountMap.put(account.getId(), account);
+      nameToAccountMap.put(account.getName(), account);
+    }
+  }
+
+  AccountInfoMap(Collection<Account> accounts) {
+    nameToAccountMap = new HashMap<>();
+    idToAccountMap = new HashMap<>();
+    for (Account account : accounts) {
       if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
         throw new IllegalStateException(
             "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
@@ -101,25 +121,27 @@ class AccountInfoMap {
    * </p>
    *
    * @param accountsJsonString JSON data containing an array of all accounts.
-   * @throws JSONException If parsing account data in json fails.
    */
-  protected AccountInfoMap(String accountsJsonString) throws JSONException {
+  protected AccountInfoMap(String accountsJsonString) {
     nameToAccountMap = new HashMap<>();
     idToAccountMap = new HashMap<>();
 
-    JSONArray accountArray = new JSONArray(accountsJsonString);
+    try {
+      List<Account> accounts = objectMapper.readValue(accountsJsonString, new TypeReference<List<Account>>() {
+      });
 
-    for (int i = 0; i < accountArray.length(); i++) {
-      JSONObject accountJson = accountArray.getJSONObject(i);
-      Account account = Account.fromJson(accountJson);
+      for (Account account : accounts) {
+        if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
+          throw new IllegalStateException(
+              "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
+        }
 
-      if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
-        throw new IllegalStateException(
-            "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
+        idToAccountMap.put(account.getId(), account);
+        nameToAccountMap.put(account.getName(), account);
       }
-
-      idToAccountMap.put(account.getId(), account);
-      nameToAccountMap.put(account.getName(), account);
+    } catch (JsonProcessingException e) {
+      logger.error("Failed to deserialize {} to a list of Account object", accountsJsonString, e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -220,7 +242,8 @@ class AccountInfoMap {
         if (!container.isSameContainer(containerInMap)) {
           logger.error(
               "Container to update in AccountId {} (containerId={} containerName={}) has an unexpected snapshot version in store (expected={}, encountered={})",
-              parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(), containerInMap.getSnapshotVersion());
+              parentAccountId, container.getId(), container.getName(), container.getSnapshotVersion(),
+              containerInMap.getSnapshotVersion());
           return true;
         }
       }

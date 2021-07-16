@@ -25,10 +25,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
@@ -93,20 +92,20 @@ public class BackupFileManagerTest {
     BackupFileManager backup =
         new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
 
-    // getLatestAccountMap should return null
-    assertNull("Disabled backup shouldn't have any state", backup.getLatestAccountMap(0));
+    // getLatestAccounts should return null
+    assertNull("Disabled backup shouldn't have any state", backup.getLatestAccounts(0));
 
     // persistAccountMap should not create any backup
     Stat stat = new Stat();
     stat.setVersion(1);
     stat.setMtime(System.currentTimeMillis());
 
-    backup.persistAccountMap(new HashMap<String, String>(), stat.getVersion(), stat.getMtime() / 1000);
+    backup.persistAccountMap(Collections.emptyList(), stat.getVersion(), stat.getMtime() / 1000);
     assertTrue("Disabled backup shouldn't add any backup", backup.isEmpty());
   }
 
   /**
-   * Test getLatestAccountMap function when all the backup files are files with version number.
+   * Test getLatestAccounts function when all the backup files are files with version number.
    * @throws IOException if I/O error occurs
    */
   @Test
@@ -119,22 +118,19 @@ public class BackupFileManagerTest {
         createBackupFilesWithVersion(accountBackupDir, startVersion, endVersion, baseModifiedTime, interval, false);
     saveAccountsToFile(Collections.singleton(refAccount), accountBackupDir.resolve(filenames[filenames.length - 1]));
 
-    Map<String, String> expected = new HashMap<>();
-    expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
-
     BackupFileManager backup =
         new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
-    Map<String, String> obtained = backup.getLatestAccountMap(0);
-    assertTwoStringMapsEqual(expected, obtained);
+    Collection<Account> obtained = backup.getLatestAccounts(0);
+    assertEquals(Collections.singletonList(refAccount), obtained);
     assertFalse("There are backup files", backup.isEmpty());
 
-    obtained = backup.getLatestAccountMap(System.currentTimeMillis() / 1000);
+    obtained = backup.getLatestAccounts(System.currentTimeMillis() / 1000);
     assertNull("No backup file should have a modified time later than now", obtained);
     assertEquals(backup.size(), endVersion - startVersion + 1);
   }
 
   /**
-   * Test getLatestAccountMap function when all the backup files are files without version number.
+   * Test getLatestAccounts function when all the backup files are files without version number.
    * @throws IOException if I/O error occurs
    */
   @Test
@@ -147,14 +143,14 @@ public class BackupFileManagerTest {
 
     BackupFileManager backup =
         new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
-    Map<String, String> obtained = backup.getLatestAccountMap(0);
+    Collection<Account> obtained = backup.getLatestAccounts(0);
     assertNull("No state should be loaded from backup file from old format", obtained);
     assertFalse("Backup should not be empty since there are files from old format", backup.isEmpty());
     assertEquals(backup.size(), count);
   }
 
   /**
-   * Test getLatestAccountMap function when some of the files are with version number and some are not.
+   * Test getLatestAccounts function when some of the files are with version number and some are not.
    * @throws IOException if I/O error occurs
    */
   @Test
@@ -170,13 +166,10 @@ public class BackupFileManagerTest {
         baseModifiedTime + 2 * backupFileNoVersionCount * interval, interval, false);
     saveAccountsToFile(Collections.singleton(refAccount), accountBackupDir.resolve(filenames[filenames.length - 1]));
 
-    Map<String, String> expected = new HashMap<>();
-    expected.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
-
     BackupFileManager backup =
         new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
-    Map<String, String> obtained = backup.getLatestAccountMap(0);
-    assertTwoStringMapsEqual(expected, obtained);
+    Collection<Account> obtained = backup.getLatestAccounts(0);
+    assertEquals(Collections.singletonList(refAccount), obtained);
     assertFalse("There are backup files", backup.isEmpty());
     assertEquals(backup.size(), endVersion - startVersion + 1 + backupFileNoVersionCount);
   }
@@ -261,7 +254,7 @@ public class BackupFileManagerTest {
   }
 
   /**
-   * Test {@link BackupFileManager#persistAccountMap(Map, int, long)} and then recover {@link BackupFileManager} from the same backup directory.
+   * Test {@link BackupFileManager#persistAccountMap(Collection, int, long)} and then recover {@link BackupFileManager} from the same backup directory.
    * @throws IOException if I/O error occurs
    */
   @Test
@@ -269,13 +262,13 @@ public class BackupFileManagerTest {
     BackupFileManager backup =
         new BackupFileManager(accountServiceMetrics, config.backupDir, config.maxBackupFileCount);
     final int numberAccounts = maxBackupFile * 2;
-    final Map<String, String> accounts = new HashMap<>(numberAccounts);
+    final Collection<Account> accounts = new ArrayList<>();
     final Stat stat = new Stat();
     final long interval = 1;
     long modifiedTime = System.currentTimeMillis() / 1000 - numberAccounts * 2;
     for (int i = 0; i < numberAccounts; i++) {
       Account account = createRandomAccount();
-      accounts.put(String.valueOf(account.getId()), account.toJson(true).toString());
+      accounts.add(account);
       stat.setVersion(i + 1);
       stat.setMtime(modifiedTime * 1000);
       backup.persistAccountMap(accounts, stat.getVersion(), stat.getMtime() / 1000);
@@ -284,8 +277,8 @@ public class BackupFileManagerTest {
 
     for (int i = 0; i < 2; i++) {
       assertEquals("Number of backup file mismatch", maxBackupFile, backup.size());
-      Map<String, String> obtained = backup.getLatestAccountMap(0);
-      assertTwoStringMapsEqual(accounts, obtained);
+      Collection<Account> obtained = backup.getLatestAccounts(0);
+      assertEquals(accounts, obtained);
       File[] remaingingFiles = accountBackupDir.toFile().listFiles();
       assertEquals("Remaining backup mismatch", maxBackupFile, remaingingFiles.length);
 
@@ -299,31 +292,18 @@ public class BackupFileManagerTest {
    * @throws JSONException if {@link Account} can't convert to json
    */
   @Test
-  public void testSerializationAndDeserialization() throws JSONException {
+  public void testSerializationAndDeserialization() throws IOException {
     // Since the account metadata is stored in an map from string to string, so here we only test map<string, string>
-    Map<String, String> state = new HashMap<>();
-    ByteBuffer buffer = BackupFileManager.serializeAccountMap(state);
-    Map<String, String> deserializedState = BackupFileManager.deserializeAccountMap(buffer.array());
-    assertTwoStringMapsEqual(state, deserializedState);
+    Collection<Account> state = new ArrayList<>();
+    ByteBuffer buffer = BackupFileManager.serializeAccounts(state);
+    Collection<Account> deserializedState = BackupFileManager.deserializeAccounts(buffer.array());
+    assertEquals(state, deserializedState);
 
     // Put a real account's json string
-    state.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
-    buffer = BackupFileManager.serializeAccountMap(state);
-    deserializedState = BackupFileManager.deserializeAccountMap(buffer.array());
-    assertTwoStringMapsEqual(state, deserializedState);
-  }
-
-  /**
-   * Assert the given two maps equal to each other.
-   * @param m1 First map.
-   * @param m2 Second map.
-   */
-  private void assertTwoStringMapsEqual(Map<String, String> m1, Map<String, String> m2) {
-    assertEquals("Two maps don't have the same size", m1.size(), m2.size());
-    for (Map.Entry<String, String> entry : m1.entrySet()) {
-      assertTrue(entry.getKey() + " doesn't exist in second map", m2.containsKey(entry.getKey()));
-      assertEquals("Values of key " + entry.getKey() + " differ", entry.getValue(), m2.get(entry.getKey()));
-    }
+    state.add(refAccount);
+    buffer = BackupFileManager.serializeAccounts(state);
+    deserializedState = BackupFileManager.deserializeAccounts(buffer.array());
+    assertEquals(state, deserializedState);
   }
 
   /**
@@ -423,15 +403,8 @@ public class BackupFileManagerTest {
    * @param filePath The given file.
    */
   private static void saveAccountsToFile(Collection<Account> accounts, Path filePath) {
-    Map<String, String> accountMap = new HashMap<>();
     try {
-      accounts.stream()
-          .forEach((account) -> accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString()));
-    } catch (JSONException e) {
-      fail("Fail to get a json format of accounts");
-    }
-    try {
-      BackupFileManager.writeAccountMapToFile(filePath, accountMap);
+      BackupFileManager.writeAccountsToFile(filePath, accounts);
     } catch (Exception e) {
       fail("Fail to write state to file: " + filePath.toString());
     }
