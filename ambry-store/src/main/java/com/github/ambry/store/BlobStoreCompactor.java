@@ -1655,6 +1655,12 @@ class BlobStoreCompactor {
             }
           }
         } else if (currentValue.isTtlUpdate()) {
+          if (currentLatestState == null) {
+            // Under only one circumstance would this happen, an TTL_UPDATE index value has no PUT before and no DELETE after.
+            // This is because the PUT is already compacted due to DELETE is out of retention and DELETE is compacted due to
+            // DELETE tombstone clean up. But TTL_UPDATE is in different log segment from PUT and DELETE so it never gets compacted.
+            continue;
+          }
           if (currentLatestState.isPut()) {
             // If isPut returns true, when the latest state doesn't carry ttl_update flag, this is wrong
             throw new IllegalStateException(

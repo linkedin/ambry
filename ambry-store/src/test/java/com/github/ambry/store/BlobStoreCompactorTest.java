@@ -403,7 +403,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   @Test
-  public void findKeyWithOldFileSpan() throws Exception{
+  public void findKeyWithOldFileSpan() throws Exception {
     assumeTrue(purgeDeleteTombstone);
     refreshState(false, true, false);
     FileSpan oldFileSpan = new FileSpan(state.index.getStartOffset(), state.index.getCurrentEndOffset());
@@ -1493,7 +1493,7 @@ public class BlobStoreCompactorTest {
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
 
     // Index Segment 1.3 P2 -> P2
-    IndexEntry p13 = state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short)2).get(0);
+    IndexEntry p13 = state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short) 2).get(0);
     state.addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
 
     // Make sure we have 3 log segments
@@ -1780,6 +1780,11 @@ public class BlobStoreCompactorTest {
     state.addDeleteEntry((MockId) p15.getKey(), null, (short) 1);
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
 
+    // Index Segment 1.6 T -> [], Put already compacted
+    MockId p16id = state.getUniqueId();
+    state.makePermanent(p16id, true);
+    state.addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
+
     // Make sure we have 3 log segments
     writeDataToMeetRequiredSegmentCount(3, null);
     state.reloadIndex(true, false);
@@ -1955,10 +1960,10 @@ public class BlobStoreCompactorTest {
       compactor.close(0);
     }
     // Before compaction, the records in the log are
-    // P11 U11 U11 T11 P| P12 T12 U12 U12 P| P13 T13 U13 U13 P| P14 T14 D14 D14 P| P15 T15 D15 D15 P
+    // P11 U11 U11 T11 P| P12 T12 U12 U12 P| P13 T13 U13 U13 P| P14 T14 D14 D14 P| P15 T15 D15 D15 P | T16 P P P P
     // After compaction, the records in the log are
-    // P11 U11 T11 P P12| T12 U12 P P13 T13| U13 P D14 P D15| P
-    cleanedUpSize = us + us + us + (ps + ts + ds) + (ps + ts + ds);
+    // P11 U11 T11 P P12| T12 U12 P P13 T13| U13 P D14 P D15| P P P P P
+    cleanedUpSize = us + us + us + (ps + ts + ds) + (ps + ts + ds) + ts;
     compactedLogSegmentName = logSegmentName.getNextGenerationName();
     assertEquals("End offset of log segment not as expected after compaction",
         endOffsetOfSegmentBeforeCompaction - cleanedUpSize,
@@ -2023,6 +2028,7 @@ public class BlobStoreCompactorTest {
     currentExpectedOffset += us + ps; // skip one put
     verifyIndexEntry(indexEntries.get(4), (MockId) p15.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
         true, false, (short) 1);
+    currentExpectedOffset += ds;
 
     // no clean shutdown file should exist
     assertFalse("Clean shutdown file not deleted",
