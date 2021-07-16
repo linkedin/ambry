@@ -65,7 +65,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final ClusterMapConfig clusterMapConfig;
-  private final StoreConfig storeConfig;
   private final VcrClusterSpectator vcrClusterSpectator;
   private final ClusterParticipant clusterParticipant;
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
@@ -100,11 +99,10 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
-    super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
+    super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null);
     this.clusterMapConfig = clusterMapConfig;
-    this.storeConfig = storeConfig;
     this.vcrClusterSpectator = vcrClusterSpectator;
     this.clusterParticipant = clusterParticipant;
     this.instanceNameToCloudDataNode = new AtomicReference<>(new ConcurrentHashMap<>());
@@ -129,6 +127,9 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     // start scheduler thread to persist index in the background
     scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+
+    started = true;
+    startupLatch.countDown();
   }
 
   /**
