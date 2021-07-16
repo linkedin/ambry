@@ -630,11 +630,6 @@ public class ReplicaThread implements Runnable {
 
                 replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                     exchangeMetadataResponse.localLagFromRemoteInBytes);
-                long maxLag =
-                    replicationMetrics.getMaxLagForPartition(remoteReplicaInfo.getReplicaId().getPartitionId());
-                if (remoteReplicaInfo.getLocalStore() instanceof BlobStore) {
-                  ((BlobStore) remoteReplicaInfo.getLocalStore()).setLocalStoreMaxLagFromPeer(maxLag);
-                }
                 if (replicaMetadataResponseInfo.getMessageInfoList().size() > 0) {
                   replicationMetrics.updateCatchupPointMetricForCloudReplica(remoteReplicaInfo,
                       replicaMetadataResponseInfo.getMessageInfoList()

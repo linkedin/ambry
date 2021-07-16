@@ -89,8 +89,6 @@ public class BlobStore implements Store {
   private final RemoteTokenTracker remoteTokenTracker;
   private final AtomicInteger errorCount;
   private final AccountService accountService;
-  //The max replication lag indicating how far local store is behind peers.
-  private volatile long localStoreMaxLagFromPeer;
   private Log log;
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
@@ -343,14 +341,6 @@ public class BlobStore implements Store {
   }
 
   /**
-   * Set max lag for blob store.
-   * @param localStoreMaxLagFromPeer the partition's maximum lag between local and its remote replicas.
-   */
-  public void setLocalStoreMaxLagFromPeer(long localStoreMaxLagFromPeer) {
-    this.localStoreMaxLagFromPeer = localStoreMaxLagFromPeer;
-  }
-
-  /**
    * Checks the state of the messages in the given {@link MessageWriteSet} in the given {@link FileSpan}.
    * @param messageSetToWrite Non-empty set of messages to write to the store.
    * @param fileSpan The fileSpan on which the check for existence of the messages have to be made.
@@ -423,13 +413,7 @@ public class BlobStore implements Store {
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && (replicaId.isSealed() || (
           replicaStatusDelegates.size() > 1 && isSealed.getAndSet(false)))) {
         for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
-          if (config.storeAutoCloseLastLogSegmentEnabled && replicaId.isSealed()
-              && localStoreMaxLagFromPeer > config.storeUnsealReplicaMinimumLagBytes) {
-            logger.info(
-                "In order to wait until store catch up with peer replica, it should remain sealed due to the max lag : {} for partition : {} is larger than {} , current used capacity : {} bytes.",
-                localStoreMaxLagFromPeer, replicaId.getPartitionId(), config.storeUnsealReplicaMinimumLagBytes,
-                index.getLogUsedCapacity());
-          } else if (!replicaStatusDelegate.unseal(replicaId)) {
+          if (!replicaStatusDelegate.unseal(replicaId)) {
             metrics.unsealSetError.inc();
             logger.warn("Could not set the partition as read-write status on {}", replicaId);
             isSealed.set(true);
