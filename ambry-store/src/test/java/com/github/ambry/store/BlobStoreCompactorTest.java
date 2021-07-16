@@ -1780,7 +1780,7 @@ public class BlobStoreCompactorTest {
     state.addDeleteEntry((MockId) p15.getKey(), null, (short) 1);
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
 
-    // Index Segment 1.6 T -> T, Put already compacted
+    // Index Segment 1.6 T -> [], Put already compacted
     MockId p16id = state.getUniqueId();
     state.makePermanent(p16id, true);
     state.addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1962,8 +1962,8 @@ public class BlobStoreCompactorTest {
     // Before compaction, the records in the log are
     // P11 U11 U11 T11 P| P12 T12 U12 U12 P| P13 T13 U13 U13 P| P14 T14 D14 D14 P| P15 T15 D15 D15 P | T16 P P P P
     // After compaction, the records in the log are
-    // P11 U11 T11 P P12| T12 U12 P P13 T13| U13 P D14 P D15| P T16 P P P | P
-    cleanedUpSize = us + us + us + (ps + ts + ds) + (ps + ts + ds);
+    // P11 U11 T11 P P12| T12 U12 P P13 T13| U13 P D14 P D15| P P P P P
+    cleanedUpSize = us + us + us + (ps + ts + ds) + (ps + ts + ds) + ts;
     compactedLogSegmentName = logSegmentName.getNextGenerationName();
     assertEquals("End offset of log segment not as expected after compaction",
         endOffsetOfSegmentBeforeCompaction - cleanedUpSize,
@@ -2029,17 +2029,6 @@ public class BlobStoreCompactorTest {
     verifyIndexEntry(indexEntries.get(4), (MockId) p15.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
         true, false, (short) 1);
     currentExpectedOffset += ds;
-
-    // Get the entries in the fourth segment
-    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
-    indexEntries.clear();
-    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
-    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
-    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
-    currentExpectedOffset += ps; // skip one put
-    verifyIndexEntry(indexEntries.get(1), p16id, currentExpectedOffset, ts, Utils.Infinite_Time, false, true, false,
-        (short) 0);
-    currentExpectedOffset +=  ts + 3 * ps; // skip three puts
 
     // no clean shutdown file should exist
     assertFalse("Clean shutdown file not deleted",
