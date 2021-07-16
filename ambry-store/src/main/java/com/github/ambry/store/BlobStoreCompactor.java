@@ -1627,6 +1627,12 @@ class BlobStoreCompactor {
         } else {
           previousKey = currentKey;
           previousLatestState = currentLatestState = srcIndex.findKey(currentKey);
+          if (currentLatestState == null) {
+            // Only one case this would happen, an TTL_UPDATE indexValue that has no PUT before, this is because the put
+            // is already compacted but TTL_UPDATE is not compacted.
+            previousLatestState = currentLatestState =
+                srcIndex.findKey(currentKey, null, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+          }
         }
 
         if (currentValue.isUndelete()) {
