@@ -43,7 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -100,10 +99,6 @@ public class BlobStore implements Store {
   private AtomicBoolean isSealed = new AtomicBoolean(false);
   private AtomicBoolean isDisabled = new AtomicBoolean(false);
   protected PersistentIndex index;
-
-  // THIS IS ONLY FOR TEST.
-  volatile protected Callable<Void> operationBeforeSynchronization = null;
-  volatile protected Callable<Void> inDeleteBetweenGetEndOffsetAndFindKey = null;
 
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
@@ -464,7 +459,6 @@ public class BlobStore implements Store {
       MessageWriteSetStateInStore state =
           checkWriteSetStateInStore(messageSetToWrite, new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
-        maybeCallBeforeSynchronization();
         synchronized (storeWriteLock) {
           // Validate that log end offset was not changed. If changed, check once again for existing
           // keys in store
@@ -550,7 +544,6 @@ public class BlobStore implements Store {
       List<IndexValue> originalPuts = new ArrayList<>();
       List<Short> lifeVersions = new ArrayList<>();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
-      maybeCallInDeleteBetweenGetEndOffsetAndFindKey();
       for (MessageInfo info : infosToDelete) {
         IndexValue value =
             index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
@@ -600,7 +593,6 @@ public class BlobStore implements Store {
               EnumSet.of(PersistentIndex.IndexEntryType.PUT)));
         }
       }
-      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -731,7 +723,6 @@ public class BlobStore implements Store {
         indexValuesToUpdate.add(value);
         lifeVersions.add(value.getLifeVersion());
       }
-      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -841,7 +832,6 @@ public class BlobStore implements Store {
           metrics.undeleteAuthorizationFailureCount.inc();
         }
       }
-      maybeCallBeforeSynchronization();
       synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
@@ -883,26 +873,6 @@ public class BlobStore implements Store {
           StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
-    }
-  }
-
-  /**
-   * Call {@link #operationBeforeSynchronization} if it's not null. This is for testing only.
-   */
-  private void maybeCallBeforeSynchronization() throws Exception {
-    Callable<Void> callable = operationBeforeSynchronization;
-    if (callable != null) {
-      callable.call();
-    }
-  }
-
-  /**
-   * Call {@link #inDeleteBetweenGetEndOffsetAndFindKey} if it's not null. This is for testing only.
-   */
-  private void maybeCallInDeleteBetweenGetEndOffsetAndFindKey() throws Exception {
-    Callable<Void> callable = inDeleteBetweenGetEndOffsetAndFindKey;
-    if (callable != null) {
-      callable.call();
     }
   }
 
