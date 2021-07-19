@@ -14,10 +14,12 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -132,6 +134,104 @@ public class MaxThrottlePolicyTest {
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true,
         Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
         HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
+
+    // Test when the request throttling is disabled
+    Properties prop = new Properties();
+    prop.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, "false");
+    maxThrottlePolicy = new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(prop)));
+
+    // test for a request quota recommendation.
+    quotaRecommendation =
+        new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+            5);
+    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
+
+    quotaRecommendationList.clear();
+    quotaRecommendationList.add(quotaRecommendation);
+    quotaRecommendationList.add(
+        new QuotaRecommendation(true, 101, QuotaName.STORAGE_IN_GB, HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5));
+    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true, new HashMap<QuotaName, Float>() {
+      {
+        put(QuotaName.READ_CAPACITY_UNIT, (float) 101.0);
+        put(QuotaName.STORAGE_IN_GB, (float) 101.0);
+      }
+    }, HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
+
+    // Test when the storage quota throttling is disabled
+    prop = new Properties();
+    prop.setProperty(StorageQuotaConfig.SHOULD_THROTTLE, "false");
+    maxThrottlePolicy = new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(prop)));
+
+    // test for a storage quota recommendation.
+    quotaRecommendation =
+        new QuotaRecommendation(true, 101, QuotaName.STORAGE_IN_GB, HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5);
+    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
+        Collections.singletonMap(QuotaName.STORAGE_IN_GB, (float) 101.0), HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+        5, throttlingRecommendation);
+
+    quotaRecommendationList.clear();
+    quotaRecommendationList.add(quotaRecommendation);
+    quotaRecommendationList.add(
+        new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+            5));
+    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true, new HashMap<QuotaName, Float>() {
+      {
+        put(QuotaName.READ_CAPACITY_UNIT, (float) 101.0);
+        put(QuotaName.STORAGE_IN_GB, (float) 101.0);
+      }
+    }, HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
+
+    // Test when both quota throttling are disabled
+    prop = new Properties();
+    prop.setProperty(StorageQuotaConfig.SHOULD_THROTTLE, "false");
+    prop.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, "false");
+    maxThrottlePolicy = new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(prop)));
+
+    quotaRecommendation =
+        new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+            5);
+    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
+
+    quotaRecommendation =
+        new QuotaRecommendation(true, 101, QuotaName.WRITE_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+            5);
+    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
+        Collections.singletonMap(QuotaName.WRITE_CAPACITY_UNIT, (float) 101.0),
+        HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
+
+    quotaRecommendation =
+        new QuotaRecommendation(true, 101, QuotaName.STORAGE_IN_GB, HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5);
+    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
+        Collections.singletonMap(QuotaName.STORAGE_IN_GB, (float) 101.0), HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+        5, throttlingRecommendation);
+
+    quotaRecommendationList.clear();
+    quotaRecommendationList.add(quotaRecommendation);
+    quotaRecommendationList.add(
+        new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+            5));
+    quotaRecommendationList.add(
+        new QuotaRecommendation(true, 101, QuotaName.WRITE_CAPACITY_UNIT, HttpResponseStatus.TOO_MANY_REQUESTS.code(),
+            5));
+    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false, new HashMap<QuotaName, Float>() {
+      {
+        put(QuotaName.READ_CAPACITY_UNIT, (float) 101.0);
+        put(QuotaName.WRITE_CAPACITY_UNIT, (float) 101.0);
+        put(QuotaName.STORAGE_IN_GB, (float) 101.0);
+      }
+    }, HttpResponseStatus.TOO_MANY_REQUESTS.code(), 5, throttlingRecommendation);
   }
 
   /**
