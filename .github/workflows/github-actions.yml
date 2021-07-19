@@ -130,9 +130,6 @@ jobs:
           java-version: '11'
           distribution: 'adopt'
 
-      - name: Publish To JFrog artifactory
-        run: ./travis-publish.sh
-
       - uses: burrunan/gradle-cache-action@v1
         name: Build artifacts and create pom files
         with:
