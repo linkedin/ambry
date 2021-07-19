@@ -13,11 +13,14 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -31,12 +34,12 @@ public class MaxThrottlePolicyTest {
   /** Test for {@link MaxThrottlePolicy#recommend}*/
   @Test
   public void testRecommend() {
-    MaxThrottlePolicy maxThrottlePolicy = new MaxThrottlePolicy();
+    MaxThrottlePolicy maxThrottlePolicy =
+        new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(new Properties())));
 
     // test for empty quota recommendation list
     ThrottlingRecommendation throttlingRecommendation = maxThrottlePolicy.recommend(Collections.emptyList());
-    assertEquals(ThrottlingRecommendation.NO_RETRY_AFTER_MS,
-        throttlingRecommendation.getRetryAfterMs());
+    assertEquals(ThrottlingRecommendation.NO_RETRY_AFTER_MS, throttlingRecommendation.getRetryAfterMs());
     assertEquals(QuotaUsageLevel.HEALTHY, throttlingRecommendation.getQuotaUsageLevel());
     assertEquals(HttpResponseStatus.OK.code(), throttlingRecommendation.getRecommendedHttpStatus());
     assertEquals(false, throttlingRecommendation.shouldThrottle());

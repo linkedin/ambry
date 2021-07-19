@@ -37,12 +37,6 @@ public class QuotaConfig {
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
   public StorageQuotaConfig storageQuotaConfig;
 
-  /**
-   * Config to enable throttling on customer's account or container.
-   */
-  @Config(REQUEST_THROTTLING_ENABLED)
-  @Default("false")
-  public boolean requestThrottlingEnabled;
 
   /**
    * Serialized json containing pairs of enforcer classes and corresponding source classes.
@@ -73,10 +67,18 @@ public class QuotaConfig {
   public String quotaManagerFactory;
 
   /**
-   * The mode in which quota throttling is being done (TRACKING/THROTTLING).
+   * The mode in which quota throttling is being done (TRACKING/THROTTLING). To throttle the requests, you have to change
+   * the mode to THROTTLING and turn on requestThrottlingEnabled or storageQuotaConfig.shouldThrottle (or both).
    */
   @Config(THROTTLING_MODE)
   public QuotaMode throttlingMode;
+
+  /**
+   * Config to enable request throttling on customer's account or container.
+   */
+  @Config(REQUEST_THROTTLING_ENABLED)
+  @Default("true")
+  public boolean requestThrottlingEnabled;
 
   /**
    * Should requests in progress be throttled if they exceed their quota.
@@ -90,7 +92,7 @@ public class QuotaConfig {
    */
   public QuotaConfig(VerifiableProperties verifiableProperties) {
     storageQuotaConfig = new StorageQuotaConfig(verifiableProperties);
-    requestThrottlingEnabled = verifiableProperties.getBoolean(REQUEST_THROTTLING_ENABLED, false);
+    requestThrottlingEnabled = verifiableProperties.getBoolean(REQUEST_THROTTLING_ENABLED, true);
     requestQuotaEnforcerSourcePairInfoJson =
         verifiableProperties.getString(REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
             buildDefaultQuotaEnforcerSourceInfoPairJson().toString());

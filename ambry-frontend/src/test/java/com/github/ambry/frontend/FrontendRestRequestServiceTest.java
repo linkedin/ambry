@@ -34,6 +34,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -41,8 +42,8 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -131,9 +132,10 @@ public class FrontendRestRequestServiceTest {
 
   static {
     try {
+      QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER =
-          new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              new MaxThrottlePolicy(), Mockito.mock(AccountService.class), null, new MetricRegistry());
+          new AmbryQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), Mockito.mock(AccountService.class),
+              null, new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -3141,7 +3143,8 @@ class FrontendTestRouter implements Router {
   String undeleteServiceId = null;
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     GetBlobResult result;
     switch (options.getOperationType()) {
       case BlobInfo:

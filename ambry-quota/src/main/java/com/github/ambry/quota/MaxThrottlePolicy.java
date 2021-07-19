@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.Collections;
 import java.util.HashMap;
@@ -37,6 +38,16 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
   // Percentage usage level at or below this limit and above warning limit will generate critical warning. Anything above will be fatal.
   static final int CRITICAL_USAGE_LEVEL_LIMIT = 100;
 
+  private final QuotaConfig quotaConfig;
+
+  /**
+   * Constructor to create a {@link MaxThrottlePolicy}.
+   * @param quotaConfig The {@link QuotaConfig}.
+   */
+  public MaxThrottlePolicy(QuotaConfig quotaConfig) {
+    this.quotaConfig = quotaConfig;
+  }
+
   @Override
   public ThrottlingRecommendation recommend(List<QuotaRecommendation> quotaRecommendations) {
     boolean shouldThrottle = false;
@@ -44,7 +55,14 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
     int recommendedHttpStatus = DEFAULT_RECOMMENDED_HTTP_STATUS;
     long retryAfterMs = DEFAULT_RETRY_AFTER_MS;
     for (QuotaRecommendation recommendation : quotaRecommendations) {
-      shouldThrottle = shouldThrottle | recommendation.shouldThrottle();
+      boolean currentQuotaShouldThrottle = recommendation.shouldThrottle();
+      if (recommendation.getQuotaName() == QuotaName.READ_CAPACITY_UNIT
+          || recommendation.getQuotaName() == QuotaName.WRITE_CAPACITY_UNIT) {
+        currentQuotaShouldThrottle &= quotaConfig.requestThrottlingEnabled;
+      } else if (recommendation.getQuotaName() == QuotaName.STORAGE_IN_GB) {
+        currentQuotaShouldThrottle &= quotaConfig.storageQuotaConfig.shouldThrottle;
+      }
+      shouldThrottle = shouldThrottle | currentQuotaShouldThrottle;
       quotaUsagePercentage.put(recommendation.getQuotaName(), recommendation.getQuotaUsagePercentage());
       recommendedHttpStatus = Math.max(recommendation.getRecommendedHttpStatus(), recommendedHttpStatus);
       retryAfterMs = Math.max(recommendation.getRetryAfterMs(), retryAfterMs);

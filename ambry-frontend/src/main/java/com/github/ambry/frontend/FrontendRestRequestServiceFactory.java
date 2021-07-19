@@ -99,7 +99,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               clusterMap.getMetricRegistry()).getAccountStatsStore();
       QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
       QuotaManager quotaManager =
-          ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
+          ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(quotaConfig),
               accountService, accountStatsStore, clusterMap.getMetricRegistry())).getQuotaManager();
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
