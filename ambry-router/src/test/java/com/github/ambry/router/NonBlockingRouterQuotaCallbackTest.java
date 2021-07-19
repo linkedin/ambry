@@ -70,7 +70,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       boolean throttleInProgressRequests) throws Exception {
     super(testEncryption, metadataContentVersion, false);
     this.throttlingMode = QuotaMode.valueOf(quotaModeStr);
-    this.throttleInProgressRequests  = throttleInProgressRequests;
+    this.throttleInProgressRequests = throttleInProgressRequests;
   }
 
   /**
@@ -79,22 +79,23 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), true},
-        {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), true},
-        {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), true},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), true},
-        {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), true},
-        {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), true},
-        {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), true},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), true},
-        {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), false},
-        {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), false},
-        {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), false},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), false},
-        {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), false},
-        {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), false},
-        {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), false},
-        {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), false}});
+    return Arrays.asList(
+        new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), true},
+            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), true},
+            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), true},
+            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), true},
+            {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), true},
+            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), true},
+            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), true},
+            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), true},
+            {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), false},
+            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), false},
+            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), false},
+            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), false},
+            {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), false},
+            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), false},
+            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), false},
+            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), false}});
   }
 
   /**
@@ -126,8 +127,11 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       expectedChargeCallbackCount += numChunks;
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get()
-          .getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
+      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+          .get()
+          .getBlobDataChannel()
+          .readInto(retainingAsyncWritableChannel, null)
+          .get();
       expectedChargeCallbackCount += numChunks;
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
@@ -192,8 +196,11 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
 
       retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       expectedChargeCallbackCount += 3;
-      router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get()
-          .getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
+      router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+          .get()
+          .getBlobDataChannel()
+          .readInto(retainingAsyncWritableChannel, null)
+          .get();
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
@@ -221,9 +228,10 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       setRouter();
       assertExpectedThreadCounts(2, 1);
       AtomicInteger listenerCalledCount = new AtomicInteger(0);
+      QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
       QuotaManager quotaManager =
-          new ChargeTesterQuotaManager(new QuotaConfig(new VerifiableProperties(new Properties())), new MaxThrottlePolicy(),
-              accountService, null, new MetricRegistry(), listenerCalledCount);
+          new ChargeTesterQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), accountService, null,
+              new MetricRegistry(), listenerCalledCount);
       QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager, true);
 
       int blobSize = 3000;
@@ -265,8 +273,9 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
      * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
      * @throws ReflectiveOperationException in case of any exception.
      */
-    public ChargeTesterQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
-        AccountStatsStore accountStatsStore, MetricRegistry metricRegistry, AtomicInteger chargeCalledCount) throws ReflectiveOperationException {
+    public ChargeTesterQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy,
+        AccountService accountService, AccountStatsStore accountStatsStore, MetricRegistry metricRegistry,
+        AtomicInteger chargeCalledCount) throws ReflectiveOperationException {
       super(quotaConfig, throttlePolicy, accountService, accountStatsStore, metricRegistry);
       this.chargeCalledCount = chargeCalledCount;
     }
@@ -274,7 +283,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     @Override
     public ThrottlingRecommendation charge(RestRequest restRequest) {
       ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest);
-      if(throttlingRecommendation != null) {
+      if (throttlingRecommendation != null) {
         chargeCalledCount.incrementAndGet();
       }
       return throttlingRecommendation;

@@ -44,10 +44,10 @@ public class AmbryQuotaManagerUpdateNotificationTest {
   @Test
   public void ambryQuotaManagerUpdateNotificationTest() throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
-    ThrottlePolicy throttlePolicy = new MaxThrottlePolicy();
     MetricRegistry metricRegistry = new MetricRegistry();
 
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
+    ThrottlePolicy throttlePolicy = new MaxThrottlePolicy(quotaConfig);
     AccountServiceForConsumerTest accountService =
         new AccountServiceForConsumerTest(new AccountServiceConfig(verifiableProperties),
             new AccountServiceMetrics(metricRegistry), null);
