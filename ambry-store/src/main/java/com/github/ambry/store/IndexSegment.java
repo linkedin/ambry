@@ -743,7 +743,8 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   void writeIndexSegmentToFile(Offset safeEndPoint) throws FileNotFoundException, StoreException {
     if (sealed.get()) {
-      throw new StoreException("Cannot persist sealed index segment", StoreErrorCodes.Illegal_Index_Operation);
+      logger.trace("Cannot persist sealed index segment : {}", indexFile.getAbsolutePath());
+      return;
     }
     if (safeEndPoint.compareTo(startOffset) <= 0) {
       return;
