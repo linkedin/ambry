@@ -364,7 +364,7 @@ public class UndeleteOperation {
       }
       if (quotaChargeCallback != null) {
         try {
-          quotaChargeCallback.chargeQuota();
+          quotaChargeCallback.chargeQuota1();
         } catch (RouterException routerException) {
           LOGGER.info("Exception {} while charging quota for undelete operation", routerException.toString());
         }

@@ -1302,7 +1302,7 @@ class PutOperation {
         // the chunk is complete now. We can charge against quota for the chunk.
         if (quotaChargeCallback != null) {
           try {
-            quotaChargeCallback.chargeQuota();
+            quotaChargeCallback.chargeQuota(chunkBlobProperties.getBlobSize());
           } catch (RouterException rEx) {
             // For now we only log for quota charge exceptions for in progress requests.
             logger.info("Exception {} while handling quota charge event", rEx.toString());

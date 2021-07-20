@@ -185,7 +185,8 @@ class PostBlobHandler {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, quotaManager.getQuotaConfig(),
+                  true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -202,8 +203,8 @@ class PostBlobHandler {
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER,
-          finalCallback);
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, quotaManager.getQuotaConfig(),
+                  false)), uri, LOGGER, finalCallback);
     }
 
     /**

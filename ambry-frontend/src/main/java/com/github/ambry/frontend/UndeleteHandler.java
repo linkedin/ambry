@@ -143,7 +143,8 @@ public class UndeleteHandler {
       return buildCallback(metrics.undeleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
         router.undeleteBlob(blobId.getID(), serviceId, routerCallback(),
-            QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
+            QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, quotaManager.getQuotaConfig(),
+                false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 

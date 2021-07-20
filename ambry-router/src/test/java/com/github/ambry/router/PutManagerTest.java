@@ -35,6 +35,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -389,7 +390,14 @@ public class PutManagerTest {
         router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
           callbackCalled.countDown();
           throw new RuntimeException("Throwing an exception in the user callback");
-        }, () -> {
+        }, new QuotaChargeCallback() {
+          @Override
+          public void chargeQuota(long chunkSize) {
+          }
+
+          @Override
+          public void chargeQuota1() {
+          }
         });
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed

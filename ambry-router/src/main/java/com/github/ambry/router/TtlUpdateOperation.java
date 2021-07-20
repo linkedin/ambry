@@ -333,7 +333,7 @@ class TtlUpdateOperation {
       }
       if (quotaChargeCallback != null) {
         try {
-          quotaChargeCallback.chargeQuota();
+          quotaChargeCallback.chargeQuota1();
         } catch (RouterException rEx) {
           LOGGER.info("Exception {} while charging quota for ttl update operation.", rEx.toString());
         }

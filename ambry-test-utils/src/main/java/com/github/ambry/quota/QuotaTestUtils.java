@@ -17,6 +17,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.router.RouterException;
 import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
@@ -70,13 +71,13 @@ public class QuotaTestUtils {
       }
 
       @Override
-      public ThrottlingRecommendation charge(RestRequest restRequest) {
+      public ThrottlingRecommendation charge(RestRequest restRequest, long chunkSize) {
         return null;
       }
 
       @Override
       public QuotaConfig getQuotaConfig() {
-        return null;
+        return new QuotaConfig(new VerifiableProperties(new Properties()));
       }
 
       @Override
@@ -87,7 +88,14 @@ public class QuotaTestUtils {
   }
 
   public static QuotaChargeCallback createDummyQuotaChargeEventListener() {
-    return () -> {
+    return new QuotaChargeCallback() {
+      @Override
+      public void chargeQuota(long chunkSize) throws RouterException {
+      }
+
+      @Override
+      public void chargeQuota1() throws RouterException {
+      }
     };
   }
 }

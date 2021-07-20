@@ -101,9 +101,19 @@ public class ConcurrencyTestTool {
   private static final String SERVER_PUT_GET_HELPER = "com.github.ambry.tools.admin.ServerPutGetHelperFactory";
   private static final AtomicBoolean putComplete = new AtomicBoolean(false);
   private static final Random random = new Random();
-  private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = () -> {};
+  private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = new QuotaChargeCallback() {
+    @Override
+    public void chargeQuota(long chunkSize) {
 
-  public static void main(String args[]) throws Exception {
+    }
+
+    @Override
+    public void chargeQuota1() {
+
+    }
+  };
+
+  public static void main(String[] args) throws Exception {
     InvocationOptions options = new InvocationOptions(args);
     Properties properties = Utils.loadProps(options.routerPropsFilePath);
     ToolUtils.addClusterMapProperties(properties);

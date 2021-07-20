@@ -32,9 +32,11 @@ public class QuotaConfig {
   public static final String REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON =
       QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
   public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manager.factory";
+  public static final String QUOTA_ACCOUNTING_SIZE = QUOTA_CONFIG_PREFIX + "accounting.size";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
+  public static final String DEFAULT_QUOTA_ACCOUNTING_SIZE = "1024"; //1kb
   public StorageQuotaConfig storageQuotaConfig;
 
 
@@ -87,6 +89,12 @@ public class QuotaConfig {
   public boolean throttleInProgressRequests;
 
   /**
+   * Size of chunk that is considered for one unit of quota.
+   */
+  @Config(DEFAULT_QUOTA_ACCOUNTING_SIZE)
+  public long quotaAccountingSize;
+
+  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
@@ -100,6 +108,7 @@ public class QuotaConfig {
     throttlingMode = QuotaMode.valueOf(verifiableProperties.getString(THROTTLING_MODE, DEFAULT_QUOTA_THROTTLING_MODE));
     throttleInProgressRequests =
         verifiableProperties.getBoolean(THROTTLE_IN_PROGRESS_REQUESTS, DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS);
+    quotaAccountingSize = verifiableProperties.getLong(QUOTA_ACCOUNTING_SIZE, Long.parseLong(DEFAULT_QUOTA_ACCOUNTING_SIZE));
   }
 
   /**

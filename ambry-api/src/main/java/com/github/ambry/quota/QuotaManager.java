@@ -52,9 +52,10 @@ public interface QuotaManager {
   /**
    * Charges one unit of cost against the quota for the specified restRequest.
    * @param restRequest {@link RestRequest} object.
+   * @param chunkSize size of the chunk for which charge is applied.
    * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
-  ThrottlingRecommendation charge(RestRequest restRequest);
+  ThrottlingRecommendation charge(RestRequest restRequest, long chunkSize);
 
   /**
    * @return QuotaConfig object.
