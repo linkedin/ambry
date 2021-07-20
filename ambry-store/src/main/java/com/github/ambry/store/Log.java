@@ -494,11 +494,12 @@ class Log implements Write {
     // this cannot be null since capacity has either been ensured or has thrown.
     LogSegment nextActiveSegment = segmentsByName.higherEntry(activeSegment.getName()).getValue();
     if (isAutoClosed) {
-      logger.info("Auto close last log segment: {} and create new active segment : {}", activeSegment.getName(),
-          nextActiveSegment.getName());
+      logger.info("DataDir: {}, Auto close last log segment: {} and create new active segment : {}", dataDir,
+          activeSegment.getName(), nextActiveSegment.getName());
     } else {
-      logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
-          nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
+      logger.info(
+          "DataDir: {}, Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
+          dataDir, nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
           activeSegment.getCapacityInBytes());
     }
     activeSegment.dropBufferForAppend();
