@@ -917,7 +917,7 @@ class PersistentIndex {
    */
   boolean wasRecentlySeen(MessageInfo info) {
     Long crcInJournal = journal.getCrcOfKey(info.getStoreKey());
-    return info.getCrc() != null && info.getCrc().equals(crcInJournal);
+    return info.getCrc().equals(crcInJournal);
   }
 
   /**
