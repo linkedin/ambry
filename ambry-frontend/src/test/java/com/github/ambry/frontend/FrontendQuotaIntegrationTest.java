@@ -219,7 +219,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    */
   @Test
   public void postGetHeadUpdateDeleteUndeleteTest() throws Exception {
-    int refContentSize = FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
+    int refContentSize = (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
     ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
     CONTAINER = ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, ACCOUNT, CONTAINER, ACCOUNT.getName(),
@@ -266,7 +266,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   void verifyGetBlobResponse(NettyClient.ResponseParts responseParts, ByteRange range, boolean resolveRangeOnEmptyBlob,
       HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
       String containerName) throws RestServiceException {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate,
           expectedContent, accountName, containerName);
     } else {
@@ -296,7 +296,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Override
   void verifyGetHeadResponse(HttpResponse response, HttpHeaders expectedHeaders, ByteRange range, boolean isPrivate,
       String accountName, String containerName, NettyClient.ResponseParts responseParts) throws RestServiceException {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetHeadResponse(response, expectedHeaders, range, isPrivate, accountName, containerName,
           responseParts);
     } else {
@@ -324,7 +324,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Override
   void verifyGetNotModifiedBlobResponse(HttpResponse response, boolean isPrivate,
       NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetNotModifiedBlobResponse(response, isPrivate, responseParts);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
@@ -345,7 +345,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Override
   void verifyUserMetadataResponse(HttpResponse response, HttpHeaders expectedHeaders, byte[] usermetadata,
       NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyUserMetadataResponse(response, expectedHeaders, usermetadata, responseParts);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());

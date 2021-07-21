@@ -564,7 +564,7 @@ class NettyResponseChannel implements RestResponseChannel {
     if (errReason != null) {
       response.headers().set(FAILURE_REASON_HEADER, errReason);
     }
-    if(errHeaders != null) {
+    if (errHeaders != null) {
       errHeaders.forEach((errHeaderKey, errHeaderVal) -> response.headers().set(errHeaderKey, errHeaderVal));
     }
     if (restServiceErrorCode != null && HttpStatusClass.CLIENT_ERROR.contains(status.code())) {
@@ -609,7 +609,7 @@ class NettyResponseChannel implements RestResponseChannel {
       } else if (request.getRestMethod().equals(RestMethod.POST)) {
         shouldKeepAlive = false;
       } else if (request.getRestMethod().equals(RestMethod.PUT) && (HttpUtil.isTransferEncodingChunked(request.request)
-          || HttpUtil.getContentLength(request.request, 0L) > 0)) {
+          || HttpUtil.getContentLength(request.request, NettyRequest.UNKNOWN_CONTENT_LENGTH) > 0)) {
         shouldKeepAlive = false;
       }
     }
@@ -873,8 +873,9 @@ class NettyResponseChannel implements RestResponseChannel {
       chunksToWriteCount.incrementAndGet();
 
       // if channel becomes inactive, no one set finalResponseMetadata. It's possible finalResponseMetadata is null.
-      long contentLength = finalResponseMetadata == null ? -1 : HttpUtil.getContentLength(finalResponseMetadata, -1);
-      isLast = contentLength != -1 && writeCompleteThreshold >= contentLength;
+      long contentLength = finalResponseMetadata == null ? NettyRequest.UNKNOWN_CONTENT_LENGTH
+          : HttpUtil.getContentLength(finalResponseMetadata, NettyRequest.UNKNOWN_CONTENT_LENGTH);
+      isLast = contentLength != NettyRequest.UNKNOWN_CONTENT_LENGTH && writeCompleteThreshold >= contentLength;
     }
 
     /**
@@ -961,7 +962,7 @@ class NettyResponseChannel implements RestResponseChannel {
     @Override
     public HttpContent readChunk(ByteBufAllocator allocator) throws Exception {
       long chunkDispenseStartTime = System.currentTimeMillis();
-      logger.trace("Servicing request for next chunk on channel {}", ctx.channel());
+      logger.trace("Servicing request for next chunk on channel {} {}", ctx.channel(), progress.get());
       HttpContent content = null;
       Chunk chunk = chunksToWrite.poll();
       if (chunk != null) {
@@ -990,7 +991,7 @@ class NettyResponseChannel implements RestResponseChannel {
 
     @Override
     public long length() {
-      return HttpUtil.getContentLength(finalResponseMetadata, -1);
+      return HttpUtil.getContentLength(finalResponseMetadata, NettyRequest.UNKNOWN_CONTENT_LENGTH);
     }
 
     @Override

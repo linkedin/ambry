@@ -32,12 +32,9 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.QuotaName;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
@@ -236,7 +233,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container publicContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     Container privateContainer = refAccount.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
-    int refContentSize = FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
+    int refContentSize = (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
 
     // with valid account and containers
     for (int i = 0; i < 2; i++) {
@@ -255,8 +252,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
     doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
     // different sizes
-    for (int contentSize : new int[]{0, FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1,
-        FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, refContentSize}) {
+    for (int contentSize : new int[]{0, (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1,
+        (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, refContentSize}) {
       doPostGetHeadUpdateDeleteUndeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
@@ -272,7 +269,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     Container refContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     doPostGetHeadUpdateDeleteUndeleteTest(0, refAccount, refContainer, refAccount.getName(),
         !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(), true);
-    doPostGetHeadUpdateDeleteUndeleteTest(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3, refAccount,
+    doPostGetHeadUpdateDeleteUndeleteTest((int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3, refAccount,
         refContainer, refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(),
         true);
 

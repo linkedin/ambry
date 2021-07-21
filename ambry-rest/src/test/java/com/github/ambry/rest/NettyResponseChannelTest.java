@@ -221,7 +221,7 @@ public class NettyResponseChannelTest {
       // first outbound has to be response.
       HttpResponse response = channel.readOutbound();
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
-      long contentLength = HttpUtil.getContentLength(response, -1);
+      long contentLength = HttpUtil.getContentLength(response, NettyRequest.UNKNOWN_CONTENT_LENGTH);
       assertEquals("Unexpected Content-Length", MockNettyMessageProcessor.CHUNK.length * i, contentLength);
       if (contentLength == 0) {
         // special case. Since Content-Length is set, the response should be an instance of FullHttpResponse.
@@ -274,7 +274,8 @@ public class NettyResponseChannelTest {
     channel.writeInbound(httpRequest);
     // There should be a response.
     response = channel.readOutbound();
-    assertEquals("Response must have Content-Length set to 0", 0, HttpUtil.getContentLength(response, -1));
+    assertEquals("Response must have Content-Length set to 0", 0,
+        HttpUtil.getContentLength(response, NettyRequest.UNKNOWN_CONTENT_LENGTH));
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     // since Content-Length is set, the response should be an instance of FullHttpResponse.
     assertTrue("Response not instance of FullHttpResponse", response instanceof FullHttpResponse);
