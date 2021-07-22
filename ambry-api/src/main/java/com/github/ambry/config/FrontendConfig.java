@@ -127,7 +127,7 @@ public class FrontendConfig {
    */
   @Config("frontend.chunked.get.response.threshold.in.bytes")
   @Default("8192")
-  public final Integer chunkedGetResponseThresholdInBytes;
+  public final long chunkedGetResponseThresholdInBytes;
 
   /**
    * Boolean indicator to specify if frontend should allow the post requests that carry serviceId used as target
@@ -258,7 +258,7 @@ public class FrontendConfig {
     pathPrefixesToRemove = Collections.unmodifiableList(
         pathPrefixesFromConfig.stream().map(this::stripLeadingAndTrailingSlash).collect(Collectors.toList()));
     chunkedGetResponseThresholdInBytes =
-        verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
+        verifiableProperties.getLong("frontend.chunked.get.response.threshold.in.bytes", 8192);
     allowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
     attachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);

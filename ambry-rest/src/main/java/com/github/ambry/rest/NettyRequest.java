@@ -13,8 +13,8 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -59,6 +59,7 @@ import org.slf4j.LoggerFactory;
  * A wrapper over {@link HttpRequest} and all the {@link HttpContent} associated with the request.
  */
 public class NettyRequest implements RestRequest {
+  static final long UNKNOWN_CONTENT_LENGTH = -1L;
   // If the write of at least {@code bufferWatermark} amount of data is unacknowledged, reading from the channel will be
   // temporarily suspended. It will be resumed when the amount of data unacknowledged drops below this number. If this
   // is <=0, it is assumed that there is no limit on the size of unacknowledged data.
@@ -171,7 +172,7 @@ public class NettyRequest implements RestRequest {
             RestServiceErrorCode.InvalidArgs);
       }
     } else {
-      size = HttpUtil.getContentLength(request, -1L);
+      size = HttpUtil.getContentLength(request, UNKNOWN_CONTENT_LENGTH);
     }
 
     // query params.
