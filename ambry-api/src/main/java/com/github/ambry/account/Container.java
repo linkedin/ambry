@@ -117,11 +117,6 @@ public class Container {
   public static final short HELIX_ACCOUNT_SERVICE_CONTAINER_ID = -2;
 
   /**
-   * The id to use when deserializing from json string but no container id is present.
-   */
-  public static final short UNINITIALIZED_CONTAINER_ID = -3;
-
-  /**
    * The id for the containers to be associated with the blobs that are put without specifying a target container,
    * but are specified public. {@link #DEFAULT_PUBLIC_CONTAINER} is one of the containers that use it.
    */

@@ -94,7 +94,6 @@ public class Account {
    * The id for to save account metadata in ambry.
    */
   public static final short HELIX_ACCOUNT_SERVICE_ACCOUNT_ID = -2;
-  public static final short UNINITIALIZED_ACCOUNT_ID = -3;
   public static final QuotaResourceType QUOTA_RESOURCE_TYPE_DEFAULT_VALUE = QuotaResourceType.CONTAINER;
   // static variables
   static final String JSON_VERSION_KEY = "version";

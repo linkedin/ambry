@@ -31,10 +31,10 @@ import static com.github.ambry.account.Container.*;
 @JsonPOJOBuilder(withPrefix = "set")
 public class ContainerBuilder {
   // necessary
-  private short id = UNINITIALIZED_CONTAINER_ID;
+  private Short id = null;
   private String name = null;
   private ContainerStatus status = null;
-  private short parentAccountId = Account.UNINITIALIZED_ACCOUNT_ID;
+  private Short parentAccountId = null;
   private String description = "";
 
   // optional
@@ -306,12 +306,13 @@ public class ContainerBuilder {
    * @throws IllegalStateException If any required fields is not set.
    */
   public Container build() {
-    if (id == UNINITIALIZED_CONTAINER_ID) {
+    if (id == null) {
       throw new IllegalStateException("Container id or container name is not present");
     }
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
-        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode, parentAccountId,
-        deleteTriggerTime, lastModifiedTime, snapshotVersion);
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
+        parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime, lastModifiedTime,
+        snapshotVersion);
   }
 }
