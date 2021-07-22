@@ -1217,20 +1217,22 @@ public class BlobStoreTest {
   @Test
   public void putErrorCasesTest() throws StoreException {
     // ID that exists
-    // live
-    verifyPutFailure(liveKeys.iterator().next(), StoreErrorCodes.Already_Exist);
-    // expired
-    verifyPutFailure(expiredKeys.iterator().next(), StoreErrorCodes.Already_Exist);
-    // deleted
-    verifyPutFailure(deletedKeys.iterator().next(), StoreErrorCodes.Already_Exist);
-    // undeleted
-    if (isLogSegmented) {
-      verifyPutFailure(undeletedKeys.iterator().next(), StoreErrorCodes.Already_Exist);
+    StoreKey storeKey = store.index.journal.getAllEntries().get(2).getKey();
+    MockId mockId = new MockId(storeKey.getID(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+    for (JournalEntry journalEntry : store.index.journal.getAllEntries()) {
+      StoreKey storeKeyFromJournal = journalEntry.getKey();
+      Offset offset = journalEntry.getOffset();
+      store.index.journal.removeSpecificValueInJournal(offset);
+      store.index.journal.addEntry(offset, storeKeyFromJournal, random.nextLong());
     }
+    verifyPutFailure(mockId, StoreErrorCodes.Already_Exist);
+
     // duplicates
     MockId id = getUniqueId();
+    long crc = random.nextLong();
     MessageInfo info =
-        new MessageInfo(id, PUT_RECORD_SIZE, id.getAccountId(), id.getContainerId(), Utils.Infinite_Time);
+        new MessageInfo(id, PUT_RECORD_SIZE, false, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
+            Utils.Infinite_Time, (short) 0);
     MessageWriteSet writeSet = new MockMessageWriteSet(Arrays.asList(info, info),
         Arrays.asList(ByteBuffer.allocate(1), ByteBuffer.allocate(1)));
     try {
@@ -1499,6 +1501,20 @@ public class BlobStoreTest {
     }
     assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
 
+    // crc is null - should fail
+    // first one duplicate, second one absent.
+    mockIdList = Arrays.asList(allMockIdList.get(0), allMockIdList.get(2));
+    crcList = Arrays.asList(null, null);
+    try {
+      putWithKeysAndCrcs(mockIdList, crcList);
+      fail("Put should fail if some keys exist, but some do not");
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Already_Exist, e.getErrorCode());
+      assertEquals("State should be SOME_NOT_ALL_DUPLICATE instead of COLLIDING",
+          "At least one message but not all in the write set is identical to an existing entry", e.getMessage());
+    }
+    assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
+
     // 2. COLLIDING - should fail.
     // first one duplicate, second one colliding.
     mockIdList = Arrays.asList(allMockIdList.get(0), allMockIdList.get(1));
@@ -1535,6 +1551,14 @@ public class BlobStoreTest {
     // Ensure that all new entries were added.
     missingKeysAfter.clear();
     assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
+
+    // 5. first be present, second one colliding but the journal is cleaned up.
+    mockIdList = Arrays.asList(allMockIdList.get(3), allMockIdList.get(1));
+    crcList = Arrays.asList(allCrcList.get(3), allCrcList.get(2));
+    store.index.journal.cleanUpJournal();
+    putWithKeysAndCrcs(mockIdList, crcList);
+    assertEquals(missingKeysAfter, store.findMissingKeys(allMockIdList));
+    reloadStore();
   }
 
   /**
@@ -2970,8 +2994,9 @@ public class BlobStoreTest {
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
   private void verifyPutFailure(MockId idToPut, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info = new MessageInfo(idToPut, PUT_RECORD_SIZE, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
+    long crc = random.nextLong();
+    MessageInfo info = new MessageInfo(idToPut, PUT_RECORD_SIZE, false, false, false, expiresAtMs, crc,
+        idToPut.getAccountId(), idToPut.getContainerId(), Utils.Infinite_Time, (short) 0);
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {

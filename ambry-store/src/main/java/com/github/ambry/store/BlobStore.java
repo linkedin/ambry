@@ -348,7 +348,7 @@ public class BlobStore implements Store {
     for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
       if (index.findKey(info.getStoreKey(), fileSpan,
           EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE)) != null) {
-        if (index.wasRecentlySeen(info)) {
+        if (index.wasRecentlySeenOrCrcIsNull(info)) {
           existingIdenticalEntries++;
           metrics.identicalPutAttemptCount.inc();
         } else {

@@ -911,13 +911,14 @@ class PersistentIndex {
   }
 
   /**
-   * Returns true if the given message was recently seen by this Index.
+   * Returns true if the given message was recently seen by this Index or crc is null from either {@link MessageInfo} or
+   * {@link Journal}.
    * @param info the {@link MessageInfo} to check.
    * @return true if the exact message was recently added to this index; false otherwise.
    */
-  boolean wasRecentlySeen(MessageInfo info) {
+  boolean wasRecentlySeenOrCrcIsNull(MessageInfo info) {
     Long crcInJournal = journal.getCrcOfKey(info.getStoreKey());
-    return info.getCrc() != null && info.getCrc().equals(crcInJournal);
+    return info.getCrc() == null || crcInJournal == null || info.getCrc().equals(crcInJournal);
   }
 
   /**
