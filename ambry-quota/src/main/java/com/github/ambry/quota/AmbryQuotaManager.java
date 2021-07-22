@@ -96,7 +96,7 @@ public class AmbryQuotaManager implements QuotaManager {
 
   @Override
   public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) {
-    if (!quotaConfig.requestThrottlingEnabled || requestQuotaEnforcers.isEmpty()) {
+    if (requestQuotaEnforcers.isEmpty()) {
       return null;
     }
     ThrottlingRecommendation throttlingRecommendation = null;
@@ -127,7 +127,7 @@ public class AmbryQuotaManager implements QuotaManager {
 
   @Override
   public ThrottlingRecommendation charge(RestRequest restRequest) {
-    if (!quotaConfig.requestThrottlingEnabled || requestQuotaEnforcers.isEmpty()) {
+    if (requestQuotaEnforcers.isEmpty()) {
       return null;
     }
     ThrottlingRecommendation throttlingRecommendation;
