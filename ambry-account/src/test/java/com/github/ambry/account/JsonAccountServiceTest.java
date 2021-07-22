@@ -14,12 +14,12 @@
 package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.JsonAccountConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,7 +29,6 @@ import java.util.HashSet;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import org.json.JSONArray;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -101,7 +100,6 @@ public class JsonAccountServiceTest {
 
     Random pseudoRandom = new Random(randomSeed);
 
-    JSONArray accountsJsonRoot = new JSONArray();
     // Using a set since caller will probably use this to verify it's own results. So will be doing mostly random
     // lookups.
     Set<Account> generatedAccounts = new HashSet<>(noAccounts);
@@ -111,10 +109,9 @@ public class JsonAccountServiceTest {
           new AccountBuilder(x, randomString(pseudoRandom, 16), Account.AccountStatus.ACTIVE).build();
 
       generatedAccounts.add(generatedAccount);
-      accountsJsonRoot.put(generatedAccount.toJson(false));
     }
 
-    Files.write(accountJsonFilePath, Collections.singleton(accountsJsonRoot.toString(4)), StandardCharsets.UTF_8);
+    Files.write(accountJsonFilePath, new ObjectMapper().writeValueAsBytes(generatedAccounts));
 
     return generatedAccounts;
   }

@@ -14,6 +14,9 @@
 package com.github.ambry.account;
 
 import com.github.ambry.quota.QuotaResourceType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,10 +30,12 @@ import static com.github.ambry.account.Account.*;
  * in two ways: 1) from an existing {@link Account} object; and 2) by supplying required fields of an {@link Account}.
  * This class is not thread safe.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonPOJOBuilder(withPrefix = "")
 public class AccountBuilder {
-  private short id;
-  private String name;
-  private AccountStatus status;
+  private Short id = null;
+  private String name = null;
+  private AccountStatus status = null;
   private QuotaResourceType quotaResourceType = QUOTA_RESOURCE_TYPE_DEFAULT_VALUE;
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
@@ -56,6 +61,12 @@ public class AccountBuilder {
       idToContainerMetadataMap.put(container.getId(), container);
     }
     quotaResourceType = origin.getQuotaResourceType();
+  }
+
+  /**
+   * Constructor for jackson to deserialize {@link Account}.
+   */
+  public AccountBuilder() {
   }
 
   /**
@@ -93,6 +104,7 @@ public class AccountBuilder {
    * @param id The id to set.
    * @return This builder.
    */
+  @JsonProperty(ACCOUNT_ID_KEY)
   public AccountBuilder id(short id) {
     this.id = id;
     return this;
@@ -103,6 +115,7 @@ public class AccountBuilder {
    * @param name The name to set.
    * @return This builder.
    */
+  @JsonProperty(ACCOUNT_NAME_KEY)
   public AccountBuilder name(String name) {
     this.name = name;
     return this;
@@ -210,6 +223,15 @@ public class AccountBuilder {
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
   public Account build() {
+    if (id == null) {
+      throw new IllegalStateException("Account id is not present");
+    }
+    // Did we check the container parent account id here?
+    for (Map.Entry<Short, Container> entry : idToContainerMetadataMap.entrySet()) {
+      if (entry.getValue().getParentAccountId() == Container.UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID) {
+        entry.setValue(new ContainerBuilder(entry.getValue()).setParentAccountId(id).build());
+      }
+    }
     return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(),
         lastModifiedTime, quotaResourceType);
   }

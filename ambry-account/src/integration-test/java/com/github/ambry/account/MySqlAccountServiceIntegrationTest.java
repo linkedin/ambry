@@ -36,15 +36,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.config.MySqlAccountServiceConfig.*;
@@ -60,7 +56,6 @@ import static org.mockito.Mockito.*;
  */
 public class MySqlAccountServiceIntegrationTest {
 
-  private static final Logger logger = LoggerFactory.getLogger(MySqlAccountServiceIntegrationTest.class);
   private static final String DESCRIPTION = "Indescribable";
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private final Properties mySqlConfigProps;
@@ -119,11 +114,11 @@ public class MySqlAccountServiceIntegrationTest {
     Account testAccount =
         new AccountBuilder((short) 1, "testAccount", Account.AccountStatus.ACTIVE).lastModifiedTime(lastModifiedTime)
             .build();
-    Map<String, String> accountMap = new HashMap<>();
-    accountMap.put(Short.toString(testAccount.getId()), testAccount.toJson(false).toString());
+    Collection<Account> accounts = new ArrayList<>();
+    accounts.add(testAccount);
     String filename = BackupFileManager.getBackupFilename(1, SystemTime.getInstance().seconds());
     Path filePath = accountBackupDir.resolve(filename);
-    BackupFileManager.writeAccountMapToFile(filePath, accountMap);
+    BackupFileManager.writeAccountsToFile(filePath, accounts);
 
     mySqlAccountService = getAccountService();
 

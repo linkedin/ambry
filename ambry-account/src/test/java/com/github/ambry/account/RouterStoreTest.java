@@ -259,8 +259,8 @@ public class RouterStoreTest {
     assertTrue("Update accounts failed at router store", succeeded);
 
     // verify that fetchAccountMetadata can fetch the accounts we just updated.
-    Map<String, String> accountMap = store.fetchAccountMetadata();
-    assertAccountsEqual(accountMap, allAccounts);
+    Collection<Account> accounts = store.fetchAccountMetadata();
+    assertAccountsEqual(accounts, allAccounts);
 
     List<RouterStore.BlobIDAndVersion> blobIDAndVersions = getBlobIDAndVersionInHelix(count);
     RouterStore.BlobIDAndVersion blobIDAndVersion = null;
@@ -271,7 +271,7 @@ public class RouterStoreTest {
       }
     }
     assertNotNull("Version " + version + " expected", blobIDAndVersion);
-    accountMap = store.readAccountMetadataFromBlobID(blobIDAndVersion.getBlobID());
+    Map<String, String> accountMap = store.readAccountMetadataFromBlobID(blobIDAndVersion.getBlobID());
     assertAccountsEqual(accountMap, allAccounts);
   }
 
@@ -297,17 +297,37 @@ public class RouterStoreTest {
   }
 
   /**
-   * Compare the account map in json string with the account map from id to account.
-   * @param accountMap The account map ini json string.
-   * @param accounts The account map from id to account.
+   * Compare the account collection in json string with the account map from id to account.
+   * @param accounts The account collection in json string.
+   * @param accountMap The account map from id to account.
    */
-  private void assertAccountsEqual(Map<String, String> accountMap, Map<Short, Account> accounts) {
-    AccountInfoMap accountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMap);
+  private void assertAccountsEqual(Collection<Account> accounts, Map<Short, Account> accountMap) {
+    AccountInfoMap accountInfoMap = new AccountInfoMap(accounts);
+    assertAccountInfoMapSameAccountWithAccountMap(accountInfoMap, accountMap);
+  }
+
+  /**
+   * Compare the account map in json string with the account map from id to account.
+   * @param accounts The account map in json string.
+   * @param accountMap The account map from id to account.
+   */
+  private void assertAccountsEqual(Map<String, String> accounts, Map<Short, Account> accountMap) {
+    AccountInfoMap accountInfoMap = new AccountInfoMap(accountServiceMetrics, accounts);
+    assertAccountInfoMapSameAccountWithAccountMap(accountInfoMap, accountMap);
+  }
+
+  /**
+   * Compare the accounts in {@link AccountInfoMap} with the account map from id to account.
+   * @param accountInfoMap The {@link AccountInfoMap}.
+   * @param accountMap The account map from id to account.
+   */
+  private void assertAccountInfoMapSameAccountWithAccountMap(AccountInfoMap accountInfoMap,
+      Map<Short, Account> accountMap) {
     Collection<Account> obtainedAccounts = accountInfoMap.getAccounts();
 
-    assertEquals("Account size doesn't match", obtainedAccounts.size(), accounts.size());
+    assertEquals("Account size doesn't match", obtainedAccounts.size(), obtainedAccounts.size());
     for (Account obtainedAccount : obtainedAccounts) {
-      Account expectedAccount = accounts.get(obtainedAccount.getId());
+      Account expectedAccount = accountMap.get(obtainedAccount.getId());
       assertEquals("Account mismatched", expectedAccount, obtainedAccount);
     }
   }
