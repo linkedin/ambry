@@ -71,11 +71,6 @@ public class QuotaTestUtils {
       }
 
       @Override
-      public ThrottlingRecommendation charge(RestRequest restRequest, long chunkSize) {
-        return null;
-      }
-
-      @Override
       public QuotaConfig getQuotaConfig() {
         return new QuotaConfig(new VerifiableProperties(new Properties()));
       }

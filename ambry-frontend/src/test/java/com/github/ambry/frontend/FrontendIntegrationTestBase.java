@@ -16,9 +16,12 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.UserQuotaRequestCostPolicy;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
@@ -56,6 +59,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
@@ -75,10 +79,12 @@ public class FrontendIntegrationTestBase {
   static final String CLUSTER_NAME = "Cluster-name";
   protected FrontendConfig frontendConfig;
   protected NettyClient nettyClient;
+  protected QuotaConfig quotaConfig;
 
   public FrontendIntegrationTestBase(FrontendConfig frontendConfig, NettyClient nettyClient) {
     this.frontendConfig = frontendConfig;
     this.nettyClient = nettyClient;
+    this.quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
   }
 
   /**
@@ -192,6 +198,7 @@ public class FrontendIntegrationTestBase {
         expectedContainerName);
     getHeadAndVerify(blobId, null, GetOption.None, headers, isPrivate, expectedAccountName, expectedContainerName);
     ByteRange range = ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
+    headers.add(RestUtils.Headers.BLOB_SIZE, range.getRangeSize());
     getBlobAndVerify(blobId, range, null, false, headers, isPrivate, content, expectedAccountName,
         expectedContainerName);
     getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
@@ -385,7 +392,7 @@ public class FrontendIntegrationTestBase {
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     verifyUserMetadata(expectedHeaders, response, null, null);
-    verifyGetRequestCostHeaders(response, Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)));
+    verifyGetRequestCostHeaders(response, expectedContentArray.length);
   }
 
   /**
@@ -890,7 +897,7 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the content posted.
    */
   private void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
+    double cuCost = contentSize / quotaConfig.quotaAccountingUnit;
     cuCost = (cuCost > 1) ? cuCost : 1;
     double storageCost = contentSize / UserQuotaRequestCostPolicy.BYTES_IN_GB;
     verifyCommonRequestCostHeaders(response, cuCost, storageCost, false);
@@ -902,7 +909,7 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the blob.
    */
   private void verifyGetRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
+    double cuCost = Math.ceil(contentSize / quotaConfig.quotaAccountingUnit);
     cuCost = (cuCost > 1) ? cuCost : 1;
     verifyCommonRequestCostHeaders(response, cuCost, 0, true);
   }

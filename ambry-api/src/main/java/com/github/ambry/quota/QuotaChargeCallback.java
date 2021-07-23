@@ -13,10 +13,11 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,20 +32,25 @@ public interface QuotaChargeCallback {
    * Build {@link QuotaChargeCallback} to handle quota compliance of requests.
    * @param restRequest {@link RestRequest} for which quota is being charged.
    * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
-   * @param quotaConfig {@link QuotaConfig} object.
    * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
    * @return QuotaChargeCallback object.
    */
   static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
-      QuotaConfig quotaConfig, boolean shouldThrottle) {
+      boolean shouldThrottle) {
+    RequestCostPolicy requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
     return new QuotaChargeCallback() {
       @Override
       public void chargeQuota(long chunkSize) throws RouterException {
         try {
-          ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, chunkSize);
+          Map<QuotaName, Double>
+              requestCost = requestCostPolicy.calculateRequestCost(restRequest, chunkSize)
+              .entrySet()
+              .stream()
+              .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
+          ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, null, requestCost);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle() && shouldThrottle) {
-            if (quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING &&
-                quotaManager.getQuotaConfig().throttleInProgressRequests) {
+            if (quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING
+                && quotaManager.getQuotaConfig().throttleInProgressRequests) {
               throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
             } else {
               logger.info("Quota exceeded for an in progress request.");
@@ -61,7 +67,7 @@ public interface QuotaChargeCallback {
 
       @Override
       public void chargeQuota() throws RouterException {
-        chargeQuota(quotaConfig.quotaAccountingSize);
+        chargeQuota(quotaManager.getQuotaConfig().quotaAccountingUnit);
       }
     };
   }

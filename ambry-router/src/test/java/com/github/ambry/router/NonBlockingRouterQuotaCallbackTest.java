@@ -19,6 +19,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
@@ -27,6 +28,7 @@ import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.ThrottlePolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
@@ -34,6 +36,7 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -244,7 +247,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       QuotaManager quotaManager =
           new ChargeTesterQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), accountService, null,
               new MetricRegistry(), listenerCalledCount);
-      QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager, quotaConfig, true);
+      QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager, true);
 
       int blobSize = 3000;
       setOperationParams(blobSize, TTL_SECS);
@@ -309,8 +312,9 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     }
 
     @Override
-    public ThrottlingRecommendation charge(RestRequest restRequest, long chunkSize) {
-      ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest, chunkSize);
+    public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+        Map<QuotaName, Double> requestCostMap) {
+      ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest, blobInfo, requestCostMap);
       if (throttlingRecommendation != null) {
         chargeCalledCount.incrementAndGet();
       }

@@ -26,6 +26,7 @@ import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
+import com.github.ambry.quota.UserQuotaRequestCostPolicy;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -73,7 +74,7 @@ class AmbrySecurityService implements SecurityService {
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
     this.quotaManager = quotaManager;
-    this.requestCostPolicy = new UserQuotaRequestCostPolicy();
+    this.requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
     isOpen = true;
   }
 

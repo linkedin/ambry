@@ -70,11 +70,11 @@ import static com.github.ambry.router.RouterErrorCode.*;
  * The body of the request should be a JSON object that conforms to the format described in {@link StitchRequestSerDe}.
  */
 public class NamedBlobPutHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(NamedBlobPutHandler.class);
   /**
    * Key to represent the time at which a blob will expire in ms. Used within the metadata map in signed IDs.
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
-  private static final Logger LOGGER = LoggerFactory.getLogger(NamedBlobPutHandler.class);
   private final SecurityService securityService;
   private final IdConverter idConverter;
   private final IdSigningService idSigningService;
@@ -190,8 +190,7 @@ public class NamedBlobPutHandler {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, quotaManager.getQuotaConfig(),
-                  true));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -221,8 +220,8 @@ public class NamedBlobPutHandler {
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, quotaManager.getQuotaConfig(),
-                  true)), uri, LOGGER, finalCallback);
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true)), uri, LOGGER,
+          finalCallback);
     }
 
     /**
@@ -253,8 +252,8 @@ public class NamedBlobPutHandler {
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                  QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, quotaManager.getQuotaConfig(),
-                      false)), this::isRetriable, routerTtlUpdateCallback(blobInfo));
+                  QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+              routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());

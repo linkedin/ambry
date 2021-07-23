@@ -13,9 +13,12 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.UserQuotaRequestCostPolicy;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -25,6 +28,7 @@ import com.github.ambry.rest.RestUtils;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -42,25 +46,29 @@ public class UserQuotaRequestCostPolicyTest {
   private final static short DEFAULT_LIFE_VERSION = 1;
   private final static long MB = 1024 * 1024;
   private final static long GB = MB * 1024L;
+  private final static long KB = 1024L;
 
   @Test
   public void testCalculateRequestCost() throws Exception {
-    UserQuotaRequestCostPolicy quotaRequestCostPolicy = new UserQuotaRequestCostPolicy();
+    QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+    UserQuotaRequestCostPolicy quotaRequestCostPolicy = new UserQuotaRequestCostPolicy(quotaConfig);
 
     RestResponseChannel restResponseChannel = mock(RestResponseChannel.class);
     when(restResponseChannel.getHeader(anyString())).thenReturn(0);
     String blobUri = "/AAYIAQSSAAgAAQAAAAAAABpFymbGwe7sRBWYa5OPlkcNHQ.bin";
     // test for a 4 MB GET request.
+    long blobSize = 4 * MB;
     BlobInfo blobInfo = getBlobInfo(4 * MB);
     RestRequest restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
     Map<String, Double> costMap =
         quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyReadCost(costMap, 1, 0);
+    verifyReadCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 0);
 
     // test for a small GET request (fractional CU).
-    blobInfo = getBlobInfo(6 * MB);
+    blobSize = 6 * MB;
+    blobInfo = getBlobInfo(blobSize);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyReadCost(costMap, 2, 0);
+    verifyReadCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 0);
 
     // test for a GET request of blob of size 0.
     blobInfo = getBlobInfo(0);
@@ -68,20 +76,34 @@ public class UserQuotaRequestCostPolicyTest {
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1, 0);
 
+    // test for a GET request of blob of size 512.
+    blobInfo = getBlobInfo(512);
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyReadCost(costMap, 1, 0);
+
     // test for a small POST request (fractional storage cost).
+    blobSize = 8 * MB;
     blobInfo = getBlobInfo(8 * MB);
     restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 8 * MB);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyWriteCost(costMap, 2, 8 * 1024 * 1024 / UserQuotaRequestCostPolicy.BYTES_IN_GB);
+    verifyWriteCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 8 * 1024 * 1024 / UserQuotaRequestCostPolicy.BYTES_IN_GB);
 
     // test for a large POST request.
+    blobSize = 4 * GB;
     blobInfo = getBlobInfo(4 * GB);
     restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 4 * GB);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyWriteCost(costMap, 1024, 4);
+    verifyWriteCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 4);
 
     // test for a POST request of blob of size 0.
     blobInfo = getBlobInfo(0);
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 0);
+    costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
+    verifyWriteCost(costMap, 1, 0);
+
+    // test for a POST request of blob of size 512.
+    blobInfo = getBlobInfo(512);
     restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 0);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0);
@@ -106,6 +128,7 @@ public class UserQuotaRequestCostPolicyTest {
     verifyWriteCost(costMap, 1, 0.0);
 
     // test BlobInfo and UserMetadata GET requests
+    blobSize = 40 * GB;
     blobInfo = getBlobInfo(40 * GB);
     restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri + "/BlobInfo", -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
@@ -116,7 +139,7 @@ public class UserQuotaRequestCostPolicyTest {
     // Plain GET should use blob size
     restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
-    verifyReadCost(costMap, 10240, 0);
+    verifyReadCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 0);
 
     // TODO add a range request case with large range
   }
@@ -143,8 +166,8 @@ public class UserQuotaRequestCostPolicyTest {
         costMap.containsKey(QuotaName.READ_CAPACITY_UNIT.name()));
     assertTrue("cost for " + QuotaName.STORAGE_IN_GB.name() + " should be present",
         costMap.containsKey(QuotaName.STORAGE_IN_GB.name()));
-    assertEquals(cUCost, costMap.get(QuotaName.READ_CAPACITY_UNIT.name()), 0.000001);
-    assertEquals(storageCost, costMap.get(QuotaName.STORAGE_IN_GB.name()), 0.000001);
+    assertEquals("Incorrect CU cost", cUCost, costMap.get(QuotaName.READ_CAPACITY_UNIT.name()), 0.000001);
+    assertEquals("Incorrect storage cost", storageCost, costMap.get(QuotaName.STORAGE_IN_GB.name()), 0.000001);
   }
 
   /**

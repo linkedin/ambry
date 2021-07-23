@@ -129,17 +129,6 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, long chunkSize) {
-    if (!RestUtils.isUploadRequest(restRequest)) {
-      return NO_QUOTA_VALUE_RECOMMENDATION;
-    }
-
-    // The cost is number of bytes in GB for one chunk.
-    Pair<Long, Long> pair = charge(restRequest, chunkSize);
-    return recommendBasedOnQuotaAndUsage(pair);
-  }
-
-  @Override
   public QuotaRecommendation recommend(RestRequest restRequest) {
     if (!RestUtils.isUploadRequest(restRequest)) {
       return NO_QUOTA_VALUE_RECOMMENDATION;

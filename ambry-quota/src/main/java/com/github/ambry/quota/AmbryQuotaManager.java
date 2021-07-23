@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AmbryQuotaManager implements QuotaManager {
   private static final Logger logger = LoggerFactory.getLogger(AmbryQuotaManager.class);
+  private final RequestCostPolicy requestCostPolicy;
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
@@ -72,6 +73,7 @@ public class AmbryQuotaManager implements QuotaManager {
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = new QuotaMetrics(metricRegistry);
+    this.requestCostPolicy = new UserQuotaRequestCostPolicy(quotaConfig);
     accountService.addAccountUpdateConsumer(this::onAccountUpdateNotification);
   }
 
@@ -122,11 +124,6 @@ public class AmbryQuotaManager implements QuotaManager {
   @Override
   public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
       Map<QuotaName, Double> requestCostMap) {
-    return charge(restRequest, blobInfo.getBlobProperties().getBlobSize());
-  }
-
-  @Override
-  public ThrottlingRecommendation charge(RestRequest restRequest, long chunkSize) {
     if (requestQuotaEnforcers.isEmpty()) {
       return null;
     }
@@ -134,7 +131,7 @@ public class AmbryQuotaManager implements QuotaManager {
     Timer.Context timer = quotaMetrics.quotaChargeTime.time();
     try {
       throttlingRecommendation = throttlePolicy.recommend(requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, chunkSize))
+          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
           .filter(Objects::nonNull)
           .collect(Collectors.toList()));
     } finally {

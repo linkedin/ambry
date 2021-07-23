@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -32,5 +33,14 @@ public interface RequestCostPolicy {
    * @param blobInfo {@link BlobInfo} of the blob in request.
    * @return Map of cost metrics and actual cost value.
    */
-  Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo);
+  Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel responseChannel,
+      BlobInfo blobInfo);
+
+  /**
+   * Calculates the cost incurred to serve the specified {@link RestRequest} for blob or chunk of the specified {@code size}.
+   * @param restRequest {@link RestRequest} served.
+   * @param size size of the blob or chunk.
+   * @return Map of cost metrics and actual cost value.
+   */
+  Map<String, Double> calculateRequestCost(RestRequest restRequest, long size);
 }
