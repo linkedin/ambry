@@ -854,7 +854,7 @@ class GetBlobOperation extends GetOperation {
             if (chunkSize != -1) {
               quotaChargeCallback.chargeQuota(chunkSize);
             } else {
-              if (this instanceof FirstGetChunk && ((FirstGetChunk) this).blobType == BlobType.DataBlob) {
+              if (this instanceof FirstGetChunk && ((FirstGetChunk) this).blobType == BlobType.DataBlob && blobInfo != null) {
                 quotaChargeCallback.chargeQuota(blobInfo.getBlobProperties().getBlobSize());
               }
               // other cases mean that either this was a metadata blob, or there was an error.
