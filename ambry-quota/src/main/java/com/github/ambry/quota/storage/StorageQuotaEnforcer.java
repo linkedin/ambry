@@ -52,7 +52,6 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   private static final int HTTP_STATUS_ALLOW = 200;
   private static final long NO_RETRY = -1L;
   private static final long BYTES_IN_GB = 1024 * 1024 * 1024;
-  private static final long CHUNK_COST_IN_BYTES = 4 * 1024 * 1024;
   // The quota recommendation returned when there is no quota found for the given account/container.
   private static final QuotaRecommendation NO_QUOTA_VALUE_RECOMMENDATION =
       new QuotaRecommendation(false, 0.0f, QuotaName.STORAGE_IN_GB, HTTP_STATUS_ALLOW, NO_RETRY);
@@ -130,13 +129,13 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest) {
+  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, long chunkSize) {
     if (!RestUtils.isUploadRequest(restRequest)) {
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
 
     // The cost is number of bytes in GB for one chunk.
-    Pair<Long, Long> pair = charge(restRequest, CHUNK_COST_IN_BYTES);
+    Pair<Long, Long> pair = charge(restRequest, chunkSize);
     return recommendBasedOnQuotaAndUsage(pair);
   }
 

@@ -134,7 +134,7 @@ public class AmbryQuotaManager implements QuotaManager {
     Timer.Context timer = quotaMetrics.quotaChargeTime.time();
     try {
       throttlingRecommendation = throttlePolicy.recommend(requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest))
+          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, chunkSize))
           .filter(Objects::nonNull)
           .collect(Collectors.toList()));
     } finally {

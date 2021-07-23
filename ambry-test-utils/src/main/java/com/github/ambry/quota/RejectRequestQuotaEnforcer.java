@@ -42,11 +42,11 @@ public class RejectRequestQuotaEnforcer implements QuotaEnforcer {
   @Override
   public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
       Map<QuotaName, Double> requestCostMap) {
-    return chargeAndRecommend(restRequest);
+    return chargeAndRecommend(restRequest, 0);
   }
 
   @Override
-  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest) {
+  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, long chunkSize) {
     return new QuotaRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE, QuotaName.READ_CAPACITY_UNIT,
         REJECT_HTTP_STATUS, 1);
   }

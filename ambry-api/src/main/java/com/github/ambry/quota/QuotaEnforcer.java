@@ -43,9 +43,10 @@ public interface QuotaEnforcer {
    * Makes an {@link QuotaRecommendation} using the information in {@link RestRequest}. This
    * method also charges one unit of request cost against the quota.
    * @param restRequest {@link RestRequest} object.
+   * @param chunkSize size of the chunk for which charge is applied.
    * @return QuotaRecommendation object with the recommendation.
    */
-  QuotaRecommendation chargeAndRecommend(RestRequest restRequest);
+  QuotaRecommendation chargeAndRecommend(RestRequest restRequest, long chunkSize);
 
   /**
    * Makes an {@link QuotaRecommendation} for the restRequest. This method doesn't know the
