@@ -60,7 +60,7 @@ public interface QuotaChargeCallback {
       }
 
       @Override
-      public void chargeQuota1() throws RouterException {
+      public void chargeQuota() throws RouterException {
         chargeQuota(quotaConfig.quotaAccountingSize);
       }
     };
@@ -73,5 +73,10 @@ public interface QuotaChargeCallback {
    */
   void chargeQuota(long chunkSize) throws RouterException;
 
-  void chargeQuota1() throws RouterException;
+  /**
+   * Callback method that can be used to charge quota usage for a request or part of a request. Call this method
+   * when the quota charge doesn't depend on the chunk size.
+   * @throws RouterException In case request needs to be throttled.
+   */
+  void chargeQuota() throws RouterException;
 }

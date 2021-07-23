@@ -108,7 +108,7 @@ public class ConcurrencyTestTool {
     }
 
     @Override
-    public void chargeQuota1() {
+    public void chargeQuota() {
 
     }
   };

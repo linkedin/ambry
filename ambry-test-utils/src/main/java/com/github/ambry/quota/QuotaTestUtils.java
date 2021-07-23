@@ -94,7 +94,7 @@ public class QuotaTestUtils {
       }
 
       @Override
-      public void chargeQuota1() throws RouterException {
+      public void chargeQuota() throws RouterException {
       }
     };
   }

@@ -122,7 +122,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
         }
 
         @Override
-        public void chargeQuota1() throws RouterException {
+        public void chargeQuota() throws RouterException {
           chargeQuota(quotaAccountingSize);
         }
       };

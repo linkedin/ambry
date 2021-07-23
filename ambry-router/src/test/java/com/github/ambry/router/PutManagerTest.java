@@ -396,7 +396,7 @@ public class PutManagerTest {
           }
 
           @Override
-          public void chargeQuota1() {
+          public void chargeQuota() {
           }
         });
     submitPutsAndAssertSuccess(false);
