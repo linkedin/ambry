@@ -1115,9 +1115,7 @@ public class IndexTest {
     state.closeAndClearIndex();
     state.reloadIndex(false, false);
     assertNull("There should be no offsets in the journal", state.index.journal.getFirstOffset());
-    if (!isLogSegmented) {
-      assertNull("There should be no log segments returned", state.index.getLogSegmentsNotInJournal());
-    }
+    assertNull("There should be no log segments returned", state.index.getLogSegmentsNotInJournal());
   }
 
   /**
