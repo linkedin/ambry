@@ -43,7 +43,7 @@ public interface QuotaChargeCallback {
       public void chargeQuota(long chunkSize) throws RouterException {
         try {
           Map<QuotaName, Double>
-              requestCost = requestCostPolicy.calculateRequestCost(restRequest, chunkSize)
+              requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
               .entrySet()
               .stream()
               .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));

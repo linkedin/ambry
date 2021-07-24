@@ -37,10 +37,10 @@ public interface RequestCostPolicy {
       BlobInfo blobInfo);
 
   /**
-   * Calculates the cost incurred to serve the specified {@link RestRequest} for blob or chunk of the specified {@code size}.
+   * Calculates the quota charge incurred to serve the specified {@link RestRequest} for blob or chunk of the specified {@code size}.
    * @param restRequest {@link RestRequest} served.
    * @param size size of the blob or chunk.
    * @return Map of cost metrics and actual cost value.
    */
-  Map<String, Double> calculateRequestCost(RestRequest restRequest, long size);
+  Map<String, Double> calculateRequestQuotaCharge(RestRequest restRequest, long size);
 }

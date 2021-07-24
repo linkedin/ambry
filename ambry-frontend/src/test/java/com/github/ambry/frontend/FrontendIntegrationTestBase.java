@@ -897,8 +897,8 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the content posted.
    */
   private void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / quotaConfig.quotaAccountingUnit;
-    cuCost = (cuCost > 1) ? cuCost : 1;
+    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
+    cuCost = Math.max(cuCost, 1);
     double storageCost = contentSize / UserQuotaRequestCostPolicy.BYTES_IN_GB;
     verifyCommonRequestCostHeaders(response, cuCost, storageCost, false);
   }
@@ -909,8 +909,8 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the blob.
    */
   private void verifyGetRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = Math.ceil(contentSize / quotaConfig.quotaAccountingUnit);
-    cuCost = (cuCost > 1) ? cuCost : 1;
+    double cuCost = Math.ceil(contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT);
+    cuCost = Math.max(cuCost, 1);
     verifyCommonRequestCostHeaders(response, cuCost, 0, true);
   }
 

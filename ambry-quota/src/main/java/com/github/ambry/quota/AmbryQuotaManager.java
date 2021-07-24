@@ -43,7 +43,6 @@ import org.slf4j.LoggerFactory;
  */
 public class AmbryQuotaManager implements QuotaManager {
   private static final Logger logger = LoggerFactory.getLogger(AmbryQuotaManager.class);
-  private final RequestCostPolicy requestCostPolicy;
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
@@ -73,7 +72,6 @@ public class AmbryQuotaManager implements QuotaManager {
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = new QuotaMetrics(metricRegistry);
-    this.requestCostPolicy = new UserQuotaRequestCostPolicy(quotaConfig);
     accountService.addAccountUpdateConsumer(this::onAccountUpdateNotification);
   }
 

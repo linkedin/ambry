@@ -36,6 +36,7 @@ import static com.github.ambry.rest.RestUtils.*;
  */
 public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
   public final static double BYTES_IN_GB = 1024 * 1024 * 1024; // 1GB
+  public final static double CU_COST_UNIT = 4 * 1024 * 1024; //4 MB
   final static double INDEX_ONLY_COST = 1;
   final static double MIN_CU_COST = INDEX_ONLY_COST;
   private static final Logger logger = LoggerFactory.getLogger(UserQuotaRequestCostPolicy.class);
@@ -51,17 +52,18 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
       BlobInfo blobInfo) {
     Map<String, Double> costMap = new HashMap<>();
     costMap.put(restMethodToCostMetric(restRequest.getRestMethod()),
-        calculateCapacityUnitCost(restRequest, restResponseChannel, blobInfo, quotaConfig.quotaAccountingUnit));
+        calculateCapacityUnitCost(restRequest, restResponseChannel, blobInfo));
+    costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, restRequest.getBlobBytesReceived()));
     costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, restRequest.getBlobBytesReceived()));
     return costMap;
   }
 
   @Override
-  public Map<String, Double> calculateRequestCost(RestRequest restRequest, long chunkSize) {
+  public Map<String, Double> calculateRequestQuotaCharge(RestRequest restRequest, long size) {
     Map<String, Double> costMap = new HashMap<>();
-    double capacityUnitCost = Math.max(Math.ceil(chunkSize / quotaConfig.quotaAccountingUnit), MIN_CU_COST);
+    double capacityUnitCost = Math.max(Math.ceil(size / quotaConfig.quotaAccountingUnit), MIN_CU_COST);
     costMap.put(restMethodToCostMetric(restRequest.getRestMethod()), capacityUnitCost);
-    costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, chunkSize));
+    costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, size));
     return costMap;
   }
 
@@ -98,11 +100,10 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
    * @param restRequest {@link RestRequest} to find type of request.
    * @param restResponseChannel {@link RestResponseChannel} object.
    * @param blobInfo {@link BlobInfo} object representing the blob being served.
-   * @param accountingUnit size of chunk that is considered for one unit of quota.
    * @return cost in terms of capacity units.
    */
   private double calculateCapacityUnitCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      BlobInfo blobInfo, long accountingUnit) {
+      BlobInfo blobInfo) {
     RequestPath requestPath = getRequestPath(restRequest);
     switch (restRequest.getRestMethod()) {
       case POST:
@@ -112,7 +113,7 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
         } else {
           contentSize = restRequest.getBytesReceived();
         }
-        double cost = Math.ceil(contentSize / accountingUnit);
+        double cost = Math.ceil(contentSize / CU_COST_UNIT);
         return Math.max(cost, MIN_CU_COST);
       case GET:
         SubResource subResource = requestPath.getSubResource();
@@ -138,7 +139,7 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
           } else { // regular GET blob
             size = blobInfo.getBlobProperties().getBlobSize();
           }
-          cost = Math.ceil(size / accountingUnit);
+          cost = Math.ceil(size / CU_COST_UNIT);
           return Math.max(cost, MIN_CU_COST);
         }
       default:

@@ -849,7 +849,7 @@ class GetBlobOperation extends GetOperation {
         chunkCompleted = true;
       }
       if (chunkCompleted) {
-        if (state != ChunkState.Complete && quotaChargeCallback != null) {
+        if (state != ChunkState.Complete && quotaChargeCallback != null && chunkException == null) {
           try {
             if (chunkSize != -1) {
               quotaChargeCallback.chargeQuota(chunkSize);
