@@ -839,9 +839,14 @@ class BlobStoreCompactor {
               double currentWriteTimePerMbInMs = diskMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile();
               int desiredWritePerSecond = getDesiredSpeedPerSecond(currentWriteTimePerMbInMs,
                   config.storeCompactionIoPerMbWriteLatencyThresholdMs);
-              logger.debug(
-                  "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
-                  currentReadTimePerMbInMs, currentWriteTimePerMbInMs, desiredReadPerSecond, desiredWritePerSecond);
+              if (currentReadTimePerMbInMs > config.storeCompactionIoPerMbReadLatencyThresholdMs
+                  || currentWriteTimePerMbInMs > config.storeCompactionIoPerMbWriteLatencyThresholdMs) {
+                // Only log when compaction copy rate is impacted.
+                logger.debug(
+                    "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
+                    currentReadTimePerMbInMs, currentWriteTimePerMbInMs, desiredReadPerSecond, desiredWritePerSecond);
+              }
+
               diskIOScheduler.updateThrottlerDesiredRate(COMPACTION_CLEANUP_JOB_NAME,
                   Math.min(desiredReadPerSecond, desiredWritePerSecond));
             } else {

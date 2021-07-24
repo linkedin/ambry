@@ -39,13 +39,10 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
@@ -78,7 +75,7 @@ public class ReplicationManager extends ReplicationEngine {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate,
-        findTokenHelper, time);
+        findTokenHelper, time, true);
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     // make sure leaderBasedReplicationAdmin is constructed before creating ReplicaThreads since it is passed to them
     if (replicationConfig.replicationModelAcrossDatacenters.equals(ReplicationModelType.LEADER_BASED)) {
