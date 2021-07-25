@@ -13,7 +13,6 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
