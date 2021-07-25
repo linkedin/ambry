@@ -113,11 +113,11 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       ScheduledExecutorService scheduler, DataNodeId dataNode, List<? extends ReplicaId> replicaIds,
       ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant, StoreManager storeManager, Predicate<MessageInfo> skipPredicate)
-      throws ReplicationException {
+      ClusterParticipant clusterParticipant, StoreManager storeManager, Predicate<MessageInfo> skipPredicate,
+      boolean enableClusterMapListener) throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, dataNode, replicaIds,
         connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
-        clusterParticipant, storeManager, skipPredicate, null, SystemTime.getInstance());
+        clusterParticipant, storeManager, skipPredicate, null, SystemTime.getInstance(), enableClusterMapListener);
   }
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -126,7 +126,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, StoreManager storeManager, Predicate<MessageInfo> skipPredicate,
-      FindTokenHelper findTokenHelper, Time time) throws ReplicationException {
+      FindTokenHelper findTokenHelper, Time time, boolean enableClusterMapListener) throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeConfig = storeConfig;
     this.storeKeyFactory = storeKeyFactory;
@@ -160,8 +160,9 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.skipPredicate = skipPredicate;
     replicaSyncUpManager = clusterParticipant == null ? null : clusterParticipant.getReplicaSyncUpManager();
     this.time = time;
-
-    clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
+    if (enableClusterMapListener) {
+      clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
+    }
   }
 
   /**
