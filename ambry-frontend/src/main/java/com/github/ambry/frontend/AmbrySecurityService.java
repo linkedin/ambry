@@ -48,7 +48,6 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.github.ambry.rest.RestUtils.*;
-import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.GetBlobOptions.*;
 
 
