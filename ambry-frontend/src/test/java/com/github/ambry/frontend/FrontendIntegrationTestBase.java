@@ -14,6 +14,8 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountCollectionSerde;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
@@ -59,6 +61,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
+import org.json.JSONObject;
 import org.junit.Assert;
 
 import static com.github.ambry.utils.TestUtils.*;
@@ -942,5 +945,25 @@ public class FrontendIntegrationTestBase {
         Double.parseDouble(costMap.get(QuotaName.STORAGE_IN_GB.name())), 0.000001);
     Assert.assertEquals("Invalid " + cuUnitName + " cost.", expectedCuCost, Double.parseDouble(costMap.get(cuUnitName)),
         0.000001);
+  }
+
+  /**
+   * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
+   * @param accountService {@link AccountService} object.
+   * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
+   */
+  void updateAccountsAndVerify(AccountService accountService, Account... accounts) throws Exception {
+    JSONObject accountUpdateJson = AccountCollectionSerde.accountsToJson(Arrays.asList(accounts));
+    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null,
+        ByteBuffer.wrap(accountUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    assertNoContent(responseParts.queue, 1);
+
+    for (Account account : accounts) {
+      assertEquals("Update not reflected in AccountService", account, accountService.getAccountById(account.getId()));
+    }
   }
 }
