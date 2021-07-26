@@ -24,6 +24,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RequestPath;
@@ -47,6 +48,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.GetBlobOptions.*;
 
 
@@ -130,7 +132,7 @@ class AmbrySecurityService implements SecurityService {
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else {
-        if (quotaManager != null) {
+        if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
               && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
