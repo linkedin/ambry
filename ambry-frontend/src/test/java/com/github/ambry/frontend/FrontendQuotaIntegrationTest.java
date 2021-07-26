@@ -261,6 +261,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  /**
+   * Tests that {@link Operations#ACCOUNTS} requests succeed irrespective of quota throttling.
+   * @throws Exception
+   */
   @Test
   public void updateAccountsTest() throws Exception {
     updateAccountsAndVerify(ACCOUNT_SERVICE, ACCOUNT_SERVICE.generateRandomAccount());
