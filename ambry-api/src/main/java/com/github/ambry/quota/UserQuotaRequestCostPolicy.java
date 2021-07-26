@@ -54,7 +54,6 @@ public class UserQuotaRequestCostPolicy implements RequestCostPolicy {
     costMap.put(restMethodToCostMetric(restRequest.getRestMethod()),
         calculateCapacityUnitCost(restRequest, restResponseChannel, blobInfo));
     costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, restRequest.getBlobBytesReceived()));
-    costMap.put(QuotaName.STORAGE_IN_GB.name(), calculateStorageCost(restRequest, restRequest.getBlobBytesReceived()));
     return costMap;
   }
 
