@@ -1300,7 +1300,7 @@ class PutOperation {
       }
       if (done) {
         // the chunk is complete now. We can charge against quota for the chunk if its not a metadata chunk.
-        if (quotaChargeCallback != null && !(this instanceof MetadataPutChunk)) {
+        if (quotaChargeCallback != null && !(this instanceof MetadataPutChunk) && chunkException == null) {
           try {
             quotaChargeCallback.chargeQuota(chunkBlobProperties.getBlobSize());
           } catch (RouterException rEx) {
