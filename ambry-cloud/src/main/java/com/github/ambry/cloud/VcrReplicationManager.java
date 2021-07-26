@@ -194,12 +194,22 @@ public class VcrReplicationManager extends ReplicationEngine {
         replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);
         remoteReplicaInfos.add(remoteReplicaInfo);
       }
-      PartitionInfo partitionInfo = new PartitionInfo(remoteReplicaInfos, partitionId, store, cloudReplica);
-      partitionToPartitionInfo.put(partitionId, partitionInfo);
-      // For CloudBackupManager, at most one PartitionInfo in the set.
-      mountPathToPartitionInfos.computeIfAbsent(cloudReplica.getMountPath(), key -> ConcurrentHashMap.newKeySet())
-          .add(partitionInfo);
-      partitionStoreMap.put(partitionId.toPathString(), store);
+      rwLock.writeLock().lock();
+      try {
+        updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
+        partitionStoreMap.put(partitionId.toPathString(), store);
+        // Reload replication token if exist.
+        int tokenReloadFailCount = reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
+        vcrMetrics.tokenReloadWarnCount.inc(tokenReloadFailCount);
+
+        // Add remoteReplicaInfos to {@link ReplicaThread}.
+        addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
+        if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
+          replicationMetrics.addLagMetricForPartition(partitionId, true);
+        }
+      } finally {
+        rwLock.writeLock().unlock();
+      }
     } else {
       try {
         storeManager.shutdownBlobStore(partitionId);
@@ -209,15 +219,6 @@ public class VcrReplicationManager extends ReplicationEngine {
             "Failed to add Partition " + partitionId + " on " + dataNodeId + " , because no peer replicas found.");
       }
     }
-    // Reload replication token if exist.
-    int tokenReloadFailCount = reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
-    vcrMetrics.tokenReloadWarnCount.inc(tokenReloadFailCount);
-
-    // Add remoteReplicaInfos to {@link ReplicaThread}.
-    addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
-    if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
-      replicationMetrics.addLagMetricForPartition(partitionId, true);
-    }
   }
 
   /**
@@ -225,7 +226,12 @@ public class VcrReplicationManager extends ReplicationEngine {
    * @param partitionId the {@link PartitionId} of the replica to removed.
    */
   void removeReplica(PartitionId partitionId) {
-    stopPartitionReplication(partitionId);
+    rwLock.writeLock().lock();
+    try {
+      stopPartitionReplication(partitionId);
+    } finally {
+      rwLock.writeLock().unlock();
+    }
     Store cloudStore = partitionStoreMap.get(partitionId.toPathString());
     if (cloudStore != null) {
       storeManager.shutdownBlobStore(partitionId);
@@ -282,7 +288,8 @@ public class VcrReplicationManager extends ReplicationEngine {
    * @param datacenterName datacenter name to check.
    * @return true if replication is allowed. false otherwise.
    */
-  private boolean shouldReplicateFromDc(String datacenterName) {
+  @Override
+  protected boolean shouldReplicateFromDc(String datacenterName) {
     return cloudConfig.vcrSourceDatacenters.contains(datacenterName);
   }
 }

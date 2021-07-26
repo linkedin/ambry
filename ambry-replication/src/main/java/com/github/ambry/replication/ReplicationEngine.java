@@ -708,15 +708,17 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       if (started) {
         // Read-write lock avoids contention between addReplica()/removeReplica() and onReplicaAddedOrRemoved() methods.
         // Read lock for current method should suffice because multiple threads from cluster change handlers should be able
-        // to access partitionToPartitionInfo map. Each thead only updates PartitionInfo of certain partition and synchronization
-        // is only required within PartitionInfo. Also, addRemoteReplicaInfoToReplicaThread() is thread-safe which allows
-        // several threads from cluster change handlers to add remoteReplicaInfo
+        // to access partitionToPartitionInfo map. Each thread only updates PartitionInfo of certain partition and synchronization
+        // is only required within PartitionInfo. addRemoteReplicaInfoToReplicaThread() is thread-safe which allows
+        // several threads from cluster change handlers to add remoteReplicaInfo, but addRemoteReplicaInfoToReplicaThread
+        // and partitionToPartitionInfo read/write should be within the same transaction to avoid race condition.
         rwLock.readLock().lock();
         try {
           // 2. determine if added/removed replicas have peer replica on local node.
           //    We skip the replica on current node because it should already be added/removed by state transition thread.
           Set<ReplicaId> addedPeerReplicas = addedReplicas.stream()
-              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != dataNodeId)
+              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != dataNodeId
+                  && shouldReplicateFromDc(r.getDataNodeId().getDatacenterName()))
               .collect(Collectors.toSet());
           Set<ReplicaId> removedPeerReplicas = removedReplicas.stream()
               .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != dataNodeId)
@@ -794,4 +796,26 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       }
     }
   }
+
+  /**
+   * Update {@link PartitionInfo} related maps including {@link ReplicationEngine#partitionToPartitionInfo} and
+   * {@link ReplicationEngine#mountPathToPartitionInfos}
+   * @param remoteReplicaInfos the {@link RemoteReplicaInfo}(s) of the local {@link ReplicaId}
+   * @param replicaId the local replica
+   */
+  protected void updatePartitionInfoMaps(List<RemoteReplicaInfo> remoteReplicaInfos, ReplicaId replicaId) {
+    PartitionId partition = replicaId.getPartitionId();
+    PartitionInfo partitionInfo =
+        new PartitionInfo(remoteReplicaInfos, partition, storeManager.getStore(partition), replicaId);
+    partitionToPartitionInfo.put(partition, partitionInfo);
+    mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
+        .add(partitionInfo);
+  }
+
+  /**
+   * Check if replication is allowed from given datacenter.
+   * @param datacenterName datacenter name to check.
+   * @return true if replication is allowed. false otherwise.
+   */
+  protected abstract boolean shouldReplicateFromDc(String datacenterName);
 }
