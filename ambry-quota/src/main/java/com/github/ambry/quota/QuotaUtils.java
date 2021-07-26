@@ -34,6 +34,7 @@ public class QuotaUtils {
     RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
     return !(requestPath.matchesOperation(Operations.GET_PEERS) || requestPath.matchesOperation(
         Operations.GET_CLUSTER_MAP_SNAPSHOT) || requestPath.matchesOperation(Operations.ACCOUNTS)
-        || requestPath.matchesOperation(Operations.STATS_REPORT));
+        || requestPath.matchesOperation(Operations.STATS_REPORT) || requestPath.matchesOperation(
+        Operations.ACCOUNTS_CONTAINERS));
   }
 }
