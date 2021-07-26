@@ -212,6 +212,13 @@ class Log implements Write {
   }
 
   /**
+   * @return return the current number of log segment.
+   */
+  int getLogSegmentCount() {
+    return segmentsByName.size();
+  }
+
+  /**
    * This returns the number of unallocated segments for this log. However, this method can only be used when compaction
    * is not running.
    * @return the number of unallocated segments.
