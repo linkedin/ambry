@@ -136,7 +136,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       String compositeBlobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
               quotaChargeCallback).get();
-      expectedChargeCallbackCount += (blobSize + getMetadataSize(metadataContentVersion, 3));
+      expectedChargeCallbackCount += blobSize;
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
@@ -205,8 +205,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, blobIds.stream()
           .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
           .collect(Collectors.toList()), null, quotaChargeCallback).get();
-      assertEquals(expectedChargeCallbackCount + getMetadataSize(metadataContentVersion, stitchedBlobCount),
-          listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 
       retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
@@ -216,9 +215,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
           .get();
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
-      assertEquals(expectedChargeCallbackCount +=
-              ((PUT_CONTENT_SIZE * stitchedBlobCount) + getMetadataSize(metadataContentVersion, stitchedBlobCount)),
-          listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE * stitchedBlobCount), listenerCalledCount.get());
 
       router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
@@ -271,22 +268,6 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       //submission after closing should return a future that is already done.
       assertClosed();
     }
-  }
-
-  /**
-   * Return the size of metadata based on number of chunks and message header version.
-   * @param messageHeaderVersion Message header version.
-   * @param numChunks number of chunks in metadata blob.
-   * @return size of metadata.
-   */
-  private long getMetadataSize(int messageHeaderVersion, int numChunks) throws MessageFormatException {
-    switch (messageHeaderVersion) {
-      case MessageFormatRecord.Message_Header_Version_V2:
-        return (34 * numChunks) + 14;
-      case MessageFormatRecord.Message_Header_Version_V3:
-        return (42 * numChunks) + 14;
-    }
-    return 0;
   }
 
   /**
