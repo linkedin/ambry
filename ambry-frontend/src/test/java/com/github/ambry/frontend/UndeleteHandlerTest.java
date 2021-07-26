@@ -24,6 +24,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -89,7 +90,7 @@ public class UndeleteHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     undeleteHandler =
         new UndeleteHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
-            accountAndContainerInjector, metrics, CLUSTER_MAP, null);
+            accountAndContainerInjector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager());
   }
 
   /**

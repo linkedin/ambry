@@ -189,8 +189,8 @@ public class NamedBlobPutHandler {
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
-                  true));
+              routerPutBlobCallback(blobInfo),
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -219,8 +219,9 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
-                  true)), uri, LOGGER, finalCallback);
+              routerStitchBlobCallback(blobInfo),
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true)), uri, LOGGER,
+          finalCallback);
     }
 
     /**
@@ -250,10 +251,8 @@ public class NamedBlobPutHandler {
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback ->
-                  router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                      QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)),
-              this::isRetriable,
+              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
+                  QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,

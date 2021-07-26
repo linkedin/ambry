@@ -13,9 +13,12 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.UserQuotaRequestCostPolicy;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -25,6 +28,7 @@ import com.github.ambry.rest.RestUtils;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -45,7 +49,8 @@ public class UserQuotaRequestCostPolicyTest {
 
   @Test
   public void testCalculateRequestCost() throws Exception {
-    UserQuotaRequestCostPolicy quotaRequestCostPolicy = new UserQuotaRequestCostPolicy();
+    UserQuotaRequestCostPolicy quotaRequestCostPolicy =
+        new UserQuotaRequestCostPolicy(new QuotaConfig(new VerifiableProperties(new Properties())));
 
     RestResponseChannel restResponseChannel = mock(RestResponseChannel.class);
     when(restResponseChannel.getHeader(anyString())).thenReturn(0);
@@ -117,6 +122,77 @@ public class UserQuotaRequestCostPolicyTest {
     restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
     costMap = quotaRequestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 10240, 0);
+
+    // TODO add a range request case with large range
+  }
+
+  @Test
+  public void testCalculateRequestQuotaCharge() throws Exception {
+    QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+    UserQuotaRequestCostPolicy quotaRequestCostPolicy = new UserQuotaRequestCostPolicy(quotaConfig);
+
+    RestResponseChannel restResponseChannel = mock(RestResponseChannel.class);
+    when(restResponseChannel.getHeader(anyString())).thenReturn(0);
+    String blobUri = "/AAYIAQSSAAgAAQAAAAAAABpFymbGwe7sRBWYa5OPlkcNHQ.bin";
+    // test for a 4 MB GET request.
+    long blobSize = 4 * MB;
+    RestRequest restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
+    Map<String, Double> costMap =
+        quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, blobSize);
+    verifyReadCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 0);
+
+    // test for a small GET request (fractional CU).
+    blobSize = 6 * MB;
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, blobSize);
+    verifyReadCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 0);
+
+    // test for a GET request of blob of size 0.
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, 0);
+    verifyReadCost(costMap, 1, 0);
+
+    // test for a GET request of blob of size 512.
+    blobSize = 512;
+    restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, blobSize);
+    verifyReadCost(costMap, 1, 0);
+
+    // test for a small POST request (fractional storage cost).
+    blobSize = 8 * MB;
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, blobSize);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, blobSize);
+    verifyWriteCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 8 * 1024 * 1024 / UserQuotaRequestCostPolicy.BYTES_IN_GB);
+
+    // test for a large POST request.
+    blobSize = 4 * GB;
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, blobSize);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, blobSize);
+    verifyWriteCost(costMap, Math.ceil(blobSize/quotaConfig.quotaAccountingUnit), 4);
+
+    // test for a POST request of blob of size 0.
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 0);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, 0);
+    verifyWriteCost(costMap, 1, 0);
+
+    // test for a POST request of blob of size 512.
+    restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 0);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, 512);
+    verifyWriteCost(costMap, 1, 0);
+
+    // test for a HEAD request.
+    restRequest = createMockRequestWithMethod(RestMethod.HEAD, blobUri, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, quotaConfig.quotaAccountingUnit);
+    verifyReadCost(costMap, 1, 0);
+
+    // test for a DELETE request.
+    restRequest = createMockRequestWithMethod(RestMethod.DELETE, blobUri, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, quotaConfig.quotaAccountingUnit);
+    verifyWriteCost(costMap, 1, 0.0);
+
+    // test for a PUT request.
+    restRequest = createMockRequestWithMethod(RestMethod.PUT, blobUri, -1);
+    costMap = quotaRequestCostPolicy.calculateRequestQuotaCharge(restRequest, quotaConfig.quotaAccountingUnit);
+    verifyWriteCost(costMap, 1, 0.0);
 
     // TODO add a range request case with large range
   }

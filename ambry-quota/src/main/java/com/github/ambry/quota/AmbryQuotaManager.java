@@ -99,12 +99,12 @@ public class AmbryQuotaManager implements QuotaManager {
     if (requestQuotaEnforcers.isEmpty()) {
       return null;
     }
-    ThrottlingRecommendation throttlingRecommendation = null;
+    ThrottlingRecommendation throttlingRecommendation;
     Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
     try {
       List<QuotaRecommendation> quotaRecommendations = requestQuotaEnforcers.stream()
           .map(quotaEnforcer -> quotaEnforcer.recommend(restRequest))
-          .filter(quotaRecommendation -> quotaRecommendation != null)
+          .filter(Objects::nonNull)
           .collect(Collectors.toList());
       if (quotaRecommendations.size() == 0) {
         quotaMetrics.quotaNotEnforcedCount.inc();
@@ -122,11 +122,6 @@ public class AmbryQuotaManager implements QuotaManager {
   @Override
   public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
       Map<QuotaName, Double> requestCostMap) {
-    return charge(restRequest);
-  }
-
-  @Override
-  public ThrottlingRecommendation charge(RestRequest restRequest) {
     if (requestQuotaEnforcers.isEmpty()) {
       return null;
     }
@@ -134,8 +129,8 @@ public class AmbryQuotaManager implements QuotaManager {
     Timer.Context timer = quotaMetrics.quotaChargeTime.time();
     try {
       throttlingRecommendation = throttlePolicy.recommend(requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest))
-          .filter(quotaRecommendation -> quotaRecommendation != null)
+          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
+          .filter(Objects::nonNull)
           .collect(Collectors.toList()));
     } finally {
       timer.stop();

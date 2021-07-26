@@ -50,13 +50,6 @@ public interface QuotaManager {
   ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap);
 
   /**
-   * Charges one unit of cost against the quota for the specified restRequest.
-   * @param restRequest {@link RestRequest} object.
-   * @return ThrottlingRecommendation object that captures the overall recommendation.
-   */
-  ThrottlingRecommendation charge(RestRequest restRequest);
-
-  /**
    * @return QuotaConfig object.
    */
   QuotaConfig getQuotaConfig();

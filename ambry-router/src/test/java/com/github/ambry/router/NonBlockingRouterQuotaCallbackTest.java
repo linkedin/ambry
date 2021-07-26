@@ -19,6 +19,8 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
@@ -26,6 +28,7 @@ import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.ThrottlePolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
@@ -33,9 +36,11 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.junit.Assert;
 import org.junit.Test;
@@ -57,6 +62,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
 
   private final QuotaMode throttlingMode;
   private final boolean throttleInProgressRequests;
+  private final long quotaAccountingSize = 1024L;
 
   /**
    * Initialize parameters common to all tests.
@@ -106,25 +112,31 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     try {
       setRouter();
       assertExpectedThreadCounts(2, 1);
-      AtomicInteger listenerCalledCount = new AtomicInteger(0);
+      AtomicLong listenerCalledCount = new AtomicLong(0);
       int expectedChargeCallbackCount = 0;
       // create a quota charge listener that increments an atomic counter everytime its called.
       // Also tests that in case quota if charged in tracking mode with throttleInProgress config set to false
       // then the requests go through even in case of exception.
-      QuotaChargeCallback quotaChargeCallback = () -> {
-        listenerCalledCount.incrementAndGet();
-        throw new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests);
+      QuotaChargeCallback quotaChargeCallback = new QuotaChargeCallback() {
+        @Override
+        public void chargeQuota(long chunkSize) throws RouterException {
+          listenerCalledCount.addAndGet(chunkSize);
+          throw new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests);
+        }
+
+        @Override
+        public void chargeQuota() throws RouterException {
+          chargeQuota(quotaAccountingSize);
+        }
       };
 
       // test for a composite blob.
       int blobSize = 3000;
-      int numChunks = (blobSize > maxPutChunkSize) ? 1 : 0;
-      numChunks += (blobSize % maxPutChunkSize) == 0 ? blobSize / maxPutChunkSize : (blobSize / maxPutChunkSize) + 1;
       setOperationParams(blobSize, TTL_SECS);
       String compositeBlobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
               quotaChargeCallback).get();
-      expectedChargeCallbackCount += numChunks;
+      expectedChargeCallbackCount += blobSize;
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
@@ -132,7 +144,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
           .get();
-      expectedChargeCallbackCount += numChunks;
+      expectedChargeCallbackCount += blobSize;
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
@@ -144,7 +156,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
         setOperationParams();
         String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
             quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
         logger.info("Put blob {}", blobId);
         blobIds.add(blobId);
       }
@@ -152,39 +164,40 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
 
       for (String blobId : blobIds) {
         router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
         router.updateBlobTtl(blobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
         router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
             null, quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         router.deleteBlob(blobId, null, null, quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         try {
           router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
           fail("Get blob should fail");
         } catch (ExecutionException e) {
           RouterException r = (RouterException) e.getCause();
           Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
-          assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+          assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
         }
         router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), null,
             quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
         router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), null,
             quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
       }
 
       // test for stitched blobs.
       blobIds = new ArrayList<>();
-      for (int i = 0; i < 2; i++) {
+      int stitchedBlobCount = 2;
+      for (int i = 0; i < stitchedBlobCount; i++) {
         setOperationParams();
         String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
             quotaChargeCallback).get();
-        assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
         logger.info("Put blob {}", blobId);
         blobIds.add(blobId);
       }
@@ -192,10 +205,9 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, blobIds.stream()
           .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
           .collect(Collectors.toList()), null, quotaChargeCallback).get();
-      assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 
       retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-      expectedChargeCallbackCount += 3;
       router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
           .get()
           .getBlobDataChannel()
@@ -203,13 +215,13 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
           .get();
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
-      assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE * stitchedBlobCount), listenerCalledCount.get());
 
       router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
-      assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
 
       router.deleteBlob(stitchedBlobId, null, null, quotaChargeCallback).get();
-      assertEquals(++expectedChargeCallbackCount, listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
     } finally {
       router.close();
       assertExpectedThreadCounts(0, 0);
@@ -281,8 +293,9 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     }
 
     @Override
-    public ThrottlingRecommendation charge(RestRequest restRequest) {
-      ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest);
+    public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+        Map<QuotaName, Double> requestCostMap) {
+      ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest, blobInfo, requestCostMap);
       if (throttlingRecommendation != null) {
         chargeCalledCount.incrementAndGet();
       }
