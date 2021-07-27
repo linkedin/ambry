@@ -76,6 +76,16 @@ public class QuotaTestUtils {
       }
 
       @Override
+      public void setQuotaMode(QuotaMode mode) {
+
+      }
+
+      @Override
+      public QuotaMode getQuotaMode() {
+        return null;
+      }
+
+      @Override
       public void shutdown() {
 
       }

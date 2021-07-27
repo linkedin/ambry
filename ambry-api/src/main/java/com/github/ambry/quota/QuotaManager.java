@@ -55,6 +55,19 @@ public interface QuotaManager {
   QuotaConfig getQuotaConfig();
 
   /**
+   * Set {@link QuotaMode} for {@link QuotaManager}.
+   * @param mode The mode to set
+   */
+  void setQuotaMode(QuotaMode mode);
+
+  /**
+   * Use this method to get the {@link QuotaMode} rather than {@link QuotaConfig#throttlingMode} since the {@link QuotaMode}
+   * might be updated by {@link #setQuotaMode}.
+   * @return the {@link QuotaMode}. By default, it will return the {@link QuotaMode} from {@link QuotaConfig}.
+   */
+  QuotaMode getQuotaMode();
+
+  /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.
    */
   void shutdown();
