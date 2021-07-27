@@ -846,16 +846,31 @@ class BlobStoreCompactor {
                     "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
                     currentReadTimePerMbInMs, currentWriteTimePerMbInMs, desiredReadPerSecond, desiredWritePerSecond);
               }
-
-              diskIOScheduler.updateThrottlerDesiredRate(COMPACTION_CLEANUP_JOB_NAME,
-                  Math.min(desiredReadPerSecond, desiredWritePerSecond));
+              int desiredRate = Math.min(desiredReadPerSecond, desiredWritePerSecond);
+              double currentRate = diskMetrics.diskCompactionCopyRateInBytes.getOneMinuteRate();
+              if (currentRate > desiredRate) {
+                // If last one minute rate is too high, need to slow down(by sleep) to desired rate.
+                // 100 -> 50 : sleep 2-1 time unit
+                // 100 -> 25 : sleep 4-1 time unit
+                // 100 -> 90: sleep (100/90 - 1) time unit
+                long sleepInMs = (long) ((currentRate / desiredRate - 1) * Time.MsPerSec);
+                long actualSleepTimeInMs = Math.min(sleepInMs, 10 * Time.MsPerSec);
+                logger.debug(
+                    "Current rate: {}, desired rate: {}. Calculated sleep time: {} ms. Actual sleep time: {} ms",
+                    currentRate, desiredRate, sleepInMs, actualSleepTimeInMs);
+                try {
+                  Thread.sleep(actualSleepTimeInMs);
+                } catch (InterruptedException e) {
+                  logger.warn("Compaction throttling sleep is interrupted", e);
+                }
+              }
             } else {
               logger.debug(
                   "Adaptive compaction is not enabled: storeCompactionMinOperationsBytesPerSec: {}, storeCompactionOperationsBytesPerSec: {}",
                   config.storeCompactionMinOperationsBytesPerSec, config.storeCompactionOperationsBytesPerSec);
+              // call into diskIOScheduler to make sure we can proceed.
+              diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
             }
-            // call into diskIOScheduler to make sure we can proceed.
-            diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
 
             if (useDirectIO) {
               // do direct IO write
