@@ -2935,11 +2935,10 @@ public class BlobStoreCompactorTest {
         compactor.close(0);
       }
     }
-    if (compactor.closeLastLogSegmentIfQualified()) {
+    if (state.log.autoCloseLastLogSegmentIfQualified()) {
       //refresh journal.
       state.index.journal.cleanUpJournal();
     }
-    compactor.closeLastLogSegmentIfQualified();
     if (!changeExpected) {
       assertEquals("Journal size should be cleaned up after last log segment closed", 0,
           state.index.journal.getCurrentNumberOfEntries());
@@ -3877,8 +3876,8 @@ public class BlobStoreCompactorTest {
   public void testCloseLastLogSegmentIfQualified() throws Exception {
     //create first active log segment
     refreshState(false, false, true);
-    //leave two log segment space for auto close last log segment purpose
-    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 2;
+    //leave five log segment space for auto close last log segment purpose
+    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 5;
     writeDataToMeetRequiredSegmentCountForAutoCloseLogSegmentTest(requiredCount);
 
     //delete blobs in last index segment.
@@ -3920,7 +3919,31 @@ public class BlobStoreCompactorTest {
             - 1);
 
     compactAndVerifyForContainerDeletion(segmentsUnderCompaction, state.time.milliseconds(), true);
+
+    // Edge case test: two log segments has been auto created without new data, the second last one should be compacted.
+    compactionPolicySwitchInfo =
+        new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
+    backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, true);
+    compactor.initialize(state.index);
+    if (state.log.autoCloseLastLogSegmentIfQualified()) {
+      //refresh journal.
+      state.index.journal.cleanUpJournal();
+    }
+    int beforeCompactionLogSegmentsCnt = state.log.getLogSegmentCount();
+    segmentsUnderCompaction = state.index.getLogSegmentsNotInJournal();
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    int afterCompactionLogSegmentCnt = state.log.getLogSegmentCount();
+    assertEquals("", beforeCompactionLogSegmentsCnt - 1, afterCompactionLogSegmentCnt);
+
+    // check flow after deployment
     state.reloadLog(true);
+
 
     //make sure new data will be added into the auto closed log segment
     long logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
