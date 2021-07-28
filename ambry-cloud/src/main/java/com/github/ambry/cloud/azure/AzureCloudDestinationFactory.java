@@ -65,7 +65,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
       dest.testAzureConnectivity();
       return dest;
     } catch (Exception e) {
-      logger.error("Error initializing Azure destination: {}", e.getMessage());
+      logger.error("Error initializing connection Azure destination: {}", e.getMessage());
       throw (e instanceof IllegalStateException) ? (IllegalStateException) e : new IllegalStateException(e);
     }
   }
