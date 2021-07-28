@@ -585,6 +585,13 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * @return localDC's zk connect string.
+   */
+  public String getLocalDcZkConnectString() {
+    return dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getZkConnectStrs().get(0);
+  }
+
+  /**
    * A callback class for {@link HelixClusterChangeHandler} in each dc to update cluster-wide info (i.e partition-to-replica
    * mapping, cluster-wide capacity)
    */
