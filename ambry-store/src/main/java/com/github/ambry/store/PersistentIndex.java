@@ -277,16 +277,12 @@ class PersistentIndex {
   }
 
   /**
-   * If index recovery succeed and last log segment is empty due to auto close segment feature, the last log segment should be set as active log segment.
+   * If index recovery succeed and last log segment is empty due to auto close segment feature, the last log segment
+   * should be set as active log segment.
    * @return {@code true} if the recovery succeed and last log segment is empty.
    */
   private boolean shouldSetActiveLogSegmentToAutoClosedSegment() {
-    LogSegment currentSecondLastLogSegment = log.getPrevSegment(log.getLastSegment());
-    if (currentSecondLastLogSegment == null) {
-      return false;
-    }
-    Offset currentSecondLastLogSegmentEndOffSet = new Offset(currentSecondLastLogSegment.getName(), currentSecondLastLogSegment.getEndOffset());
-    return getCurrentEndOffset().equals(currentSecondLastLogSegmentEndOffSet) && log.getLastSegment().isEmpty();
+    return log.getLastSegment().isEmpty() && getCurrentEndOffset().compareTo(log.getEndOffset()) < 0;
   }
 
   /**
