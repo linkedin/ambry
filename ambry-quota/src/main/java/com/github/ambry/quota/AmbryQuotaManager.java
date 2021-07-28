@@ -47,6 +47,7 @@ public class AmbryQuotaManager implements QuotaManager {
   private final ThrottlePolicy throttlePolicy;
   private final QuotaConfig quotaConfig;
   private final QuotaMetrics quotaMetrics;
+  private volatile QuotaMode quotaMode;
 
   /**
    * Constructor for {@link AmbryQuotaManager}.
@@ -72,6 +73,7 @@ public class AmbryQuotaManager implements QuotaManager {
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = new QuotaMetrics(metricRegistry);
+    this.quotaMode = quotaConfig.throttlingMode;
     accountService.addAccountUpdateConsumer(this::onAccountUpdateNotification);
   }
 
@@ -148,6 +150,16 @@ public class AmbryQuotaManager implements QuotaManager {
   @Override
   public QuotaConfig getQuotaConfig() {
     return quotaConfig;
+  }
+
+  @Override
+  public void setQuotaMode(QuotaMode mode) {
+    this.quotaMode = mode;
+  }
+
+  @Override
+  public QuotaMode getQuotaMode() {
+    return quotaMode;
   }
 
   /**

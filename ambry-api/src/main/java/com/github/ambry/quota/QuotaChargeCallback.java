@@ -42,14 +42,13 @@ public interface QuotaChargeCallback {
       @Override
       public void chargeQuota(long chunkSize) throws RouterException {
         try {
-          Map<QuotaName, Double>
-              requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
+          Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
               .entrySet()
               .stream()
               .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
           ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, null, requestCost);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle() && shouldThrottle) {
-            if (quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING
+            if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING
                 && quotaManager.getQuotaConfig().throttleInProgressRequests) {
               throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
             } else {

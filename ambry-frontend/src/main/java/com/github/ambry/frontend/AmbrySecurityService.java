@@ -134,7 +134,7 @@ class AmbrySecurityService implements SecurityService {
         if (quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
-              && quotaManager.getQuotaConfig().throttlingMode == QuotaMode.THROTTLING) {
+              && quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
             Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
             throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests, true, true,
                 quotaHeaderMap);
