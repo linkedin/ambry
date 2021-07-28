@@ -13,8 +13,13 @@
  */
 package com.github.ambry.cloud;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
+import com.github.ambry.clustermap.HelixClusterManager;
+import com.github.ambry.clustermap.HelixVcrUtil;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
@@ -26,7 +31,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenFactory;
-import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
@@ -41,9 +45,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
@@ -57,6 +63,12 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final boolean trackPerDatacenterLagInMetric;
+  private final Lock vcrHelixUpdateLock = new ReentrantLock();
+  private volatile boolean isVcrHelixUpdater = false;
+  private volatile boolean isVcrHelixUpdateInProgress = false;
+  private volatile boolean isAmbryListenerToUpdateVcrHelixRegistered = false;
+  private volatile ScheduledFuture<?> vcrHelixUpdateFuture = null;
+  private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
 
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
@@ -83,6 +95,13 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
       throw new IllegalStateException("One or more VCR cross colo replication peer datacenter should be specified");
     }
+    try {
+      vcrHelixConfig =
+          new ObjectMapper().readValue(cloudConfig.vcrHelixUpdateConfig, HelixVcrUtil.VcrHelixConfig.class);
+    } catch (JsonProcessingException e) {
+      throw new IllegalStateException("VcrHelixConfig is not correct");
+    }
+    vcrMetrics.registerVcrHelixUpdateGuage(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
   }
 
   @Override
@@ -91,6 +110,21 @@ public class VcrReplicationManager extends ReplicationEngine {
     vcrClusterParticipant.addListener(new VcrClusterParticipantListener() {
       @Override
       public void onPartitionAdded(PartitionId partitionId) {
+        if (partitionId.isEqual(cloudConfig.vcrHelixUpdaterParitionId)) {
+          vcrHelixUpdateLock.lock();
+          try {
+            if (isAmbryListenerToUpdateVcrHelixRegistered == false) {
+              // Only register the listener once. Unfortunately, we can't unregister a listener, but it's OK since
+              // listener execute helix update only when isVcrHelixUpdater is true.
+              clusterMap.registerClusterMapListener(
+                  new com.github.ambry.cloud.VcrReplicationManager.AmbryListenerToUpdateVcrHelix());
+            }
+            isVcrHelixUpdater = true;
+            scheduleVcrHelix();
+          } finally {
+            vcrHelixUpdateLock.unlock();
+          }
+        }
         try {
           addReplica(partitionId);
           logger.info("Partition {} added to {}", partitionId, dataNodeId);
@@ -106,6 +140,17 @@ public class VcrReplicationManager extends ReplicationEngine {
 
       @Override
       public void onPartitionRemoved(PartitionId partitionId) {
+        if (partitionId.isEqual(cloudConfig.vcrHelixUpdaterParitionId)) {
+          vcrHelixUpdateLock.lock();
+          try {
+            isVcrHelixUpdater = false;
+            if (vcrHelixUpdateFuture != null) {
+              vcrHelixUpdateFuture.cancel(false);
+            }
+          } finally {
+            vcrHelixUpdateLock.unlock();
+          }
+        }
         try {
           removeReplica(partitionId);
         } catch (Exception e) {
@@ -291,5 +336,64 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   protected boolean shouldReplicateFromDc(String datacenterName) {
     return cloudConfig.vcrSourceDatacenters.contains(datacenterName);
+  }
+
+  /**
+   * Check and schedule a VCR helix update task. We schedule updateVcrHelix in 2 cases:
+   * 1. On a node become online role of partition 1
+   * 2. On Ambry cluster change
+   */
+  private void scheduleVcrHelix() {
+    if (vcrHelixUpdateFuture == null) {
+      vcrHelixUpdateFuture =
+          scheduler.schedule(() -> updateVcrHelix(), cloudConfig.vcrHelixUpdateDelayTimeInSeconds, TimeUnit.SECONDS);
+    } else {
+      // If a vcrHelixUpdate task is scheduled, try to cancel it first.
+      vcrHelixUpdateFuture.cancel(false);
+      // either success cancel or not, we should schedule a new job to updateVcrHelix
+      vcrHelixUpdateFuture =
+          scheduler.schedule(() -> updateVcrHelix(), cloudConfig.vcrHelixUpdateDelayTimeInSeconds, TimeUnit.SECONDS);
+    }
+  }
+
+  /**
+   * The actual performer to update VCR Helix:
+   */
+  private void updateVcrHelix() {
+    String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
+    logger.info("Going to update VCR Helix Cluster. Dryrun: {}", cloudConfig.vcrHelixUpdateDryRun);
+    try {
+      isVcrHelixUpdateInProgress = true;
+      HelixVcrUtil.updateResourceAndPartition(localDcZkStr, clusterMapConfig.clusterMapClusterName,
+          cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName, vcrHelixConfig,
+          cloudConfig.vcrHelixUpdateDryRun);
+    } finally {
+      isVcrHelixUpdateInProgress = false;
+    }
+    logger.info("VCR Helix Cluster is done.");
+  }
+
+  int getVcrHelixUpdaterAsCount() {
+    return isVcrHelixUpdater ? 1 : 0;
+  }
+
+  int getVcrHelixUpdateInProgressAsCount() {
+    return isVcrHelixUpdateInProgress ? 1 : 0;
+  }
+
+  class AmbryListenerToUpdateVcrHelix implements ClusterMapChangeListener {
+    @Override
+    public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+      if (isVcrHelixUpdater) { // For most VCR node, the value is false, then they don't need to enter the lock.
+        vcrHelixUpdateLock.lock();
+        try {
+          if (isVcrHelixUpdater) {
+            scheduleVcrHelix();
+          }
+        } finally {
+          vcrHelixUpdateLock.unlock();
+        }
+      }
+    }
   }
 }
