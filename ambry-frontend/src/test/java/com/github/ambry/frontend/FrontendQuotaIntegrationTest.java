@@ -39,6 +39,8 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.utils.TestUtils;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -46,6 +48,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpVersion;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -224,6 +227,47 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     CONTAINER = ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, ACCOUNT, CONTAINER, ACCOUNT.getName(),
         !CONTAINER.isCacheable(), ACCOUNT.getName(), CONTAINER.getName(), false);
+  }
+
+  /**
+   * Tests that {@link Operations#GET_CLUSTER_MAP_SNAPSHOT} requests succeed irrespective of quota throttling.
+   * @throws Exception
+   */
+  @Test
+  public void getClusterMapSnapshotTest() throws Exception {
+    FullHttpRequest httpRequest =
+        new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT,
+            Unpooled.buffer(0));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+  }
+
+  /**
+   * Tests that {@link Operations#GET_PEERS} requests succeed irrespective of quota throttling.
+   * @throws Exception
+   */
+  @Test
+  public void getPeersTest() throws Exception {
+    String baseUri = Operations.GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + "localhost" + "&"
+        + GetPeersHandler.PORT_QUERY_PARAM + "=" + "62000";
+    String[] uris = {baseUri, "/" + baseUri};
+    for (String uri : uris) {
+      FullHttpRequest httpRequest =
+          new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri, Unpooled.buffer(0));
+      NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+      HttpResponse response = getHttpResponse(responseParts);
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    }
+  }
+
+  /**
+   * Tests that {@link Operations#ACCOUNTS} requests succeed irrespective of quota throttling.
+   * @throws Exception
+   */
+  @Test
+  public void updateAccountsTest() throws Exception {
+    updateAccountsAndVerify(ACCOUNT_SERVICE, ACCOUNT_SERVICE.generateRandomAccount());
   }
 
   @Override

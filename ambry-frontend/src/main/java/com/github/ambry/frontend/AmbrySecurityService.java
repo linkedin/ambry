@@ -24,6 +24,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.quota.UserQuotaRequestCostPolicy;
@@ -131,7 +132,7 @@ class AmbrySecurityService implements SecurityService {
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else {
-        if (quotaManager != null) {
+        if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
               && quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
@@ -166,7 +167,7 @@ class AmbrySecurityService implements SecurityService {
         .stream()
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
     setRequestCostHeader(requestCost, responseChannel);
-    if (quotaManager != null) {
+    if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
       ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
       if (throttlingRecommendation != null) {
         RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)

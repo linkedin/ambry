@@ -488,7 +488,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     Container editedContainer = editedAccount.getAllContainers().stream().findAny().get();
     editedContainer = new ContainerBuilder(editedContainer).setDescription("new description abcdefgh").build();
     editedAccount = new AccountBuilder(editedAccount).addOrUpdateContainer(editedContainer).build();
-    updateAccountsAndVerify(editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
+    updateAccountsAndVerify(ACCOUNT_SERVICE, editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
 
     verifyGetAccountsAndContainer();
 
@@ -698,27 +698,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     deleteBlobAndVerify(stitchedBlobId);
     verifyOperationsAfterDelete(stitchedBlobId, expectedGetHeaders, !container.isCacheable(), account.getName(),
         container.getName(), ByteBuffer.wrap(fullContentArray), null);
-  }
-
-  // stitchedUploadTest() helpers
-
-  /**
-   * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
-   * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
-   */
-  private void updateAccountsAndVerify(Account... accounts) throws Exception {
-    JSONObject accountUpdateJson = AccountCollectionSerde.accountsToJson(Arrays.asList(accounts));
-    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null,
-        ByteBuffer.wrap(accountUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
-    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
-    HttpResponse response = getHttpResponse(responseParts);
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
-    verifyTrackingHeaders(response);
-    assertNoContent(responseParts.queue, 1);
-
-    for (Account account : accounts) {
-      assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
-    }
   }
 
   // accountApiTest() helpers
