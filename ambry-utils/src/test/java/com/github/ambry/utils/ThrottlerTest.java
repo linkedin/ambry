@@ -81,4 +81,15 @@ public class ThrottlerTest {
     throttler.maybeThrottle(150);
     Assert.assertEquals(1500, time.milliseconds());
   }
+
+  @Test
+  public void testWithRealTime() throws Exception {
+    Time time = SystemTime.getInstance();
+    long now = time.seconds();
+    Throttler throttler = new Throttler(100, -1, true, time);
+    Thread.sleep(10);
+    throttler.maybeThrottle(500);
+    throttler.maybeThrottle(300);
+    Assert.assertTrue(time.seconds() - now > 7);
+  }
 }

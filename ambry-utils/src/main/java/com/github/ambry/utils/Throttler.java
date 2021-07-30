@@ -79,7 +79,7 @@ public class Throttler {
             }
           }
         }
-        periodStartNs = now;
+        periodStartNs = time.nanoseconds();
         observedSoFar = 0;
       }
     }
@@ -89,7 +89,7 @@ public class Throttler {
    * Update desiredRatePerSec for this throttler.
    * @param desiredRatePerSec the new desiredRatePerSec
    */
-  public void updateDesiredRatePerSecond(double desiredRatePerSec){
+  public void updateDesiredRatePerSecond(double desiredRatePerSec) {
     synchronized (lock) {
       this.desiredRatePerSec = desiredRatePerSec;
     }
