@@ -23,8 +23,6 @@ import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Utils;
-import com.zaxxer.hikari.HikariDataSource;
-import java.io.Closeable;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -166,14 +164,12 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     partitionClassReportsDao = new PartitionClassReportsDao(dataSource, mySqlMetrics);
     this.hostnameHelper = hostnameHelper;
     storeMetrics = new AccountStatsMySqlStore.Metrics(registry);
-    if (!Strings.isNullOrEmpty(localBackupFilePath)) {
-      // load backup file and this backup is the previous stats
-      ObjectMapper objectMapper = new ObjectMapper();
-      try {
-        this.previousStats = objectMapper.readValue(new File(localBackupFilePath), StatsWrapper.class);
-      } catch (Exception e) {
-        this.previousStats = null;
-      }
+    try {
+      this.previousStats = queryAccountStatsBySimplifiedHostName(hostname);
+    } catch (Exception e) {
+      logger.error("Failed to query account stats from mysql database for host : {}", hostname);
+      //if query from mysql fails, try to get the previousStats from local backup file.
+      readStatsFromLocalBackupFile(localBackupFilePath);
     }
   }
 
@@ -244,6 +240,22 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   /**
+   * Read all the container storage usage from local backup file.
+   * @param localBackupFilePath The filepath to local backup file.
+   */
+  private void readStatsFromLocalBackupFile(String localBackupFilePath) {
+    if (!Strings.isNullOrEmpty(localBackupFilePath)) {
+      // load backup file and this backup is the previous stats
+      ObjectMapper objectMapper = new ObjectMapper();
+      try {
+        this.previousStats = objectMapper.readValue(new File(localBackupFilePath), StatsWrapper.class);
+      } catch (Exception e) {
+        this.previousStats = null;
+      }
+    }
+  }
+
+  /**
    * Delete container's accountstats data if partition, or account, or container exists in previous partition map but
    * missing in current partition map.
    * @param prevPartitionMap the previous partition stats map.
@@ -311,8 +323,19 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    */
   @Override
   public StatsWrapper queryAccountStatsByHost(String queryHostname, int port) throws SQLException {
-    long startTimeMs = System.currentTimeMillis();
     queryHostname = hostnameHelper.simplifyHostname(queryHostname, port);
+    return queryAccountStatsBySimplifiedHostName(queryHostname);
+  }
+
+  /**
+   * Query mysql database to get all the container storage usage for given {@code clusterName} and {@code queryHostname} and
+   * construct a {@link StatsSnapshot} from them.
+   * @param queryHostname The simplified hostname to query.
+   * @return {@link StatsSnapshot} published by the given simplified hostname.
+   * @throws SQLException
+   */
+  private StatsWrapper queryAccountStatsBySimplifiedHostName(String queryHostname) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
     Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
     StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
     AtomicLong timestamp = new AtomicLong(0);
