@@ -60,8 +60,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
 
   // Note: assuming that passed mountPath is the partitionId path
   @Override
-  protected void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
-      throws IOException, ReplicationException {
+  protected void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
       replicaTokenSerde.serializeTokens(tokenInfoList, tokenOutputStream);
