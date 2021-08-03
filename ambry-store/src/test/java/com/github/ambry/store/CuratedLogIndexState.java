@@ -257,7 +257,7 @@ class CuratedLogIndexState {
     }
     List<IndexEntry> indexEntries = new ArrayList<>(count);
     Offset expectedJournalLastOffset = null;
-    Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
+    Offset endOffsetOfPrevMsg = log.getEndOffset();
     for (int i = 0; i < count; i++) {
       byte[] dataWritten = appendToLog(size);
       FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, size);

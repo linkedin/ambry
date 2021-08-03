@@ -473,7 +473,7 @@ class Log implements Write {
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
   boolean autoCloseLastLogSegmentIfQualified() throws StoreException {
-    if (compactionPolicySwitchInfoCounterValueReached()) {
+    if (compactionPolicySwitchInfoCounterValueReached() && !activeSegment.isEmpty()) {
       //ensure the capacity to open the new log segment and allocate new log segment.
       //if not able to close the last log segment, continue running the compaction.
       try {

@@ -3920,9 +3920,9 @@ public class BlobStoreCompactorTest {
 
     compactAndVerifyForContainerDeletion(segmentsUnderCompaction, state.time.milliseconds(), true);
 
-    // Edge case test: two log segments has been auto created without new data, the second last one should be compacted.
-    compactionPolicySwitchInfo =
-        new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
+    // Edge case test: if the last log segment is empty, no need to auto close it.
+    int beforeAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    compactionPolicySwitchInfo = new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
     backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, true);
     compactor.initialize(state.index);
@@ -3930,22 +3930,11 @@ public class BlobStoreCompactorTest {
       //refresh journal.
       state.index.journal.cleanUpJournal();
     }
-    int beforeCompactionLogSegmentsCnt = state.log.getLogSegmentCount();
-    segmentsUnderCompaction = state.index.getLogSegmentsNotInJournal();
-    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
-    try {
-      compactor.compact(details, bundleReadBuffer);
-    } finally {
-      compactor.close(0);
-    }
-    int afterCompactionLogSegmentCnt = state.log.getLogSegmentCount();
-    assertEquals("", beforeCompactionLogSegmentsCnt - 1, afterCompactionLogSegmentCnt);
+    int afterAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    assertEquals("No segments should be created since last log segment is empty", beforeAutoCloseLogSegmentsCnt,
+        afterAutoCloseLogSegmentsCnt);
 
-    // check flow after deployment
-    state.reloadLog(true);
-
-
-    //make sure new data will be added into the auto closed log segment
+    //make sure new data will be added into the last log segment
     long logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
     long logSegmentCountAfterNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
@@ -3955,6 +3944,30 @@ public class BlobStoreCompactorTest {
     assertEquals("Last index segment should belongs to auto closed log segment",
         state.index.getIndexSegments().lastEntry().getValue().getLogSegmentName(),
         state.log.getLastSegment().getName());
+
+    //close the last log segment again.
+    beforeAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    if (state.log.autoCloseLastLogSegmentIfQualified()) {
+      //refresh journal.
+      state.index.journal.cleanUpJournal();
+    }
+    afterAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    assertEquals("One log segment should be created since last log segment is not empty", beforeAutoCloseLogSegmentsCnt,
+        afterAutoCloseLogSegmentsCnt - 1);
+
+    //make sure new data will be added into the last log segment
+    logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
+    state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    logSegmentCountAfterNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
+    assertEquals("Log Segment count should be increased after some data has been added to the last log segment.",
+        logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment,
+        logSegmentCountAfterNewDataAddIntoAutoClosedLogSegment - 1);
+    assertEquals("Last index segment should belongs to auto closed log segment",
+        state.index.getIndexSegments().lastEntry().getValue().getLogSegmentName(),
+        state.log.getLastSegment().getName());
+
+    // check flow after deployment
+    state.reloadLog(true);
   }
 
   /**
