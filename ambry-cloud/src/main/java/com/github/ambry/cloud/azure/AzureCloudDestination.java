@@ -427,6 +427,7 @@ class AzureCloudDestination implements CloudDestination {
       BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
       azureBlobDataAccessor.uploadFile(tokenLayout.containerName, tokenLayout.blobFilePath, inputStream);
     } catch (IOException | BlobStorageException e) {
+      azureMetrics.absTokenPersistFailureCount.inc();
       throw toCloudStorageException("Could not persist token: " + partitionPath, e);
     }
   }
