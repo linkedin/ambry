@@ -70,7 +70,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
       cloudDestination.persistTokens(mountPath, replicaTokenFileName, inputStream);
       logger.info("Persisted replica tokens for {} to cloud destination.", mountPath);
     } catch (CloudStorageException e) {
-      throw new ReplicationException("IO error persisting replica tokens at mount path " + mountPath, e);
+      logger.error("IO error persisting replica tokens at mount path " + mountPath, e);
     }
   }
 
