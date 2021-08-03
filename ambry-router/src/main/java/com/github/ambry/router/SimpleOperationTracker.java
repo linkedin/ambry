@@ -170,8 +170,9 @@ class SimpleOperationTracker implements OperationTracker {
         diskReplicaSuccessTarget =
             routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
                 routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
-        diskReplicaParallelism = routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas.size()
-            : routerConfig.routerPutRequestParallelism;
+        diskReplicaParallelism =
+            routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.min(eligibleReplicas.size(),
+                routerConfig.routerPutRequestParallelism) : routerConfig.routerPutRequestParallelism;
         crossColoEnabled = false;
         break;
       case DeleteOperation:
