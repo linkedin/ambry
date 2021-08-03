@@ -62,15 +62,12 @@ public class AccountStatsMySqlConfig {
   @Default("")
   public final String domainNamesToRemove;
 
-
   /**
    * Number of connections and threads to use for executing transactions.
    */
   @Config(POOL_SIZE)
   @Default("2")
   public final int poolSize;
-
-  /**
 
   /**
    * Negative numbers means disable batch. 0 means unlimited batch size. Any positive number means the size of each batch.

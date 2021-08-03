@@ -120,7 +120,28 @@ public class AccountStatsMySqlStoreIntegrationTest {
   }
 
   @Test
-  public void testEmptyStats() throws Exception {
+  public void testEmptyStatsWhenReadingPreviousStatsFromMysqlDb() throws Exception {
+    //write a new stats into database.
+    AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
+    StatsWrapper stats = generateStatsWrapper(1, 1, 1, StatsReportType.ACCOUNT_REPORT);
+    mySqlStore.storeAccountStats(stats);
+
+    StatsWrapper obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertTrue(obtainedStats.getSnapshot().getSubMap().containsKey(Utils.statsPartitionKey((short) 0)));
+
+    //initialized the mySqlStore and write a new stats with the same partition.
+    mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
+    StatsWrapper stats2 = generateStatsWrapper(0, 0, 0, StatsReportType.ACCOUNT_REPORT);
+    stats2.getSnapshot().getSubMap().put(Utils.statsPartitionKey((short) 0), new StatsSnapshot(0L, null));
+    mySqlStore.storeAccountStats(stats2);
+
+    // empty stats should remove all the data in the database
+    obtainedStats = mySqlStore.queryAccountStatsByHost(hostname1, port1);
+    assertFalse(obtainedStats.getSnapshot().getSubMap().containsKey(Utils.statsPartitionKey((short) 0)));
+  }
+
+  @Test
+  public void testEmptyStatsWhenReadingPreviousStatsFromLocalBackUpFile() throws Exception {
     AccountStatsMySqlStore mySqlStore = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
     StatsWrapper stats = generateStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
     stats.getSnapshot().getSubMap().put(Utils.statsPartitionKey((short) 10), new StatsSnapshot(0L, null));
