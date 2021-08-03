@@ -217,6 +217,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     return tokenInfo.getPartitionId().equals(remoteReplicaInfo.getReplicaId().getPartitionId());
   }
 
+  @Override
+  protected boolean shouldReplicateFromDc(String datacenterName) {
+    return true;
+  }
+
   /**
    * Remove a replica of given partition and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionName the partition of the replica to be removed.

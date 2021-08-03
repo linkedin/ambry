@@ -145,6 +145,11 @@ public class ReplicationManager extends ReplicationEngine {
     }
   }
 
+  @Override
+  protected boolean shouldReplicateFromDc(String datacenterName) {
+    return true;
+  }
+
   /**
    * Add given replica into replication manager.
    * @param replicaId the replica to add
@@ -233,21 +238,6 @@ public class ReplicationManager extends ReplicationEngine {
     }
     replicationMetrics.addLagMetricForPartition(partition, replicationConfig.replicationTrackPerPartitionLagFromRemote);
     return remoteReplicaInfos;
-  }
-
-  /**
-   * Update {@link PartitionInfo} related maps including {@link ReplicationEngine#partitionToPartitionInfo} and
-   * {@link ReplicationEngine#mountPathToPartitionInfos}
-   * @param remoteReplicaInfos the {@link RemoteReplicaInfo}(s) of the local {@link ReplicaId}
-   * @param replicaId the local replica
-   */
-  private void updatePartitionInfoMaps(List<RemoteReplicaInfo> remoteReplicaInfos, ReplicaId replicaId) {
-    PartitionId partition = replicaId.getPartitionId();
-    PartitionInfo partitionInfo =
-        new PartitionInfo(remoteReplicaInfos, partition, storeManager.getStore(partition), replicaId);
-    partitionToPartitionInfo.put(partition, partitionInfo);
-    mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
-        .add(partitionInfo);
   }
 
   /**

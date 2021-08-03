@@ -272,7 +272,11 @@ public class ReplicaThread implements Runnable {
       if (!replicasToReplicateGroupedByNode.computeIfAbsent(dataNodeId, key -> new HashSet<>())
           .add(remoteReplicaInfo)) {
         replicationMetrics.remoteReplicaInfoAddError.inc();
-        logger.error("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
+        // Since VCR is also listening Ambry Clustermap change, this may happen if events happens in following order:
+        // 1. VCR in memory ambry-clustermap updated
+        // 2. VcrClusterParticipantListener adds remote replicas for the newly added partition
+        // 3. ClusterMapChangeListener adds remote replicas
+        logger.warn("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
       }
     } finally {
       lock.unlock();
