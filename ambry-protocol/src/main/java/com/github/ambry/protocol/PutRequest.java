@@ -56,7 +56,7 @@ public class PutRequest extends RequestOrResponse {
   // BlobData
 
   // Used to calculate crc value in ambry-frontend.
-  private final PutRequestCrc32Impl crc;
+  private final Crc32Impl crc;
   private ByteBuf crcByteBuf;
   private boolean okayToWriteCrc = false;
   private int sizeExcludingBlobAndCrc = -1;
@@ -93,7 +93,7 @@ public class PutRequest extends RequestOrResponse {
       ByteBuffer usermetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType,
       ByteBuffer blobEncryptionKey) {
     this(correlationId, clientId, blobId, properties, usermetadata, materializedBlob, blobSize, blobType,
-        blobEncryptionKey, PutRequestCrc32Impl.getAmbryUtilInstance());
+        blobEncryptionKey, Crc32Impl.getAmbryInstance());
   }
 
   /**
@@ -107,11 +107,11 @@ public class PutRequest extends RequestOrResponse {
    * @param blobSize the size of the blob data.
    * @param blobType the type of the blob data.
    * @param blobEncryptionKey the encryption key for the blob.
-   * @param crc32Impl the {@link PutRequestCrc32Impl}.
+   * @param crc32Impl the {@link Crc32Impl}.
    */
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer usermetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey,
-      PutRequestCrc32Impl crc32Impl) {
+      Crc32Impl crc32Impl) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;

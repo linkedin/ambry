@@ -104,9 +104,7 @@ public class RouterConfig {
       "router.cross.colo.request.to.dc.with.most.replicas";
   public static final String ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS =
       "router.background.deleter.max.concurrent.operations";
-  public static final String ROUTER_PUT_REQUEST_CRC32_IMPLEMENTATION = "router.put.request.crc32.implementation";
-  public static final String CRC32_IMPLEMENTATION_AMBRY_UTIL = "AmbryUtil";
-  public static final String CRC32_IMPLEMENTATION_JAVA_NATIVE = "JavaNative";
+  public static final String ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32 = "router.put.request.use.java.native.crc32";
 
   /**
    * Number of independent scaling units for the router.
@@ -503,9 +501,12 @@ public class RouterConfig {
   @Default("0")
   public final int routerBackgroundDeleterMaxConcurrentOperations;
 
-  @Config(ROUTER_PUT_REQUEST_CRC32_IMPLEMENTATION)
-  @Default(CRC32_IMPLEMENTATION_AMBRY_UTIL)
-  public final String routerPutRequestCrc32Implementation;
+  /**
+   * True to use java native crc32 implementation
+   */
+  @Config(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32)
+  @Default("false")
+  public final boolean routerPutRequestUseJavaNativeCrc32;
 
   /**
    * Create a RouterConfig instance.
@@ -615,7 +616,7 @@ public class RouterConfig {
     routerBackgroundDeleterMaxConcurrentOperations =
         verifiableProperties.getIntInRange(ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS, 0, 0,
             Integer.MAX_VALUE);
-    routerPutRequestCrc32Implementation =
-        verifiableProperties.getString(ROUTER_PUT_REQUEST_CRC32_IMPLEMENTATION, CRC32_IMPLEMENTATION_AMBRY_UTIL);
+    routerPutRequestUseJavaNativeCrc32 =
+        verifiableProperties.getBoolean(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32, false);
   }
 }

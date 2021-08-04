@@ -34,8 +34,8 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.protocol.PutRequestCrc32Impl;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
@@ -1400,23 +1400,8 @@ class PutOperation {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
           chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
           buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
-          getCrc32Implementation());
-    }
-
-    /**
-     * Select crc32 implementation based on {@link RouterConfig#routerPutRequestCrc32Implementation}.
-     * @return
-     */
-    protected PutRequestCrc32Impl getCrc32Implementation() {
-      if (routerConfig.routerPutRequestCrc32Implementation.equals(RouterConfig.CRC32_IMPLEMENTATION_AMBRY_UTIL)) {
-        return PutRequestCrc32Impl.getAmbryUtilInstance();
-      } else if (routerConfig.routerPutRequestCrc32Implementation.equals(
-          RouterConfig.CRC32_IMPLEMENTATION_JAVA_NATIVE)) {
-        return PutRequestCrc32Impl.getJavaNativeInstance();
-      } else {
-        throw new IllegalStateException(
-            "Unknown crc32 implementation: " + routerConfig.routerPutRequestCrc32Implementation);
-      }
+          routerConfig.routerPutRequestUseJavaNativeCrc32 ? Crc32Impl.getJavaNativeInstance()
+              : Crc32Impl.getAmbryInstance());
     }
 
     /**

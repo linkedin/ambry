@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ import java.util.zip.CRC32;
 
 
 /**
- * The Crc32 algorithm interface for {@link PutRequest}.
+ * The Crc32 implementaion interface.
  */
-public interface PutRequestCrc32Impl {
+public interface Crc32Impl {
 
   /**
    * Update Crc32 value based on given {@link ByteBuffer}.
@@ -39,9 +39,9 @@ public interface PutRequestCrc32Impl {
    * Return java native implementation of crc32 algorithm.
    * @return
    */
-  static PutRequestCrc32Impl getJavaNativeInstance() {
-    return new PutRequestCrc32Impl() {
-      private CRC32 crc32 = new CRC32();
+  static Crc32Impl getJavaNativeInstance() {
+    return new Crc32Impl() {
+      final private CRC32 crc32 = new CRC32();
 
       @Override
       public void update(ByteBuffer buffer) {
@@ -59,9 +59,9 @@ public interface PutRequestCrc32Impl {
    * Return ambry util implementation of crc32 algorithm.
    * @return
    */
-  static PutRequestCrc32Impl getAmbryUtilInstance() {
-    return new PutRequestCrc32Impl() {
-      private Crc32 crc32 = new Crc32();
+  static Crc32Impl getAmbryInstance() {
+    return new Crc32Impl() {
+      final private Crc32 crc32 = new Crc32();
 
       @Override
       public void update(ByteBuffer buffer) {
