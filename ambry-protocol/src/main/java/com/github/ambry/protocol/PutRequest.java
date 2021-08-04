@@ -19,7 +19,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertiesSerDe;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -57,7 +56,7 @@ public class PutRequest extends RequestOrResponse {
   // BlobData
 
   // Used to calculate crc value in ambry-frontend.
-  private final Crc32 crc;
+  private final PutRequestCrc32Algo crc;
   private ByteBuf crcByteBuf;
   private boolean okayToWriteCrc = false;
   private int sizeExcludingBlobAndCrc = -1;
@@ -93,6 +92,26 @@ public class PutRequest extends RequestOrResponse {
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer usermetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType,
       ByteBuffer blobEncryptionKey) {
+    this(correlationId, clientId, blobId, properties, usermetadata, materializedBlob, blobSize, blobType,
+        blobEncryptionKey, PutRequestCrc32Algo.getAmbryUtilInstance());
+  }
+
+  /**
+   * Construct a PutRequest
+   * @param correlationId the correlation id associated with the request.
+   * @param clientId the clientId associated with the request.
+   * @param blobId the {@link BlobId} of the blob that is being put as part of this request.
+   * @param properties the {@link BlobProperties} associated with the request.
+   * @param usermetadata the user metadata associated with the request.
+   * @param materializedBlob the materialized buffer containing the blob data.
+   * @param blobSize the size of the blob data.
+   * @param blobType the type of the blob data.
+   * @param blobEncryptionKey the encryption key for the blob.
+   * @param crcAlgo the {@link PutRequestCrc32Algo}.
+   */
+  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
+      ByteBuffer usermetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey,
+      PutRequestCrc32Algo crcAlgo) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
@@ -101,7 +120,7 @@ public class PutRequest extends RequestOrResponse {
     this.blobType = blobType;
     this.blobEncryptionKey = blobEncryptionKey;
     this.blob = materializedBlob;
-    this.crc = new Crc32();
+    this.crc = crcAlgo;
     this.crcByteBuf = PooledByteBufAllocator.DEFAULT.ioBuffer(CRC_SIZE_IN_BYTES);
     this.blobStream = null;
     this.crcValue = null;

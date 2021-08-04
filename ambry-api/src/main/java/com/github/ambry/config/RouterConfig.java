@@ -104,6 +104,9 @@ public class RouterConfig {
       "router.cross.colo.request.to.dc.with.most.replicas";
   public static final String ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS =
       "router.background.deleter.max.concurrent.operations";
+  public static final String ROUTER_PUT_REQUEST_CRC32_ALGORITHM = "router.put.request.crc32.algorithm";
+  public static final String CRC32_ALGORITHM_AMBRY_UTIL = "AmbryUtil";
+  public static final String CRC32_ALGORITHM_JAVA_NATIVE = "JavaNative";
 
   /**
    * Number of independent scaling units for the router.
@@ -500,6 +503,10 @@ public class RouterConfig {
   @Default("0")
   public final int routerBackgroundDeleterMaxConcurrentOperations;
 
+  @Config(ROUTER_PUT_REQUEST_CRC32_ALGORITHM)
+  @Default(CRC32_ALGORITHM_AMBRY_UTIL)
+  public final String routerPutRequestCrc32Algorithm;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -608,5 +615,7 @@ public class RouterConfig {
     routerBackgroundDeleterMaxConcurrentOperations =
         verifiableProperties.getIntInRange(ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS, 0, 0,
             Integer.MAX_VALUE);
+    routerPutRequestCrc32Algorithm =
+        verifiableProperties.getString(ROUTER_PUT_REQUEST_CRC32_ALGORITHM, CRC32_ALGORITHM_AMBRY_UTIL);
   }
 }

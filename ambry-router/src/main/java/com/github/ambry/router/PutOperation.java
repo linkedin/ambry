@@ -35,6 +35,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutRequestCrc32Algo;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
@@ -1134,7 +1135,8 @@ class PutOperation {
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename());
         operationTracker =
-            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true, routerMetrics);
+            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true,
+                routerMetrics);
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
@@ -1397,7 +1399,22 @@ class PutOperation {
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
           chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
-          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
+          getCrc32Algorithm());
+    }
+
+    /**
+     * Select crc32 algorithm based on {@link RouterConfig#routerPutRequestCrc32Algorithm}.
+     * @return
+     */
+    protected PutRequestCrc32Algo getCrc32Algorithm() {
+      if (routerConfig.routerPutRequestCrc32Algorithm.equals(RouterConfig.CRC32_ALGORITHM_AMBRY_UTIL)) {
+        return PutRequestCrc32Algo.getAmbryUtilInstance();
+      } else if (routerConfig.routerPutRequestCrc32Algorithm.equals(RouterConfig.CRC32_ALGORITHM_JAVA_NATIVE)) {
+        return PutRequestCrc32Algo.getJavaNativeInstance();
+      } else {
+        throw new IllegalStateException("Unknown crc32 algorithm: " + routerConfig.routerPutRequestCrc32Algorithm);
+      }
     }
 
     /**
