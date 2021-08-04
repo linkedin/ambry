@@ -43,9 +43,10 @@ public class Crc32Benchmark {
     final int NUM_BUFFERS = 10;
     final Random random = new Random();
     System.out.println("Time Unit: us");
-    System.out.printf("size\t\theapJava\theapAmbry\tdirectJava\tdirectAmbry\n");
+    System.out.printf("size\t\theapJava\theapAmbry\tdirectJava\tdirectAmbry\tarrayJava\tarrayAmbry\n");
     for (int size : BUFFER_SIZES) {
       ByteBuffer[] buffers = new ByteBuffer[NUM_BUFFERS];
+      long[] crcs = new long[NUM_BUFFERS];
       // first test on heap buffer
       byte[] arr = new byte[size];
       for (int i = 0; i < NUM_BUFFERS; i++) {
@@ -61,10 +62,11 @@ public class Crc32Benchmark {
         ByteBuffer buffer = buffers[iter % NUM_BUFFERS];
         assert buffer.remaining() == size;
         test.update(buffer);
-        test.getValue();
+        crcs[iter % NUM_BUFFERS] = test.getValue();
         buffer.position(0);
       }
       double heapAmbry = ((double) (System.nanoTime() - start)) / NUM_ITERATION / 1000;
+      printArray(crcs);
 
       start = System.nanoTime();
       for (int iter = 0; iter < NUM_ITERATION; iter++) {
@@ -72,11 +74,11 @@ public class Crc32Benchmark {
         ByteBuffer buffer = buffers[iter % NUM_BUFFERS];
         assert buffer.remaining() == size;
         test.update(buffer);
-        test.getValue();
+        crcs[iter % NUM_BUFFERS] = test.getValue();
         buffer.position(0);
       }
       double heapJava = ((double) (System.nanoTime() - start)) / NUM_ITERATION / 1000;
-
+      printArray(crcs);
 
       // then test on direct buffer
       for (int i = 0; i < NUM_BUFFERS; i++) {
@@ -92,10 +94,11 @@ public class Crc32Benchmark {
         ByteBuffer buffer = buffers[iter % NUM_BUFFERS];
         assert buffer.remaining() == size;
         test.update(buffer);
-        test.getValue();
+        crcs[iter % NUM_BUFFERS] = test.getValue();
         buffer.position(0);
       }
       double directAmbry = ((double) (System.nanoTime() - start)) / NUM_ITERATION / 1000;
+      printArray(crcs);
 
       start = System.nanoTime();
       for (int iter = 0; iter < NUM_ITERATION; iter++) {
@@ -103,13 +106,44 @@ public class Crc32Benchmark {
         ByteBuffer buffer = buffers[iter % NUM_BUFFERS];
         assert buffer.remaining() == size;
         test.update(buffer);
-        test.getValue();
+        crcs[iter % NUM_BUFFERS] = test.getValue();
         buffer.position(0);
       }
       double directJava = ((double) (System.nanoTime() - start)) / NUM_ITERATION / 1000;
+      printArray(crcs);
 
-      System.out.printf("%s\t\t%.2f\t%.2f\t%.2f\t%.2f\n", sizeLiterals.get(size), heapJava, heapAmbry, directJava,
-          directAmbry);
+      start = System.nanoTime();
+      for (int iter = 0; iter < NUM_ITERATION; iter++) {
+        Crc32 test = new Crc32();
+        ByteBuffer buffer = buffers[iter % NUM_BUFFERS];
+        assert buffer.remaining() == size;
+        buffer.get(arr);
+        test.update(arr, 0, arr.length);
+        crcs[iter % NUM_BUFFERS] = test.getValue();
+        buffer.position(0);
+      }
+      double arrayAmbry = ((double) (System.nanoTime() - start)) / NUM_ITERATION / 1000;
+      printArray(crcs);
+
+      start = System.nanoTime();
+      for (int iter = 0; iter < NUM_ITERATION; iter++) {
+        CRC32 test = new CRC32();
+        ByteBuffer buffer = buffers[iter % NUM_BUFFERS];
+        assert buffer.remaining() == size;
+        buffer.get(arr);
+        test.update(arr, 0, arr.length);
+        crcs[iter % NUM_BUFFERS] = test.getValue();
+        buffer.position(0);
+      }
+      double arrayJava = ((double) (System.nanoTime() - start)) / NUM_ITERATION / 1000;
+      printArray(crcs);
+
+      System.out.printf("%s\t\t%.2f\t\t%.2f\t\t%.2f\t\t%.2f\t\t%.2f\t\t%.2f\n", sizeLiterals.get(size), heapJava,
+          heapAmbry, directJava, directAmbry, arrayJava, arrayAmbry);
     }
+  }
+
+  private static void printArray(long[] array) {
+    //System.out.println(Arrays.stream(array).boxed().map(String::valueOf).collect(Collectors.joining(",")));
   }
 }
