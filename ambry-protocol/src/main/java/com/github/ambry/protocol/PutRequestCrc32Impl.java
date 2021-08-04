@@ -21,7 +21,7 @@ import java.util.zip.CRC32;
 /**
  * The Crc32 algorithm interface for {@link PutRequest}.
  */
-public interface PutRequestCrc32Algo {
+public interface PutRequestCrc32Impl {
 
   /**
    * Update Crc32 value based on given {@link ByteBuffer}.
@@ -39,8 +39,8 @@ public interface PutRequestCrc32Algo {
    * Return java native implementation of crc32 algorithm.
    * @return
    */
-  static PutRequestCrc32Algo getJavaNativeInstance() {
-    return new PutRequestCrc32Algo() {
+  static PutRequestCrc32Impl getJavaNativeInstance() {
+    return new PutRequestCrc32Impl() {
       private CRC32 crc32 = new CRC32();
 
       @Override
@@ -59,8 +59,8 @@ public interface PutRequestCrc32Algo {
    * Return ambry util implementation of crc32 algorithm.
    * @return
    */
-  static PutRequestCrc32Algo getAmbryUtilInstance() {
-    return new PutRequestCrc32Algo() {
+  static PutRequestCrc32Impl getAmbryUtilInstance() {
+    return new PutRequestCrc32Impl() {
       private Crc32 crc32 = new Crc32();
 
       @Override
