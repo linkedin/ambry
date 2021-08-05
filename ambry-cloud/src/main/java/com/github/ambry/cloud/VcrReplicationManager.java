@@ -24,6 +24,9 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterParticipantListener;
+import com.github.ambry.commons.RetryExecutor;
+import com.github.ambry.commons.RetryPolicies;
+import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -45,6 +48,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -69,6 +73,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   private volatile boolean isAmbryListenerToUpdateVcrHelixRegistered = false;
   private volatile ScheduledFuture<?> vcrHelixUpdateFuture = null;
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
+  private final RetryPolicy retryPolicy = RetryPolicies.defaultPolicy();
+  private final RetryExecutor retryExecutor = new RetryExecutor(Executors.newScheduledThreadPool(2));
 
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
@@ -125,17 +131,10 @@ public class VcrReplicationManager extends ReplicationEngine {
             vcrHelixUpdateLock.unlock();
           }
         }
-        try {
-          addReplica(partitionId);
-          logger.info("Partition {} added to {}", partitionId, dataNodeId);
-        } catch (ReplicationException e) {
-          vcrMetrics.addPartitionErrorCount.inc();
-          logger.error("Exception on adding Partition {} to {}: ", partitionId, dataNodeId, e);
-        } catch (Exception e) {
-          // Helix will run into error state if exception throws in Helix context.
-          vcrMetrics.addPartitionErrorCount.inc();
-          logger.error("Unknown Exception on adding Partition {} to {}: ", partitionId, dataNodeId, e);
-        }
+
+        // Add partition with retry logic in case Ambry clustermap is not update to date.
+        retryExecutor.runWithRetries(retryPolicy, callback -> addReplica(partitionId),
+            e -> e instanceof RetryableAddReplicaException, null);
       }
 
       @Override
@@ -208,16 +207,18 @@ public class VcrReplicationManager extends ReplicationEngine {
   /**
    * Add a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s to backup list.
    * @param partitionId the {@link PartitionId} of the replica to add.
-   * @throws ReplicationException if replicas initialization failed.
+   * @throws IllegalStateException if add replica failed and not retryable.
+   * @throws RetryableAddReplicaException if add replica fail but it's retryable.
    */
-  void addReplica(PartitionId partitionId) throws ReplicationException {
+  void addReplica(PartitionId partitionId) {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
-      throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
+      throw new IllegalStateException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
     ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());
     if (!storeManager.addBlobStore(cloudReplica)) {
       logger.error("Can't start cloudstore for replica {}", cloudReplica);
-      throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);
+      vcrMetrics.addPartitionErrorCount.inc();
+      throw new IllegalStateException("Can't start cloudstore for replica " + cloudReplica);
     }
     List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
@@ -244,8 +245,13 @@ public class VcrReplicationManager extends ReplicationEngine {
         updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
         partitionStoreMap.put(partitionId.toPathString(), store);
         // Reload replication token if exist.
-        int tokenReloadFailCount = reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
-        vcrMetrics.tokenReloadWarnCount.inc(tokenReloadFailCount);
+        try {
+          int tokenReloadFailCount = reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
+          vcrMetrics.tokenReloadWarnCount.inc(tokenReloadFailCount);
+        } catch (ReplicationException e) {
+          throw new IllegalStateException("Could not reload replication token. PartitionId " + partitionId.toString(),
+              e);
+        }
 
         // Add remoteReplicaInfos to {@link ReplicaThread}.
         addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
@@ -254,13 +260,16 @@ public class VcrReplicationManager extends ReplicationEngine {
         }
       } finally {
         rwLock.writeLock().unlock();
+        logger.info("Partition {} added to {}", partitionId, dataNodeId);
       }
     } else {
       try {
         storeManager.shutdownBlobStore(partitionId);
         storeManager.removeBlobStore(partitionId);
       } finally {
-        throw new ReplicationException(
+        vcrMetrics.addPartitionErrorCount.inc();
+        // In this case, it's still retryable.
+        throw new RetryableAddReplicaException(
             "Failed to add Partition " + partitionId + " on " + dataNodeId + " , because no peer replicas found.");
       }
     }
@@ -394,6 +403,15 @@ public class VcrReplicationManager extends ReplicationEngine {
           vcrHelixUpdateLock.unlock();
         }
       }
+    }
+  }
+
+  /**
+   * A wrapper of RuntimeException for retryable exception in addReplica.
+   */
+  class RetryableAddReplicaException extends RuntimeException {
+    RetryableAddReplicaException(String msg) {
+      super(msg);
     }
   }
 }
