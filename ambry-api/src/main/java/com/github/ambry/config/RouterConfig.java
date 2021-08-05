@@ -104,6 +104,7 @@ public class RouterConfig {
       "router.cross.colo.request.to.dc.with.most.replicas";
   public static final String ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS =
       "router.background.deleter.max.concurrent.operations";
+  public static final String ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32 = "router.put.request.use.java.native.crc32";
 
   /**
    * Number of independent scaling units for the router.
@@ -501,6 +502,13 @@ public class RouterConfig {
   public final int routerBackgroundDeleterMaxConcurrentOperations;
 
   /**
+   * True to use java native crc32 implementation
+   */
+  @Config(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32)
+  @Default("false")
+  public final boolean routerPutRequestUseJavaNativeCrc32;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -608,5 +616,7 @@ public class RouterConfig {
     routerBackgroundDeleterMaxConcurrentOperations =
         verifiableProperties.getIntInRange(ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS, 0, 0,
             Integer.MAX_VALUE);
+    routerPutRequestUseJavaNativeCrc32 =
+        verifiableProperties.getBoolean(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32, false);
   }
 }

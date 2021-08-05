@@ -34,6 +34,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
@@ -1134,7 +1135,8 @@ class PutOperation {
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename());
         operationTracker =
-            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true, routerMetrics);
+            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true,
+                routerMetrics);
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
@@ -1397,7 +1399,9 @@ class PutOperation {
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
           chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
-          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
+          routerConfig.routerPutRequestUseJavaNativeCrc32 ? Crc32Impl.getJavaNativeInstance()
+              : Crc32Impl.getAmbryInstance());
     }
 
     /**
