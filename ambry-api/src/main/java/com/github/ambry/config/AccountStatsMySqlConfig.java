@@ -21,6 +21,7 @@ public class AccountStatsMySqlConfig {
   public static final String POOL_SIZE = PREFIX + "pool.size";
   public static final String UPDATE_BATCH_SIZE = PREFIX + "update.batch.size";
   public static final String ENABLE_REWRITE_BATCHED_STATEMENT = PREFIX + "enable.rewrite.batched.statements";
+  public static final String CONNECTION_IDLE_TIMEOUT = PREFIX + "connection.idle.timeout.ms";
 
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
@@ -84,11 +85,19 @@ public class AccountStatsMySqlConfig {
   @Default("false")
   public final boolean enableRewriteBatchedStatement;
 
+  /**
+   * Connection idle timeout in ms. Once a connection is idle for more than the timeout, it will be closed by the pool.
+   */
+  @Config(CONNECTION_IDLE_TIMEOUT)
+  @Default("60 * 1000")
+  public final long connectionIdleTimeoutMs;
+
   public AccountStatsMySqlConfig(VerifiableProperties verifiableProperties) {
     dbInfo = verifiableProperties.getString(DB_INFO, "");
     domainNamesToRemove = verifiableProperties.getString(DOMAIN_NAMES_TO_REMOVE, "");
     poolSize = verifiableProperties.getIntInRange(POOL_SIZE, 2, 1, Integer.MAX_VALUE);
     updateBatchSize = verifiableProperties.getInt(UPDATE_BATCH_SIZE, 0);
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
+    connectionIdleTimeoutMs = verifiableProperties.getLong(CONNECTION_IDLE_TIMEOUT, 60 * 1000);
   }
 }
