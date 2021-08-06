@@ -17,11 +17,9 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockVcrClusterAgentsFactory;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
@@ -63,7 +61,6 @@ import static org.junit.Assert.*;
 public class MockCluster {
   private static final Logger logger = LoggerFactory.getLogger(MockCluster.class);
   private final MockClusterAgentsFactory mockClusterAgentsFactory;
-  private MockVcrClusterAgentsFactory mockClusterSpectatorFactory;
   private final MockClusterMap clusterMap;
   private final List<AmbryServer> serverList;
   private boolean serverInitialized = false;
@@ -110,8 +107,6 @@ public class MockCluster {
     clusterMap = mockClusterMap;
     serverList = new ArrayList<>();
     generalDataNodeIndex = 0;
-
-    mockClusterSpectatorFactory = new MockVcrClusterAgentsFactory(cloudDataNodes);
   }
 
   /**
@@ -229,10 +224,6 @@ public class MockCluster {
     return mockClusterAgentsFactory;
   }
 
-  public VcrClusterAgentsFactory getClusterSpectatorFactory() {
-    return mockClusterSpectatorFactory;
-  }
-
   /**
    * Create initialization {@link VerifiableProperties} for server.
    * @param dataNodeId {@link DataNodeId} object of the server initialized.
@@ -280,10 +271,10 @@ public class MockCluster {
     if (mockClusterAgentsFactory != null) {
       server =
           new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties), mockClusterAgentsFactory,
-              mockClusterSpectatorFactory, notificationSystem, time, null);
+              notificationSystem, time, null);
     } else {
       server = new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties),
-          this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time, null);
+          this.mockClusterAgentsFactory, notificationSystem, time, null);
     }
     return server;
   }

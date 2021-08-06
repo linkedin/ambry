@@ -58,7 +58,7 @@ public class AmbryServerTest {
     props.setProperty("clustermap.host.name", dataNodeId.getHostname());
 
     AmbryServer ambryServer =
-        new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, null, new LoggingNotificationSystem(),
+        new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, new LoggingNotificationSystem(),
             SystemTime.getInstance(), reporterFactory);
     ambryServer.startup();
     verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());

@@ -23,11 +23,10 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterSpectator;
-import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettyInternalMetrics;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
@@ -108,7 +107,6 @@ public class AmbryServer {
   private static final Logger logger = LoggerFactory.getLogger(AmbryServer.class);
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
-  private final VcrClusterAgentsFactory _vcrClusterAgentsFactory;
   private final Function<MetricRegistry, JmxReporter> reporterFactory;
   private ClusterMap clusterMap;
   private List<ClusterParticipant> clusterParticipants;
@@ -129,19 +127,13 @@ public class AmbryServer {
   private AccountStatsMySqlStore accountStatsMySqlStore = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
-    this(properties, clusterAgentsFactory, vcrClusterAgentsFactory, new LoggingNotificationSystem(), time, null);
-  }
-
-  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, Time time) throws InstantiationException {
-    this(properties, clusterAgentsFactory, null, notificationSystem, time, null);
+    this(properties, clusterAgentsFactory, notificationSystem, time, null);
   }
 
   /**
    * @param properties {@link VerifiableProperties} object containing configs for the server.
    * @param clusterAgentsFactory The {@link ClusterAgentsFactory} to use.
-   * @param vcrClusterAgentsFactory a {@link VcrClusterAgentsFactory} instance. Required if replicating from a VCR.
    * @param notificationSystem the {@link NotificationSystem} to use.
    * @param time The {@link Time} instance to use.
    * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
@@ -149,11 +141,10 @@ public class AmbryServer {
    * @throws InstantiationException if there was an error during startup.
    */
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      VcrClusterAgentsFactory vcrClusterAgentsFactory, NotificationSystem notificationSystem, Time time,
-      Function<MetricRegistry, JmxReporter> reporterFactory) throws InstantiationException {
+      NotificationSystem notificationSystem, Time time, Function<MetricRegistry, JmxReporter> reporterFactory)
+      throws InstantiationException {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
-    this._vcrClusterAgentsFactory = vcrClusterAgentsFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
     this.reporterFactory = reporterFactory;
@@ -251,7 +242,9 @@ public class AmbryServer {
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
         logger.info("Creating Helix cluster spectator for cloud to store replication.");
-        vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
+        vcrClusterSpectator =
+            ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, cloudConfig,
+                clusterMapConfig, null, null, null, null, null)).getVcrClusterSpectator(cloudConfig, clusterMapConfig);
         cloudToStoreReplicationManager =
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                 storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
