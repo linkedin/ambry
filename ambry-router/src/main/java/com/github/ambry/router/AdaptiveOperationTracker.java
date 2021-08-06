@@ -173,6 +173,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       case GetBlobOperation:
         trackerToReturn = isLocal ? routerMetrics.getBlobLocalDcLatencyMs : routerMetrics.getBlobCrossDcLatencyMs;
         break;
+      case PutOperation:
+        trackerToReturn = routerMetrics.putBlobLatencyMs;
+        break;
       default:
         throw new IllegalArgumentException("Unsupported router operation when getting whole DC latency tracker.");
     }
@@ -192,6 +195,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         break;
       case GetBlobOperation:
         pastDueCounter = routerMetrics.getBlobPastDueCount;
+        break;
+      case PutOperation:
+        pastDueCounter = routerMetrics.putBlobPastDueCount;
         break;
       default:
         throw new IllegalArgumentException("Unsupported router operation when getting whole DC past due counter.");
@@ -216,6 +222,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         resourceToHistogramMap =
             isLocal ? routerMetrics.getBlobLocalDcResourceToLatency : routerMetrics.getBlobCrossDcResourceToLatency;
         break;
+      case PutOperation:
+        resourceToHistogramMap = routerMetrics.putBlobResourceToLatency;
+        break;
       default:
         throw new IllegalArgumentException("Unsupported router operation when getting resource-to-latency map");
     }
@@ -227,11 +236,29 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * outstanding for a certain amount of time from parallelism.
    */
   private class OpTrackerIterator implements Iterator<ReplicaId> {
+    private int totalRequestCount = 0;
 
+    /**
+     * For Adaptive Operation Tracker, we want to achieve this result:
+     * 1. we don't want to send more than #parallelism requests when all requests get responses in time
+     * 2. we only send additional request when one of the existing request's latency exceeds 95%.
+     *
+     * For example, if we have 6 replicas and the parallelism is 3, calling hasNext(), next() and remove()
+     * would result in:
+     * replica 1: totalRequestCount = 0, total-disabled-failed=0<3, return true
+     * replica 2: totalRequestCount = 1, total-disabled-failed=1<3, return true
+     * replica 3: totalRequestCount = 2, total-disabled-failed=2<3, return true
+     * replica 4: totalRequestCount = 3, total-disabled-failed=3!<3, wait until oldest request past due.
+     * If replica 1 returns failure response, then failed = 1
+     * replica 4: totalRequestCount = 3, total-disabled-failed=2<3, return true
+     * If replica 2 exceed 95% latency
+     * replica 5: return true
+     * @return
+     */
     @Override
     public boolean hasNext() {
       if (replicaIterator.hasNext()) {
-        if (inflightCount < getCurrentParallelism()) {
+        if (totalRequestCount - disabledCount - failedCount < getCurrentParallelism()) {
           return true;
         }
         if (inflightCount < routerConfig.routerOperationTrackerMaxInflightRequests && isOldestRequestPastDue()) {
@@ -253,6 +280,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       }
       unexpiredRequestSendTimes.put(lastReturnedByIterator, new Pair<>(false, time.milliseconds()));
       inFlightReplicaType = lastReturnedByIterator.getReplicaType();
+      totalRequestCount++;
       inflightCount++;
     }
 

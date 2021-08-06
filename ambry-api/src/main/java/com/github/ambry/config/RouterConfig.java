@@ -61,6 +61,7 @@ public class RouterConfig {
   public static final String ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS =
       "router.operation.tracker.include.down.replicas";
   public static final String ROUTER_GET_OPERATION_TRACKER_TYPE = "router.get.operation.tracker.type";
+  public static final String ROUTER_PUT_OPERATION_TRACKER_TYPE = "router.put.operation.tracker.type";
   public static final String ROUTER_LATENCY_TOLERANCE_QUANTILE = "router.latency.tolerance.quantile";
   public static final String ROUTER_BLOBID_CURRENT_VERSION = "router.blobid.current.version";
   public static final String ROUTER_METADATA_CONTENT_VERSION = "router.metadata.content.version";
@@ -263,6 +264,13 @@ public class RouterConfig {
   @Config(ROUTER_GET_OPERATION_TRACKER_TYPE)
   @Default("SimpleOperationTracker")
   public final String routerGetOperationTrackerType;
+
+  /**
+   * The OperationTracker to use for PUT operations.
+   */
+  @Config(ROUTER_PUT_OPERATION_TRACKER_TYPE)
+  @Default("SimpleOperationTracker")
+  public final String routerPutOperationTrackerType;
 
   /**
    * If an adaptive operation tracker is being used, a request is discounted from the parallelism count if it has been
@@ -549,6 +557,8 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS, true);
     routerGetOperationTrackerType =
         verifiableProperties.getString(ROUTER_GET_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
+    routerPutOperationTrackerType =
+        verifiableProperties.getString(ROUTER_PUT_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
         verifiableProperties.getDoubleInRange(ROUTER_LATENCY_TOLERANCE_QUANTILE, DEFAULT_LATENCY_TOLERANCE_QUANTILE,
             0.0, 1.0);

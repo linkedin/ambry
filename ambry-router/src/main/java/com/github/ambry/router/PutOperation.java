@@ -1134,9 +1134,7 @@ class PutOperation {
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename());
-        operationTracker =
-            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true,
-                routerMetrics);
+        operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
@@ -1145,6 +1143,28 @@ class PutOperation {
         setOperationExceptionAndComplete(
             new RouterException("Prepare for sending failed", e, RouterErrorCode.UnexpectedInternalError));
       }
+    }
+
+    /**
+     * Gets an {@link OperationTracker} based on the config;
+     * @return an {@link OperationTracker} based on the config;
+     */
+    protected OperationTracker getOperationTracker() {
+      OperationTracker operationTracker;
+      String trackerType = routerConfig.routerPutOperationTrackerType;
+      String originatingDcName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+      if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
+        operationTracker =
+            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, originatingDcName, true,
+                routerMetrics);
+      } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
+        operationTracker =
+            new AdaptiveOperationTracker(routerConfig, routerMetrics, RouterOperation.PutOperation, partitionId,
+                originatingDcName, time);
+      } else {
+        throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
+      }
+      return operationTracker;
     }
 
     /**
