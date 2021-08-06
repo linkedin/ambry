@@ -1439,7 +1439,19 @@ class PersistentIndex {
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
     long bytesRead = 0;
     if (token.getType().equals(FindTokenType.IndexBased)) {
-      bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexSegments);
+      try {
+        if (token.getOffset().equals(validIndexSegments.lastKey())) {
+          bytesRead = getAbsoluteReadBytesFromIndexBasedToken(token, indexSegments);
+        } else {
+          bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexSegments);
+        }
+      } catch (StoreException e) {
+        //If get read bytes from storeKey fails, use the start offset in index based token.
+        logger.error(
+            "Store exception on getAbsoluteReadBytesFromIndexBasedToken request with error code {} in datadir {} ",
+            e.getErrorCode(), dataDir);
+        bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexSegments);
+      }
     } else if (token.getType().equals(FindTokenType.JournalBased)) {
       if (messageEntries.size() > 0) {
         bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexSegments) + messageEntries.get(
@@ -1530,6 +1542,50 @@ class PersistentIndex {
     }
     int numPrecedingLogSegments = getLogSegmentToIndexSegmentMapping(indexSegments).headMap(offset.getName()).size();
     return numPrecedingLogSegments * log.getSegmentCapacity() + offset.getOffset();
+  }
+
+  /**
+   * @return the absolute read bytes represented by token.
+   * @throws StoreException
+   */
+  long getAbsoluteReadBytesFromIndexBasedToken(StoreFindToken indexBasedToken) throws StoreException {
+    return getAbsoluteReadBytesFromIndexBasedToken(indexBasedToken, validIndexSegments);
+  }
+
+  /**
+   * Get the absolute read bytes from index based token {@link StoreKey}.
+   * @param indexBasedToken the point until which the log has been read.
+   * @param indexSegments the list of index segments to use.
+   * @return the absolute read bytes represented by token.
+   * @throws StoreException
+   */
+  private long getAbsoluteReadBytesFromIndexBasedToken(StoreFindToken indexBasedToken, ConcurrentSkipListMap<Offset, IndexSegment> indexSegments)
+      throws StoreException {
+    Offset offset = indexBasedToken.getOffset();
+    LogSegment logSegment = log.getSegment(offset.getName());
+    if (logSegment == null || offset.getOffset() > logSegment.getEndOffset()) {
+      throw new IllegalArgumentException("Offset is invalid: " + offset + "; LogSegment: " + logSegment);
+    }
+    int numPrecedingLogSegments = getLogSegmentToIndexSegmentMapping(indexSegments).headMap(offset.getName()).size();
+    return numPrecedingLogSegments * log.getSegmentCapacity() + log.getEndOffset().getOffset() - getTotalOffsetAfterTokenPointedStoreKey(indexBasedToken);
+  }
+
+  /**
+   * Get the absolute read bytes after index based token {@link StoreKey}.
+   * @param indexBasedToken the point until which the log has been read.
+   * @return the absolute read bytes after index based token {@link StoreKey}.
+   * @throws StoreException
+   */
+  private long getTotalOffsetAfterTokenPointedStoreKey(StoreFindToken indexBasedToken) throws StoreException {
+    StoreKey storeKey = indexBasedToken.getStoreKey();
+    List<MessageInfo> entries = new ArrayList<>();
+    IndexSegment indexSegment = validIndexSegments.get(indexBasedToken.getOffset());
+    indexSegment.getEntriesSince(storeKey, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), false);
+    long totalSizeNotReplicated = 0;
+    for (MessageInfo messageInfo : entries) {
+      totalSizeNotReplicated += messageInfo.getSize();
+    }
+    return totalSizeNotReplicated;
   }
 
   /**

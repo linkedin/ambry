@@ -1018,6 +1018,75 @@ public class IndexTest {
   }
 
   /**
+   * Tests {@link PersistentIndex#findEntriesSince(FindToken, long)} when last log segment gets auto closed and token
+   * points to the last index segment.
+   * @throws StoreException
+   */
+  @Test
+  public void findEntriesSinceAfterAutoCloseLastLogSegmentTest() throws StoreException {
+    state.addPutEntries(7, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
+    state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    if (isLogSegmented) {
+      CompactionPolicySwitchInfo compactionPolicySwitchInfo =
+          new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
+      backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
+      if (state.log.autoCloseLastLogSegmentIfQualified()) {
+        //refresh journal.
+        state.index.journal.cleanUpJournal();
+      }
+
+      //1. index based token points to last entry of second last index segment + 1 -> index based token points to first
+      //entry of last Index segment
+      Offset lastIndexSegmentStartOffset = state.referenceIndex.lastKey();
+      Offset secondLastSegmentStartOffset = state.referenceIndex.lowerKey(lastIndexSegmentStartOffset);
+      TreeMap<MockId, TreeSet<IndexValue>> lastIndexSegment = state.referenceIndex.get(lastIndexSegmentStartOffset);
+      Map.Entry<MockId, TreeSet<IndexValue>> lastIndexSegmentFirstEntry = lastIndexSegment.firstEntry();
+      long maxTotalSizeOfEntries =
+          getSizeOfAllValues(state.referenceIndex.get(lastIndexSegmentStartOffset).firstEntry().getValue());
+
+      MockId lastId = state.referenceIndex.get(secondLastSegmentStartOffset).lastKey();
+      StoreFindToken startToken =
+          new StoreFindToken(lastId, secondLastSegmentStartOffset, state.sessionId, state.incarnationId, null, null,
+              UNINITIALIZED_RESET_KEY_VERSION);
+      IndexSegment segmentOfToken = state.index.getIndexSegments().get(lastIndexSegmentStartOffset);
+      StoreFindToken expectedEndToken =
+          new StoreFindToken(lastIndexSegmentFirstEntry.getKey(), lastIndexSegmentStartOffset, state.sessionId,
+              state.incarnationId, segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
+              segmentOfToken.getResetKeyLifeVersion());
+      try {
+        expectedEndToken.setBytesRead(state.index.getAbsoluteReadBytesFromIndexBasedToken(expectedEndToken));
+      } catch (StoreException e) {
+        expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(lastIndexSegmentStartOffset));
+      }
+      Set<MockId> expectedKeys = new HashSet<>();
+      expectedKeys.add(lastIndexSegmentFirstEntry.getKey());
+      doFindEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
+
+      //2. index based token points to last entry of last index segment -> index based token points to last entry of last
+      //Index segment
+      lastId = state.referenceIndex.get(lastIndexSegmentStartOffset).lastKey();
+      startToken =
+          new StoreFindToken(lastId, lastIndexSegmentStartOffset, state.sessionId, state.incarnationId, null, null,
+              UNINITIALIZED_RESET_KEY_VERSION);
+      Map.Entry<MockId, TreeSet<IndexValue>> lastIndexSegmentLastEntry = lastIndexSegment.lastEntry();
+      expectedEndToken =
+          new StoreFindToken(lastIndexSegmentLastEntry.getKey(), lastIndexSegmentStartOffset, state.sessionId,
+              state.incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION);
+      try {
+        expectedEndToken.setBytesRead(state.index.getAbsoluteReadBytesFromIndexBasedToken(expectedEndToken));
+      } catch (StoreException e) {
+        expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(lastIndexSegmentStartOffset));
+      }
+      expectedKeys = new HashSet<>();
+      maxTotalSizeOfEntries =
+          getSizeOfAllValues(state.referenceIndex.get(lastIndexSegmentStartOffset).lastEntry().getValue());
+      doFindEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
+    }
+  }
+
+  /**
    * Tests behaviour of {@link PersistentIndex#findEntriesSince(FindToken, long)} on crash-restart of index and some
    * recovery. Specifically tests cases where tokens have been handed out before the "crash" failure.
    * @throws IOException
@@ -2381,8 +2450,7 @@ public class IndexTest {
    * @param newLogSegment {@code true} if this is a new log segment. {@code false} otherwise
    * @throws StoreException
    */
-  private void fillLastLogSegmentToCapacity(int numberOfEntries, boolean newLogSegment)
-      throws StoreException {
+  private void fillLastLogSegmentToCapacity(int numberOfEntries, boolean newLogSegment) throws StoreException {
     if (newLogSegment) {
       // to ensure a new log segment is created. If not, find the remaining size below will fail
       state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
