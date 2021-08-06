@@ -1567,7 +1567,7 @@ class PersistentIndex {
       throw new IllegalArgumentException("Offset is invalid: " + offset + "; LogSegment: " + logSegment);
     }
     int numPrecedingLogSegments = getLogSegmentToIndexSegmentMapping(indexSegments).headMap(offset.getName()).size();
-    return numPrecedingLogSegments * log.getSegmentCapacity() + log.getSegmentCapacity() - getTotalOffsetAfterTokenPointedStoreKey(indexBasedToken);
+    return numPrecedingLogSegments * log.getSegmentCapacity() + log.getEndOffset().getOffset() - getTotalOffsetAfterTokenPointedStoreKey(indexBasedToken);
   }
 
   /**

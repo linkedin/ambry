@@ -1023,9 +1023,10 @@ public class IndexTest {
    * @throws StoreException
    */
   @Test
-  public void findEntriesSinceAfterAutoCloseLastLogsegmentTest() throws StoreException {
+  public void findEntriesSinceAfterAutoCloseLastLogSegmentTest() throws StoreException {
     state.addPutEntries(7, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
+    state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
 
     if (isLogSegmented) {
       CompactionPolicySwitchInfo compactionPolicySwitchInfo =
@@ -1043,7 +1044,7 @@ public class IndexTest {
       TreeMap<MockId, TreeSet<IndexValue>> lastIndexSegment = state.referenceIndex.get(lastIndexSegmentStartOffset);
       Map.Entry<MockId, TreeSet<IndexValue>> lastIndexSegmentFirstEntry = lastIndexSegment.firstEntry();
       long maxTotalSizeOfEntries =
-          getSizeOfAllValues(state.referenceIndex.get(secondLastSegmentStartOffset).lastEntry().getValue());
+          getSizeOfAllValues(state.referenceIndex.get(lastIndexSegmentStartOffset).firstEntry().getValue());
 
       MockId lastId = state.referenceIndex.get(secondLastSegmentStartOffset).lastKey();
       StoreFindToken startToken =
@@ -1055,7 +1056,7 @@ public class IndexTest {
               state.incarnationId, segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(),
               segmentOfToken.getResetKeyLifeVersion());
       try {
-        expectedEndToken.setBytesRead(state.index.getAbsoluteReadBytesFromIndexBasedToken(startToken));
+        expectedEndToken.setBytesRead(state.index.getAbsoluteReadBytesFromIndexBasedToken(expectedEndToken));
       } catch (StoreException e) {
         expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(lastIndexSegmentStartOffset));
       }
@@ -1069,11 +1070,12 @@ public class IndexTest {
       startToken =
           new StoreFindToken(lastId, lastIndexSegmentStartOffset, state.sessionId, state.incarnationId, null, null,
               UNINITIALIZED_RESET_KEY_VERSION);
+      Map.Entry<MockId, TreeSet<IndexValue>> lastIndexSegmentLastEntry = lastIndexSegment.lastEntry();
       expectedEndToken =
-          new StoreFindToken(lastIndexSegmentFirstEntry.getKey(), lastIndexSegmentStartOffset, state.sessionId,
+          new StoreFindToken(lastIndexSegmentLastEntry.getKey(), lastIndexSegmentStartOffset, state.sessionId,
               state.incarnationId, null, null, UNINITIALIZED_RESET_KEY_VERSION);
       try {
-        expectedEndToken.setBytesRead(state.index.getAbsoluteReadBytesFromIndexBasedToken(startToken));
+        expectedEndToken.setBytesRead(state.index.getAbsoluteReadBytesFromIndexBasedToken(expectedEndToken));
       } catch (StoreException e) {
         expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(lastIndexSegmentStartOffset));
       }
