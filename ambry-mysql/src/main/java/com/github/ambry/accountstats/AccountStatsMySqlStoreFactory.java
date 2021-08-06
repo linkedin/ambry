@@ -85,6 +85,7 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
     hikariConfig.setUsername(dbEndpoint.getUsername());
     hikariConfig.setPassword(dbEndpoint.getPassword());
     hikariConfig.setMaximumPoolSize(accountStatsMySqlConfig.poolSize);
+    hikariConfig.setIdleTimeout(accountStatsMySqlConfig.connectionIdleTimeoutMs);
     // Recommended properties for automatic prepared statement caching
     // https://github.com/brettwooldridge/HikariCP/wiki/MySQL-Configuration
     hikariConfig.addDataSourceProperty("cachePrepStmts", "true");
