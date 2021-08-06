@@ -67,7 +67,7 @@ public class AccountStatsMySqlConfig {
    * Number of connections and threads to use for executing transactions.
    */
   @Config(POOL_SIZE)
-  @Default("1")
+  @Default("2")
   public final int poolSize;
 
   /**
@@ -95,7 +95,7 @@ public class AccountStatsMySqlConfig {
   public AccountStatsMySqlConfig(VerifiableProperties verifiableProperties) {
     dbInfo = verifiableProperties.getString(DB_INFO, "");
     domainNamesToRemove = verifiableProperties.getString(DOMAIN_NAMES_TO_REMOVE, "");
-    poolSize = verifiableProperties.getIntInRange(POOL_SIZE, 1, 1, Integer.MAX_VALUE);
+    poolSize = verifiableProperties.getIntInRange(POOL_SIZE, 2, 1, Integer.MAX_VALUE);
     updateBatchSize = verifiableProperties.getInt(UPDATE_BATCH_SIZE, 0);
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
     connectionIdleTimeoutMs = verifiableProperties.getLong(CONNECTION_IDLE_TIMEOUT, 60 * 1000);
