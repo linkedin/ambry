@@ -1,6 +1,6 @@
 {
-    "clusterName": "OneDiskOneReplica",
-    "version": 99,
+    "clusterName": "Zee",
+    "version": 88,
     "datacenters": [
         {
             "dataNodes": [
@@ -17,7 +17,7 @@
                     "port": 6667
                 }
             ],
-            "name": "Datacenter",
+            "name": "ei-ltx1",
             "id" : "1"
         }
     ]

@@ -1,9 +1,9 @@
 {
-    "clusterName": "Proto",
+    "clusterName": "Ze",
     "version": 3,
     "partitions": [
         {
-            "id": 10,
+            "id": 1,
             "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 107374182400,
