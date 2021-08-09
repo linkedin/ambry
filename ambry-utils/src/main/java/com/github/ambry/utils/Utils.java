@@ -53,7 +53,6 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.RandomAccess;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -1205,9 +1204,14 @@ public class Utils {
    * @return {@code true} this cause indicates a possible early termination from the client. {@code false} otherwise.
    */
   public static boolean isPossibleClientTermination(Throwable cause) {
-    return cause instanceof IOException && (CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage())
-        || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(cause.getMessage()) || SSL_ENGINE_CLOSED_EXCEPTION_MSG.equals(
-        cause.getMessage()));
+    if (cause instanceof IOException) {
+      String msg = cause.getMessage();
+      if (msg != null) {
+        return msg.endsWith(CLIENT_RESET_EXCEPTION_MSG) || msg.endsWith(CLIENT_BROKEN_PIPE_EXCEPTION_MSG)
+            || msg.endsWith(SSL_ENGINE_CLOSED_EXCEPTION_MSG);
+      }
+    }
+    return false;
   }
 
   /**
