@@ -158,9 +158,9 @@ project(':ambry-utils') {
         compile "commons-codec:commons-codec:$commonsVersion"
         compile "org.json:json:$jsonVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-        compile "io.netty:netty-buffer:$nettyVersion"
         compile "io.netty:netty-all:$nettyVersion"
         testCompile project(":ambry-test-utils")
+        testCompile "io.netty:netty-transport-native-epoll:$nettyVersion"
     }
 }
 
@@ -182,7 +182,6 @@ project(':ambry-api') {
         compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
         compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
         compile "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
-        compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')
     }
@@ -397,7 +396,6 @@ project(':ambry-router') {
                 project(':ambry-rest')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
-        compile "io.netty:netty-buffer:$nettyVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-network', configuration: 'testArchives')
         testCompile project(path: ':ambry-cloud', configuration: 'testArchives')
