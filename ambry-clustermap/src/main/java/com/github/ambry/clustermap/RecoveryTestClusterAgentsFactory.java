@@ -51,6 +51,7 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
     PartitionLayout partitionLayout =
         new PartitionLayout(new HardwareLayout(clusterMapConfig.clustermapRecoveryTestHardwareLayout, clusterMapConfig),
             clusterMapConfig.clustermapRecoveryTestPartitionLayout, clusterMapConfig);
+    logger.info("Initialized partition layout in RecoveryTestClusterAgentsFactory: " + partitionLayout.toString());
     staticClusterAgentsFactory = new StaticClusterAgentsFactory(clusterMapConfig, partitionLayout);
     helixClusterAgentsFactory =
         new HelixClusterAgentsFactory(clusterMapConfig, staticClusterAgentsFactory.getMetricRegistry());

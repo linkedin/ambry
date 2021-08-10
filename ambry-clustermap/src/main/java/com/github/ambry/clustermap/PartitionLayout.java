@@ -17,6 +17,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -268,7 +269,15 @@ class PartitionLayout {
    */
   public Partition getPartition(InputStream stream) throws IOException {
     byte[] partitionBytes = Partition.readPartitionBytesFromStream(stream);
+    logger.info("Partition bytes from stream: " + deserializePartitionBytes(partitionBytes));
+    logger.info("Partition map state: " + toString());
+    logger.info("Partition map keys: " + partitionMap.keySet().stream().map(key -> deserializePartitionBytes(key.array())).collect(Collectors.joining()));
     return partitionMap.get(ByteBuffer.wrap(partitionBytes));
+  }
+
+  private String deserializePartitionBytes(byte[] bytes) {
+    ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
+    return "Partition version: " + byteBuffer.getShort() + " id: " + byteBuffer.getLong();
   }
 
   public JSONObject toJSONObject() throws JSONException {
