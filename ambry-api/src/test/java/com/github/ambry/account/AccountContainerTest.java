@@ -82,7 +82,7 @@ public class AccountContainerTest {
   private List<Boolean> refContainerSignedPathRequiredValues;
   private List<Boolean> refContainerOverrideAccountAcls;
   private List<NamedBlobMode> refContainerNamedBlobModes;
-  private List<Set<String>> refContainerContentTypeWhitelistForFilenamesOnDownloadValues;
+  private List<Set<String>> refContainerContentTypeAllowListForFilenamesOnDownloadValues;
   private List<Long> refContainerLastModifiedTimes;
   private List<Integer> refContainerSnapshotVersions;
   private List<JSONObject> containerJsonList;
@@ -171,7 +171,7 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // second container with (id=1, name="0")
@@ -185,7 +185,7 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
@@ -208,7 +208,7 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // second container with (id=0, name="1")
@@ -222,7 +222,7 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
@@ -245,7 +245,7 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // second container with (id=1, name="0")
@@ -259,7 +259,7 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .build());
     // third container with (id=10, name="10")
@@ -272,7 +272,7 @@ public class AccountContainerTest {
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
-            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
         .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
         .build());
     // second container with (id=10, name="11")
@@ -285,7 +285,7 @@ public class AccountContainerTest {
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
-            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
         .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
@@ -318,7 +318,7 @@ public class AccountContainerTest {
         .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
         .setTtlRequired(refContainerTtlRequiredValues.get(0))
         .setContentTypeWhitelistForFilenamesOnDownload(
-            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+            refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
         .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
         .build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
@@ -436,7 +436,7 @@ public class AccountContainerTest {
               .setTtlRequired(refContainerTtlRequiredValues.get(i))
               .setSecurePathRequired(refContainerSignedPathRequiredValues.get(i))
               .setContentTypeWhitelistForFilenamesOnDownload(
-                  refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i))
+                  refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(i))
               .setOverrideAccountAcl(refContainerOverrideAccountAcls.get(i))
               .setNamedBlobMode(refContainerNamedBlobModes.get(i))
               .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(i))
@@ -590,7 +590,7 @@ public class AccountContainerTest {
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
       boolean updatedSignedPathRequired = !container.isSecurePathRequired();
-      Set<String> updatedContentTypeWhitelistForFilenamesOnDownloadValues =
+      Set<String> updatedContentTypeAllowListForFilenamesOnDownloadValues =
           container.getContentTypeWhitelistForFilenamesOnDownload()
               .stream()
               .map(contentType -> contentType + "--updated")
@@ -606,7 +606,7 @@ public class AccountContainerTest {
           .setReplicationPolicy(updatedReplicationPolicy)
           .setTtlRequired(updatedTtlRequired)
           .setSecurePathRequired(updatedSignedPathRequired)
-          .setContentTypeWhitelistForFilenamesOnDownload(updatedContentTypeWhitelistForFilenamesOnDownloadValues);
+          .setContentTypeWhitelistForFilenamesOnDownload(updatedContentTypeAllowListForFilenamesOnDownloadValues);
       accountBuilder.addOrUpdateContainer(containerBuilder.build());
 
       // build account and assert
@@ -629,7 +629,7 @@ public class AccountContainerTest {
           assertEquals("Wrong ttl required setting", TTL_REQUIRED_DEFAULT_VALUE, updatedContainer.isTtlRequired());
           assertEquals("Wrong secure required setting", SECURE_PATH_REQUIRED_DEFAULT_VALUE,
               updatedContainer.isSecurePathRequired());
-          assertEquals("Wrong content type whitelist for filenames on download value",
+          assertEquals("Wrong content type allow list for filenames on download value",
               CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
               updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
           break;
@@ -643,8 +643,8 @@ public class AccountContainerTest {
           assertEquals("Wrong ttl required setting", updatedTtlRequired, updatedContainer.isTtlRequired());
           assertEquals("Wrong secure path required setting", updatedSignedPathRequired,
               updatedContainer.isSecurePathRequired());
-          assertEquals("Wrong content type whitelist for filenames on download value",
-              updatedContentTypeWhitelistForFilenamesOnDownloadValues,
+          assertEquals("Wrong content type allow list for filenames on download value",
+              updatedContentTypeAllowListForFilenamesOnDownloadValues,
               updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
           break;
         default:
@@ -685,7 +685,7 @@ public class AccountContainerTest {
             .setReplicationPolicy(refContainerReplicationPolicyValues.get(0))
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0));
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
@@ -807,7 +807,7 @@ public class AccountContainerTest {
             .setOverrideAccountAcl(refContainerOverrideAccountAcls.get(0))
             .setNamedBlobMode(refContainerNamedBlobModes.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
-                refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(0))
+                refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
             .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
             .setLastModifiedTime(refContainerLastModifiedTimes.get(0))
             .setSnapshotVersion(refContainerSnapshotVersions.get(0))
@@ -997,11 +997,11 @@ public class AccountContainerTest {
             container.isAccountAclOverridden());
         assertEquals("Wrong named blob mode setting", refContainerNamedBlobModes.get(index),
             container.getNamedBlobMode());
-        Set<String> expectedContentTypeWhitelistForFilenamesOnDownloadValue =
-            refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index) == null ? Collections.emptySet()
-                : refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(index);
-        assertEquals("Wrong content types whitelisted for filename on download",
-            expectedContentTypeWhitelistForFilenamesOnDownloadValue,
+        Set<String> expectedContentTypeAllowListForFilenamesOnDownloadValue =
+            refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(index) == null ? Collections.emptySet()
+                : refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(index);
+        assertEquals("Wrong content types allow listed for filename on download",
+            expectedContentTypeAllowListForFilenamesOnDownloadValue,
             container.getContentTypeWhitelistForFilenamesOnDownload());
         assertEquals("Wrong last modified time setting", (long) refContainerLastModifiedTimes.get(index),
             container.getLastModifiedTime());
@@ -1099,7 +1099,7 @@ public class AccountContainerTest {
     refContainerSignedPathRequiredValues = new ArrayList<>();
     refContainerOverrideAccountAcls = new ArrayList<>();
     refContainerNamedBlobModes = new ArrayList<>();
-    refContainerContentTypeWhitelistForFilenamesOnDownloadValues = new ArrayList<>();
+    refContainerContentTypeAllowListForFilenamesOnDownloadValues = new ArrayList<>();
     refContainerLastModifiedTimes = new ArrayList<>();
     refContainerSnapshotVersions = new ArrayList<>();
     containerJsonList = new ArrayList<>();
@@ -1135,12 +1135,12 @@ public class AccountContainerTest {
       refContainerNamedBlobModes.add(random.nextBoolean() ? NamedBlobMode.DISABLED : NamedBlobMode.OPTIONAL);
       refContainerDeleteTriggerTime.add((long) 0);
       if (i == 0) {
-        refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(null);
+        refContainerContentTypeAllowListForFilenamesOnDownloadValues.add(null);
       } else if (i == 1) {
-        refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(Collections.emptySet());
+        refContainerContentTypeAllowListForFilenamesOnDownloadValues.add(Collections.emptySet());
       } else {
-        refContainerContentTypeWhitelistForFilenamesOnDownloadValues.add(
-            getRandomContentTypeWhitelistForFilenamesOnDownload());
+        refContainerContentTypeAllowListForFilenamesOnDownloadValues.add(
+            getRandomContentTypeAllowListForFilenamesOnDownload());
       }
       refContainerLastModifiedTimes.add(System.currentTimeMillis());
       refContainerSnapshotVersions.add(random.nextInt());
@@ -1149,7 +1149,7 @@ public class AccountContainerTest {
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
           refContainerMediaScanDisabledValues.get(i), refContainerReplicationPolicyValues.get(i),
           refContainerTtlRequiredValues.get(i), refContainerSignedPathRequiredValues.get(i),
-          refContainerContentTypeWhitelistForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
+          refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
           refContainerOverrideAccountAcls.get(i), refContainerNamedBlobModes.get(i), refAccountId,
           refContainerDeleteTriggerTime.get(i), refContainerLastModifiedTimes.get(i),
           refContainerSnapshotVersions.get(i)));
@@ -1160,7 +1160,7 @@ public class AccountContainerTest {
   /**
    * @return a random set of strings
    */
-  private Set<String> getRandomContentTypeWhitelistForFilenamesOnDownload() {
+  private Set<String> getRandomContentTypeAllowListForFilenamesOnDownload() {
     Set<String> toRet = new HashSet<>();
     IntStream.range(0, random.nextInt(10) + 1).boxed().forEach(i -> toRet.add(TestUtils.getRandomString(10)));
     return toRet;

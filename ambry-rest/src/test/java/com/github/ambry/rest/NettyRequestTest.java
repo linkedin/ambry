@@ -93,8 +93,8 @@ import static org.junit.Assert.*;
 public class NettyRequestTest {
   private static final int GENERATED_CONTENT_SIZE = 10240;
   private static final int GENERATED_CONTENT_PART_COUNT = 10;
-  private static String BLACKLISTED_QUERY_PARAM = "paramBlacklisted";
-  private static final Set<String> BLACKLISTED_QUERY_PARAM_SET = Collections.singleton(BLACKLISTED_QUERY_PARAM);
+  private static String DENYLISTED_QUERY_PARAM = "paramDenyListed";
+  private static final Set<String> DENY_LISTED_QUERY_PARAM_SET = Collections.singleton(DENYLISTED_QUERY_PARAM);
   private static final int DEFAULT_WATERMARK;
 
   static {
@@ -130,7 +130,7 @@ public class NettyRequestTest {
     params.put("overLoadedKey", values);
     params.put("paramNoValue", null);
     params.put("paramNoValueInUriButValueInHeader", null);
-    params.put(BLACKLISTED_QUERY_PARAM, values);
+    params.put(DENYLISTED_QUERY_PARAM, values);
 
     StringBuilder uriAttachmentBuilder = new StringBuilder("?");
     for (Map.Entry<String, List<String>> param : params.entrySet()) {
@@ -221,7 +221,7 @@ public class NettyRequestTest {
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "");
     // HttpRequest null.
     try {
-      new NettyRequest(null, new MockChannel(), new NettyMetrics(new MetricRegistry()), BLACKLISTED_QUERY_PARAM_SET);
+      new NettyRequest(null, new MockChannel(), new NettyMetrics(new MetricRegistry()), DENY_LISTED_QUERY_PARAM_SET);
       fail("Provided null HttpRequest to NettyRequest, yet it did not fail");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -229,7 +229,7 @@ public class NettyRequestTest {
 
     // Channel null.
     try {
-      new NettyRequest(httpRequest, null, new NettyMetrics(new MetricRegistry()), BLACKLISTED_QUERY_PARAM_SET);
+      new NettyRequest(httpRequest, null, new NettyMetrics(new MetricRegistry()), DENY_LISTED_QUERY_PARAM_SET);
       fail("Provided null Channel to NettyRequest, yet it did not fail");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -637,7 +637,7 @@ public class NettyRequestTest {
       httpRequest.headers().set(headers);
     }
     NettyRequest nettyRequest =
-        new NettyRequest(httpRequest, channel, new NettyMetrics(metricRegistry), BLACKLISTED_QUERY_PARAM_SET);
+        new NettyRequest(httpRequest, channel, new NettyMetrics(metricRegistry), DENY_LISTED_QUERY_PARAM_SET);
     assertEquals("Auto-read is in an invalid state",
         (!httpMethod.equals(HttpMethod.POST) && !httpMethod.equals(HttpMethod.PUT))
             || NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
@@ -727,8 +727,8 @@ public class NettyRequestTest {
     Map<String, Integer> keyValueCount = new HashMap<String, Integer>();
     for (Map.Entry<String, List<String>> param : params.entrySet()) {
       boolean containsKey = receivedArgs.containsKey(param.getKey());
-      if (BLACKLISTED_QUERY_PARAM_SET.contains(param.getKey())) {
-        assertFalse("Should not contain blacklisted key: " + param.getKey(), containsKey);
+      if (DENY_LISTED_QUERY_PARAM_SET.contains(param.getKey())) {
+        assertFalse("Should not contain deny listed key: " + param.getKey(), containsKey);
       } else {
         assertTrue("Did not find key: " + param.getKey(), containsKey);
         if (!keyValueCount.containsKey(param.getKey())) {
