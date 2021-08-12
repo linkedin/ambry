@@ -21,6 +21,9 @@ import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import java.util.Objects;
 
 
+/**
+ * Class to represent a container's storage stats.
+ */
 @JsonPropertyOrder({"containerId", "logicalStorageUsage", "physicalStorageUsage", "numberOfBlobs"})
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 @JsonDeserialize(builder = ContainerStorageStats.Builder.class)
@@ -30,6 +33,13 @@ public class ContainerStorageStats {
   private final long numberOfBlobs;
   private final long physicalStorageUsage;
 
+  /**
+   * Constructor to instantiate a {@link ContainerStorageStats}.
+   * @param containerId The container id.
+   * @param logicalStorageUsage The logical storage usage.
+   * @param physicalStorageUsage The physical storage usage.
+   * @param numberOfBlobs The number of blobs.
+   */
   public ContainerStorageStats(short containerId, long logicalStorageUsage, long physicalStorageUsage,
       long numberOfBlobs) {
     this.containerId = containerId;
@@ -38,18 +48,30 @@ public class ContainerStorageStats {
     this.numberOfBlobs = numberOfBlobs;
   }
 
+  /**
+   * @return The container id
+   */
   public short getContainerId() {
     return containerId;
   }
 
+  /**
+   * @return The number of blobs
+   */
   public long getNumberOfBlobs() {
     return numberOfBlobs;
   }
 
+  /**
+   * @return The physical storage usage.
+   */
   public long getPhysicalStorageUsage() {
     return physicalStorageUsage;
   }
 
+  /**
+   * @return The logical storage usage.
+   */
   public long getLogicalStorageUsage() {
     return logicalStorageUsage;
   }
@@ -86,6 +108,11 @@ public class ContainerStorageStats {
     return buffer.toString();
   }
 
+  /**
+   * Add the given {@link ContainerStorageStats} to the current {@link ContainerStorageStats}.
+   * @param other The {@link ContainerStorageStats} to add.
+   * @return A new {@link ContainerStorageStats}.
+   */
   public ContainerStorageStats add(ContainerStorageStats other) {
     if (other.containerId != containerId) {
       throw new IllegalArgumentException(
@@ -95,6 +122,9 @@ public class ContainerStorageStats {
         other.physicalStorageUsage + physicalStorageUsage, other.numberOfBlobs + numberOfBlobs);
   }
 
+  /**
+   * The Builder class for {@link ContainerStorageStats}.
+   */
   @JsonIgnoreProperties(ignoreUnknown = true)
   @JsonPOJOBuilder(withPrefix = "")
   public static class Builder {
@@ -103,33 +133,64 @@ public class ContainerStorageStats {
     private long physicalStorageUsage = 0;
     private long numberOfBlobs = 0;
 
+    /**
+     * Empty constructor for json
+     */
     public Builder() {
     }
 
+    /**
+     * Constructor to instantiate a new {@link Builder}. The rest of the values are 0 by default.
+     * @param containerId The container id.
+     */
     public Builder(short containerId) {
       this.containerId = containerId;
     }
 
+    /**
+     * Set container id for {@link Builder}.
+     * @param containerId The container id.
+     * @return Current builder
+     */
     public Builder containerId(short containerId) {
       this.containerId = containerId;
       return this;
     }
 
+    /**
+     * Set logical storage usage for {@link Builder}.
+     * @param logicalStorageUsage The logical storage usage.
+     * @return Current Builder.
+     */
     public Builder logicalStorageUsage(long logicalStorageUsage) {
       this.logicalStorageUsage = logicalStorageUsage;
       return this;
     }
 
+    /**
+     * Set physical storage usage for {@link Builder}.
+     * @param physicalStorageUsage The physical storage usage.
+     * @return Current Builder.
+     */
     public Builder physicalStorageUsage(long physicalStorageUsage) {
       this.physicalStorageUsage = physicalStorageUsage;
       return this;
     }
 
+    /**
+     * Set number of blobs for {@link Builder}.
+     * @param numberOfBlobs The number of blobs.
+     * @return Current Builder.
+     */
     public Builder numberOfBlobs(long numberOfBlobs) {
       this.numberOfBlobs = numberOfBlobs;
       return this;
     }
 
+    /**
+     * Build a {@link ContainerStorageStats} based on the values in builder.
+     * @return A new {@link ContainerStorageStats}.
+     */
     public ContainerStorageStats build() {
       if (containerId == null) {
         throw new IllegalStateException("No container is provided");
