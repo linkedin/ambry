@@ -66,6 +66,8 @@ public class AggregatedAccountReportsDaoTest {
     when(mockResultSet.getInt(eq(AggregatedAccountReportsDao.ACCOUNT_ID_COLUMN))).thenReturn(queryAccountId);
     when(mockResultSet.getInt(eq(AggregatedAccountReportsDao.CONTAINER_ID_COLUMN))).thenReturn(queryContainerId);
     when(mockResultSet.getLong(eq(AggregatedAccountReportsDao.STORAGE_USAGE_COLUMN))).thenReturn(queryStorageUsage);
+    when(mockResultSet.getLong(eq(AggregatedAccountReportsDao.PHYSICAL_STORAGE_USAGE_COLUMN))).thenReturn(queryStorageUsage);
+    when(mockResultSet.getLong(eq(AggregatedAccountReportsDao.NUMBER_OF_BLOBS_COLUMN))).thenReturn(1L);
     when(mockQueryAggregatedStatement.executeQuery()).thenReturn(mockResultSet);
 
     mockQueryMonthStatement = mock(PreparedStatement.class);

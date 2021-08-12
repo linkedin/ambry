@@ -36,17 +36,21 @@ public class AccountReportsDao {
   public static final String ACCOUNT_ID_COLUMN = "accountId";
   public static final String CONTAINER_ID_COLUMN = "containerId";
   public static final String STORAGE_USAGE_COLUMN = "storageUsage";
+  public static final String PHYSICAL_STORAGE_USAGE_COLUMN = "physicalStorageUsage";
+  public static final String NUMBER_OF_BLOBS_COLUMN = "numberOfBlobs";
   public static final String UPDATED_AT_COLUMN = "updatedAt";
 
   private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
   private static final String insertSql = String.format(
-      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
+      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=?, %s=?, %s=NOW()",
       ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
-      CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+      CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
+      UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
+      UPDATED_AT_COLUMN);
   private static final String querySqlForClusterAndHost =
-      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
-          CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
-          HOSTNAME_COLUMN);
+      String.format("SELECT %s, %s, %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN,
+          ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN,
+          NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN);
   private static final String deletePartitionSql =
       String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
           HOSTNAME_COLUMN, PARTITION_ID_COLUMN);
@@ -80,6 +84,8 @@ public class AccountReportsDao {
    */
   void updateStorageUsage(String clusterName, String hostname, int partitionId, short accountId, short containerId,
       long storageUsage) throws SQLException {
+    long physicalStorageUsage = storageUsage;
+    long numberOfBlobs = 1L;
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
         long startTimeMs = System.currentTimeMillis();
@@ -91,7 +97,11 @@ public class AccountReportsDao {
         insertStatement.setInt(4, accountId);
         insertStatement.setInt(5, containerId);
         insertStatement.setLong(6, storageUsage);
-        insertStatement.setLong(7, storageUsage);
+        insertStatement.setLong(7, physicalStorageUsage);
+        insertStatement.setLong(8, numberOfBlobs);
+        insertStatement.setLong(9, storageUsage);
+        insertStatement.setLong(10, physicalStorageUsage);
+        insertStatement.setLong(11, numberOfBlobs);
         insertStatement.executeUpdate();
         metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
         metrics.writeSuccessCount.inc();
@@ -124,6 +134,8 @@ public class AccountReportsDao {
             int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
             int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
             long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
+            long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
+            long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
             long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
             func.apply(partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
           }
@@ -252,6 +264,8 @@ public class AccountReportsDao {
      */
     public void addUpdateToBatch(String clusterName, String hostname, int partitionId, short accountId,
         short containerId, long storageUsage) throws SQLException {
+      long physicalStorageUsage = storageUsage;
+      long numberOfBlobs = 1L;
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setString(2, hostname);
@@ -259,7 +273,11 @@ public class AccountReportsDao {
         statement.setInt(4, accountId);
         statement.setInt(5, containerId);
         statement.setLong(6, storageUsage);
-        statement.setLong(7, storageUsage);
+        statement.setLong(7, physicalStorageUsage);
+        statement.setLong(8, numberOfBlobs);
+        statement.setLong(9, storageUsage);
+        statement.setLong(10, physicalStorageUsage);
+        statement.setLong(11, numberOfBlobs);
       });
     }
   }

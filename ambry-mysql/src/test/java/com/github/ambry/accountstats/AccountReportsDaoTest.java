@@ -63,6 +63,8 @@ public class AccountReportsDaoTest {
     when(mockResultSet.getInt(eq(AccountReportsDao.ACCOUNT_ID_COLUMN))).thenReturn(queryAccountId);
     when(mockResultSet.getInt(eq(AccountReportsDao.CONTAINER_ID_COLUMN))).thenReturn(queryContainerId);
     when(mockResultSet.getLong(eq(AccountReportsDao.STORAGE_USAGE_COLUMN))).thenReturn(queryStorageUsage);
+    when(mockResultSet.getLong(eq(AccountReportsDao.PHYSICAL_STORAGE_USAGE_COLUMN))).thenReturn(queryStorageUsage);
+    when(mockResultSet.getLong(eq(AccountReportsDao.NUMBER_OF_BLOBS_COLUMN))).thenReturn(1L);
     when(mockResultSet.getTimestamp(eq(AccountReportsDao.UPDATED_AT_COLUMN))).thenReturn(
         new Timestamp(SystemTime.getInstance().milliseconds()));
     when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);

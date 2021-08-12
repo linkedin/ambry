@@ -46,6 +46,8 @@ public class PartitionClassReportsDao {
   private static final String ACCOUNT_ID_COLUMN = "accountId";
   private static final String CONTAINER_ID_COLUMN = "containerId";
   private static final String STORAGE_USAGE_COLUMN = "storageUsage";
+  private static final String PHYSICAL_STORAGE_USAGE_COLUMN = "physicalStorageUsage";
+  private static final String NUMBER_OF_BLOBS_COLUMN = "numberOfBlobs";
   private static final String UPDATED_AT_COLUMN = "updatedAt";
 
   /**
@@ -88,15 +90,17 @@ public class PartitionClassReportsDao {
 
   /**
    * eg: INSERT INTO AggregatedPartitionClassReports
-   *     SELECT id, 101, 201, 12345, NOW()
+   *     SELECT id, 101, 201, 12345, 23456, 321, NOW()
    *     FROM PartitionClassNames WHERE clusterName = "ambry-test" AND name = "default"
-   *     ON DUPLICATE KEY UPDATE storageUsage=12345, updatedAt=NOW();
-   *  101 is the account id, 201 is the container id, 12345 is the storage usage.
+   *     ON DUPLICATE KEY UPDATE storageUsage=12345, physicalStorageUsage=23456, numberOfBlobs=321, updatedAt=NOW();
+   *  101 is the account id, 201 is the container id, 12345 is the storage usage, 23456 is the physical storage usage, 321 is the number of blobs.
    */
   private static final String insertAggregatedSql = String.format(
-      "INSERT INTO %s SELECT %s, ?, ?, ?, NOW() FROM %s WHERE %s=? AND %s=? ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
-      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN,
-      NAME_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) SELECT %s, ?, ?, ?, ?, ?, NOW() FROM %s WHERE %s=? AND %s=? ON DUPLICATE KEY UPDATE %s=?, %s=?, %s=?, %s=NOW()",
+      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN,
+      PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE,
+      CLUSTER_NAME_COLUMN, NAME_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
+      UPDATED_AT_COLUMN);
 
   /**
    * eg : DELETE FROM AggregatedPartitionClassReports
@@ -111,17 +115,18 @@ public class PartitionClassReportsDao {
           CLUSTER_NAME_COLUMN, NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
 
   /**
-   * eg: SELECT TableA.name, accountId, containerId, storageUsage, updatedAt
+   * eg: SELECT TableA.name, accountId, containerId, storageUsage, physicalStorageUsage, numberOfBlobs, updatedAt
    *     FROM AggregatedPartitionClassReport INNER JOIN (
    *         SELECT * FROM PartitionClassNames WHERE clusterName="ambry-test"
    *     ) TableA
    *     WHERE TableA.id = AggregatedPartitionClassReports.partitionClassId;
    */
   private static final String queryAggregatedSql = String.format(
-      "SELECT TableA.%s, %s, %s, %s, %s FROM %s " + "INNER JOIN (SELECT * FROM %s WHERE %s = ?) TableA"
+      "SELECT TableA.%s, %s, %s, %s, %s, %s, %s FROM %s " + "INNER JOIN (SELECT * FROM %s WHERE %s = ?) TableA"
           + " WHERE TableA.%s = %s.%s;", NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN,
-      UPDATED_AT_COLUMN, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN,
-      ID_COLUMN, AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN);
+      PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN,
+      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN, ID_COLUMN,
+      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN);
 
   private final DataSource dataSource;
   private final MySqlMetrics metrics;
@@ -131,7 +136,7 @@ public class PartitionClassReportsDao {
    * @param dataSource The {@link DataSource}.
    * @param metrics The {@link MySqlMetrics}.
    */
-  PartitionClassReportsDao(DataSource  dataSource, MySqlMetrics metrics) {
+  PartitionClassReportsDao(DataSource dataSource, MySqlMetrics metrics) {
     this.dataSource = Objects.requireNonNull(dataSource, "DataSource is empty");
     this.metrics = Objects.requireNonNull(metrics, "MySqlMetrics is empty");
   }
@@ -304,7 +309,9 @@ public class PartitionClassReportsDao {
             int accountId = rs.getInt(2);
             int containerId = rs.getInt(3);
             long usage = rs.getLong(4);
-            long updatedAt = rs.getTimestamp(5).getTime();
+            long physicalStorageUsage = rs.getLong(5);
+            long numberOfBlobs = rs.getLong(6);
+            long updatedAt = rs.getTimestamp(7).getTime();
             func.apply(partitionClassName, (short) accountId, (short) containerId, usage, updatedAt);
           }
         }
@@ -373,13 +380,19 @@ public class PartitionClassReportsDao {
      */
     public void addUpdateToBatch(String clusterName, String partitionClassName, short accountId, short containerId,
         long usage) throws SQLException {
+      long physicalStorageUsage = usage;
+      long numberOfBlobs = 1;
       addUpdateToBatch(statement -> {
         statement.setInt(1, accountId);
         statement.setInt(2, containerId);
         statement.setLong(3, usage);
-        statement.setString(4, clusterName);
-        statement.setString(5, partitionClassName);
-        statement.setLong(6, usage);
+        statement.setLong(4, physicalStorageUsage);
+        statement.setLong(5, numberOfBlobs);
+        statement.setString(6, clusterName);
+        statement.setString(7, partitionClassName);
+        statement.setLong(8, usage);
+        statement.setLong(9, physicalStorageUsage);
+        statement.setLong(10, numberOfBlobs);
       });
     }
   }
