@@ -114,6 +114,7 @@ public class ContainerStorageStats {
    * @return A new {@link ContainerStorageStats}.
    */
   public ContainerStorageStats add(ContainerStorageStats other) {
+    Objects.requireNonNull(other, "Parameter can't be null");
     if (other.containerId != containerId) {
       throw new IllegalArgumentException(
           "ContainerId from other stats is different from current one: " + other.containerId + " != " + containerId);
