@@ -382,7 +382,7 @@ public class CloudConfig {
    * The delay between an ambry cluster change notification arrive and VCR helix update action
    */
   @Config(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS)
-  @Default("180")
+  @Default("60")
   public final int vcrHelixUpdateDelayTimeInSeconds;
 
   /**
@@ -453,7 +453,7 @@ public class CloudConfig {
     vcrHelixUpdaterParitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "1");
     vcrHelixUpdateConfig =
         verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
-    vcrHelixUpdateDelayTimeInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 180);
+    vcrHelixUpdateDelayTimeInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 60);
     vcrHelixUpdateDryRun = verifiableProperties.getBoolean(VCR_HELIX_UPDATE_DRY_RUN, false);
   }
 }

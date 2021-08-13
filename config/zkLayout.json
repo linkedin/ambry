@@ -1,9 +1,14 @@
 {
   "zkInfo" : [
      {
-       "datacenter":"ei-ltx1",
+       "datacenter":"dc1",
        "id" : "1",
-       "zkConnectStr":"zk-ltx1-ambry.stg.linkedin.com:12913"
+       "zkConnectStr":"localhost:2199"
+     },
+     {
+       "datacenter":"dc2",
+       "id" : "2",
+       "zkConnectStr":"localhost:2300"
      }
   ]
 }

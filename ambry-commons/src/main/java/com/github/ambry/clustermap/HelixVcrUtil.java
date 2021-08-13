@@ -207,6 +207,8 @@ public class HelixVcrUtil {
           destAdmin.rebalance(destClusterName, resource, config.getIdealStateConfigFields().getNumReplicas(), "", "");
           logger.info("Added Resource {}  with partition {}", resource, srcPartitions);
         }
+      } else {
+        logger.info("Resource {} is up to date. No action needed.", resource);
       }
     }
     logger.info("Cluster {} is updated successfully!", destClusterName);

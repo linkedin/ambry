@@ -50,7 +50,8 @@ public class StaticVcrClusterParticipant implements VcrClusterParticipant {
    * @param clusterMapConfig The clustermap configuration to use.
    * @param clusterMap The clustermap to use.
    */
-  public StaticVcrClusterParticipant(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig, ClusterMap clusterMap) {
+  public StaticVcrClusterParticipant(CloudConfig cloudConfig, ClusterMapConfig clusterMapConfig,
+      ClusterMap clusterMap) {
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     if (Utils.isNullOrEmpty(cloudConfig.vcrAssignedPartitions)) {
       throw new IllegalArgumentException("Missing value for " + CloudConfig.VCR_ASSIGNED_PARTITIONS);
@@ -93,12 +94,6 @@ public class StaticVcrClusterParticipant implements VcrClusterParticipant {
   @Override
   public Collection<? extends PartitionId> getAssignedPartitionIds() {
     return Collections.unmodifiableCollection(assignedPartitionIds);
-  }
-
-  @Override
-  public boolean isPartitionAssigned(String partitionPath) {
-    return (partitionIdMap.get(partitionPath) != null) && assignedPartitionIds.contains(
-        partitionIdMap.get(partitionPath));
   }
 
   @Override
