@@ -97,10 +97,10 @@ public class PartitionClassReportsDao {
    */
   private static final String insertAggregatedSql = String.format(
       "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) SELECT %s, ?, ?, ?, ?, ?, NOW() FROM %s WHERE %s=? AND %s=? ON DUPLICATE KEY UPDATE %s=?, %s=?, %s=?, %s=NOW()",
-      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN,
-      PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE,
-      CLUSTER_NAME_COLUMN, NAME_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
-      UPDATED_AT_COLUMN);
+      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
+      STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, ID_COLUMN,
+      PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN, NAME_COLUMN, STORAGE_USAGE_COLUMN,
+      PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN);
 
   /**
    * eg : DELETE FROM AggregatedPartitionClassReports
@@ -306,12 +306,12 @@ public class PartitionClassReportsDao {
         try (ResultSet rs = queryStatement.executeQuery()) {
           while (rs.next()) {
             String partitionClassName = rs.getString(1);
-            int accountId = rs.getInt(2);
-            int containerId = rs.getInt(3);
-            long usage = rs.getLong(4);
-            long physicalStorageUsage = rs.getLong(5);
-            long numberOfBlobs = rs.getLong(6);
-            long updatedAt = rs.getTimestamp(7).getTime();
+            int accountId = rs.getInt(ACCOUNT_ID_COLUMN);
+            int containerId = rs.getInt(CONTAINER_ID_COLUMN);
+            long usage = rs.getLong(STORAGE_USAGE_COLUMN);
+            long physicalStorageUsage = rs.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
+            long numberOfBlobs = rs.getLong(NUMBER_OF_BLOBS_COLUMN);
+            long updatedAt = rs.getTimestamp(UPDATED_AT_COLUMN).getTime();
             func.apply(partitionClassName, (short) accountId, (short) containerId, usage, updatedAt);
           }
         }
