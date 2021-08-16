@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS AccountReports
     containerId          INT         NOT NULL,
     storageUsage         BIGINT      NOT NULL, /* logical storage usage */
     physicalStorageUsage BIGINT      NOT NULL, /* physical storage usage */
-    numberOfBlobs        BIGINT      NOT NULL,
+    numberOfBlobs        BIGINT      NOT NULL, /* number of blobs, include blobs at all states, even for compaction */
     updatedAt            TIMESTAMP   NOT NULL,
 
     PRIMARY KEY (clusterName, hostname, partitionId, accountId, containerId),

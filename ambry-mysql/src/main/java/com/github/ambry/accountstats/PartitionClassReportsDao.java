@@ -380,6 +380,7 @@ public class PartitionClassReportsDao {
      */
     public void addUpdateToBatch(String clusterName, String partitionClassName, short accountId, short containerId,
         long usage) throws SQLException {
+      // TODO: adding real physical storage usage and number of blobs here
       long physicalStorageUsage = usage;
       long numberOfBlobs = 1;
       addUpdateToBatch(statement -> {

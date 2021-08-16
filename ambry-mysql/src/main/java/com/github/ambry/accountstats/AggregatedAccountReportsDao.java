@@ -109,6 +109,7 @@ public class AggregatedAccountReportsDao {
    */
   void updateStorageUsage(String clusterName, short accountId, short containerId, long storageUsage)
       throws SQLException {
+    // TODO: adding real physical storage usage and number of blobs here
     long physicalStorageUsage = storageUsage;
     long numberOfBlobs = 1L;
     try (Connection connection = dataSource.getConnection()) {
@@ -342,6 +343,7 @@ public class AggregatedAccountReportsDao {
      */
     public void addUpdateToBatch(String clusterName, short accountId, short containerId, long storageUsage)
         throws SQLException {
+      // TODO: adding real physical storage usage and number of blobs here
       long physicalStorageUsage = storageUsage;
       long numberOfBlobs = 1L;
       addUpdateToBatch(statement -> {
