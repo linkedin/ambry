@@ -15,6 +15,7 @@ package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -292,12 +293,12 @@ public class PartitionClassReportsDao {
 
   /**
    * Query container storage usage for given {@code clusterName}. This usage is aggregated under each partition class name.
-   * The results will be applied to the given {@link PartitionClassContainerUsageFunction}.
+   * The results will be applied to the given {@link PartitionClassContainerStorageStatsFunction}.
    * @param clusterName The clusterName.
    * @param func The callback to apply query results
    * @throws SQLException
    */
-  void queryAggregatedPartitionClassReport(String clusterName, PartitionClassContainerUsageFunction func)
+  void queryAggregatedPartitionClassReport(String clusterName, PartitionClassContainerStorageStatsFunction func)
       throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement queryStatement = connection.prepareStatement(queryAggregatedSql)) {
@@ -312,7 +313,8 @@ public class PartitionClassReportsDao {
             long physicalStorageUsage = rs.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
             long numberOfBlobs = rs.getLong(NUMBER_OF_BLOBS_COLUMN);
             long updatedAt = rs.getTimestamp(UPDATED_AT_COLUMN).getTime();
-            func.apply(partitionClassName, (short) accountId, (short) containerId, usage, updatedAt);
+            func.apply(partitionClassName, (short) accountId,
+                new ContainerStorageStats((short) containerId, usage, physicalStorageUsage, numberOfBlobs), updatedAt);
           }
         }
         metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);

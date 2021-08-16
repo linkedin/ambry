@@ -13,19 +13,21 @@
  */
 package com.github.ambry.accountstats;
 
+import com.github.ambry.server.storagestats.ContainerStorageStats;
+
+
 /**
- * A callback function to call when processing aggregated partition class container usage.
+ * A callback function to call when processing aggregated partition class container storage stats.
  */
 @FunctionalInterface
-public interface PartitionClassContainerUsageFunction {
+public interface PartitionClassContainerStorageStatsFunction {
 
   /**
-   * Process aggregated partition class container usage.
+   * Process aggregated partition class container storage stats.
    * @param partitionClassName The partition class name
-   * @param accountId the account id
-   * @param containerId the container id
-   * @param storageUsage the storage usage
-   * @param updatedAt the updated at time in milliseconds
+   * @param accountId The account id
+   * @param containerStats The {@link ContainerStorageStats}
+   * @param updatedAt The updated at time in milliseconds
    */
-  void apply(String partitionClassName, short accountId, short containerId, long storageUsage, long updatedAt);
+  void apply(String partitionClassName, short accountId, ContainerStorageStats containerStats, long updatedAt);
 }

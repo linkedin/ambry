@@ -116,11 +116,13 @@ public class AccountReportsDaoTest {
   @Test
   public void testQueryStorageUsageForHost() throws Exception {
     accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
-        (partitionId, accountId, containerId, storageUsage, updatedAt) -> {
+        (partitionId, accountId, containerStats, updatedAt) -> {
           assertEquals("Partition id mismatch", queryPartitionId, partitionId);
           assertEquals("Account id mismatch", queryAccountId, accountId);
-          assertEquals("Container id mismatch", queryContainerId, containerId);
-          assertEquals("Storage usage mismatch", queryStorageUsage, storageUsage);
+          assertEquals("Container id mismatch", queryContainerId, containerStats.getContainerId());
+          assertEquals("Storage usage mismatch", queryStorageUsage, containerStats.getLogicalStorageUsage());
+          assertEquals("Physical storage usage mismatch", queryStorageUsage, containerStats.getPhysicalStorageUsage());
+          assertEquals("Number of blobs mismatch", 1L, containerStats.getNumberOfBlobs());
         });
     verify(mockConnection).prepareStatement(anyString());
     assertEquals("Read success count should be 1", 1, metrics.readSuccessCount.getCount());

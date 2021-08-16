@@ -15,6 +15,7 @@ package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -166,35 +167,36 @@ public class AggregatedAccountReportsDao {
   }
 
   /**
-   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
+   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryContainerUsageForCluster(String clusterName, AggregatedContainerUsageFunction func) throws SQLException {
+  void queryContainerUsageForCluster(String clusterName, AggregatedContainerStorageStatsFunction func)
+      throws SQLException {
     queryContainerUsageForClusterInternal(false, clusterName, func);
   }
 
   /**
-   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
+   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryMonthlyContainerUsageForCluster(String clusterName, AggregatedContainerUsageFunction func)
+  void queryMonthlyContainerUsageForCluster(String clusterName, AggregatedContainerStorageStatsFunction func)
       throws SQLException {
     queryContainerUsageForClusterInternal(true, clusterName, func);
   }
 
   /**
-   * Query container storage for the given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
+   * Query container storage for the given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
    * @param forMonthly True to return the monthly snapshot of the container storage usage.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
   private void queryContainerUsageForClusterInternal(boolean forMonthly, String clusterName,
-      AggregatedContainerUsageFunction func) throws SQLException {
+      AggregatedContainerStorageStatsFunction func) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       String sqlStatement = forMonthly ? queryMonthlyUsageSqlForCluster : queryUsageSqlForCluster;
       try (PreparedStatement queryStatement = connection.prepareStatement(sqlStatement)) {
@@ -207,7 +209,8 @@ public class AggregatedAccountReportsDao {
             long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
             long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
             long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
-            func.apply((short) accountId, (short) containerId, storageUsage);
+            func.apply((short) accountId,
+                new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs));
           }
         }
         metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);

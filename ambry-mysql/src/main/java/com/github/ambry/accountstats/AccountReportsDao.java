@@ -15,6 +15,7 @@ package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -117,13 +118,14 @@ public class AccountReportsDao {
 
   /**
    * Query container storage usage for given {@code clusterName} and {@code hostname}. The result will be applied to the
-   * {@link ContainerUsageFunction}.
+   * {@link ContainerStorageStatsFunction}.
    * @param clusterName The clusterName.
    * @param hostname The hostname.
-   * @param func The {@link ContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link ContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryStorageUsageForHost(String clusterName, String hostname, ContainerUsageFunction func) throws SQLException {
+  void queryStorageUsageForHost(String clusterName, String hostname, ContainerStorageStatsFunction func)
+      throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement queryStatement = connection.prepareStatement(querySqlForClusterAndHost)) {
         long startTimeMs = System.currentTimeMillis();
@@ -138,7 +140,9 @@ public class AccountReportsDao {
             long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
             long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
             long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
-            func.apply(partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
+            func.apply(partitionId, (short) accountId,
+                new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs),
+                updatedAtMs);
           }
         }
         metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
