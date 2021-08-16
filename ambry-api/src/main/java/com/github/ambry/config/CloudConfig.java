@@ -389,7 +389,7 @@ public class CloudConfig {
    * If true, VCR helix update will be in dry run mode. We can also use this to turn off automated VCR cluster update.
    */
   @Config(VCR_HELIX_UPDATE_DRY_RUN)
-  @Default("true")
+  @Default("false")
   public final boolean vcrHelixUpdateDryRun;
 
   public CloudConfig(VerifiableProperties verifiableProperties) {

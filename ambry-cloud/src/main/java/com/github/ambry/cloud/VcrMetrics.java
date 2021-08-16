@@ -18,7 +18,6 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.github.ambry.cloud.azure.AzureContainerCompactor;
 
 
 public class VcrMetrics {
@@ -58,7 +57,7 @@ public class VcrMetrics {
   public final Counter retryCount;
 
   // VCR Automation
-  public Gauge<Integer> vcrHelixUpdaterGuage;
+  public Gauge<Integer> vcrHelixUpdaterGauge;
   public Gauge<Integer> vcrHelixUpdateInProgressGauge;
   private final MetricRegistry registry;
 
@@ -107,7 +106,7 @@ public class VcrMetrics {
 
   public void registerVcrHelixUpdateGuage(Gauge<Integer> updaterGaugeCount,
       Gauge<Integer> vcrHelixUpdateInProgressGaugeCount) {
-    vcrHelixUpdaterGuage = registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdaterGuage"),
+    vcrHelixUpdaterGauge = registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdaterGuage"),
         () -> updaterGaugeCount);
     vcrHelixUpdateInProgressGauge =
         registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdaterGuage"),

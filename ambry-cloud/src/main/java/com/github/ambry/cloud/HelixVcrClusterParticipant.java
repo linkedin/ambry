@@ -67,6 +67,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   private final DataNodeId currentDataNode;
   private final String vcrClusterName;
   private final String vcrInstanceName;
+  private final Map<String, PartitionId> partitionIdMap;
   private final Set<PartitionId> assignedPartitionIds = ConcurrentHashMap.newKeySet();
   private final HelixVcrClusterMetrics metrics;
   private final List<VcrClusterParticipantListener> listeners = new ArrayList<>();
@@ -100,6 +101,8 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
     logger.info("All partitions from clusterMap: {}.", allPartitions);
+    partitionIdMap =
+        allPartitions.stream().collect(Collectors.toConcurrentMap(PartitionId::toPathString, Function.identity()));
     vcrClusterName = cloudConfig.vcrClusterName;
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -137,11 +140,14 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     try {
       partitionId = clusterMap.getPartitionIdFromStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionBytes)));
     } catch (IOException e) {
-      callback.onCompletion(null, e);
+      metrics.partitionIdNotInClusterMapOnAdd.inc();
+      callback.onCompletion(null,
+          new IllegalStateException("Partition not in clusterMap on add: Partition Id: " + partitionIdStr));
       return;
     }
     if (partitionId != null) {
-      if (assignedPartitionIds.add(partitionId)) {
+      if (partitionIdMap.putIfAbsent(partitionIdStr, partitionId) == null) {
+        assignedPartitionIds.add(partitionId);
         for (VcrClusterParticipantListener listener : listeners) {
           listener.onPartitionAdded(partitionId);
         }
@@ -150,11 +156,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
         logger.info("Partition {} exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
       callback.onCompletion(null, null);
-    } else {
-      metrics.partitionIdNotInClusterMapOnAdd.inc();
-
-      callback.onCompletion(null,
-          new IllegalStateException("Partition not in clusterMap on add: Partition Id: " + partitionIdStr));
     }
   }
 
@@ -165,29 +166,17 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void removePartition(String partitionIdStr) {
-    byte[] partitionBytes =
-        ClusterMapUtils.serializeShortAndLong(AmbryPartition.CURRENT_VERSION, Long.parseLong(partitionIdStr));
-    PartitionId partitionId = null;
-    try {
-      partitionId = clusterMap.getPartitionIdFromStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionBytes)));
-    } catch (IOException e) {
-      throw new IllegalStateException("Couldn't parse partitionId", e);
-    }
-    // TODO: if clustermap is updated, it may have no information about this partition.
+    PartitionId partitionId = partitionIdMap.remove(partitionIdStr);
     if (partitionId != null) {
-      if (assignedPartitionIds.remove(partitionId)) {
-        for (VcrClusterParticipantListener listener : listeners) {
-          listener.onPartitionRemoved(partitionId);
-        }
-        logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
-            vcrInstanceName, assignedPartitionIds.size());
-        logger.debug("Assigned Partitions: {}", assignedPartitionIds);
-      } else {
-        logger.info("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
+      for (VcrClusterParticipantListener listener : listeners) {
+        listener.onPartitionRemoved(partitionId);
       }
+      assignedPartitionIds.remove(partitionId);
+      logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
+          vcrInstanceName, assignedPartitionIds.size());
+      logger.debug("Current assigned partitions: {}", partitionIdMap.keySet());
     } else {
-      logger.error("Partition {} not in clusterMap on remove.", partitionIdStr);
-      metrics.partitionIdNotInClusterMapOnRemove.inc();
+      logger.warn("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
     }
   }
 
