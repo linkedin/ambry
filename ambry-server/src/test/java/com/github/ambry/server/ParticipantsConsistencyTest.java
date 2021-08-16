@@ -178,7 +178,7 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
-    public void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
+    public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
         Callback<StatsSnapshot> callback) {
     }
 

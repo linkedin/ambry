@@ -20,7 +20,7 @@ import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -38,7 +38,6 @@ import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
-import org.apache.helix.healthcheck.HealthReportProvider;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.HelixPropertyStore;
@@ -121,30 +120,25 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
-   * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
+   * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
+  public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
       Callback<StatsSnapshot> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this));
-    registerHealthReportTasks(stateMachineEngine, ambryHealthReports, accountStatsStore, callback);
+    registerStatsReportAggregationTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
     try {
       // register server as a participant
       manager.connect();
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
-    }
-    if (clusterMapConfig.clustermapEnableHelixHealthReport) {
-      for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
-        manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
-      }
     }
     logger.info("Completed participation in cluster {} at {}", clusterName, zkConnectStr);
   }
@@ -445,40 +439,27 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Register {@link HelixHealthReportAggregatorTask}s for appropriate {@link AmbryHealthReport}s.
+   * Register aggregation tasks for appropriate {@link AmbryStatsReport}s.
    * @param engine the {@link StateMachineEngine} to register the task state model.
-   * @param healthReports the {@link List} of {@link AmbryHealthReport}s that may require the registration of
-   * corresponding {@link HelixHealthReportAggregatorTask}s.
+   * @param statsReports the {@link List} of {@link AmbryStatsReport}s that may require the registration of
+   * corresponding {@link MySqlReportAggregatorTask}s.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports,
+  private void registerStatsReportAggregationTasks(StateMachineEngine engine, List<AmbryStatsReport> statsReports,
       AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    for (final AmbryHealthReport healthReport : healthReports) {
-      if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
-        if (clusterMapConfig.clustermapEnableHelixAggregationTask) {
-          // register cluster wide aggregation task for the health report
-          taskFactoryMap.put(
-              String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
-              new TaskFactory() {
-                @Override
-                public Task createNewTask(TaskCallbackContext context) {
-                  return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
-                      healthReport.getReportName(), healthReport.getStatsFieldName(), healthReport.getStatsReportType(),
-                      callback, clusterMapConfig);
-                }
-              });
-        }
+    for (final AmbryStatsReport statsReport : statsReports) {
+      if (statsReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
         if (clusterMapConfig.clustermapEnableMySqlAggregationTask && accountStatsStore != null) {
           taskFactoryMap.put(
-              String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
+              String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, statsReport.getReportName()),
               new TaskFactory() {
                 @Override
                 public Task createNewTask(TaskCallbackContext context) {
                   return new MySqlReportAggregatorTask(context.getManager(),
-                      healthReport.getAggregateIntervalInMinutes(), healthReport.getStatsReportType(),
-                      accountStatsStore, callback, clusterMapConfig, metricRegistry);
+                      statsReport.getAggregateIntervalInMinutes(), statsReport.getStatsReportType(), accountStatsStore,
+                      callback, clusterMapConfig, metricRegistry);
                 }
               });
         }

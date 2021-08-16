@@ -20,6 +20,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.accountstats.InmemoryAccountStatsStore;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -106,6 +107,7 @@ public class StatsManagerTest {
   private final Map<String, Pair<Long, Long>> storeDeleteTombstoneStats = new HashMap<>();
   private final StatsManagerConfig statsManagerConfig;
   private final AccountService inMemoryAccountService = new InMemAccountService(false, false);
+  private final InmemoryAccountStatsStore accountStatsStore;
   private VerifiableProperties verifiableProperties;
   private DataNodeId dataNodeId;
 
@@ -171,9 +173,10 @@ public class StatsManagerTest {
     storageManager = new MockStorageManager(storeMap, dataNodeId);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     clusterParticipant = new MockHelixParticipant(clusterMapConfig);
+    accountStatsStore = new InmemoryAccountStatsStore("test", "localhost");
     statsManager =
-        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null, null,
-            inMemoryAccountService);
+        new StatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
+            accountStatsStore, inMemoryAccountService);
   }
 
   /**
@@ -268,8 +271,11 @@ public class StatsManagerTest {
     }
     assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue());
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachablePartitions.size());
-    String statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
-    StatsWrapper statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+
+    StatsManager.AccountStatsPublisher publisher = testStatsManager.new AccountStatsPublisher(accountStatsStore);
+    publisher.run();
+    StatsWrapper statsWrapper = accountStatsStore.queryAccountStatsByHost("localhost", 0);
+
     List<String> unreachableStores = statsWrapper.getHeader().getUnreachableStores();
     assertTrue("The unreachable store list should contain Partition1 and Partition2",
         unreachableStores.containsAll(Arrays.asList(partitionId1.toPathString(), partitionId2.toPathString())));
@@ -334,14 +340,15 @@ public class StatsManagerTest {
         Collections.singletonList((MockDataNodeId) dataNodeId), 0);
     testStoreMap.put(partitionId3, new MockStore(new MockStoreStats(snapshotsByType, false)));
     // verify that partitionId3 is not in stats report before adding to statsManager
-    String statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
-    StatsWrapper statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    StatsManager.AccountStatsPublisher publisher = testStatsManager.new AccountStatsPublisher(accountStatsStore);
+    publisher.run();
+    StatsWrapper statsWrapper = accountStatsStore.queryAccountStatsByHost("localhost", 0);
     assertFalse("Partition3 should not present in stats report",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toString()));
     // verify that after adding into statsManager, PartitionId3 is in stats report
     testStatsManager.addReplica(partitionId3.getReplicaIds().get(0));
-    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
-    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    publisher.run();
+    statsWrapper = accountStatsStore.queryAccountStatsByHost("localhost", 0);
     assertTrue("Partition3 should present in stats report",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId3.toString()));
     // verify that after removing PartitionId0 (corresponding to the first replica in replicas list), PartitionId0 is not in the stats report
@@ -350,8 +357,8 @@ public class StatsManagerTest {
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toString()));
     testStoreMap.remove(testReplicas.get(0).getPartitionId());
     testStatsManager.removeReplica(testReplicas.get(0));
-    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
-    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    publisher.run();
+    statsWrapper = accountStatsStore.queryAccountStatsByHost("localhost", 0);
     assertFalse("Partition0 should not present in stats report after removal",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId0.toString()));
     // verify that removing the PartitionId0 should fail because it no longer exists in StatsManager
@@ -392,8 +399,8 @@ public class StatsManagerTest {
         waitRemoveCountdown.countDown();
       }
     }, false).start();
-    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
-    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    publisher.run();
+    statsWrapper = accountStatsStore.queryAccountStatsByHost("localhost", 0);
     // verify that the removed store is indeed unreachable during stats aggregation
     assertTrue("The removed partition should be unreachable during aggregation",
         ((MockStorageManager) mockStorageManager).unreachablePartitions.contains(partitionRemoved.get(0)));
@@ -426,14 +433,14 @@ public class StatsManagerTest {
       // count down to allow stats aggregation to proceed
       waitAddCountdown.countDown();
     }, false).start();
-    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
-    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    publisher.run();
+    statsWrapper = accountStatsStore.queryAccountStatsByHost("localhost", 0);
     // verify that new added PartitionId4 is not in report for this round of aggregation
     assertFalse("Partition4 should not present in stats report",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toString()));
     // verify that new added PartitionId4 will be collected for next round of aggregation
-    statsJSON = testStatsManager.getNodeStatsInJSON(StatsReportType.ACCOUNT_REPORT);
-    statsWrapper = mapper.readValue(statsJSON, StatsWrapper.class);
+    publisher.run();
+    statsWrapper = accountStatsStore.queryAccountStatsByHost("localhost", 0);
     assertTrue("Partition4 should present in stats report",
         statsWrapper.getSnapshot().getSubMap().containsKey(partitionId4.toString()));
   }
@@ -497,74 +504,6 @@ public class StatsManagerTest {
         new MockStatsManager(storageManager, replicas, new MetricRegistry(), statsManagerConfig, clusterParticipant);
     // state transition on existing replica should be no-op
     clusterParticipant.onPartitionBecomeStandbyFromLeader(replicas.get(0).getPartitionId().toPathString());
-  }
-
-  /**
-   * Test that the {@link StatsManager} can correctly collect and aggregate all type of stats on the node. This
-   * test is using randomly generated account snapshot and partitionClass snapshot in mock {@link StoreStats}.
-   * @throws Exception
-   */
-  @Test
-  public void testGetNodeStatsInJSON() throws Exception {
-    // initialize StatsManager and create all types of snapshots for testing
-    List<ReplicaId> replicaIds = new ArrayList<>();
-    PartitionId partitionId;
-    DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
-        Collections.singletonList("/tmp"), "DC1");
-    Map<PartitionId, Store> storeMap = new HashMap<>();
-    List<StatsSnapshot> partitionClassSnapshots = new ArrayList<>();
-    List<StatsSnapshot> accountSnapshots = new ArrayList<>();
-    for (int i = 0; i < 2; i++) {
-      partitionId = new MockPartitionId(i,
-          (i % 2 == 0) ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS,
-          Collections.singletonList((MockDataNodeId) dataNodeId), 0);
-      Map<StatsReportType, StatsSnapshot> allSnapshots = generateRandomSnapshot();
-      partitionClassSnapshots.add(allSnapshots.get(StatsReportType.PARTITION_CLASS_REPORT));
-      accountSnapshots.add(allSnapshots.get(StatsReportType.ACCOUNT_REPORT));
-      storeMap.put(partitionId, new MockStore(new MockStoreStats(allSnapshots, false)));
-      replicaIds.add(partitionId.getReplicaIds().get(0));
-    }
-    StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
-    StatsManager statsManager =
-        new StatsManager(storageManager, replicaIds, new MetricRegistry(), statsManagerConfig, new MockTime(), null,
-            null, inMemoryAccountService);
-
-    StatsSnapshot expectAccountSnapshot = new StatsSnapshot(0L, new HashMap<>());
-    StatsSnapshot expectPartitionClassSnapshot = new StatsSnapshot(0L, new HashMap<>());
-    for (int i = 0; i < accountSnapshots.size(); ++i) {
-      Map<String, StatsSnapshot> partitionToAccountSnapshot = new HashMap<>();
-      Map<String, StatsSnapshot> partitionToPartitionClassSnapshot = new HashMap<>();
-      Map<String, StatsSnapshot> partitionClassSnapshotMap = new HashMap<>();
-      String partitionClassStr =
-          i % 2 == 0 ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS;
-      partitionToAccountSnapshot.put(Utils.statsPartitionKey((short) i), accountSnapshots.get(i));
-      partitionToPartitionClassSnapshot.put(Utils.statsPartitionKey((short) i), partitionClassSnapshots.get(i));
-      partitionClassSnapshotMap.put(partitionClassStr,
-          new StatsSnapshot(partitionClassSnapshots.get(i).getValue(), partitionToPartitionClassSnapshot));
-      //aggregate two types of snapshots respectively
-      StatsSnapshot.aggregate(expectAccountSnapshot,
-          new StatsSnapshot(accountSnapshots.get(i).getValue(), partitionToAccountSnapshot));
-      StatsSnapshot.aggregate(expectPartitionClassSnapshot,
-          new StatsSnapshot(partitionClassSnapshots.get(i).getValue(), partitionClassSnapshotMap));
-    }
-
-    // Get node level stats in JSON to verify
-    for (StatsReportType type : EnumSet.of(StatsReportType.ACCOUNT_REPORT, StatsReportType.PARTITION_CLASS_REPORT)) {
-      String statsInJSON = statsManager.getNodeStatsInJSON(type);
-      StatsSnapshot actualSnapshot = mapper.readValue(statsInJSON, StatsWrapper.class).getSnapshot();
-      switch (type) {
-        case ACCOUNT_REPORT:
-          assertTrue("Mismatch in aggregated node stats at account level",
-              expectAccountSnapshot.equals(actualSnapshot));
-          break;
-        case PARTITION_CLASS_REPORT:
-          assertTrue("Mismatch in aggregated node stats at partitionClass level",
-              expectPartitionClassSnapshot.equals(actualSnapshot));
-          break;
-        default:
-          throw new IllegalArgumentException("Unrecognized stats report type: " + type);
-      }
-    }
   }
 
   /**

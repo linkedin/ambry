@@ -15,7 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.accountstats.AccountStatsStore;
-import com.github.ambry.server.AmbryHealthReport;
+import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -85,7 +85,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
             registeredPartitionStateChangeListeners = new HashMap<>();
 
         @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
+        public void participate(List<AmbryStatsReport> ambryHealthReports, AccountStatsStore accountStatsStore,
             Callback<StatsSnapshot> callback) {
           for (String partitionName : partitionLeadershipList) {
             for (PartitionStateChangeListener partitionStateChangeListener : registeredPartitionStateChangeListeners.values()) {
