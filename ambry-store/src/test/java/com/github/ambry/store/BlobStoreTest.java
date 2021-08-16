@@ -3286,7 +3286,7 @@ public class BlobStoreTest {
     }
 
     @Override
-    public void handleNewPutEntry(IndexValue putValue) {
+    public void handleNewPutEntry(StoreKey key, IndexValue putValue) {
       this.currentValue = putValue;
       this.originalPutValue = null;
       this.previousValue = null;
@@ -3301,7 +3301,7 @@ public class BlobStoreTest {
     }
 
     @Override
-    public void handleNewTtlUpdateEntry(IndexValue ttlUpdateValue, IndexValue originalPutValue) {
+    public void handleNewTtlUpdateEntry(StoreKey key, IndexValue ttlUpdateValue, IndexValue originalPutValue) {
       this.currentValue = ttlUpdateValue;
       this.originalPutValue = originalPutValue;
       this.previousValue = null;
