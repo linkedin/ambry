@@ -630,6 +630,11 @@ public class BlobIdTransformerTest {
       }
     }
 
+    @Override
+    public PartitionId getPartitionIdByName(String partitionIdStr) throws IOException {
+      return null;
+    }
+
     public List<? extends PartitionId> getWritablePartitionIds(String partitionClass) {
       return null;
     }

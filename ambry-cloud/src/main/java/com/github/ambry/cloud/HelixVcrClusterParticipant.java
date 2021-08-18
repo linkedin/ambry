@@ -134,11 +134,9 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   }
 
   private void doAddPartition(String partitionIdStr, Callback<Object> callback) {
-    byte[] partitionBytes =
-        ClusterMapUtils.serializeShortAndLong(AmbryPartition.CURRENT_VERSION, Long.parseLong(partitionIdStr));
     PartitionId partitionId = null;
     try {
-      partitionId = clusterMap.getPartitionIdFromStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionBytes)));
+      partitionId = clusterMap.getPartitionIdByName(partitionIdStr);
     } catch (IOException e) {
       metrics.partitionIdNotInClusterMapOnAdd.inc();
       callback.onCompletion(null,
@@ -156,6 +154,8 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
         logger.info("Partition {} exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
       callback.onCompletion(null, null);
+    } else {
+      throw new IllegalStateException("lala");
     }
   }
 

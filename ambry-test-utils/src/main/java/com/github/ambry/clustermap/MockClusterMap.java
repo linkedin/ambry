@@ -381,6 +381,11 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) throws IOException {
+    return null;
+  }
+
+  @Override
   public List<PartitionId> getWritablePartitionIds(String partitionClass) {
     lastRequestedPartitionClasses.add(partitionClass);
     List<PartitionId> partitionIdList = Collections.emptyList();

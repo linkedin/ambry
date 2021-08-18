@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.io.InputStream;
@@ -372,6 +373,13 @@ public class HelixClusterManager implements ClusterMap {
       throw new IOException("Partition id from stream is unknown (not present in current clustermap)");
     }
     return partition;
+  }
+
+  @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) throws IOException {
+    byte[] partitionBytes =
+        ClusterMapUtils.serializeShortAndLong(AmbryPartition.CURRENT_VERSION, Long.parseLong(partitionIdStr));
+    return getPartitionIdFromStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionBytes)));
   }
 
   @Override

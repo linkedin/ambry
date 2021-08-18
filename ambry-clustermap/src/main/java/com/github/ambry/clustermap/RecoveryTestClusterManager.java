@@ -57,6 +57,11 @@ public class RecoveryTestClusterManager implements ClusterMap {
   }
 
   @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) throws IOException {
+    return null;
+  }
+
+  @Override
   public List<PartitionId> getWritablePartitionIds(String partitionClass) {
     throw new UnsupportedOperationException(String.format("getWritablePartitionIds method is not supported"));
   }
