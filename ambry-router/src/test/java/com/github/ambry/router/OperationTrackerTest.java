@@ -117,7 +117,7 @@ public class OperationTrackerTest {
     OperationTracker ot = getOperationTracker(false, 2, 3, RouterOperation.GetBlobOperation, true);
     // 3-0-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, 3, false);
+    sendRequests(ot, 2, false);
     // 0-3-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
     for (int i = 0; i < 2; i++) {

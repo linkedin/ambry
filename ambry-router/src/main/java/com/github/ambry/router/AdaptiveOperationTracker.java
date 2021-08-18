@@ -236,7 +236,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * outstanding for a certain amount of time from parallelism.
    */
   private class OpTrackerIterator implements Iterator<ReplicaId> {
-    private int totalRequestCount = 0;
 
     /**
      * For Adaptive Operation Tracker, we want to achieve this result:
@@ -258,7 +257,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     @Override
     public boolean hasNext() {
       if (replicaIterator.hasNext()) {
-        if (totalRequestCount - disabledCount - failedCount < getCurrentParallelism()) {
+        if (inflightCount < getCurrentParallelism() && getSuccessCount() + inflightCount < getSuccessTarget(
+            inFlightReplicaType)) {
           return true;
         }
         if (inflightCount < routerConfig.routerOperationTrackerMaxInflightRequests && isOldestRequestPastDue()) {
@@ -280,7 +280,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       }
       unexpiredRequestSendTimes.put(lastReturnedByIterator, new Pair<>(false, time.milliseconds()));
       inFlightReplicaType = lastReturnedByIterator.getReplicaType();
-      totalRequestCount++;
       inflightCount++;
     }
 
