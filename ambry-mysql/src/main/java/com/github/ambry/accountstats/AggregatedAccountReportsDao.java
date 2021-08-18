@@ -15,7 +15,6 @@ package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
 import com.github.ambry.mysql.MySqlMetrics;
-import com.github.ambry.server.storagestats.ContainerStorageStats;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -49,32 +48,25 @@ public class AggregatedAccountReportsDao {
   public static final String ACCOUNT_ID_COLUMN = "accountId";
   public static final String CONTAINER_ID_COLUMN = "containerId";
   public static final String STORAGE_USAGE_COLUMN = "storageUsage";
-  public static final String PHYSICAL_STORAGE_USAGE_COLUMN = "physicalStorageUsage";
-  public static final String NUMBER_OF_BLOBS_COLUMN = "numberOfBlobs";
   public static final String UPDATED_AT_COLUMN = "updatedAt";
   public static final String MONTH_COLUMN = "month";
 
   private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
   private static final String insertSql = String.format(
-      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=?, %s=?, %s=NOW()",
+      "INSERT INTO %s (%s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
       AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
-      STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN,
-      STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN);
+      STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
   private static final String queryUsageSqlForCluster =
-      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
-          STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE,
-          CLUSTER_NAME_COLUMN);
+      String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
+          STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
   private static final String queryMonthlyUsageSqlForCluster =
-      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
-          STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
-          MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
-  private static final String copySqlForCluster = String.format(
-      "INSERT %s SELECT * FROM %s WHERE %s = ? ON DUPLICATE KEY UPDATE %s=%s.%s, %s=%s.%s, %s=%s.%s, %s=%s.%s",
-      MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
-      STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN,
-      AGGREGATED_ACCOUNT_REPORTS_TABLE, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
-      AGGREGATED_ACCOUNT_REPORTS_TABLE, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE,
-      UPDATED_AT_COLUMN);
+      String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
+          STORAGE_USAGE_COLUMN, MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
+  private static final String copySqlForCluster =
+      String.format("INSERT %s SELECT * FROM %s WHERE %s = ? ON DUPLICATE KEY UPDATE %s=%s.%s, %s=%s.%s",
+          MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
+          STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN,
+          AGGREGATED_ACCOUNT_REPORTS_TABLE, UPDATED_AT_COLUMN);
   private static final String deleteMonthlySqlForCluster =
       String.format("DELETE FROM %s WHERE %s=?", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
   private static final String queryMonthSqlForCluster =
@@ -110,9 +102,6 @@ public class AggregatedAccountReportsDao {
    */
   void updateStorageUsage(String clusterName, short accountId, short containerId, long storageUsage)
       throws SQLException {
-    // TODO: adding real physical storage usage and number of blobs here
-    long physicalStorageUsage = storageUsage;
-    long numberOfBlobs = 1L;
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
         long startTimeMs = System.currentTimeMillis();
@@ -122,11 +111,7 @@ public class AggregatedAccountReportsDao {
         insertStatement.setInt(2, accountId);
         insertStatement.setInt(3, containerId);
         insertStatement.setLong(4, storageUsage);
-        insertStatement.setLong(5, physicalStorageUsage);
-        insertStatement.setLong(6, numberOfBlobs);
-        insertStatement.setLong(7, storageUsage);
-        insertStatement.setLong(8, physicalStorageUsage);
-        insertStatement.setLong(9, numberOfBlobs);
+        insertStatement.setLong(5, storageUsage);
         insertStatement.executeUpdate();
         metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
         metrics.writeSuccessCount.inc();
@@ -167,36 +152,35 @@ public class AggregatedAccountReportsDao {
   }
 
   /**
-   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
+   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryContainerUsageForCluster(String clusterName, AggregatedContainerStorageStatsFunction func)
-      throws SQLException {
+  void queryContainerUsageForCluster(String clusterName, AggregatedContainerUsageFunction func) throws SQLException {
     queryContainerUsageForClusterInternal(false, clusterName, func);
   }
 
   /**
-   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
+   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryMonthlyContainerUsageForCluster(String clusterName, AggregatedContainerStorageStatsFunction func)
+  void queryMonthlyContainerUsageForCluster(String clusterName, AggregatedContainerUsageFunction func)
       throws SQLException {
     queryContainerUsageForClusterInternal(true, clusterName, func);
   }
 
   /**
-   * Query container storage for the given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
+   * Query container storage for the given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
    * @param forMonthly True to return the monthly snapshot of the container storage usage.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
    * @throws SQLException
    */
   private void queryContainerUsageForClusterInternal(boolean forMonthly, String clusterName,
-      AggregatedContainerStorageStatsFunction func) throws SQLException {
+      AggregatedContainerUsageFunction func) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       String sqlStatement = forMonthly ? queryMonthlyUsageSqlForCluster : queryUsageSqlForCluster;
       try (PreparedStatement queryStatement = connection.prepareStatement(sqlStatement)) {
@@ -207,10 +191,7 @@ public class AggregatedAccountReportsDao {
             int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
             int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
             long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-            long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
-            long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
-            func.apply((short) accountId,
-                new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs));
+            func.apply((short) accountId, (short) containerId, storageUsage);
           }
         }
         metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -346,19 +327,12 @@ public class AggregatedAccountReportsDao {
      */
     public void addUpdateToBatch(String clusterName, short accountId, short containerId, long storageUsage)
         throws SQLException {
-      // TODO: adding real physical storage usage and number of blobs here
-      long physicalStorageUsage = storageUsage;
-      long numberOfBlobs = 1L;
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setInt(2, accountId);
         statement.setInt(3, containerId);
         statement.setLong(4, storageUsage);
-        statement.setLong(5, physicalStorageUsage);
-        statement.setLong(6, numberOfBlobs);
-        statement.setLong(7, storageUsage);
-        statement.setLong(8, physicalStorageUsage);
-        statement.setLong(9, numberOfBlobs);
+        statement.setLong(5, storageUsage);
       });
     }
   }

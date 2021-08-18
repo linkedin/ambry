@@ -66,9 +66,6 @@ public class AggregatedAccountReportsDaoTest {
     when(mockResultSet.getInt(eq(AggregatedAccountReportsDao.ACCOUNT_ID_COLUMN))).thenReturn(queryAccountId);
     when(mockResultSet.getInt(eq(AggregatedAccountReportsDao.CONTAINER_ID_COLUMN))).thenReturn(queryContainerId);
     when(mockResultSet.getLong(eq(AggregatedAccountReportsDao.STORAGE_USAGE_COLUMN))).thenReturn(queryStorageUsage);
-    when(mockResultSet.getLong(eq(AggregatedAccountReportsDao.PHYSICAL_STORAGE_USAGE_COLUMN))).thenReturn(
-        queryStorageUsage);
-    when(mockResultSet.getLong(eq(AggregatedAccountReportsDao.NUMBER_OF_BLOBS_COLUMN))).thenReturn(1L);
     when(mockQueryAggregatedStatement.executeQuery()).thenReturn(mockResultSet);
 
     mockQueryMonthStatement = mock(PreparedStatement.class);
@@ -101,6 +98,7 @@ public class AggregatedAccountReportsDaoTest {
     metrics = new MySqlMetrics(AggregatedAccountReportsDao.class, new MetricRegistry());
     aggregatedAccountReportsDao = new AggregatedAccountReportsDao(getDataSource(mockConnection), metrics);
   }
+
 
   /**
    * Utility to get a {@link DataSource}.
@@ -180,12 +178,10 @@ public class AggregatedAccountReportsDaoTest {
   @Test
   public void testQueryAggregatedStats() throws Exception {
     long readSuccessCountBefore = metrics.readSuccessCount.getCount();
-    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerStats) -> {
+    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
       assertEquals(queryAccountId, accountId);
-      assertEquals(queryContainerId, containerStats.getContainerId());
-      assertEquals(queryStorageUsage, containerStats.getLogicalStorageUsage());
-      assertEquals(queryStorageUsage, containerStats.getPhysicalStorageUsage());
-      assertEquals(1L, containerStats.getNumberOfBlobs());
+      assertEquals(queryContainerId, containerId);
+      assertEquals(queryStorageUsage, storageUsage);
     });
     verify(mockConnection).prepareStatement(anyString());
     assertEquals("Read success count should be " + (readSuccessCountBefore + 1), (readSuccessCountBefore + 1),
@@ -205,13 +201,12 @@ public class AggregatedAccountReportsDaoTest {
   @Test
   public void testQueryMonthlyAggregatedStats() throws Exception {
     long readSuccessCountBefore = metrics.readSuccessCount.getCount();
-    aggregatedAccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName, (accountId, containerStats) -> {
-      assertEquals(queryAccountId, accountId);
-      assertEquals(queryContainerId, containerStats.getContainerId());
-      assertEquals(queryStorageUsage, containerStats.getLogicalStorageUsage());
-      assertEquals(queryStorageUsage, containerStats.getPhysicalStorageUsage());
-      assertEquals(1L, containerStats.getNumberOfBlobs());
-    });
+    aggregatedAccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
+        (accountId, containerId, storageUsage) -> {
+          assertEquals(queryAccountId, accountId);
+          assertEquals(queryContainerId, containerId);
+          assertEquals(queryStorageUsage, storageUsage);
+        });
     verify(mockConnection).prepareStatement(anyString());
     assertEquals("Read success count should be " + (readSuccessCountBefore + 1), (readSuccessCountBefore + 1),
         metrics.readSuccessCount.getCount());
