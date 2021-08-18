@@ -186,7 +186,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     int batchSize = 0;
     long startTimeMs = System.currentTimeMillis();
 
-    // Find the differences between two {@link StatsSnapshot} and apply them to the given {@link ContainerUsageFunction}.
+    // Find the differences between two {@link StatsSnapshot} and apply them to the given {@link ContainerStorageStatsFunction}.
     // The difference is defined as
     // 1. If a container storage usage exists in both StatsSnapshot, and the values are different.
     // 2. If a container storage usage only exists in current StatsSnapshot.
@@ -340,12 +340,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     StatsSnapshot hostSnapshot = new StatsSnapshot((long) 0, partitionSubMap);
     AtomicLong timestamp = new AtomicLong(0);
     accountReportsDao.queryStorageUsageForHost(clusterName, queryHostname,
-        (partitionId, accountId, containerId, storageUsage, updatedAtMs) -> {
+        (partitionId, accountId, containerStats, updatedAtMs) -> {
           StatsSnapshot partitionSnapshot = hostSnapshot.getSubMap()
               .computeIfAbsent(Utils.statsPartitionKey(partitionId), k -> new StatsSnapshot((long) 0, new HashMap<>()));
           StatsSnapshot accountSnapshot = partitionSnapshot.getSubMap()
               .computeIfAbsent(Utils.statsAccountKey(accountId), k -> new StatsSnapshot((long) 0, new HashMap<>()));
-          accountSnapshot.getSubMap().put(Utils.statsContainerKey(containerId), new StatsSnapshot(storageUsage, null));
+          accountSnapshot.getSubMap()
+              .put(Utils.statsContainerKey(containerStats.getContainerId()),
+                  new StatsSnapshot(containerStats.getLogicalStorageUsage(), null));
           timestamp.set(Math.max(timestamp.get(), updatedAtMs));
         });
 
@@ -402,9 +404,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
-    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
+    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerStats) -> {
       result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-          .put(String.valueOf(containerId), storageUsage);
+          .put(String.valueOf(containerStats.getContainerId()), containerStats.getLogicalStorageUsage());
     });
     storeMetrics.queryAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
@@ -414,8 +416,9 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public StatsSnapshot queryAggregatedAccountStatsByClusterName(String clusterName) throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<Short, Map<Short, Long>> accountContainerUsage = new HashMap<>();
-    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerId, storageUsage) -> {
-      accountContainerUsage.computeIfAbsent(accountId, k -> new HashMap<>()).put(containerId, storageUsage);
+    aggregatedAccountReportsDao.queryContainerUsageForCluster(clusterName, (accountId, containerStats) -> {
+      accountContainerUsage.computeIfAbsent(accountId, k -> new HashMap<>())
+          .put(containerStats.getContainerId(), containerStats.getLogicalStorageUsage());
     });
     if (accountContainerUsage.isEmpty()) {
       return null;
@@ -440,11 +443,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   public Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
     Map<String, Map<String, Long>> result = new HashMap<>();
-    aggregatedAccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName,
-        (accountId, containerId, storageUsage) -> {
-          result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-              .put(String.valueOf(containerId), storageUsage);
-        });
+    aggregatedAccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName, (accountId, containerStats) -> {
+      result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
+          .put(String.valueOf(containerStats.getContainerId()), containerStats.getLogicalStorageUsage());
+    });
     storeMetrics.queryMonthlyAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return result;
   }
@@ -585,10 +587,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     Map<String, Map<Short, Map<Short, Long>>> partitionClassNameAccountContainerUsages = new HashMap<>();
     AtomicLong timestamp = new AtomicLong(0);
     partitionClassReportsDao.queryAggregatedPartitionClassReport(clusterName,
-        (partitionClassName, accountId, containerId, storageUsage, updatedAt) -> {
+        (partitionClassName, accountId, containerStats, updatedAt) -> {
           partitionClassNameAccountContainerUsages.computeIfAbsent(partitionClassName, k -> new HashMap<>())
               .computeIfAbsent(accountId, k -> new HashMap<>())
-              .put(containerId, storageUsage);
+              .put(containerStats.getContainerId(), containerStats.getLogicalStorageUsage());
           timestamp.set(Math.max(timestamp.get(), updatedAt));
         });
     if (partitionClassNameAccountContainerUsages.isEmpty()) {
@@ -650,10 +652,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     Map<Integer, Map<Short, Map<Short, Long>>> partitionAccountContainerUsage = new HashMap<>();
     AtomicLong timestamp = new AtomicLong(0);
     accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
-        (partitionId, accountId, containerId, storageUsage, updatedAtMs) -> {
+        (partitionId, accountId, containerStats, updatedAtMs) -> {
           partitionAccountContainerUsage.computeIfAbsent(partitionId, pid -> new HashMap<>())
               .computeIfAbsent(accountId, aid -> new HashMap<>())
-              .put(containerId, storageUsage);
+              .put(containerStats.getContainerId(), containerStats.getLogicalStorageUsage());
           timestamp.set(Math.max(timestamp.get(), updatedAtMs));
         });
     // Here partitionAccountContainerUsage has partition id, account id and container id as keys of map at each level,
