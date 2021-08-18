@@ -159,12 +159,12 @@ public class PartitionClassReportsDaoTest {
     dao.insertPartitionClassName(clusterName1, className1);
 
     final Map<String, Map<Short, Map<Short, Long>>> usagesInDB = new HashMap<>();
-    final Map<String, Map<Short, Map<Short, Long>>> physicalUsagesInDB = new HashMap<>();
-    dao.queryAggregatedPartitionClassReport(clusterName, (partitionClassName, accountId, containerStats, updatedAt) -> {
-      usagesInDB.computeIfAbsent(partitionClassName, k -> new HashMap<>())
-          .computeIfAbsent(accountId, k -> new HashMap<>())
-          .put(containerStats.getContainerId(), containerStats.getLogicalStorageUsage());
-    });
+    dao.queryAggregatedPartitionClassReport(clusterName,
+        (partitionClassName, accountId, containerId, storageUsage, updatedAt) -> {
+          usagesInDB.computeIfAbsent(partitionClassName, k -> new HashMap<>())
+              .computeIfAbsent(accountId, k -> new HashMap<>())
+              .put(containerId, storageUsage);
+        });
     assertTrue(usagesInDB.isEmpty());
 
     final int numAccount = 100;
@@ -195,17 +195,13 @@ public class PartitionClassReportsDaoTest {
       }
       batch.flush();
       dao.queryAggregatedPartitionClassReport(clusterName,
-          (partitionClassName, accountId, containerStats, updatedAt) -> {
+          (partitionClassName, accountId, containerId, storageUsage, updatedAt) -> {
             usagesInDB.computeIfAbsent(partitionClassName, k -> new HashMap<>())
                 .computeIfAbsent(accountId, k -> new HashMap<>())
-                .put(containerStats.getContainerId(), containerStats.getLogicalStorageUsage());
-            physicalUsagesInDB.computeIfAbsent(partitionClassName, k -> new HashMap<>())
-                .computeIfAbsent(accountId, k -> new HashMap<>())
-                .put(containerStats.getContainerId(), containerStats.getPhysicalStorageUsage());
+                .put(containerId, storageUsage);
           });
 
       assertEquals(classNameAccountContainerUsages, usagesInDB);
-      assertEquals(classNameAccountContainerUsages, physicalUsagesInDB);
     }
   }
 

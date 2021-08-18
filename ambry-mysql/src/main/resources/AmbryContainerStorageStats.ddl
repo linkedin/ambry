@@ -19,15 +19,13 @@
  */
 CREATE TABLE IF NOT EXISTS AccountReports
 (
-    clusterName          VARCHAR(25) NOT NULL,
-    hostname             VARCHAR(30) NOT NULL,
-    partitionId          INT         NOT NULL,
-    accountId            INT         NOT NULL,
-    containerId          INT         NOT NULL,
-    storageUsage         BIGINT      NOT NULL, /* logical storage usage */
-    physicalStorageUsage BIGINT      NOT NULL, /* physical storage usage */
-    numberOfBlobs        BIGINT      NOT NULL, /* number of blobs, include blobs at all states, even for compaction */
-    updatedAt            TIMESTAMP   NOT NULL,
+    clusterName  VARCHAR(25) NOT NULL,
+    hostname     VARCHAR(30) NOT NULL,
+    partitionId  INT         NOT NULL,
+    accountId    INT         NOT NULL,
+    containerId  INT         NOT NULL,
+    storageUsage BIGINT      NOT NULL,
+    updatedAt    TIMESTAMP   NOT NULL,
 
     PRIMARY KEY (clusterName, hostname, partitionId, accountId, containerId),
     INDEX updatedAtIndex (updatedAt)
@@ -36,27 +34,16 @@ CREATE TABLE IF NOT EXISTS AccountReports
     COLLATE utf8_bin;
 
 /**
-  We have to add physicalStorageUsage and numberOfBlobs to the existing AccountReports table.
-  We would like to set physicalStorageUsage's value to be the same as storageUsage and the numberOfBlobs to be 0
-
-  ALTER TABLE AccountReports ADD numberOfBlobs BIGINT NOT NULL DEFAULT 0;
-  ALTER TABLE AccountReports ADD physicalStorageUsage BIGINT NOT NULL DEFAULT 0;
-  Update AccountReports SET physicalStorageUsage = storageUsage;
-*/
-
-/**
  * This table is created to store aggregated account storage usage. An aggregation task will be activated to read all
  * the container storage usages from table AcountReports and generate an aggregated stats and write it back to this table.
  */
 CREATE TABLE IF NOT EXISTS AggregatedAccountReports
 (
-    clusterName          VARCHAR(25) NOT NULL,
-    accountId            INT         NOT NULL,
-    containerId          INT         NOT NULL,
-    storageUsage         BIGINT      NOT NULL, /* logical storage usage */
-    physicalStorageUsage BIGINT      NOT NULL, /* physical storage usage */
-    numberOfBlobs        BIGINT      NOT NULL,
-    updatedAt            TIMESTAMP   NOT NULL,
+    clusterName  VARCHAR(25) NOT NULL,
+    accountId    INT         NOT NULL,
+    containerId  INT         NOT NULL,
+    storageUsage BIGINT      NOT NULL,
+    updatedAt    TIMESTAMP   NOT NULL,
 
     PRIMARY KEY (clusterName, accountId, containerId)
 )
@@ -64,25 +51,11 @@ CREATE TABLE IF NOT EXISTS AggregatedAccountReports
     COLLATE utf8_bin;
 
 /**
-  We have to add physicalStorageUsage and numberOfBlobs to the existing AggregatedAccountReports table.
-  We would like to set physicalStorageUsage's value to be the same as storageUsage and the numberOfBlobs to be 0
-
-  ALTER TABLE AggregatedAccountReports ADD numberOfBlobs BIGINT NOT NULL DEFAULT 0;
-  ALTER TABLE AggregatedAccountReports ADD physicalStorageUsage BIGINT NOT NULL DEFAULT 0;
-  Update AggregatedAccountReports SET physicalStorageUsage = storageUsage;
- */
-
-/**
  * This table is created to keep a copy of aggregated container storage usage from table AggregatedAccountReports at the
  * beginning of each month. The schema of this table is the same as table AggregatedAccountReports. The data is directly
  * copied it every month.
  */
 CREATE TABLE IF NOT EXISTS MonthlyAggregatedAccountReports LIKE AggregatedAccountReports;
-/**
-  ALTER TABLE MonthlyAggregatedAccountReports ADD numberOfBlobs BIGINT NOT NULL DEFAULT 0;
-  ALTER TABLE MonthlyAggregatedAccountReports ADD physicalStorageUsage BIGINT NOT NULL DEFAULT 0;
-  Update MonthlyAggregatedAccountReports SET physicalStorageUsage = storageUsage;
- */
 
 /**
  * This table is created to record when the data in table MonthlyAggregatedAccountReports is copied.
@@ -136,24 +109,13 @@ CREATE TABLE IF NOT EXISTS Partitions
  */
 CREATE TABLE IF NOT EXISTS AggregatedPartitionClassReports
 (
-    partitionClassId     SMALLINT  NOT NULL,
-    accountId            INT       NOT NULL,
-    containerId          INT       NOT NULL,
-    storageUsage         BIGINT    NOT NULL,
-    physicalStorageUsage BIGINT    NOT NULL, /* physical storage usage */
-    numberOfBlobs        BIGINT    NOT NULL,
-    updatedAt            TIMESTAMP NOT NULL,
+    partitionClassId SMALLINT  NOT NULL,
+    accountId        INT       NOT NULL,
+    containerId      INT       NOT NULL,
+    storageUsage     BIGINT    NOT NULL,
+    updatedAt        TIMESTAMP NOT NULL,
 
     PRIMARY KEY (partitionClassId, accountId, containerId)
 )
     CHARACTER SET utf8
     COLLATE utf8_bin;
-
-/**
-  We have to add physicalStorageUsage and numberOfBlobs to the existing AggregatedPartitionClassReports table.
-  We would like to set physicalStorageUsage's value to be the same as storageUsage and the numberOfBlobs to be 0
-
-  ALTER TABLE AggregatedPartitionClassReports ADD numberOfBlobs BIGINT NOT NULL DEFAULT 0;
-  ALTER TABLE AggregatedPartitionClassReports ADD physicalStorageUsage BIGINT NOT NULL DEFAULT 0;
-  Update AggregatedPartitionClassReports SET physicalStorageUsage = storageUsage;
- */

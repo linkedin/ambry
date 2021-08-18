@@ -13,21 +13,19 @@
  */
 package com.github.ambry.accountstats;
 
-import com.github.ambry.server.storagestats.ContainerStorageStats;
-
-
 /**
- * A callback function to call when processing container storage stats.
+ * A callback function to call when processing container storage usage.
  */
 @FunctionalInterface
-public interface ContainerStorageStatsFunction {
+public interface ContainerUsageFunction {
 
   /**
-   * Process container storage stats.
+   * Process container storage usage.
    * @param partitionId The partition id.
    * @param accountId The account id.
-   * @param containerStats The {@link ContainerStorageStats}
+   * @param containerId The container id.
+   * @param storageUsage The storage usage in bytes for this container.
    * @param updatedAtMs The timestamp in milliseconds when this data is updated.
    */
-  void apply(int partitionId, short accountId, ContainerStorageStats containerStats, long updatedAtMs);
+  void apply(int partitionId, short accountId, short containerId, long storageUsage, long updatedAtMs);
 }

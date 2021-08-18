@@ -63,8 +63,6 @@ public class AccountReportsDaoTest {
     when(mockResultSet.getInt(eq(AccountReportsDao.ACCOUNT_ID_COLUMN))).thenReturn(queryAccountId);
     when(mockResultSet.getInt(eq(AccountReportsDao.CONTAINER_ID_COLUMN))).thenReturn(queryContainerId);
     when(mockResultSet.getLong(eq(AccountReportsDao.STORAGE_USAGE_COLUMN))).thenReturn(queryStorageUsage);
-    when(mockResultSet.getLong(eq(AccountReportsDao.PHYSICAL_STORAGE_USAGE_COLUMN))).thenReturn(queryStorageUsage);
-    when(mockResultSet.getLong(eq(AccountReportsDao.NUMBER_OF_BLOBS_COLUMN))).thenReturn(1L);
     when(mockResultSet.getTimestamp(eq(AccountReportsDao.UPDATED_AT_COLUMN))).thenReturn(
         new Timestamp(SystemTime.getInstance().milliseconds()));
     when(mockQueryStatement.executeQuery()).thenReturn(mockResultSet);
@@ -116,13 +114,11 @@ public class AccountReportsDaoTest {
   @Test
   public void testQueryStorageUsageForHost() throws Exception {
     accountReportsDao.queryStorageUsageForHost(clusterName, hostname,
-        (partitionId, accountId, containerStats, updatedAt) -> {
+        (partitionId, accountId, containerId, storageUsage, updatedAt) -> {
           assertEquals("Partition id mismatch", queryPartitionId, partitionId);
           assertEquals("Account id mismatch", queryAccountId, accountId);
-          assertEquals("Container id mismatch", queryContainerId, containerStats.getContainerId());
-          assertEquals("Storage usage mismatch", queryStorageUsage, containerStats.getLogicalStorageUsage());
-          assertEquals("Physical storage usage mismatch", queryStorageUsage, containerStats.getPhysicalStorageUsage());
-          assertEquals("Number of blobs mismatch", 1L, containerStats.getNumberOfBlobs());
+          assertEquals("Container id mismatch", queryContainerId, containerId);
+          assertEquals("Storage usage mismatch", queryStorageUsage, storageUsage);
         });
     verify(mockConnection).prepareStatement(anyString());
     assertEquals("Read success count should be 1", 1, metrics.readSuccessCount.getCount());

@@ -13,18 +13,7 @@
  */
 package com.github.ambry.accountstats;
 
-import com.github.ambry.server.storagestats.ContainerStorageStats;
-
-
-/**
- * A callback function to call when processing aggregated container storage stats.
- */
 @FunctionalInterface
-public interface AggregatedContainerStorageStatsFunction {
-  /**
-   * Process container storage usage.
-   * @param accountId The account id.
-   * @param containerStats The {@link ContainerStorageStats}
-   */
-  void apply(short accountId, ContainerStorageStats containerStats);
+public interface AggregatedContainerUsageFunction {
+  void apply(short accountId, short containerId, long storageUsage);
 }
