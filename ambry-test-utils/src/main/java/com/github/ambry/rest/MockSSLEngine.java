@@ -26,7 +26,7 @@ import javax.net.ssl.SSLSession;
  * A mock of {@link SSLEngine} that either delegates to a passed in {@link SSLEngine}, or returns the provided
  * objects.
  */
-class MockSSLEngine extends SSLEngine {
+public class MockSSLEngine extends SSLEngine {
   private final SSLEngine delegateEngine;
   private final SSLSession sessionToReturn;
 
@@ -34,7 +34,7 @@ class MockSSLEngine extends SSLEngine {
    * @param delegateEngine An {@link SSLEngine} to delegate to in most cases.
    * @param sessionToReturn If not {@code null}, return this certificate in {@link #getSession()} instead of delegating.
    */
-  MockSSLEngine(SSLEngine delegateEngine, SSLSession sessionToReturn) {
+  public MockSSLEngine(SSLEngine delegateEngine, SSLSession sessionToReturn) {
     this.delegateEngine = delegateEngine;
     this.sessionToReturn = sessionToReturn;
   }

@@ -59,6 +59,8 @@ public class Http2ClientMetrics {
   public final Counter http2ParentExceptionCount;
   public final Counter http2StreamExceptionCount;
 
+  public final Counter http2ServerCertificateValidationFailureCount;
+
   public Http2ClientMetrics(MetricRegistry registry) {
     this.registry = registry;
     http2ConnectionAcquireTime =
@@ -109,6 +111,9 @@ public class Http2ClientMetrics {
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2ParentExceptionCount"));
     http2StreamExceptionCount =
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2StreamExceptionCount"));
+
+    http2ServerCertificateValidationFailureCount =
+        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "http2ServerCertificateValidationFailureCount"));
   }
 
   void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup) {
