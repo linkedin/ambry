@@ -63,10 +63,12 @@ public class PartitionClassReportsDao {
           CLUSTER_NAME_COLUMN);
 
   /**
-   * eg: INSERT INTO Partitions VALUES("ambry-test", 12, 1);
+   * eg: INSERT INTO Partitions (clusterName, id, partitionClassId) VALUES("ambry-test", 12, 1);
    * 12 is the partition id and 1 is the partition class id from PartitionClassNames.id.
    */
-  private static final String insertPartitionIdSql = String.format("INSERT INTO %s VALUES (?, ?, ?)", PARTITIONS_TABLE);
+  private static final String insertPartitionIdSql =
+      String.format("INSERT INTO %s (%s, %s, %s) VALUES (?, ?, ?)", PARTITIONS_TABLE, CLUSTER_NAME_COLUMN, ID_COLUMN,
+          PARTITION_CLASS_ID_COLUMN);
 
   /**
    * eg: SELECT id FROM Partitions WHERE clusterName = "ambry-test";
@@ -87,16 +89,17 @@ public class PartitionClassReportsDao {
       PARTITION_CLASS_ID_COLUMN, CLUSTER_NAME_COLUMN);
 
   /**
-   * eg: INSERT INTO AggregatedPartitionClassReports
+   * eg: INSERT INTO AggregatedPartitionClassReports (partitionClassId, accountId, containerId, storageUsage, updatedAt)
    *     SELECT id, 101, 201, 12345, NOW()
    *     FROM PartitionClassNames WHERE clusterName = "ambry-test" AND name = "default"
    *     ON DUPLICATE KEY UPDATE storageUsage=12345, updatedAt=NOW();
    *  101 is the account id, 201 is the container id, 12345 is the storage usage.
    */
   private static final String insertAggregatedSql = String.format(
-      "INSERT INTO %s SELECT %s, ?, ?, ?, NOW() FROM %s WHERE %s=? AND %s=? ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
-      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN,
-      NAME_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+      "INSERT INTO %s (%s, %s, %s, %s, %s) SELECT %s, ?, ?, ?, NOW() FROM %s WHERE %s=? AND %s=? ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
+      AGGREGATED_PARTITION_CLASS_REPORTS_TABLE, PARTITION_CLASS_ID_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
+      STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, ID_COLUMN, PARTITION_CLASS_NAMES_TABLE, CLUSTER_NAME_COLUMN, NAME_COLUMN,
+      STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
 
   /**
    * eg : DELETE FROM AggregatedPartitionClassReports
@@ -131,7 +134,7 @@ public class PartitionClassReportsDao {
    * @param dataSource The {@link DataSource}.
    * @param metrics The {@link MySqlMetrics}.
    */
-  PartitionClassReportsDao(DataSource  dataSource, MySqlMetrics metrics) {
+  PartitionClassReportsDao(DataSource dataSource, MySqlMetrics metrics) {
     this.dataSource = Objects.requireNonNull(dataSource, "DataSource is empty");
     this.metrics = Objects.requireNonNull(metrics, "MySqlMetrics is empty");
   }
@@ -151,8 +154,8 @@ public class PartitionClassReportsDao {
         queryStatement.setString(1, clusterName);
         try (ResultSet rs = queryStatement.executeQuery()) {
           while (rs.next()) {
-            short partitionClassId = rs.getShort(1);
-            String partitionClassName = rs.getString(2);
+            short partitionClassId = rs.getShort(ID_COLUMN);
+            String partitionClassName = rs.getString(NAME_COLUMN);
             result.put(partitionClassName, partitionClassId);
           }
         }
@@ -210,8 +213,8 @@ public class PartitionClassReportsDao {
         queryStatement.setString(1, clusterName);
         try (ResultSet resultSet = queryStatement.executeQuery()) {
           while (resultSet.next()) {
-            int partitionId = resultSet.getInt(1);
-            String partitionClassName = resultSet.getString(2);
+            int partitionId = resultSet.getInt(ID_COLUMN);
+            String partitionClassName = resultSet.getString(NAME_COLUMN);
             nameAndIds.computeIfAbsent(partitionClassName, k -> new HashSet<>()).add(partitionId);
           }
         }
@@ -241,7 +244,7 @@ public class PartitionClassReportsDao {
         queryStatement.setString(1, clusterName);
         try (ResultSet rs = queryStatement.executeQuery()) {
           while (rs.next()) {
-            partitionIds.add(rs.getInt(1));
+            partitionIds.add(rs.getInt(ID_COLUMN));
           }
         }
         metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -300,11 +303,11 @@ public class PartitionClassReportsDao {
         queryStatement.setString(1, clusterName);
         try (ResultSet rs = queryStatement.executeQuery()) {
           while (rs.next()) {
-            String partitionClassName = rs.getString(1);
-            int accountId = rs.getInt(2);
-            int containerId = rs.getInt(3);
-            long usage = rs.getLong(4);
-            long updatedAt = rs.getTimestamp(5).getTime();
+            String partitionClassName = rs.getString(NAME_COLUMN);
+            int accountId = rs.getInt(ACCOUNT_ID_COLUMN);
+            int containerId = rs.getInt(CONTAINER_ID_COLUMN);
+            long usage = rs.getLong(STORAGE_USAGE_COLUMN);
+            long updatedAt = rs.getTimestamp(UPDATED_AT_COLUMN).getTime();
             func.apply(partitionClassName, (short) accountId, (short) containerId, usage, updatedAt);
           }
         }
