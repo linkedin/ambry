@@ -62,9 +62,7 @@ public class Http2PeerCertificateValidator extends ChannelInboundHandlerAdapter 
    * @param ctx the {@link ChannelHandlerContext}.
    */
   private void validateSslConnection(ChannelHandlerContext ctx) throws Exception {
-    if (http2PeerCertificateSanRegex.isEmpty()) {
-      logger.info("(TDBG) validateSslConnection => regex is empty");
-
+    if (http2PeerCertificateSanRegex.trim().isEmpty()) {
       return;
     }
     SslHandler sslHandler = ctx.channel().pipeline().get(SslHandler.class);

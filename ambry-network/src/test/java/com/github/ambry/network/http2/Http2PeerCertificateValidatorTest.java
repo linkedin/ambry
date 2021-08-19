@@ -85,6 +85,15 @@ public class Http2PeerCertificateValidatorTest {
     assertEquals("validation success counter mismatch", 0,
         metrics.http2ServerCertificateValidationFailureCount.getCount());
 
+    //certificate validation is disabled with empty regex, channel should not be closed.
+    channel = createChannelSsl(subjectAltNames, " ", metrics);
+    sslHandler = channel.pipeline().get(SslHandler.class);
+    promise = (Promise<Channel>) sslHandler.handshakeFuture();
+    promise.setSuccess(channel);
+    assertTrue("channel should not be closed", channel.isActive());
+    assertEquals("validation success counter mismatch", 0,
+        metrics.http2ServerCertificateValidationFailureCount.getCount());
+
     //security validation failure case (service closed), channel should be closed.
     channel = createChannelSsl(subjectAltNames, "invalid.*", metrics);
     sslHandler = channel.pipeline().get(SslHandler.class);
