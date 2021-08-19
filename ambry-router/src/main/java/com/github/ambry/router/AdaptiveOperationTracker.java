@@ -240,25 +240,27 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     /**
      * For Adaptive Operation Tracker, we want to achieve this result:
      * 1. we don't want to send more than #parallelism requests when all requests get responses in time
-     * 2. we only send additional request when one of the existing request's latency exceeds 95%.
+     * 2. we don't want to send more than #successTarget requests if we don't know the response.
+     * 2. we only send additional request when one of the existing request's latency exceeds 95% or there is a failure response.
      *
-     * For example, if we have 6 replicas and the parallelism is 3, calling hasNext(), next() and remove()
+     * For example, if we have 6 replicas and the parallelism is 3, success target is 2, calling hasNext(), next() and remove()
      * would result in:
-     * replica 1: totalRequestCount = 0, total-disabled-failed=0<3, return true
-     * replica 2: totalRequestCount = 1, total-disabled-failed=1<3, return true
-     * replica 3: totalRequestCount = 2, total-disabled-failed=2<3, return true
-     * replica 4: totalRequestCount = 3, total-disabled-failed=3!<3, wait until oldest request past due.
-     * If replica 1 returns failure response, then failed = 1
-     * replica 4: totalRequestCount = 3, total-disabled-failed=2<3, return true
-     * If replica 2 exceed 95% latency
-     * replica 5: return true
+     * replica 1: inflight(0) < parallelism(3) && inflight(0) + successCount(0) < successTarget(2), return true
+     * replica 2: inflight(1) < parallelism(3) && inflight(1) + successCount(0) < successTarget(2), return true
+     * replica 3: inflight(2) < parallelism(3) && inflight(2) + successCount(0) < successTarget(2), return false, since inflight + successCount < successTarget is false.
+     * Replica 1 receives SUCCESS response
+     * replica 3: inflight(1) < parallelism(3) && inflight(1) + successCount(1) < successTarget(2), return false, since inflight + successCount < successTarget is false.
+     * Replica 2 receives FAILURE response
+     * replica 3: inflight(0) < parallelism(3) && inflight(0) + successCount(1) < successTarget(2), return true
+     * replica 4: inflight(1) < parallelism(3) && inflight(1) + successCount(1) < successTarget(2), return false, since inflight + successCount < successTarget is false.
+     * replica 3 exceeds 95% latency
+     * replica 4: return true
      * @return
      */
     @Override
     public boolean hasNext() {
       if (replicaIterator.hasNext()) {
-        if (inflightCount < getCurrentParallelism() && getSuccessCount() + inflightCount < getSuccessTarget(
-            inFlightReplicaType)) {
+        if (shouldSendRequestWithoutConsideringMetrics()) {
           return true;
         }
         if (inflightCount < routerConfig.routerOperationTrackerMaxInflightRequests && isOldestRequestPastDue()) {
@@ -271,12 +273,14 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     @Override
     public void remove() {
       replicaIterator.remove();
-      if (inflightCount >= getCurrentParallelism() && unexpiredRequestSendTimes.size() > 0) {
+      if (!shouldSendRequestWithoutConsideringMetrics() && unexpiredRequestSendTimes.size() > 0) {
         // we are here because oldest request is past due
         Map.Entry<ReplicaId, Pair<Boolean, Long>> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
-        expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue().getSecond());
-        unexpiredRequestSendTimes.remove(oldestEntry.getKey());
-        pastDueCounter.inc();
+        if (oldestEntry.getValue().getFirst()) {
+          expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue().getSecond());
+          unexpiredRequestSendTimes.remove(oldestEntry.getKey());
+          pastDueCounter.inc();
+        }
       }
       unexpiredRequestSendTimes.put(lastReturnedByIterator, new Pair<>(false, time.milliseconds()));
       inFlightReplicaType = lastReturnedByIterator.getReplicaType();
@@ -290,6 +294,16 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       }
       lastReturnedByIterator = replicaIterator.next();
       return lastReturnedByIterator;
+    }
+
+    /**
+     * @return True when request should be sent even without considering metrics.
+     */
+    private boolean shouldSendRequestWithoutConsideringMetrics() {
+      int parallelism = getCurrentParallelism();
+      int successCount = getSuccessCount();
+      int successTarget = getSuccessTarget(inFlightReplicaType);
+      return inflightCount < parallelism && successCount + inflightCount < successTarget;
     }
 
     /**
