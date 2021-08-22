@@ -16,8 +16,6 @@ package com.github.ambry.clustermap;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;

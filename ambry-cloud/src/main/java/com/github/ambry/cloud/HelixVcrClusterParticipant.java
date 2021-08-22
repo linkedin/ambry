@@ -29,10 +29,7 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -42,7 +39,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
@@ -134,17 +130,11 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   }
 
   private void doAddPartition(String partitionIdStr, Callback<Object> callback) {
-    PartitionId partitionId = null;
-    try {
-      partitionId = clusterMap.getPartitionIdByName(partitionIdStr);
-    } catch (IOException e) {
-      metrics.partitionIdNotInClusterMapOnAdd.inc();
-      callback.onCompletion(null,
-          new IllegalStateException("Partition not in clusterMap on add: Partition Id: " + partitionIdStr));
-      return;
-    }
+    PartitionId partitionId = clusterMap.getPartitionIdByName(partitionIdStr);
+
     if (partitionId != null) {
       if (partitionIdMap.putIfAbsent(partitionIdStr, partitionId) == null) {
+        // TODO: get rid of assignedPartitionIds
         assignedPartitionIds.add(partitionId);
         for (VcrClusterParticipantListener listener : listeners) {
           listener.onPartitionAdded(partitionId);
@@ -155,7 +145,9 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
       }
       callback.onCompletion(null, null);
     } else {
-      throw new IllegalStateException("lala");
+      metrics.partitionIdNotInClusterMapOnAdd.inc();
+      callback.onCompletion(null,
+          new IllegalStateException("Partition not in clusterMap on add: Partition Id: " + partitionIdStr));
     }
   }
 

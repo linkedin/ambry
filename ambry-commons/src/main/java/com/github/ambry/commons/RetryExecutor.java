@@ -78,7 +78,7 @@ public class RetryExecutor {
                 waitTimeMs, TimeUnit.MILLISECONDS);
           }
         } else {
-          logger.info("{} of {} attempts failed, completing operation. exception is below:", currAttempts,
+          logger.info("{} of {} attempts failed, completing operation. See exception below:", currAttempts,
               policy.maxAttempts(), exception);
           userCallback.onCompletion(null, exception);
         }

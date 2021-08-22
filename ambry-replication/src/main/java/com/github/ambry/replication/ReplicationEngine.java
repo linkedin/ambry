@@ -700,7 +700,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
      */
     @Override
     public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
-      logger.info("--------------onReplicaAddedOrRemoved");
+      logger.trace("onReplicaAddedOrRemoved added: {}, removed: {}", addedReplicas, removedReplicas);
       // 1. wait for start() to complete
       try {
         startupLatch.await();
@@ -719,7 +719,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         try {
           // 2. determine if added/removed replicas have peer replica on local node.
           //    We skip the replica on current node because it should already be added/removed by state transition thread.
-          // 这里可能要注意一些timming问题
           Set<ReplicaId> addedPeerReplicas = addedReplicas.stream()
               .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != dataNodeId
                   && shouldReplicateFromDc(r.getDataNodeId().getDatacenterName()))

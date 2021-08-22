@@ -101,7 +101,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
-    vcrMetrics.registerVcrHelixUpdateGuage(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
+    vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
   }
 
   @Override
@@ -114,11 +114,12 @@ public class VcrReplicationManager extends ReplicationEngine {
           vcrHelixUpdateLock.lock();
           try {
             if (isAmbryListenerToUpdateVcrHelixRegistered == false) {
-              // Only register the listener once. Unfortunately, we can't unregister a listener, but it's OK since
-              // listener execute helix update only when isVcrHelixUpdater is true.
-              logger.info("VCR updater registered.");
+              // Only register the listener once. Unfortunately, we can't unregister a listener, so we use
+              // isAmbryListenerToUpdateVcrHelixRegistered as the flag.
               clusterMap.registerClusterMapListener(
                   new com.github.ambry.cloud.VcrReplicationManager.AmbryListenerToUpdateVcrHelix());
+              isAmbryListenerToUpdateVcrHelixRegistered = true;
+              logger.info("VCR updater registered.");
             }
             isVcrHelixUpdater = true;
             scheduleVcrHelix();
@@ -341,8 +342,8 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   /**
    * Check and schedule a VCR helix update task. We schedule updateVcrHelix in 2 cases:
-   * 1. On a node become online role of partition 1
-   * 2. On Ambry cluster change
+   * 1. On a node become online role of partition, which usually happens on restart or deployment.
+   * 2. On Ambry cluster change.
    */
   private void scheduleVcrHelix() {
     if (vcrHelixUpdateFuture != null && vcrHelixUpdateFuture.cancel(false)) {
@@ -361,10 +362,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   private void updateVcrHelix() {
     String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
     logger.info("Going to update VCR Helix Cluster. Dryrun: {}", cloudConfig.vcrHelixUpdateDryRun);
-    logger.info("Current partitions in clustermap: ", clusterMap.getAllPartitionIds(null));
-    for (PartitionId partitionIdx : clusterMap.getAllPartitionIds(null)) {
-      logger.info(partitionIdx.toString());
-    }
     try {
       isVcrHelixUpdateInProgress = true;
       HelixVcrUtil.updateResourceAndPartition(localDcZkStr, clusterMapConfig.clusterMapClusterName,
@@ -388,7 +385,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     @Override
     public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
       logger.info("onReplicaAddedOrRemoved event triggered by clustermap change.");
-      if (isVcrHelixUpdater) { // For most VCR node, the value is false, then they don't need to enter the lock.
+      if (isVcrHelixUpdater) { // For most VCR node, the value is false, they don't need to enter the lock.
         vcrHelixUpdateLock.lock();
         try {
           if (isVcrHelixUpdater) {

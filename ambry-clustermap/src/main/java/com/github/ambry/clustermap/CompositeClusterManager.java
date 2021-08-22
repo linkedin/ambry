@@ -80,7 +80,7 @@ class CompositeClusterManager implements ClusterMap {
 
   @Override
   public PartitionId getPartitionIdByName(String partitionIdStr) {
-    return null;
+    return helixClusterManager.getPartitionIdByName(partitionIdStr);
   }
 
   /**
