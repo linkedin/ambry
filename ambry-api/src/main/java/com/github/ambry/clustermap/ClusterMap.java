@@ -40,9 +40,9 @@ public interface ClusterMap extends AutoCloseable {
   /**
    * Gets PartitionId based on partitionId string.
    * @param partitionIdStr {@link String} the partition id in string format
-   * @return PartitionId
+   * @return PartitionId or null if the partition doesn't exist
    */
-  PartitionId getPartitionIdByName(String partitionIdStr) throws IOException;
+  PartitionId getPartitionIdByName(String partitionIdStr);
 
   /**
    * Gets a list of partitions that are available for writes. Gets a mutable shallow copy of the list of the partitions

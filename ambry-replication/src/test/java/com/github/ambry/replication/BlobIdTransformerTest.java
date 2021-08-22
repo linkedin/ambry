@@ -631,7 +631,7 @@ public class BlobIdTransformerTest {
     }
 
     @Override
-    public PartitionId getPartitionIdByName(String partitionIdStr) throws IOException {
+    public PartitionId getPartitionIdByName(String partitionIdStr) {
       return null;
     }
 
