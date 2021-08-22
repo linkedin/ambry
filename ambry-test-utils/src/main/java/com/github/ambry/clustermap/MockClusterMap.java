@@ -16,11 +16,13 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -382,7 +384,13 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public PartitionId getPartitionIdByName(String partitionIdStr) {
-    return null;
+    byte[] partitionBytes =
+        ClusterMapUtils.serializeShortAndLong(AmbryPartition.CURRENT_VERSION, Long.parseLong(partitionIdStr));
+    try {
+      return getPartitionIdFromStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionBytes)));
+    } catch (IOException e) {
+      return null;
+    }
   }
 
   @Override

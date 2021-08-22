@@ -63,7 +63,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   private final DataNodeId currentDataNode;
   private final String vcrClusterName;
   private final String vcrInstanceName;
-  private final Map<String, PartitionId> partitionIdMap;
+  private final Map<String, PartitionId> partitionIdMap = new ConcurrentHashMap<>();
   private final Set<PartitionId> assignedPartitionIds = ConcurrentHashMap.newKeySet();
   private final HelixVcrClusterMetrics metrics;
   private final List<VcrClusterParticipantListener> listeners = new ArrayList<>();
@@ -97,8 +97,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
     logger.info("All partitions from clusterMap: {}.", allPartitions);
-    partitionIdMap =
-        allPartitions.stream().collect(Collectors.toConcurrentMap(PartitionId::toPathString, Function.identity()));
     vcrClusterName = cloudConfig.vcrClusterName;
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -120,7 +118,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     retryExecutor.runWithRetries(retryPolicy, callback -> doAddPartition(partitionIdStr, callback), e -> true,
         (result, exception) -> {
           if (exception != null) {
-            logger.warn("Partition {} is not in clusterMap on addPartition and retry failed.", partitionIdStr,
+            logger.warn("AddPartition for {} failed after retry: ", partitionIdStr,
                 exception);
           } else {
             logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
@@ -131,7 +129,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
 
   private void doAddPartition(String partitionIdStr, Callback<Object> callback) {
     PartitionId partitionId = clusterMap.getPartitionIdByName(partitionIdStr);
-
     if (partitionId != null) {
       if (partitionIdMap.putIfAbsent(partitionIdStr, partitionId) == null) {
         // TODO: get rid of assignedPartitionIds

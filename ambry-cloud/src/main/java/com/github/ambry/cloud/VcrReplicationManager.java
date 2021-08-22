@@ -50,6 +50,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 
 /**
@@ -113,7 +115,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         if (partitionId.isEqual(cloudConfig.vcrHelixUpdaterParitionId)) {
           vcrHelixUpdateLock.lock();
           try {
-            if (isAmbryListenerToUpdateVcrHelixRegistered == false) {
+            if (!isAmbryListenerToUpdateVcrHelixRegistered) {
               // Only register the listener once. Unfortunately, we can't unregister a listener, so we use
               // isAmbryListenerToUpdateVcrHelixRegistered as the flag.
               clusterMap.registerClusterMapListener(
@@ -121,6 +123,13 @@ public class VcrReplicationManager extends ReplicationEngine {
               isAmbryListenerToUpdateVcrHelixRegistered = true;
               logger.info("VCR updater registered.");
             }
+            // It's possible isVcrHelixUpdater to be true on two nodes.
+            // For example, lets say at time "t" node A is the owner of partition 1. Due to some partition reassignment
+            // (lets say new node addition), partition 1 get assigned to node B at time "t+1". In this case it's possible
+            // for Node B to get notification of addPartition of partition 1 at "t+2" before Node A gets removePartition
+            // notification (at t+4). If a main cluster update happens between "t+2" and "t+4", then two nodes might try
+            // to update vcr cluster at the same time.
+            // TODO: find a solution for this race condition.
             isVcrHelixUpdater = true;
             scheduleVcrHelix();
           } finally {
@@ -362,15 +371,19 @@ public class VcrReplicationManager extends ReplicationEngine {
   private void updateVcrHelix() {
     String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
     logger.info("Going to update VCR Helix Cluster. Dryrun: {}", cloudConfig.vcrHelixUpdateDryRun);
+    logger.info("Current partitions in clustermap data structure: {}",
+        clusterMap.getAllPartitionIds(null).stream().map(Object::toString).collect(Collectors.joining(",")));
     try {
       isVcrHelixUpdateInProgress = true;
       HelixVcrUtil.updateResourceAndPartition(localDcZkStr, clusterMapConfig.clusterMapClusterName,
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName, vcrHelixConfig,
           cloudConfig.vcrHelixUpdateDryRun);
+    } catch (Exception e) {
+      logger.warn("VCR Helix cluster update failed: ", e);
     } finally {
       isVcrHelixUpdateInProgress = false;
     }
-    logger.info("VCR Helix Cluster update done.");
+    logger.info("VCR Helix cluster update done.");
   }
 
   int getVcrHelixUpdaterAsCount() {

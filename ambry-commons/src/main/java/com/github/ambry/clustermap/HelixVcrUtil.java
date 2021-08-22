@@ -190,8 +190,9 @@ public class HelixVcrUtil {
           logger.info("DryRun: Drop Resource {}", resource);
         } else if (dropResource) {
           // This resource need to be recreate.
+          logger.info("Dropped Resource {}, Partitions: {}", resource,
+              destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet());
           destAdmin.dropResource(destClusterName, resource);
-          logger.info("Dropped Resource {}", resource);
         }
       } else {
         createNewResource = true;
