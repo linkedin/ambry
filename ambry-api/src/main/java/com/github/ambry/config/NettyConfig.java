@@ -34,7 +34,7 @@ public class NettyConfig {
   public static final String NETTY_SERVER_MAX_HEADER_SIZE = "netty.server.max.header.size";
   public static final String NETTY_SERVER_MAX_CHUNK_SIZE = "netty.server.max.chunk.size";
   public static final String NETTY_SERVER_REQUEST_BUFFER_WATERMARK = "netty.server.request.buffer.watermark";
-  public static final String NETTY_SERVER_BLACKLISTED_QUERY_PARAMS = "netty.server.blacklisted.query.params";
+  public static final String NETTY_SERVER_DENY_LISTED_QUERY_PARAMS = "netty.server.deny.listed.query.params";
   public static final String NETTY_MULTIPART_POST_MAX_SIZE_BYTES = "netty.multipart.post.max.size.bytes";
   public static final String SSL_FACTORY_KEY = "netty.server.ssl.factory";
   public static final String NETTY_METRICS_REFRESH_INTERVAL_SECONDS = "netty.metrics.refresh.interval.seconds";
@@ -125,9 +125,9 @@ public class NettyConfig {
    * A comma separated list of query parameters that should not be honored when forwarded to the
    * {@link RestRequestService} layer.
    */
-  @Config(NETTY_SERVER_BLACKLISTED_QUERY_PARAMS)
+  @Config(NETTY_SERVER_DENY_LISTED_QUERY_PARAMS)
   @Default("")
-  public final Set<String> nettyBlacklistedQueryParams;
+  public final Set<String> nettyServerDenyListedQueryParams;
 
   /**
    * The threshold (in bytes) for POSTs via multipart/form-data.
@@ -183,8 +183,8 @@ public class NettyConfig {
     nettyServerRequestBufferWatermark =
         verifiableProperties.getIntInRange(NETTY_SERVER_REQUEST_BUFFER_WATERMARK, 32 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
-    nettyBlacklistedQueryParams = new HashSet<>(
-        Arrays.asList(verifiableProperties.getString(NETTY_SERVER_BLACKLISTED_QUERY_PARAMS, "").split(",")));
+    nettyServerDenyListedQueryParams = new HashSet<>(
+        Arrays.asList(verifiableProperties.getString(NETTY_SERVER_DENY_LISTED_QUERY_PARAMS, "").split(",")));
     nettyMultipartPostMaxSizeBytes =
         verifiableProperties.getLongInRange(NETTY_MULTIPART_POST_MAX_SIZE_BYTES, 20 * 1024 * 1024, 0, Long.MAX_VALUE);
     nettyServerSslFactory = verifiableProperties.getString(SSL_FACTORY_KEY, "");

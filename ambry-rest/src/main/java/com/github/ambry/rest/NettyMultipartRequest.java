@@ -61,7 +61,7 @@ class NettyMultipartRequest extends NettyRequest {
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param channel the {@link Channel} over which the {@code request} has been received.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
-   * @param blacklistedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
+   * @param denyListedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
    * @param maxSizeAllowedInBytes the cap on the size of the request. If the size of the request goes beyond this size, then
    *                        it will be discarded.
    * @throws IllegalArgumentException if {@code request} is null or if the HTTP method defined in {@code request} is
@@ -70,8 +70,8 @@ class NettyMultipartRequest extends NettyRequest {
    *                                {@link RestMethod}.
    */
   NettyMultipartRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics,
-      Set<String> blacklistedQueryParams, long maxSizeAllowedInBytes) throws RestServiceException {
-    super(request, channel, nettyMetrics, blacklistedQueryParams);
+      Set<String> denyListedQueryParams, long maxSizeAllowedInBytes) throws RestServiceException {
+    super(request, channel, nettyMetrics, denyListedQueryParams);
     // reset auto read state.
     channel.config().setRecvByteBufAllocator(savedAllocator);
     setAutoRead(true);

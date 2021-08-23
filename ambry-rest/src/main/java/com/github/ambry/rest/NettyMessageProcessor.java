@@ -301,10 +301,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
               && HttpPostRequestDecoder.isMultipart(httpRequest)) {
             nettyMetrics.multipartPostRequestRate.mark();
             request = new NettyMultipartRequest(httpRequest, ctx.channel(), nettyMetrics,
-                nettyConfig.nettyBlacklistedQueryParams, nettyConfig.nettyMultipartPostMaxSizeBytes);
+                nettyConfig.nettyServerDenyListedQueryParams, nettyConfig.nettyMultipartPostMaxSizeBytes);
           } else {
             request =
-                new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, nettyConfig.nettyBlacklistedQueryParams);
+                new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, nettyConfig.nettyServerDenyListedQueryParams);
           }
           responseChannel.setRequest(request);
           logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());

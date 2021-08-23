@@ -111,13 +111,13 @@ public class NettyRequest implements RestRequest {
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param channel the {@link Channel} over which the {@code request} has been received.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
-   * @param blacklistedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
+   * @param denyListedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
    * @throws IllegalArgumentException if {@code request} is null.
    * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
    *                                {@link RestMethod} or if the {@link RestUtils.Headers#BLOB_SIZE} header is invalid.
    */
   public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics,
-      Set<String> blacklistedQueryParams) throws RestServiceException {
+      Set<String> denyListedQueryParams) throws RestServiceException {
     if (request == null || channel == null) {
       throw new IllegalArgumentException("Received null argument(s)");
     }
@@ -177,7 +177,7 @@ public class NettyRequest implements RestRequest {
 
     // query params.
     for (Map.Entry<String, List<String>> e : query.parameters().entrySet()) {
-      if (!blacklistedQueryParams.contains(e.getKey())) {
+      if (!denyListedQueryParams.contains(e.getKey())) {
         StringBuilder value = null;
         if (e.getValue() != null) {
           StringBuilder combinedValues = combineVals(new StringBuilder(), e.getValue());
@@ -187,7 +187,7 @@ public class NettyRequest implements RestRequest {
         }
         allArgs.put(e.getKey(), value);
       } else {
-        logger.debug("Encountered blacklisted query parameter {} in request {}", e, request);
+        logger.debug("Encountered denylisted query parameter {} in request {}", e, request);
       }
     }
 
