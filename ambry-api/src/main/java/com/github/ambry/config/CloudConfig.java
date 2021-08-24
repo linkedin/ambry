@@ -368,7 +368,7 @@ public class CloudConfig {
    * The vcr node responsible for partition 1 is the vcr helix updater.
    */
   @Config(VCR_HELIX_UPDATER_PARTITION_ID)
-  @Default("1")
+  @Default("-1")
   public final String vcrHelixUpdaterParitionId;
 
   /**
@@ -450,9 +450,9 @@ public class CloudConfig {
         Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
     vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
         DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
-    vcrHelixUpdaterParitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "1");
+    vcrHelixUpdaterParitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "-1");
     vcrHelixUpdateConfig =
-        verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
+        verifiableProperties.getString(VCR_HELIX_UPDATE_CONFIG, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
     vcrHelixUpdateDelayTimeInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 60);
     vcrHelixUpdateDryRun = verifiableProperties.getBoolean(VCR_HELIX_UPDATE_DRY_RUN, false);
   }

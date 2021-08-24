@@ -368,12 +368,13 @@ public class VcrReplicationManager extends ReplicationEngine {
   /**
    * The actual performer to update VCR Helix:
    */
+  synchronized
   private void updateVcrHelix() {
-    String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
     logger.info("Going to update VCR Helix Cluster. Dryrun: {}", cloudConfig.vcrHelixUpdateDryRun);
     logger.info("Current partitions in clustermap data structure: {}",
         clusterMap.getAllPartitionIds(null).stream().map(Object::toString).collect(Collectors.joining(",")));
     try {
+      String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
       isVcrHelixUpdateInProgress = true;
       HelixVcrUtil.updateResourceAndPartition(localDcZkStr, clusterMapConfig.clusterMapClusterName,
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName, vcrHelixConfig,
