@@ -129,7 +129,7 @@ class LogSegment implements Read, Write {
             long computedCrc = crcStream.getValue();
             long crcFromFile = stream.readLong();
             if (crcFromFile != computedCrc) {
-              throw new IllegalStateException("CRC from the segment file does not match computed CRC of header");
+              throw new IllegalStateException("CRC from the segment file [" + file.getAbsolutePath() + "] does not match computed CRC of header");
             }
             startOffset = HEADER_SIZE;
             break;
@@ -148,10 +148,10 @@ class LogSegment implements Read, Write {
         Files.setPosixFilePermissions(this.file.toPath(), config.storeDataFilePermission);
       }
     } catch (FileNotFoundException e) {
-      throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
+      throw new StoreException("File not found while creating log segment [" + file.getAbsolutePath() + "]", e, StoreErrorCodes.File_Not_Found);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException(errorCode.toString() + " while creating log segment", e, errorCode);
+      throw new StoreException(errorCode.toString() + " while creating log segment [" + file.getAbsolutePath() + "]", e, errorCode);
     }
   }
 
