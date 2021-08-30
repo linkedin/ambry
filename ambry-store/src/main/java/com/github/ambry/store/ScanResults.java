@@ -204,6 +204,13 @@ class ScanResults {
     updateNestedMapHelper(containerBaseBucket, accountId, containerId, value);
   }
 
+  /**
+   * Update the physical storage usage and store key for the givne account and container.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param usage The new physical storage usage
+   * @param key The new store key
+   */
   void updateContainerPhysicalStorageUsageAndStoreKey(short accountId, short containerId, long usage, StoreKey key) {
     updateNestedMapHelper(containerPhysicalStorageUsage, accountId, containerId, usage);
     containerStoreKeys.computeIfAbsent(accountId, k -> new HashMap<>())

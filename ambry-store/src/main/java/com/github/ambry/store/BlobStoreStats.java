@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.SortedMap;
@@ -707,16 +708,30 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
   }
 
+  /**
+   * Perform an action each {@link IndexEntry} from a given {@link IndexSegment}. IndexEntry will be passed to the callback method
+   * as the first parameter and a boolean value indicating if this IndexEntry is valid or not, will be passed to the callback method
+   * as the second parameter.
+   * @param indexSegment the {@link IndexSegment} where the entries came from
+   * @param deleteReferenceTimeInMs the reference time in ms until which deletes are relevant
+   * @param expiryReferenceTimeInMs the reference time in ms until which expiration are relevant
+   * @param keyFinalStates a {@link Map} of key to {@link IndexFinalState}.
+   * @param removeFinalStateOnPut if {@code True}, then remove the {@link IndexFinalState} from the given map {@code keyFinalStates}
+   *                         when encountering PUT IndexValue. This method iterates through IndexValues from most recent one to
+   *                         earliest one, so PUT IndexValue is the last IndexValue for the same key.
+   * @param indexEntryAction the action to take on each {@link IndexEntry} found.
+   * @throws StoreException if there are problems reading the index.
+   */
   private void forEachIndexEntry(IndexSegment indexSegment, long deleteReferenceTimeInMs, long expiryReferenceTimeInMs,
       FileSpan fileSpanUnderCompaction, Map<StoreKey, IndexFinalState> keyFinalStates, boolean removeFinalStateOnPut,
       IndexEntryAction indexEntryAction) throws StoreException {
+    Objects.requireNonNull(indexEntryAction, "IndexEntryAction callback is null");
     ListIterator<IndexEntry> it = indexSegment.listIterator(indexSegment.size());
     while (it.hasPrevious()) {
       IndexEntry indexEntry = it.previous();
       IndexValue indexValue = indexEntry.getValue();
       StoreKey key = indexEntry.getKey();
       boolean isValid = false;
-      boolean putAndRemoveFinalState = false;
       if (indexValue.isDelete()) {
         if (keyFinalStates.containsKey(key)) {
           IndexFinalState state = keyFinalStates.get(key);
@@ -774,20 +789,17 @@ class BlobStoreStats implements StoreStats, Closeable {
           }
           isValid = !isExpired(indexValue.getExpiresAtMs(), expiryReferenceTimeInMs);
         }
-        if (removeFinalStateOnPut) {
-          putAndRemoveFinalState = true;
-        }
       }
       indexEntryAction.accept(indexEntry, isValid);
-      if (putAndRemoveFinalState) {
+      if (indexValue.isPut() && removeFinalStateOnPut) {
         keyFinalStates.remove(key);
       }
     }
   }
 
   /**
-   * Perform an action each valid {@link IndexEntry} from a given {@link List} of {@link IndexEntry}s that belong to the
-   * same {@link IndexSegment}.
+   * Perform an action each valid {@link IndexEntry} from a given {@link IndexSegment}. This is helper method for {@link #forEachIndexEntry}.
+   * It filter out the invalid IndexEntries and only call the callback method on invalid IndexEntries.
    * @param indexSegment the {@link IndexSegment} where the entries came from
    * @param deleteReferenceTimeInMs the reference time in ms until which deletes are relevant
    * @param expiryReferenceTimeInMs the reference time in ms until which expiration are relevant
@@ -1636,7 +1648,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   private class EntryContext {
-    final StoreKey key; // This is for UNDELETE and DELETE
+    final StoreKey key;
     final IndexValue currentValue;
     final IndexValue originalPutValue;
     final IndexValue previousValue; // This is for UNDELETE and DELETE

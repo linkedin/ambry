@@ -1643,18 +1643,19 @@ class CuratedLogIndexState {
             }
           } else if (currentValue.isTtlUpdate()) {
             IndexValue putValue = getExpectedValue(key, EnumSet.of(PersistentIndex.IndexEntryType.PUT), null);
-            if (putValue != null) {
-              if (latestValue.isDelete()) {
-                if (latestValue.getOperationTimeInMs() >= deleteReferenceTimeMs
-                    || isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(key, currentValue,
-                    fileSpanUnderCompaction)) {
-                  validEntries.add(currentEntry);
-                  isValid = true;
-                }
-              } else {
+            if (putValue == null) {
+              continue;
+            }
+            if (latestValue.isDelete()) {
+              if (latestValue.getOperationTimeInMs() >= deleteReferenceTimeMs
+                  || isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(key, currentValue,
+                  fileSpanUnderCompaction)) {
                 validEntries.add(currentEntry);
                 isValid = true;
               }
+            } else {
+              validEntries.add(currentEntry);
+              isValid = true;
             }
           } else {
             // current index value is PUT
