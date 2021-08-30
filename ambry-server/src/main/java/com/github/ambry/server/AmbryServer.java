@@ -317,7 +317,7 @@ public class AmbryServer {
       for (StatsReportType type : StatsReportType.values()) {
         validStatsTypes.add(type.toString());
       }
-      if (serverConfig.serverStatsPublishHealthReportEnabled) {
+      if (serverConfig.serverStatsPublishReportEnabled) {
         serverConfig.serverStatsReportsToPublish.forEach(e -> {
           if (validStatsTypes.contains(e)) {
             ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,

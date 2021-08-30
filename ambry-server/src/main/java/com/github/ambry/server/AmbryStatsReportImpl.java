@@ -15,7 +15,7 @@
 package com.github.ambry.server;
 
 /**
- * Customized Helix Health Report for collecting account usage stats per node (instance).
+ * Customized Helix Stats Report for collecting account usage stats per node (instance).
  */
 public class AmbryStatsReportImpl implements AmbryStatsReport {
   public static final String REPORT_NAME_SUFFIX = "Report";
