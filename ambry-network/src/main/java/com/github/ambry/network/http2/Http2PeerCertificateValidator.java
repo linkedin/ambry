@@ -22,7 +22,9 @@ import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import javax.net.ssl.SSLSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,10 +38,12 @@ public class Http2PeerCertificateValidator extends ChannelInboundHandlerAdapter 
   private static final Logger logger = LoggerFactory.getLogger(Http2PeerCertificateValidator.class);
   private final String http2PeerCertificateSanRegex;
   private final Http2ClientMetrics http2ClientMetrics;
+  private final Pattern http2PeerCertificateSanRegexPattern;
 
   public Http2PeerCertificateValidator(String http2PeerCertificateSanRegex,
-      Http2ClientMetrics http2ClientMetrics) {
+      Http2ClientMetrics http2ClientMetrics) throws PatternSyntaxException {
     this.http2PeerCertificateSanRegex = http2PeerCertificateSanRegex;
+    this.http2PeerCertificateSanRegexPattern = Pattern.compile(http2PeerCertificateSanRegex);
     this.http2ClientMetrics = http2ClientMetrics;
   }
 
@@ -52,7 +56,7 @@ public class Http2PeerCertificateValidator extends ChannelInboundHandlerAdapter 
 
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-    logger.trace("Channel Inactive " + ctx.channel().remoteAddress());
+    logger.trace("Channel Inactive {}", ctx.channel().remoteAddress());
     super.channelInactive(ctx);
   }
 
@@ -99,8 +103,7 @@ public class Http2PeerCertificateValidator extends ChannelInboundHandlerAdapter 
                 continue;
               }
 
-              logger.info("(TDBG) validateSslConnection => SAN[" + numSanName + "] => type: " + altNameType + " name: " + altName + " Regex: " + http2PeerCertificateSanRegex);
-              if (Pattern.matches(http2PeerCertificateSanRegex, altName)) {
+              if (http2PeerCertificateSanRegexPattern.matcher(altName).matches()) {
                 return;
               }
             }

@@ -68,9 +68,10 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
     ChannelPipeline pipeline = ch.pipeline();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT));
     pipeline.addLast(sslHandler);
-    pipeline.addLast(
-        new Http2PeerCertificateValidator(http2ClientConfig.http2PeerCertificateSanRegex,
-            http2ClientMetrics));
+    if (!http2ClientConfig.http2PeerCertificateSanRegex.trim().isEmpty()) {
+      pipeline.addLast(
+          new Http2PeerCertificateValidator(http2ClientConfig.http2PeerCertificateSanRegex, http2ClientMetrics));
+    }
     pipeline.addLast(Http2FrameCodecBuilder.forClient()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)

@@ -134,7 +134,6 @@ public class Http2PeerCertificateValidatorTest {
         new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), new Certificate[]{cert}));
     SslHandler sslHandler = new SslHandler(mockSSLEngine);
     EmbeddedChannel channel = new EmbeddedChannel(sslHandler, new Http2PeerCertificateValidator(regex, http2ClientMetrics));
-    // EmbeddedChannel channel = new EmbeddedChannel(new RouterSecurityHandler(regex));
     return channel;
   }
 }
