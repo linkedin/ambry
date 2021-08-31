@@ -85,6 +85,8 @@ public class RouterConfig {
       "router.operation.tracker.terminate.on.not.found.enabled";
   public static final String ROUTER_OPERATION_TRACKER_MAX_INFLIGHT_REQUESTS =
       "router.operation.tracker.max.inflight.requests";
+  public static final String ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE =
+      "router.adaptive.operation.tracker.waiting.for.response";
   public static final String ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED =
       "router.operation.tracker.exclude.timeout.enabled";
   public static final String ROUTER_OPERATION_TRACKER_HISTOGRAM_DUMP_ENABLED =
@@ -412,6 +414,14 @@ public class RouterConfig {
   public final int routerOperationTrackerMaxInflightRequests;
 
   /**
+   * True when the adaptive operation tracker would wait for all the responses coming back before sending out new requests
+   * when there is no request exceeding the given percentile.
+   */
+  @Config(ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE)
+  @Default("false")
+  public final boolean routerAdaptiveOperationTrackerWaitingForResponse;
+
+  /**
    * Indicates whether to enable excluding timed out requests in Histogram reservoir.
    */
   @Config(ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED)
@@ -595,6 +605,8 @@ public class RouterConfig {
         verifiableProperties.getLong(ROUTER_OPERATION_TRACKER_MIN_DATA_POINTS_REQUIRED, 1000L);
     routerOperationTrackerMaxInflightRequests =
         verifiableProperties.getIntInRange(ROUTER_OPERATION_TRACKER_MAX_INFLIGHT_REQUESTS, 2, 1, Integer.MAX_VALUE);
+    routerAdaptiveOperationTrackerWaitingForResponse =
+        verifiableProperties.getBoolean(ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE, false);
     routerOperationTrackerExcludeTimeoutEnabled =
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED, false);
     routerOperationTrackerHistogramDumpEnabled =

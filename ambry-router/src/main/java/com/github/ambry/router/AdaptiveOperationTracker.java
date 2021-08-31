@@ -238,7 +238,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   private class OpTrackerIterator implements Iterator<ReplicaId> {
 
     /**
-     * For Adaptive Operation Tracker, we want to achieve this result:
+     * For Adaptive Operation Tracker, we want to achieve this result when the {@link RouterConfig#routerAdaptiveOperationTrackerWaitingForResponse} is true.
      * 1. we don't want to send more than #parallelism requests when all requests get responses in time
      * 2. we don't want to send more than #successTarget requests if we don't know the response.
      * 2. we only send additional request when one of the existing request's latency exceeds 95% or there is a failure response.
@@ -300,10 +300,14 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
      * @return True when request should be sent even without considering metrics.
      */
     private boolean shouldSendRequestWithoutConsideringMetrics() {
-      int parallelism = getCurrentParallelism();
-      int successCount = getSuccessCount();
-      int successTarget = getSuccessTarget(inFlightReplicaType);
-      return inflightCount < parallelism && successCount + inflightCount < successTarget;
+      if (routerConfig.routerAdaptiveOperationTrackerWaitingForResponse) {
+        int parallelism = getCurrentParallelism();
+        int successCount = getSuccessCount();
+        int successTarget = getSuccessTarget(inFlightReplicaType);
+        return inflightCount < parallelism && successCount + inflightCount < successTarget;
+      } else {
+        return inflightCount < getCurrentParallelism();
+      }
     }
 
     /**
