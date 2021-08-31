@@ -623,8 +623,6 @@ public class GetBlobOperationTest {
     }
     op.poll(requestRegistrationCallback);
     time.sleep(routerConfig.routerRequestTimeoutMs + 1);
-    op.poll(requestRegistrationCallback);
-    time.sleep(routerConfig.routerRequestTimeoutMs + 1);
 
     // 2 requests have been sent out and both of them timed out. Nest, complete operation on remaining replicas
     // The request should have response from one local replica and all remote replicas.
@@ -1570,10 +1568,8 @@ public class GetBlobOperationTest {
           Utils.newThread(() -> {
             if (getChunksBeforeRead) {
               // wait for all chunks (data + metadata) to be received
-              int expectedNumberOfResponses =
-                  numChunks * (operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName())
-                      ? routerConfig.routerGetSuccessTarget : routerConfig.routerGetRequestParallelism);
-              while (mockNetworkClient.getProcessedResponseCount() < expectedNumberOfResponses) {
+              while (mockNetworkClient.getProcessedResponseCount()
+                  < numChunks * routerConfig.routerGetRequestParallelism) {
                 Thread.yield();
               }
             }

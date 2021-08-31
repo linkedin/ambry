@@ -209,11 +209,10 @@ public class GetBlobInfoOperationTest {
    */
   @Test
   public void testInstantiation() {
-    BlobId blobId =
-        new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID,
-            Utils.getRandomShort(random), Utils.getRandomShort(random),
-            mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
-            BlobId.BlobDataType.DATACHUNK);
+    BlobId blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random), Utils.getRandomShort(random),
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
     Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
       // no op.
     };
@@ -259,9 +258,8 @@ public class GetBlobInfoOperationTest {
       ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
       requestRegistrationCallback.setRequestsToSend(requestListToFill);
       op.poll(requestRegistrationCallback);
-      Assert.assertEquals("Number of requests mismatch",
-          operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()) ? successTarget
-              : requestParallelism, correlationIdToGetOperation.size());
+      Assert.assertEquals("There should only be as many requests at this point as requestParallelism",
+          requestParallelism, correlationIdToGetOperation.size());
 
       CountDownLatch onPollLatch = new CountDownLatch(1);
       if (testEncryption) {
@@ -373,25 +371,26 @@ public class GetBlobInfoOperationTest {
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
 
     op.poll(requestRegistrationCallback);
-    Assert.assertEquals("Number of requests mismatch", successTarget, correlationIdToGetOperation.size());
+    Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
+        correlationIdToGetOperation.size());
     int count = 0;
     while (!op.isOperationComplete()) {
       time.sleep(routerConfig.routerRequestTimeoutMs + 1);
       op.poll(requestRegistrationCallback);
-      if (++count == 3) {
+      if (++count == 2) {
         // exit loop to let remote replicas complete the response.
         break;
       }
     }
-    // 1 + 3 requests have been sent out and all of them timed out. Nest, complete operation on remaining replicas
+    // 2 + 2 requests have been sent out and all of them timed out. Nest, complete operation on remaining replicas
     completeOp(op);
     RouterException routerException = (RouterException) op.getOperationException();
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
     Assert.assertEquals("The number of data points in local colo latency histogram is not expected", 0,
         tracker.getLatencyHistogram(localReplica).getCount());
-    // the count of data points in Histogram should be 6 because 9(total replicas) - 3(# of timed out request) = 6
-    Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 6,
+    // the count of data points in Histogram should be 5 because 9(total replicas) - 4(# of timed out request) = 5
+    Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 5,
         tracker.getLatencyHistogram(remoteReplica).getCount());
   }
 
@@ -477,13 +476,10 @@ public class GetBlobInfoOperationTest {
     AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
 
     // First three requests would come from local datacenter and they will all time out.
-
-    for (int i = 0; i < 3; i++) {
-      op.poll(requestRegistrationCallback);
-      time.sleep(routerConfig.routerRequestTimeoutMs + 1);
-    }
+    op.poll(requestRegistrationCallback);
     Assert.assertEquals("There should only be as many requests at this point as requestParallelism", 3,
         correlationIdToGetOperation.size());
+    time.sleep(routerConfig.routerRequestTimeoutMs + 1);
 
     completeOp(op);
     RouterException routerException = (RouterException) op.getOperationException();
@@ -736,9 +732,8 @@ public class GetBlobInfoOperationTest {
             routerCallback, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     op.poll(requestRegistrationCallback);
-    Assert.assertEquals("Number of requests mismatch",
-        operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()) ? successTarget
-            : requestParallelism, correlationIdToGetOperation.size());
+    Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
+        correlationIdToGetOperation.size());
     completeOp(op);
     RouterException routerException = (RouterException) op.getOperationException();
     Assert.assertEquals(errorCode, routerException.getErrorCode());

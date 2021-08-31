@@ -844,6 +844,7 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.operation.tracker.metric.scope", trackerScope.toString());
     props.setProperty("router.operation.tracker.max.inflight.requests", Integer.toString(maxInflightNum));
     props.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
+    props.setProperty(RouterConfig.ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE, "true");
     if (customPercentiles != null) {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
     }

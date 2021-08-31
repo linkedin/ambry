@@ -117,7 +117,7 @@ public class OperationTrackerTest {
     OperationTracker ot = getOperationTracker(false, 2, 3, RouterOperation.GetBlobOperation, true);
     // 3-0-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, operationTrackerType.equals(SIMPLE_OP_TRACKER) ? 3 : 2, false);
+    sendRequests(ot, 3, false);
     // 0-3-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
     for (int i = 0; i < 2; i++) {
@@ -127,12 +127,10 @@ public class OperationTrackerTest {
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
 
-    if (operationTrackerType.equals(SIMPLE_OP_TRACKER)) {
-      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-      // 0-0-2-1; 9-0-0-0
-      assertTrue("Operation should have succeeded", ot.hasSucceeded());
-      assertTrue("Operation should be done", ot.isDone());
-    }
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    // 0-0-2-1; 9-0-0-0
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
   }
 
   /**
@@ -149,20 +147,18 @@ public class OperationTrackerTest {
     OperationTracker ot = getOperationTracker(false, 2, 3, RouterOperation.GetBlobOperation, true);
     // 3-0-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, operationTrackerType.equals(SIMPLE_OP_TRACKER) ? 3 : 2, false);
+    sendRequests(ot, 3, false);
     // 0-3-0-0; 9-0-0-0
     for (int i = 0; i < 2; i++) {
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
     }
     assertFalse("Operation should not have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
-    if (operationTrackerType.equals(SIMPLE_OP_TRACKER)) {
-      // 0-1-0-2; 9-0-0-0
-      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
-      // 0-0-1-2; 9-0-0-0
-      assertFalse("Operation should not have succeeded", ot.hasSucceeded());
-      assertTrue("Operation should be done", ot.isDone());
-    }
+    // 0-1-0-2; 9-0-0-0
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    // 0-0-1-2; 9-0-0-0
+    assertFalse("Operation should not have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
   }
 
   /**
@@ -544,7 +540,7 @@ public class OperationTrackerTest {
     initialize();
     OperationTracker ot = getOperationTracker(true, 1, 2, RouterOperation.GetBlobOperation, true);
     // 3-0-0-0; 9-0-0-0
-    sendRequests(ot, operationTrackerType.equals(SIMPLE_OP_TRACKER) ? 2 : 1, false);
+    sendRequests(ot, 2, false);
     // 1-2-0-0; 9-0-0-0
 
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
@@ -581,7 +577,7 @@ public class OperationTrackerTest {
     initialize();
     OperationTracker ot = getOperationTracker(true, 1, 2, RouterOperation.GetBlobOperation, true);
     // 3-0-0-0; 9-0-0-0
-    sendRequests(ot, operationTrackerType.equals(SIMPLE_OP_TRACKER) ? 2 : 1, false);
+    sendRequests(ot, 2, false);
     // 1-2-0-0; 9-0-0-0
     ReplicaId id = inflightReplicas.poll();
     assertEquals("First request should have been to local DC", localDcName, id.getDataNodeId().getDatacenterName());
@@ -593,25 +589,20 @@ public class OperationTrackerTest {
     id = inflightReplicas.poll();
     assertEquals("Second request should have been to local DC", localDcName, id.getDataNodeId().getDatacenterName());
     ot.onResponse(id, TrackedRequestFinalState.FAILURE);
-    if (!operationTrackerType.equals(SIMPLE_OP_TRACKER)) {
-      // For adaptive operation tracker, send request again.
-      sendRequests(ot, 1, false);
-    }
     id = inflightReplicas.poll();
     assertEquals("Third request should have been to local DC", localDcName, id.getDataNodeId().getDatacenterName());
     ot.onResponse(id, TrackedRequestFinalState.FAILURE);
     // 0-0-0-3; 9-0-0-0
     assertFalse("Operation should not be done", ot.isDone());
-    int numReqs = operationTrackerType.equals(SIMPLE_OP_TRACKER) ? 2 : 1;
-    sendRequests(ot, numReqs, false);
+    sendRequests(ot, 2, false);
     // 0-0-0-3; 7-2-0-0
     assertFalse("Operation should not be done", ot.isDone());
-    for (int i = 0; i < numReqs; i++) {
+    for (int i = 0; i < 2; i++) {
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
     }
     // 0-0-0-3; 7-0-0-2
     assertFalse("Operation should not be done", ot.isDone());
-    sendRequests(ot, numReqs, false);
+    sendRequests(ot, 2, false);
     // 0-0-0-3; 5-2-0-2
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
     assertFalse("Operation should not be done", ot.isDone());
@@ -673,11 +664,9 @@ public class OperationTrackerTest {
     localDcName = datanodes.get(0).getDatacenterName();
     mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
     OperationTracker ot = getOperationTracker(true, 1, 2, RouterOperation.GetBlobOperation, true);
-    int numReqs = operationTrackerType.equals(SIMPLE_OP_TRACKER) ? 2 : 1;
-    sendRequests(ot, numReqs, true);
-    for (int i = 0; i < numReqs; i++) {
-      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    }
+    sendRequests(ot, 2, true);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
     assertFalse("Operation should not be done", ot.isDone());
     sendRequests(ot, 1, true);
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
@@ -768,7 +757,7 @@ public class OperationTrackerTest {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
     OperationTracker ot = getOperationTracker(true, 3, 6, RouterOperation.GetBlobOperation, true);
-    sendRequests(ot, operationTrackerType.equals(SIMPLE_OP_TRACKER) ? 6 : 3, false);
+    sendRequests(ot, 6, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local
@@ -777,9 +766,6 @@ public class OperationTrackerTest {
     }
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());
 
-    if (!operationTrackerType.equals(SIMPLE_OP_TRACKER)) {
-      sendRequests(ot, 3, false);
-    }
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       ot.onResponse(replica, TrackedRequestFinalState.SUCCESS);
@@ -797,10 +783,10 @@ public class OperationTrackerTest {
   public void blobNotFoundInOriginDcAndCrossColoDisabledTest() {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
-    OperationTracker ot = getOperationTracker(false, 1, 1, RouterOperation.GetBlobOperation, true);
+    OperationTracker ot = getOperationTracker(false, 1, 3, RouterOperation.GetBlobOperation, true);
+    sendRequests(ot, 3, false);
+    assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
     for (int i = 0; i < 3; i++) {
-      sendRequests(ot, 1, false);
-      assertEquals("Should have 1 replica", 1, inflightReplicas.size());
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local replicas
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
@@ -818,10 +804,10 @@ public class OperationTrackerTest {
   public void originDcNotFoundUnknownOriginDcTest() {
     initialize();
     originatingDcName = null;
-    OperationTracker ot = getOperationTracker(true, 1, 1, RouterOperation.GetBlobOperation, true);
+    OperationTracker ot = getOperationTracker(true, 1, 12, RouterOperation.GetBlobOperation, true);
+    sendRequests(ot, 12, false);
+    assertEquals("Should have 12 replicas", 12, inflightReplicas.size());
     for (int i = 0; i < 12; i++) {
-      sendRequests(ot, 1, false);
-      assertEquals("Should have 1 replica", 1, inflightReplicas.size());
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local replicas
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
@@ -838,10 +824,10 @@ public class OperationTrackerTest {
   public void originDcNotFoundTriggeredTest() {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
-    OperationTracker ot = getOperationTracker(true, 1, 1, RouterOperation.GetBlobOperation, true);
+    OperationTracker ot = getOperationTracker(true, 2, 3, RouterOperation.GetBlobOperation, true);
+    sendRequests(ot, 3, false);
+    assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
     for (int i = 0; i < 3; i++) {
-      sendRequests(ot, 1, false);
-      assertEquals("Should have 1 replica", 1, inflightReplicas.size());
       ReplicaId replica = inflightReplicas.poll();
       // fail first 3 requests to local replicas
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
@@ -850,11 +836,12 @@ public class OperationTrackerTest {
     assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
     assertFalse("Operation should be done", ot.isDone());
 
+    sendRequests(ot, 3, false);
+    assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
     // Send three not found response from originating dc, it will terminate the operation.
     for (int i = 0; i < 3; i++) {
-      sendRequests(ot, 1, false);
-      assertEquals("Should have 1 replicas", 1, inflightReplicas.size());
       ReplicaId replica = inflightReplicas.poll();
+      // fail first 3 requests to local replicas
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
       assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
       if (i < 2) {
@@ -898,37 +885,35 @@ public class OperationTrackerTest {
   public void getOperationWithDiskDownAndNotFoundTest() {
     initialize();
     originatingDcName = localDcName;
-    OperationTracker ot = getOperationTracker(true, 1, 1, RouterOperation.GetBlobOperation, true);
+    OperationTracker ot = getOperationTracker(true, 1, 3, RouterOperation.GetBlobOperation, true);
+    sendRequests(ot, 3, false);
     // set up test case in originating dc where 1st and 2nd replica return Disk_Unavailable, 3rd returns Not_Found
     ReplicaId replica;
     for (int i = 0; i < 2; ++i) {
-      sendRequests(ot, 1, false);
       replica = inflightReplicas.poll();
       ot.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
       assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
-    sendRequests(ot, 1, false);
     replica = inflightReplicas.poll();
     ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
     assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
     assertFalse("Operation is not yet complete", ot.isDone());
     // make remaining replicas return either Disk_Unavailable or Not_Found
     for (int i = 0; i < 2; ++i) {
+      sendRequests(ot, 3, false);
       for (int j = 0; j < 3; ++j) {
-        sendRequests(ot, 1, false);
         replica = inflightReplicas.poll();
         ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
       }
     }
+    sendRequests(ot, 3, false);
     for (int i = 0; i < 2; ++i) {
-      sendRequests(ot, 1, false);
       replica = inflightReplicas.poll();
       ot.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
     }
     // although now we have diskDownCount + totalNotFoundCount = 11, GET operation should not fail at this point of time
     assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
     // after last replica return NotFound, the operation has indeed failed on NotFound
-    sendRequests(ot, 1, false);
     replica = inflightReplicas.poll();
     ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
     assertTrue("Operation should fail on NOT_FOUND", ot.hasFailedOnNotFound());
@@ -1018,7 +1003,6 @@ public class OperationTrackerTest {
    */
   @Test
   public void localDcCloudOriginatingDcDiskTest() {
-    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
     initializeWithCloudDcs(true);
     originatingDcName = getDatacenters(ReplicaType.DISK_BACKED, localDcName).iterator().next();
 
@@ -1057,7 +1041,6 @@ public class OperationTrackerTest {
    */
   @Test
   public void localDcCloudOriginatingDcCloudTest() {
-    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
     initializeWithCloudDcs(true);
     // test failure in cloud dc with fallback to cloud DC.
     originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED, localDcName).iterator().next();
@@ -1106,7 +1089,6 @@ public class OperationTrackerTest {
    */
   @Test
   public void localDcDiskOriginatingDcCloudTest() {
-    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
     initializeWithCloudDcs(false);
     // test failure in disk dc with fallback to cloud DC
     originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED, localDcName).iterator().next();
@@ -1135,7 +1117,6 @@ public class OperationTrackerTest {
    */
   @Test
   public void localDcDiskOriginatingDcDiskTest() {
-    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
     initializeWithCloudDcs(false);
     // test failure in disk dc with fallback to disk DC
     originatingDcName = getDatacenters(ReplicaType.DISK_BACKED, localDcName).iterator().next();
