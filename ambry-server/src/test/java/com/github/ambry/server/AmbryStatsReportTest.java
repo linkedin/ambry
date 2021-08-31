@@ -14,20 +14,10 @@
 
 package com.github.ambry.server;
 
-import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.clustermap.MockDataNodeId;
-import com.github.ambry.config.StatsManagerConfig;
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
-import com.github.ambry.utils.MockTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import org.junit.Test;
 
@@ -39,26 +29,18 @@ public class AmbryStatsReportTest {
 
   @Test
   public void testAmbryStatsReport() throws Exception {
-    StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(new Properties()));
-    StatsManager testStatsManager = new StatsManager(new MockStorageManager(Collections.emptyMap(),
-        new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
-            Collections.singletonList("/tmp"), "DC1")), Collections.emptyList(), new MetricRegistry(), config,
-        new MockTime(), null, null, new InMemAccountService(false, false));
     // test account stats report
-    AmbryStatsReport ambryStatsReport =
-        new AmbryStatsReport(testStatsManager, AGGREGATE_INTERVAL_MINS, StatsReportType.ACCOUNT_REPORT);
+    AmbryStatsReportImpl ambryStatsReport =
+        new AmbryStatsReportImpl(AGGREGATE_INTERVAL_MINS, StatsReportType.ACCOUNT_REPORT);
     assertEquals("Mismatch in aggregation time interval", AGGREGATE_INTERVAL_MINS,
         ambryStatsReport.getAggregateIntervalInMinutes());
     assertEquals("Mismatch in report name", "AccountReport", ambryStatsReport.getReportName());
-    assertEquals("Mismatch in stats field name", "AccountStats", ambryStatsReport.getStatsFieldName());
 
     // test partition class stats report
-    ambryStatsReport =
-        new AmbryStatsReport(testStatsManager, AGGREGATE_INTERVAL_MINS, StatsReportType.PARTITION_CLASS_REPORT);
+    ambryStatsReport = new AmbryStatsReportImpl(AGGREGATE_INTERVAL_MINS, StatsReportType.PARTITION_CLASS_REPORT);
     assertEquals("Mismatch in aggregation time interval", AGGREGATE_INTERVAL_MINS,
         ambryStatsReport.getAggregateIntervalInMinutes());
     assertEquals("Mismatch in report name", "PartitionClassReport", ambryStatsReport.getReportName());
-    assertEquals("Mismatch in stats field name", "PartitionClassStats", ambryStatsReport.getStatsFieldName());
   }
 
   @Test

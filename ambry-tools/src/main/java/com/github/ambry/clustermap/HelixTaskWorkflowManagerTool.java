@@ -18,7 +18,7 @@ import com.github.ambry.cloud.DeprecatedContainerCloudSyncTask;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AmbryStatsReport;
+import com.github.ambry.server.AmbryStatsReportImpl;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
@@ -226,7 +226,7 @@ public class HelixTaskWorkflowManagerTool {
     for (String report : config.statsReportsToAggregate) {
       StatsReportType statsType = StatsReportType.valueOf(report);
       String reportName =
-          AmbryStatsReport.convertStatsReportTypeToProperString(statsType) + AmbryStatsReport.REPORT_NAME_SUFFIX;
+          AmbryStatsReportImpl.convertStatsReportTypeToProperString(statsType) + AmbryStatsReportImpl.REPORT_NAME_SUFFIX;
       String jobId =
           statsType.toString().toLowerCase() + (isRecurrentWorkflow ? RECURRENT_JOB_SUFFIX : ONE_TIME_JOB_SUFFIX);
       String taskId = statsType.toString().toLowerCase() + AGGREGATE_TASK_SUFFIX;

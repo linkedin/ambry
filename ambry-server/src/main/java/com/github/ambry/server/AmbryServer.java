@@ -312,17 +312,16 @@ public class AmbryServer {
       }
 
       // Other code
-      List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
+      List<AmbryStatsReport> ambryStatsReports = new ArrayList<>();
       Set<String> validStatsTypes = new HashSet<>();
       for (StatsReportType type : StatsReportType.values()) {
         validStatsTypes.add(type.toString());
       }
-      if (serverConfig.serverStatsPublishHealthReportEnabled) {
+      if (serverConfig.serverStatsPublishReportEnabled) {
         serverConfig.serverStatsReportsToPublish.forEach(e -> {
           if (validStatsTypes.contains(e)) {
-            ambryHealthReports.add(
-                new AmbryStatsReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
-                    StatsReportType.valueOf(e)));
+            ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
+                StatsReportType.valueOf(e)));
           }
         });
       }
@@ -332,7 +331,7 @@ public class AmbryServer {
       }
       Callback<StatsSnapshot> accountServiceCallback = new AccountServiceCallback(accountService);
       for (ClusterParticipant clusterParticipant : clusterParticipants) {
-        clusterParticipant.participate(ambryHealthReports, accountStatsMySqlStore, accountServiceCallback);
+        clusterParticipant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
       }
 
       if (nettyInternalMetrics != null) {

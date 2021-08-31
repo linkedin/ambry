@@ -14,51 +14,25 @@
 
 package com.github.ambry.server;
 
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.helix.healthcheck.HealthReportProvider;
-
-
 /**
- * Customized Helix Health Report for collecting account usage stats per node (instance).
+ * Customized Helix Stats Report for collecting account usage stats per node (instance).
  */
-public class AmbryStatsReport extends HealthReportProvider implements AmbryHealthReport {
+public class AmbryStatsReportImpl implements AmbryStatsReport {
   public static final String REPORT_NAME_SUFFIX = "Report";
-  private static final String STATS_FIELD_SUFFIX = "Stats";
   private final String reportName;
-  private final String statsFieldName;
-  private final StatsManager statsManager;
   private final long aggregatePeriodInMinutes;
   private final StatsReportType statsReportType;
 
-  AmbryStatsReport(StatsManager statsManager, long aggregatePeriodInMinutes, StatsReportType type) {
-    this.statsManager = statsManager;
+  AmbryStatsReportImpl(long aggregatePeriodInMinutes, StatsReportType type) {
     this.aggregatePeriodInMinutes = aggregatePeriodInMinutes;
     String reportTypeStr = convertStatsReportTypeToProperString(type);
     reportName = reportTypeStr + REPORT_NAME_SUFFIX;
-    statsFieldName = reportTypeStr + STATS_FIELD_SUFFIX;
     statsReportType = type;
-  }
-
-  /**
-   * Get the node wide aggregated quota stats in this node
-   * @return a {@link Map} with the aggregated quota stats mapped with {@link AmbryStatsReport}'s static key
-   */
-  @Override
-  public Map<String, String> getRecentHealthReport() {
-    Map<String, String> report = new HashMap<>();
-    report.put(statsFieldName, statsManager.getNodeStatsInJSON(statsReportType));
-    return report;
   }
 
   @Override
   public String getReportName() {
     return reportName;
-  }
-
-  @Override
-  public String getStatsFieldName() {
-    return statsFieldName;
   }
 
   @Override
@@ -69,11 +43,6 @@ public class AmbryStatsReport extends HealthReportProvider implements AmbryHealt
   @Override
   public long getAggregateIntervalInMinutes() {
     return aggregatePeriodInMinutes;
-  }
-
-  @Override
-  public void resetStats() {
-    // no op
   }
 
   /**

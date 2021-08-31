@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.DataNodeId;
@@ -96,7 +97,8 @@ public class StatsManagerIntegrationTest {
     aggregatedPartitionClassStatsSnapshot.updateValue();
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     statsManager = new StatsManager(storageManager, replicas, new MetricRegistry(),
-        new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), null, null, null);
+        new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), null, null,
+        new InMemAccountService(false, false));
   }
 
   /**
