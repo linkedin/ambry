@@ -19,6 +19,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -27,7 +28,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -77,8 +77,10 @@ public class GetAccountsHandlerTest {
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       assertEquals("Content-length is not as expected", channel.getSize(),
           Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
-      assertEquals("Accounts do not match", new HashSet<>(expectedAccounts),
-          new HashSet<>(AccountCollectionSerde.accountsFromJson(RestTestUtils.getJsonizedResponseBody(channel))));
+      RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel((int) channel.getSize());
+      channel.readInto(asyncWritableChannel, null).get();
+      assertEquals("Accounts do not match", new HashSet<>(expectedAccounts), new HashSet<>(
+          AccountCollectionSerde.accountsFromInputStreamInJson(asyncWritableChannel.consumeContentAsInputStream())));
     };
     testAction.accept(createRestRequest(null, null, null, Operations.ACCOUNTS), accountService.getAllAccounts());
     testAction.accept(createRestRequest(account.getName(), null, null, Operations.ACCOUNTS),
@@ -153,8 +155,10 @@ public class GetAccountsHandlerTest {
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       assertEquals("Content-length is not as expected", channel.getSize(),
           Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+      RetainingAsyncWritableChannel asyncWritableChannel = new RetainingAsyncWritableChannel((int) channel.getSize());
+      channel.readInto(asyncWritableChannel, null).get();
       assertEquals("Container does not match", Collections.singletonList(expectedContainer),
-          AccountCollectionSerde.containersFromJson(RestTestUtils.getJsonizedResponseBody(channel),
+          AccountCollectionSerde.containersFromInputStreamInJson(asyncWritableChannel.consumeContentAsInputStream(),
               existingAccount.getId()));
     };
     testAction.accept(

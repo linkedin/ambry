@@ -20,6 +20,7 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
@@ -30,7 +31,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -77,7 +77,7 @@ public class PostAccountContainersHandlerTest {
     String accountName = theAccount.getName();
     short accountId = theAccount.getId();
     ThrowingConsumer<Collection<Container>> testAction = inputContainers -> {
-      String requestBody = AccountCollectionSerde.containersToJson(inputContainers).toString();
+      String requestBody = new String(AccountCollectionSerde.serializeContainersInJson(inputContainers));
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       RestRequest request = createRestRequest(requestBody, accountName, null);
       ReadableStreamChannel responseChannel = sendRequestGetResponse(request, restResponseChannel);
@@ -86,8 +86,12 @@ public class PostAccountContainersHandlerTest {
           Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
       assertEquals("Account id in response header is not as expected", accountId,
           Short.parseShort((String) restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_ID)));
+      RetainingAsyncWritableChannel asyncWritableChannel =
+          new RetainingAsyncWritableChannel((int) responseChannel.getSize());
+      responseChannel.readInto(asyncWritableChannel, null).get();
       Collection<Container> outputContainers =
-          AccountCollectionSerde.containersFromJson(RestTestUtils.getJsonizedResponseBody(responseChannel), accountId);
+          AccountCollectionSerde.containersFromInputStreamInJson(asyncWritableChannel.consumeContentAsInputStream(),
+              accountId);
       assertEquals("Unexpected count returned", inputContainers.size(), outputContainers.size());
       for (Container container : outputContainers) {
         assertEquals("Container in account service not as expected", container,
@@ -123,7 +127,7 @@ public class PostAccountContainersHandlerTest {
     };
     String accountName = theAccount.getName();
     // Empty container list should fail
-    String emptyContainers = AccountCollectionSerde.containersToJson(Collections.emptyList()).toString();
+    String emptyContainers = new String(AccountCollectionSerde.serializeContainersInJson(Collections.emptyList()));
     RestRequest request = createRestRequest(emptyContainers, accountName, null);
     testAction.accept(request, RestServiceErrorCode.BadRequest);
 
@@ -135,8 +139,8 @@ public class PostAccountContainersHandlerTest {
     request = createRestRequest(invalidJson, accountName, null);
     testAction.accept(request, RestServiceErrorCode.BadRequest);
     // No account specified
-    String oneContainer = AccountCollectionSerde.containersToJson(
-        Collections.singleton(accountService.getRandomContainer(theAccount.getId()))).toString();
+    String oneContainer = new String(AccountCollectionSerde.serializeContainersInJson(
+        Collections.singleton(accountService.getRandomContainer(theAccount.getId()))));
     request = createRestRequest(oneContainer, null, null);
     testAction.accept(request, RestServiceErrorCode.BadRequest);
     // AccountService update failure

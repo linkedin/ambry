@@ -13,10 +13,11 @@
  */
 package com.github.ambry.account;
 
-import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
-import com.github.ambry.quota.QuotaResourceType;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
@@ -835,6 +836,15 @@ public class AccountContainerTest {
     JSONObject jsonObject = new JSONObject(serialized);
     fromJson = Account.fromJson(jsonObject);
     assertTrue(deserialized.equals(fromJson));
+
+    @JsonIgnoreProperties({"containers"})
+    abstract class AccountMixIn {
+    }
+    ObjectMapper newObjectMapper = new ObjectMapper();
+    newObjectMapper.addMixIn(Account.class, AccountMixIn.class);
+
+    serialized = newObjectMapper.writeValueAsString(deserialized);
+    assertFalse(serialized.contains("containers"));
   }
 
   @Test

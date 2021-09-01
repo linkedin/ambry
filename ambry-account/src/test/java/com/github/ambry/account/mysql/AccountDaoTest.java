@@ -61,7 +61,7 @@ public class AccountDaoTest {
   private final PreparedStatement mockContainerQueryStatement;
   private final PreparedStatement mockContainerUpdateStatement;
 
-  public AccountDaoTest() throws SQLException {
+  public AccountDaoTest() throws Exception {
     metrics = new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry());
     testContainer =
         new ContainerBuilder((short) 1, "state-backup", Container.ContainerStatus.ACTIVE, "", accountId).build();
@@ -76,7 +76,7 @@ public class AccountDaoTest {
     accountDao = new AccountDao(dataAccessor);
 
     //Account mock statements
-    String accountJson = AccountCollectionSerde.accountToJsonNoContainers(testAccount).toString();
+    String accountJson = new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(testAccount));
     mockAccountInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into Accounts"))).thenReturn(mockAccountInsertStatement);
     when(mockAccountInsertStatement.executeBatch()).thenReturn(new int[]{1});

@@ -372,13 +372,19 @@ public class AccountDao {
    */
   private void bindAccount(PreparedStatement statement, Account account, StatementType statementType)
       throws SQLException {
+    String accountInJson;
+    try {
+      accountInJson = new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(account));
+    } catch (IOException e) {
+      throw new SQLException("Fail to serialize account: " + account.toString(), e);
+    }
     switch (statementType) {
       case Insert:
-        statement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
+        statement.setString(1, accountInJson);
         statement.setInt(2, account.getSnapshotVersion());
         break;
       case Update:
-        statement.setString(1, AccountCollectionSerde.accountToJsonNoContainers(account).toString());
+        statement.setString(1, accountInJson);
         statement.setInt(2, (account.getSnapshotVersion() + 1));
         statement.setInt(3, account.getId());
         break;
