@@ -312,8 +312,10 @@ class PersistentIndex {
    */
   private void removeIndexEntryNotBelongsToLastLogSegmentFromJournal() {
     LogSegmentName lastLogSegmentName = log.getLastSegment().getName();
-    while (journal.getFirstOffset() != null && !journal.getFirstOffset().getName().equals(lastLogSegmentName)) {
-      journal.removeSpecificValueInJournal(journal.getFirstOffset());
+    Offset journalFirstOffset = journal.getFirstOffset();
+    while (journalFirstOffset != null && !journalFirstOffset.getName().equals(lastLogSegmentName)) {
+      journal.removeSpecificValueInJournal(journalFirstOffset);
+      journalFirstOffset = journal.getFirstOffset();
     }
   }
 
@@ -1275,7 +1277,8 @@ class PersistentIndex {
         // recheck to make sure that offsetToStart hasn't slipped out of the journal. It is possible (but highly
         // improbable) that the offset has slipped out of the journal and has been compacted b/w the time of getting
         // entries from the journal to when another view of the index segments was obtained.
-        if (entries != null && offsetToStart.compareTo(journal.getFirstOffset()) >= 0) {
+        Offset journalFirstOffset = journal.getFirstOffset();
+        if (entries != null && journalFirstOffset != null && offsetToStart.compareTo(journalFirstOffset) >= 0) {
           startTimeInMs = time.milliseconds();
           logger.trace("Index : {} retrieving from journal from offset {} total entries {}", dataDir, offsetToStart,
               entries.size());

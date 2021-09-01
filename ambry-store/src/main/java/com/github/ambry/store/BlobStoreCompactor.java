@@ -401,8 +401,8 @@ class BlobStoreCompactor {
       }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
-      if (srcIndex.journal.getFirstOffset() != null
-          && segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
+      Offset journalFirstOffset = srcIndex.journal.getFirstOffset();
+      if (journalFirstOffset != null && segmentEndOffset.compareTo(journalFirstOffset) >= 0) {
         throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
       }
       prevSegmentName = segment.getName();
