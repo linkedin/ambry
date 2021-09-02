@@ -370,10 +370,9 @@ public class Account {
     if (account == null) {
       return false;
     }
-    // We don't compare snapshot version
+    // We don't compare snapshot version and lastModifiedTime
     return id == account.id && name.equals(account.name) && status == account.status
-        && lastModifiedTime == account.lastModifiedTime && aclInheritedByContainer == account.aclInheritedByContainer
-        && quotaResourceType == account.quotaResourceType;
+        && aclInheritedByContainer == account.aclInheritedByContainer && quotaResourceType == account.quotaResourceType;
   }
 
   @Override
