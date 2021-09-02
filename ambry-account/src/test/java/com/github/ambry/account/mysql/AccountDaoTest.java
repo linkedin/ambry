@@ -62,11 +62,13 @@ public class AccountDaoTest {
   private final PreparedStatement mockContainerUpdateStatement;
 
   public AccountDaoTest() throws Exception {
+    long lastModifiedTime = SystemTime.getInstance().milliseconds();
     metrics = new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry());
     testContainer =
         new ContainerBuilder((short) 1, "state-backup", Container.ContainerStatus.ACTIVE, "", accountId).build();
     testAccount =
         new AccountBuilder(accountId, "samza", Account.AccountStatus.ACTIVE).addOrUpdateContainer(testContainer)
+            .lastModifiedTime(lastModifiedTime)
             .build();
     testAccountInfo = new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
         new ArrayList<>());
@@ -89,7 +91,7 @@ public class AccountDaoTest {
     when(mockAccountResultSet.next()).thenReturn(true).thenReturn(false);
     when(mockAccountResultSet.getString(eq(AccountDao.ACCOUNT_INFO))).thenReturn(accountJson);
     when(mockAccountResultSet.getTimestamp(eq(AccountDao.LAST_MODIFIED_TIME))).thenReturn(
-        new Timestamp(SystemTime.getInstance().milliseconds()));
+        new Timestamp(lastModifiedTime));
     when(mockAccountQueryStatement.executeQuery()).thenReturn(mockAccountResultSet);
 
     // Container mock statements
