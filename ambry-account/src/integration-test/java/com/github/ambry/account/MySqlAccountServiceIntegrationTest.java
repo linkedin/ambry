@@ -146,7 +146,7 @@ public class MySqlAccountServiceIntegrationTest {
     // Test in-memory cache is updated with accounts from mysql store on start up.
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
     assertEquals("Mismatch in number of accounts", 1, accounts.size());
-    assertEquals("Mismatch in account information", testAccount, accounts.get(0));
+    assertAccountEqualWithoutLastModifiedTime(testAccount, accounts.get(0));
   }
 
   /**
@@ -258,8 +258,7 @@ public class MySqlAccountServiceIntegrationTest {
     // sleep for polling interval time
     Thread.sleep(Long.parseLong(mySqlConfigProps.getProperty(UPDATER_POLLING_INTERVAL_SECONDS)) * 1000 + 100);
     // Verify account is added to cache by background updater.
-    assertEquals("Mismatch in account retrieved by ID", testAccount,
-        mySqlAccountService.getAccountById(testAccount.getId()));
+    assertAccountEqualWithoutLastModifiedTime(testAccount, mySqlAccountService.getAccountById(testAccount.getId()));
 
     // verify that close() stops the background updater thread
     mySqlAccountService.close();
@@ -309,7 +308,7 @@ public class MySqlAccountServiceIntegrationTest {
     }));
     // Note: because consumer is notified of changes, its cache should already be in sync with DB
     long lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
-    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
+    assertAccountEqualWithoutLastModifiedTime(a1, consumerAccountService.getAccountByName(accountName));
 
     // Update account only
     String newAccountName = "a1-updated";
@@ -323,7 +322,7 @@ public class MySqlAccountServiceIntegrationTest {
     }));
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
-    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(newAccountName));
+    assertAccountEqualWithoutLastModifiedTime(a1, consumerAccountService.getAccountByName(newAccountName));
     assertNull("Expected no account with old name", consumerAccountService.getAccountByName(accountName));
     accountName = newAccountName;
 
@@ -341,7 +340,7 @@ public class MySqlAccountServiceIntegrationTest {
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
     assertEquals("Container mismatch", c1Mod, consumerAccountService.getContainerByName(accountName, "c1"));
-    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
+    assertAccountEqualWithoutLastModifiedTime(a1, consumerAccountService.getAccountByName(accountName));
     lmt = consumerAccountService.accountInfoMapRef.get().getLastModifiedTime();
 
     // Add container only
@@ -356,7 +355,7 @@ public class MySqlAccountServiceIntegrationTest {
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
     assertEquals("Container mismatch", cNew, consumerAccountService.getContainerByName(accountName, "c4"));
-    assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(accountName));
+    assertAccountEqualWithoutLastModifiedTime(a1, consumerAccountService.getAccountByName(accountName));
 
     // For this section, consumer must get out of date so need to unsubscribe its notifier
     mockNotifier.unsubscribeAll();
@@ -422,7 +421,7 @@ public class MySqlAccountServiceIntegrationTest {
 
     // Fetch and update cache in consumer account service
     consumerAccountService.fetchAndUpdateCache();
-    assertEquals("Account mismatch", account, consumerAccountService.getAccountByName(accountName));
+    assertAccountEqualWithoutLastModifiedTime(account, consumerAccountService.getAccountByName(accountName));
     assertEquals("Container mismatch", container, consumerAccountService.getContainerByName(accountName, "c1"));
     assertEquals("Container mismatch", container, consumerAccountService.getContainerById(accountId, (short) 1));
 
@@ -641,8 +640,8 @@ public class MySqlAccountServiceIntegrationTest {
 
     // Verify all accounts and containers are added.
     assertEquals("Mismatch in number of accounts", 2, mySqlAccountService.getAllAccounts().size());
-    assertEquals("Mismatch in account information of a1", a1, mySqlAccountService.getAccountById(a1.getId()));
-    assertEquals("Mismatch in account information of a2", a2, mySqlAccountService.getAccountById(a2.getId()));
+    assertAccountEqualWithoutLastModifiedTime(a1, mySqlAccountService.getAccountById(a1.getId()));
+    assertAccountEqualWithoutLastModifiedTime(a2, mySqlAccountService.getAccountById(a2.getId()));
   }
 
   /**
@@ -702,13 +701,13 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountService.updateAccounts(Collections.singletonList(a1));
 
     //2. query db - should be successful
-    assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
+    assertAccountEqualWithoutLastModifiedTime(a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
 
     //3. close db connection manually
     mySqlAccountStore.getMySqlDataAccessor().getDatabaseConnection(true).close();
 
     //4. query db - should establish new connection and get results.
-    assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
+    assertAccountEqualWithoutLastModifiedTime(a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
   }
 
   private Account makeTestAccountWithContainer() {
@@ -740,5 +739,14 @@ public class MySqlAccountServiceIntegrationTest {
     Statement statement = dbConnection.createStatement();
     statement.executeUpdate("DELETE FROM " + AccountDao.ACCOUNT_TABLE);
     statement.executeUpdate("DELETE FROM " + AccountDao.CONTAINER_TABLE);
+  }
+
+  /**
+   * Assert two accounts are equals without comparing the lastModifiedTime.
+   * @param a1 The first account.
+   * @param a2 The second account.
+   */
+  private void assertAccountEqualWithoutLastModifiedTime(Account a1, Account a2) {
+    assertEquals("Account Mismatch", new AccountBuilder(a1).lastModifiedTime(a2.getLastModifiedTime()).build(), a2);
   }
 }
