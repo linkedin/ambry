@@ -68,6 +68,25 @@ jobs:
   int-test:
 
     runs-on: ubuntu-latest
+    services:
+      cosmos-db:
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator
+        ports:
+          - 8081:8081
+          - 10251:10251
+          - 10252:10252
+          - 10253:10253
+          - 10254:10254
+          - 10255:10255
+        options: '-m 3g --cpus=2.0'
+        env:
+          AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 5
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite
+        ports:
+          - 10000:10000
+          - 10001:10001
+          - 10002:10002
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
