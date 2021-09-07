@@ -570,6 +570,37 @@ public class TestUtils {
   }
 
   /**
+   * Generating a partition class snapshot from the given container storage map.
+   * @param containerStorageMap The container storage map.
+   * @return A partition class {@link StatsSnapshot}.
+   */
+  public static StatsSnapshot makePartitionClassSnasphotFromContainerStorageMap(
+      Map<String, Map<String, Map<String, Long>>> containerStorageMap) {
+    Map<String, StatsSnapshot> partitionClassSnapshots = new HashMap<>();
+    long sumOfPartitionClassUsage = 0;
+    for (Map.Entry<String, Map<String, Map<String, Long>>> partitionClassUsageEntry : containerStorageMap.entrySet()) {
+      String partitionClassName = partitionClassUsageEntry.getKey();
+      Map<String, StatsSnapshot> accountContainerSnapshots = new HashMap<>();
+      long sumOfAccountContainerUsage = 0;
+      Map<String, Map<String, Long>> accountContainerStorageUsage = partitionClassUsageEntry.getValue();
+      for (Map.Entry<String, Map<String, Long>> accountContainerEntry : accountContainerStorageUsage.entrySet()) {
+        String accountId = accountContainerEntry.getKey();
+        for (Map.Entry<String, Long> containerEntry : accountContainerEntry.getValue().entrySet()) {
+          String containerId = containerEntry.getKey();
+          accountContainerSnapshots.put(
+              Utils.partitionClassStatsAccountContainerKey(Short.valueOf(accountId), Short.valueOf(containerId)),
+              new StatsSnapshot(containerEntry.getValue(), null));
+          sumOfAccountContainerUsage += containerEntry.getValue();
+        }
+      }
+      partitionClassSnapshots.put(partitionClassName,
+          new StatsSnapshot(sumOfAccountContainerUsage, accountContainerSnapshots));
+      sumOfPartitionClassUsage += sumOfAccountContainerUsage;
+    }
+    return new StatsSnapshot(sumOfPartitionClassUsage, partitionClassSnapshots);
+  }
+
+  /**
    * Generating an aggregated partition class stats. {@code partitionClassNames} provides a list of partition class names
    * and for each partition class name, {@code numAccount} * {@code numContainer} container will be created.
    * @param partitionClassNames The list of partition class names.

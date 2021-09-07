@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.TestUtils;
 import java.util.HashMap;
@@ -35,7 +36,7 @@ public class StorageStatsUtilTest {
   @Test
   public void testAggregatedAccountStorageStatsConverter() {
     Map<Short, Map<Short, ContainerStorageStats>> storageStats =
-        generateRandomAggregatedAccountStorageStats(10, 10, 10000L, 2, 10);
+        generateRandomAggregatedAccountStorageStats((short) 1000, 10, 10, 10000L, 2, 10);
     AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(storageStats);
 
     StatsSnapshot expected = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(
@@ -52,7 +53,37 @@ public class StorageStatsUtilTest {
   }
 
   /**
+   * Test case for {@link StorageStatsUtil#convertAggregatedPartitionClassStorageStatsToStatsSnapshot}.
+   */
+  @Test
+  public void testAggregatedPartitionClassStorageStatsConverter() {
+    String[] partitionClassNames = {"default", "newClass"};
+    Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = new HashMap<>();
+    short accountIdStart = (short) 1000;
+    for (String partitionClassName : partitionClassNames) {
+      storageStats.put(partitionClassName,
+          generateRandomAggregatedAccountStorageStats(accountIdStart, 10, 10, 10000L, 2, 10));
+      accountIdStart += 10;
+    }
+    AggregatedPartitionClassStorageStats aggregatedPartitionClassStorageStats =
+        new AggregatedPartitionClassStorageStats(storageStats);
+
+    StatsSnapshot expected = TestUtils.makePartitionClassSnasphotFromContainerStorageMap(
+        convertAggregatedPartitionClassStorageStatsMapToContainerStorageMap(storageStats, false));
+    StatsSnapshot snapshot = StorageStatsUtil.convertAggregatedPartitionClassStorageStatsToStatsSnapshot(
+        aggregatedPartitionClassStorageStats, false);
+    Assert.assertEquals(expected, snapshot);
+
+    expected = TestUtils.makePartitionClassSnasphotFromContainerStorageMap(
+        convertAggregatedPartitionClassStorageStatsMapToContainerStorageMap(storageStats, true));
+    snapshot = StorageStatsUtil.convertAggregatedPartitionClassStorageStatsToStatsSnapshot(
+        aggregatedPartitionClassStorageStats, true);
+    Assert.assertEquals(expected, snapshot);
+  }
+
+  /**
    * Generate account storage stats in a map with random values.
+   * @param accountIdStart The start value of account id
    * @param numberOfAccounts The number of accounts
    * @param numberOfContainersPerAccount The number of containers per account
    * @param maxLogicalStorageUsage the maximum value for logical storage usage
@@ -60,9 +91,10 @@ public class StorageStatsUtilTest {
    * @param maxNumberOfBlobs The maximum value for number of blobs.
    * @return
    */
-  static Map<Short, Map<Short, ContainerStorageStats>> generateRandomAggregatedAccountStorageStats(int numberOfAccounts,
-      int numberOfContainersPerAccount, long maxLogicalStorageUsage, int physicalFactor, int maxNumberOfBlobs) {
-    short accountId = 1000;
+  static Map<Short, Map<Short, ContainerStorageStats>> generateRandomAggregatedAccountStorageStats(short accountIdStart,
+      int numberOfAccounts, int numberOfContainersPerAccount, long maxLogicalStorageUsage, int physicalFactor,
+      int maxNumberOfBlobs) {
+    short accountId = accountIdStart;
     short containerId = 1;
     Map<Short, Map<Short, ContainerStorageStats>> result = new HashMap<>();
     for (int i = 0; i < numberOfAccounts; i++) {
@@ -105,6 +137,16 @@ public class StorageStatsUtilTest {
             .put(String.valueOf(containerId),
                 usePhysicalStorageUsage ? stats.getPhysicalStorageUsage() : stats.getLogicalStorageUsage());
       }
+    }
+    return result;
+  }
+
+  static Map<String, Map<String, Map<String, Long>>> convertAggregatedPartitionClassStorageStatsMapToContainerStorageMap(
+      Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats, boolean usePhysicalStorageUsage) {
+    Map<String, Map<String, Map<String, Long>>> result = new HashMap<>();
+    for (String key : storageStats.keySet()) {
+      result.put(key,
+          convertAggregatedAccountStorageStatsMapToContainerStorageMap(storageStats.get(key), usePhysicalStorageUsage));
     }
     return result;
   }
