@@ -312,8 +312,8 @@ public class PartitionClassReportsDao {
             int accountId = rs.getInt(ACCOUNT_ID_COLUMN);
             int containerId = rs.getInt(CONTAINER_ID_COLUMN);
             long usage = rs.getLong(STORAGE_USAGE_COLUMN);
-            long physicalStorageUsage = rs.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
-            long numberOfBlobs = rs.getLong(NUMBER_OF_BLOBS_COLUMN);
+            final long physicalStorageUsage = rs.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
+            final long numberOfBlobs = rs.getLong(NUMBER_OF_BLOBS_COLUMN);
             long updatedAt = rs.getTimestamp(UPDATED_AT_COLUMN).getTime();
             func.apply(partitionClassName, (short) accountId,
                 new ContainerStorageStats((short) containerId, usage, physicalStorageUsage, numberOfBlobs), updatedAt);
@@ -385,8 +385,8 @@ public class PartitionClassReportsDao {
     public void addUpdateToBatch(String clusterName, String partitionClassName, short accountId, short containerId,
         long usage) throws SQLException {
       // TODO: adding real physical storage usage and number of blobs here
-      long physicalStorageUsage = usage;
-      long numberOfBlobs = 1;
+      final long physicalStorageUsage = usage;
+      final long numberOfBlobs = 1;
       addUpdateToBatch(statement -> {
         statement.setInt(1, accountId);
         statement.setInt(2, containerId);

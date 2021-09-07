@@ -86,8 +86,8 @@ public class AccountReportsDao {
   void updateStorageUsage(String clusterName, String hostname, int partitionId, short accountId, short containerId,
       long storageUsage) throws SQLException {
     // TODO: adding real physical storage usage and number of blobs here
-    long physicalStorageUsage = storageUsage;
-    long numberOfBlobs = 1L;
+    final long physicalStorageUsage = storageUsage;
+    final long numberOfBlobs = 1L;
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
         long startTimeMs = System.currentTimeMillis();
@@ -137,8 +137,8 @@ public class AccountReportsDao {
             int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
             int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
             long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-            long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
-            long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
+            final long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
+            final long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
             long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
             func.apply(partitionId, (short) accountId,
                 new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs),
@@ -270,8 +270,8 @@ public class AccountReportsDao {
     public void addUpdateToBatch(String clusterName, String hostname, int partitionId, short accountId,
         short containerId, long storageUsage) throws SQLException {
       // TODO: adding real physical storage usage and number of blobs here
-      long physicalStorageUsage = storageUsage;
-      long numberOfBlobs = 1L;
+      final long physicalStorageUsage = storageUsage;
+      final long numberOfBlobs = 1L;
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setString(2, hostname);
