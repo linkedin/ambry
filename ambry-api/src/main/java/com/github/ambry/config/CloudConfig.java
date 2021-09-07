@@ -365,11 +365,11 @@ public class CloudConfig {
   public final String vcrHelixStateModelFactoryClass;
 
   /**
-   * The vcr node responsible for partition 1 is the vcr helix updater.
+   * The vcr node responsible for partition 1 is the vcr helix updater. Use empty string to disable vcr helix auto update.
    */
   @Config(VCR_HELIX_UPDATER_PARTITION_ID)
-  @Default("-1")
-  public final String vcrHelixUpdaterParitionId;
+  @Default("")
+  public final String vcrHelixUpdaterPartitionId;
 
   /**
    * The config string used when update VCR helix.
@@ -450,7 +450,7 @@ public class CloudConfig {
         Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
     vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
         DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
-    vcrHelixUpdaterParitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "-1");
+    vcrHelixUpdaterPartitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "");
     vcrHelixUpdateConfig =
         verifiableProperties.getString(VCR_HELIX_UPDATE_CONFIG, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
     vcrHelixUpdateDelayTimeInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 60);

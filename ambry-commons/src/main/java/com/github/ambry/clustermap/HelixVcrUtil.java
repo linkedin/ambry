@@ -92,8 +92,9 @@ public class HelixVcrUtil {
     clusterConfig.setNumOfflineInstancesForAutoExit(clusterConfigFields.getNumOfflineInstancesForAutoExit());
     if (dryRun) {
       logger.info("Will update cluster config to: {}", clusterConfig.toString());
+    } else {
+      configAccessor.setClusterConfig(destClusterName, clusterConfig);
     }
-    configAccessor.setClusterConfig(destClusterName, clusterConfig);
   }
 
   /**

@@ -50,7 +50,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 
@@ -112,14 +111,13 @@ public class VcrReplicationManager extends ReplicationEngine {
     vcrClusterParticipant.addListener(new VcrClusterParticipantListener() {
       @Override
       public void onPartitionAdded(PartitionId partitionId) {
-        if (partitionId.isEqual(cloudConfig.vcrHelixUpdaterParitionId)) {
+        if (partitionId.isEqual(cloudConfig.vcrHelixUpdaterPartitionId)) {
           vcrHelixUpdateLock.lock();
           try {
             if (!isAmbryListenerToUpdateVcrHelixRegistered) {
               // Only register the listener once. Unfortunately, we can't unregister a listener, so we use
               // isAmbryListenerToUpdateVcrHelixRegistered as the flag.
-              clusterMap.registerClusterMapListener(
-                  new com.github.ambry.cloud.VcrReplicationManager.AmbryListenerToUpdateVcrHelix());
+              clusterMap.registerClusterMapListener(new AmbryListenerToUpdateVcrHelix());
               isAmbryListenerToUpdateVcrHelixRegistered = true;
               logger.info("VCR updater registered.");
             }
@@ -151,7 +149,7 @@ public class VcrReplicationManager extends ReplicationEngine {
 
       @Override
       public void onPartitionRemoved(PartitionId partitionId) {
-        if (partitionId.isEqual(cloudConfig.vcrHelixUpdaterParitionId)) {
+        if (partitionId.isEqual(cloudConfig.vcrHelixUpdaterPartitionId)) {
           vcrHelixUpdateLock.lock();
           try {
             isVcrHelixUpdater = false;
@@ -368,8 +366,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   /**
    * The actual performer to update VCR Helix:
    */
-  synchronized
-  private void updateVcrHelix() {
+  synchronized private void updateVcrHelix() {
     logger.info("Going to update VCR Helix Cluster. Dryrun: {}", cloudConfig.vcrHelixUpdateDryRun);
     logger.info("Current partitions in clustermap data structure: {}",
         clusterMap.getAllPartitionIds(null).stream().map(Object::toString).collect(Collectors.joining(",")));
@@ -380,6 +377,7 @@ public class VcrReplicationManager extends ReplicationEngine {
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName, vcrHelixConfig,
           cloudConfig.vcrHelixUpdateDryRun);
     } catch (Exception e) {
+      // TODO: metric, alert
       logger.warn("VCR Helix cluster update failed: ", e);
     } finally {
       isVcrHelixUpdateInProgress = false;

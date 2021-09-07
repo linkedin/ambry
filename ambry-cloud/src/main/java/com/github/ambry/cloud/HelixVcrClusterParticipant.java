@@ -118,8 +118,8 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     retryExecutor.runWithRetries(retryPolicy, callback -> doAddPartition(partitionIdStr, callback), e -> true,
         (result, exception) -> {
           if (exception != null) {
-            logger.warn("AddPartition for {} failed after retry: ", partitionIdStr,
-                exception);
+            // TODO: add partition fail metric
+            logger.warn("AddPartition for {} failed after retry: ", partitionIdStr, exception);
           } else {
             logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
                 vcrInstanceName, assignedPartitionIds.size());
@@ -129,7 +129,11 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
 
   private void doAddPartition(String partitionIdStr, Callback<Object> callback) {
     PartitionId partitionId = clusterMap.getPartitionIdByName(partitionIdStr);
-    if (partitionId != null) {
+    if (partitionId == null) {
+      metrics.partitionIdNotInClusterMapOnAdd.inc();
+      callback.onCompletion(null,
+          new IllegalStateException("Partition not in clusterMap on add: Partition Id: " + partitionIdStr));
+    } else {
       if (partitionIdMap.putIfAbsent(partitionIdStr, partitionId) == null) {
         // TODO: get rid of assignedPartitionIds
         assignedPartitionIds.add(partitionId);
@@ -141,10 +145,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
         logger.info("Partition {} exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
       callback.onCompletion(null, null);
-    } else {
-      metrics.partitionIdNotInClusterMapOnAdd.inc();
-      callback.onCompletion(null,
-          new IllegalStateException("Partition not in clusterMap on add: Partition Id: " + partitionIdStr));
     }
   }
 
@@ -156,7 +156,9 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
    */
   public void removePartition(String partitionIdStr) {
     PartitionId partitionId = partitionIdMap.remove(partitionIdStr);
-    if (partitionId != null) {
+    if (partitionId == null) {
+      logger.warn("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
+    } else {
       for (VcrClusterParticipantListener listener : listeners) {
         listener.onPartitionRemoved(partitionId);
       }
@@ -164,8 +166,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
       logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
           vcrInstanceName, assignedPartitionIds.size());
       logger.debug("Current assigned partitions: {}", partitionIdMap.keySet());
-    } else {
-      logger.warn("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
     }
   }
 

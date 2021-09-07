@@ -377,13 +377,7 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public PartitionId getPartitionIdByName(String partitionIdStr) {
-    byte[] partitionBytes =
-        ClusterMapUtils.serializeShortAndLong(AmbryPartition.CURRENT_VERSION, Long.parseLong(partitionIdStr));
-    try {
-      return getPartitionIdFromStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionBytes)));
-    } catch (IOException e) {
-      return null;
-    }
+    return partitionNameToAmbryPartition.get(partitionIdStr);
   }
 
   @Override

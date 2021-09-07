@@ -42,7 +42,7 @@ public class AmbryPartition implements PartitionId {
   private long lastUpdatedSealedStateChangeCounter = 0;
 
   private static final short VERSION_FIELD_SIZE_IN_BYTES = 2;
-  public static final short CURRENT_VERSION = 1;
+  static final short CURRENT_VERSION = 1;
   private static final int PARTITION_SIZE_IN_BYTES = VERSION_FIELD_SIZE_IN_BYTES + 8;
 
   /**
