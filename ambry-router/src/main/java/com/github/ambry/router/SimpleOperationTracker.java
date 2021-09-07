@@ -574,6 +574,10 @@ class SimpleOperationTracker implements OperationTracker {
     return failedCount;
   }
 
+  int getSuccessCount() {
+    return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaSuccessCount : diskReplicaSuccessCount;
+  }
+
   /**
    * Helper function to catch a potential race condition in
    * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean, NonBlockingRouterMetrics)}.

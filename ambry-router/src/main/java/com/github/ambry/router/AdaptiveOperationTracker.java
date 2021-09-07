@@ -173,6 +173,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       case GetBlobOperation:
         trackerToReturn = isLocal ? routerMetrics.getBlobLocalDcLatencyMs : routerMetrics.getBlobCrossDcLatencyMs;
         break;
+      case PutOperation:
+        trackerToReturn = routerMetrics.putBlobLatencyMs;
+        break;
       default:
         throw new IllegalArgumentException("Unsupported router operation when getting whole DC latency tracker.");
     }
@@ -192,6 +195,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         break;
       case GetBlobOperation:
         pastDueCounter = routerMetrics.getBlobPastDueCount;
+        break;
+      case PutOperation:
+        pastDueCounter = routerMetrics.putBlobPastDueCount;
         break;
       default:
         throw new IllegalArgumentException("Unsupported router operation when getting whole DC past due counter.");
@@ -216,6 +222,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         resourceToHistogramMap =
             isLocal ? routerMetrics.getBlobLocalDcResourceToLatency : routerMetrics.getBlobCrossDcResourceToLatency;
         break;
+      case PutOperation:
+        resourceToHistogramMap = routerMetrics.putBlobResourceToLatency;
+        break;
       default:
         throw new IllegalArgumentException("Unsupported router operation when getting resource-to-latency map");
     }
@@ -228,10 +237,30 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    */
   private class OpTrackerIterator implements Iterator<ReplicaId> {
 
+    /**
+     * For Adaptive Operation Tracker, we want to achieve this result when the {@link RouterConfig#routerAdaptiveOperationTrackerWaitingForResponse} is true.
+     * 1. we don't want to send more than #parallelism requests when all requests get responses in time
+     * 2. we don't want to send more than #successTarget requests if we don't know the response.
+     * 2. we only send additional request when one of the existing request's latency exceeds 95% or there is a failure response.
+     *
+     * For example, if we have 6 replicas and the parallelism is 3, success target is 2, calling hasNext(), next() and remove()
+     * would result in:
+     * replica 1: inflight(0) < parallelism(3) && inflight(0) + successCount(0) < successTarget(2), return true
+     * replica 2: inflight(1) < parallelism(3) && inflight(1) + successCount(0) < successTarget(2), return true
+     * replica 3: inflight(2) < parallelism(3) && inflight(2) + successCount(0) < successTarget(2), return false, since inflight + successCount < successTarget is false.
+     * Replica 1 receives SUCCESS response
+     * replica 3: inflight(1) < parallelism(3) && inflight(1) + successCount(1) < successTarget(2), return false, since inflight + successCount < successTarget is false.
+     * Replica 2 receives FAILURE response
+     * replica 3: inflight(0) < parallelism(3) && inflight(0) + successCount(1) < successTarget(2), return true
+     * replica 4: inflight(1) < parallelism(3) && inflight(1) + successCount(1) < successTarget(2), return false, since inflight + successCount < successTarget is false.
+     * replica 3 exceeds 95% latency
+     * replica 4: return true
+     * @return
+     */
     @Override
     public boolean hasNext() {
       if (replicaIterator.hasNext()) {
-        if (inflightCount < getCurrentParallelism()) {
+        if (shouldSendRequestWithoutConsideringMetrics()) {
           return true;
         }
         if (inflightCount < routerConfig.routerOperationTrackerMaxInflightRequests && isOldestRequestPastDue()) {
@@ -244,12 +273,14 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     @Override
     public void remove() {
       replicaIterator.remove();
-      if (inflightCount >= getCurrentParallelism() && unexpiredRequestSendTimes.size() > 0) {
+      if (!shouldSendRequestWithoutConsideringMetrics() && unexpiredRequestSendTimes.size() > 0) {
         // we are here because oldest request is past due
         Map.Entry<ReplicaId, Pair<Boolean, Long>> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
-        expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue().getSecond());
-        unexpiredRequestSendTimes.remove(oldestEntry.getKey());
-        pastDueCounter.inc();
+        if (oldestEntry.getValue().getFirst()) {
+          expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue().getSecond());
+          unexpiredRequestSendTimes.remove(oldestEntry.getKey());
+          pastDueCounter.inc();
+        }
       }
       unexpiredRequestSendTimes.put(lastReturnedByIterator, new Pair<>(false, time.milliseconds()));
       inFlightReplicaType = lastReturnedByIterator.getReplicaType();
@@ -263,6 +294,20 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       }
       lastReturnedByIterator = replicaIterator.next();
       return lastReturnedByIterator;
+    }
+
+    /**
+     * @return True when request should be sent even without considering metrics.
+     */
+    private boolean shouldSendRequestWithoutConsideringMetrics() {
+      if (routerConfig.routerAdaptiveOperationTrackerWaitingForResponse) {
+        int parallelism = getCurrentParallelism();
+        int successCount = getSuccessCount();
+        int successTarget = getSuccessTarget(inFlightReplicaType);
+        return inflightCount < parallelism && successCount + inflightCount < successTarget;
+      } else {
+        return inflightCount < getCurrentParallelism();
+      }
     }
 
     /**

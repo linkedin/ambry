@@ -61,6 +61,7 @@ public class RouterConfig {
   public static final String ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS =
       "router.operation.tracker.include.down.replicas";
   public static final String ROUTER_GET_OPERATION_TRACKER_TYPE = "router.get.operation.tracker.type";
+  public static final String ROUTER_PUT_OPERATION_TRACKER_TYPE = "router.put.operation.tracker.type";
   public static final String ROUTER_LATENCY_TOLERANCE_QUANTILE = "router.latency.tolerance.quantile";
   public static final String ROUTER_BLOBID_CURRENT_VERSION = "router.blobid.current.version";
   public static final String ROUTER_METADATA_CONTENT_VERSION = "router.metadata.content.version";
@@ -84,6 +85,8 @@ public class RouterConfig {
       "router.operation.tracker.terminate.on.not.found.enabled";
   public static final String ROUTER_OPERATION_TRACKER_MAX_INFLIGHT_REQUESTS =
       "router.operation.tracker.max.inflight.requests";
+  public static final String ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE =
+      "router.adaptive.operation.tracker.waiting.for.response";
   public static final String ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED =
       "router.operation.tracker.exclude.timeout.enabled";
   public static final String ROUTER_OPERATION_TRACKER_HISTOGRAM_DUMP_ENABLED =
@@ -265,6 +268,13 @@ public class RouterConfig {
   public final String routerGetOperationTrackerType;
 
   /**
+   * The OperationTracker to use for PUT operations.
+   */
+  @Config(ROUTER_PUT_OPERATION_TRACKER_TYPE)
+  @Default("SimpleOperationTracker")
+  public final String routerPutOperationTrackerType;
+
+  /**
    * If an adaptive operation tracker is being used, a request is discounted from the parallelism count if it has been
    * outstanding for more than the quantile defined here (compared to latencies of other requests of the same class).
    */
@@ -402,6 +412,14 @@ public class RouterConfig {
   @Config(ROUTER_OPERATION_TRACKER_MAX_INFLIGHT_REQUESTS)
   @Default("2")
   public final int routerOperationTrackerMaxInflightRequests;
+
+  /**
+   * True when the adaptive operation tracker would wait for all the responses coming back before sending out new requests
+   * when there is no request exceeding the given percentile.
+   */
+  @Config(ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE)
+  @Default("false")
+  public final boolean routerAdaptiveOperationTrackerWaitingForResponse;
 
   /**
    * Indicates whether to enable excluding timed out requests in Histogram reservoir.
@@ -549,6 +567,8 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS, true);
     routerGetOperationTrackerType =
         verifiableProperties.getString(ROUTER_GET_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
+    routerPutOperationTrackerType =
+        verifiableProperties.getString(ROUTER_PUT_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
         verifiableProperties.getDoubleInRange(ROUTER_LATENCY_TOLERANCE_QUANTILE, DEFAULT_LATENCY_TOLERANCE_QUANTILE,
             0.0, 1.0);
@@ -585,6 +605,8 @@ public class RouterConfig {
         verifiableProperties.getLong(ROUTER_OPERATION_TRACKER_MIN_DATA_POINTS_REQUIRED, 1000L);
     routerOperationTrackerMaxInflightRequests =
         verifiableProperties.getIntInRange(ROUTER_OPERATION_TRACKER_MAX_INFLIGHT_REQUESTS, 2, 1, Integer.MAX_VALUE);
+    routerAdaptiveOperationTrackerWaitingForResponse =
+        verifiableProperties.getBoolean(ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE, false);
     routerOperationTrackerExcludeTimeoutEnabled =
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED, false);
     routerOperationTrackerHistogramDumpEnabled =
