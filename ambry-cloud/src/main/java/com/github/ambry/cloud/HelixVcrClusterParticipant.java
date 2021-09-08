@@ -113,10 +113,11 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void addPartition(String partitionIdStr) {
-    // Add partition with retry logic in case Ambry clustermap is not update to date.
-    retryExecutor.runWithRetries(retryPolicy, callback -> doAddPartition(partitionIdStr, callback), e -> true,
-        (result, exception) -> {
+    // Add partition with retry logic in case Ambry clustermap is not update to date(IllegalStateException).
+    retryExecutor.runWithRetries(retryPolicy, callback -> doAddPartition(partitionIdStr, callback),
+        e -> e instanceof IllegalStateException, (result, exception) -> {
           if (exception != null) {
+            // use this condition to capture all potential exceptions.
             logger.warn("AddPartition for {} failed after retry: ", partitionIdStr, exception);
           } else {
             logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,

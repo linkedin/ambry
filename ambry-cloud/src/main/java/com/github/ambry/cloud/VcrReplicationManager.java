@@ -356,6 +356,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (vcrHelixUpdateFuture != null && vcrHelixUpdateFuture.cancel(false)) {
       // If a vcrHelixUpdate task is scheduled, try to cancel it first.
       logger.info("There was a scheduled vcrHelixUpdate task. Canceled.");
+      vcrHelixUpdateFuture = null;
     }
     // either success cancel or not, we should schedule a new job to updateVcrHelix
     vcrHelixUpdateFuture =
