@@ -14,7 +14,6 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.account.AccountService;
-import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
@@ -118,7 +117,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     retryExecutor.runWithRetries(retryPolicy, callback -> doAddPartition(partitionIdStr, callback), e -> true,
         (result, exception) -> {
           if (exception != null) {
-            // TODO: add partition fail metric
             logger.warn("AddPartition for {} failed after retry: ", partitionIdStr, exception);
           } else {
             logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
@@ -157,6 +155,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   public void removePartition(String partitionIdStr) {
     PartitionId partitionId = partitionIdMap.remove(partitionIdStr);
     if (partitionId == null) {
+      metrics.partitionIdNotInClusterMapOnRemove.inc();
       logger.warn("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
     } else {
       for (VcrClusterParticipantListener listener : listeners) {

@@ -122,12 +122,12 @@ public class VcrReplicationManager extends ReplicationEngine {
               logger.info("VCR updater registered.");
             }
             // It's possible isVcrHelixUpdater to be true on two nodes.
-            // For example, lets say at time "t" node A is the owner of partition 1. Due to some partition reassignment
+            // For example, at time "t" node A is the owner of partition 1. Due to some partition reassignment
             // (lets say new node addition), partition 1 get assigned to node B at time "t+1". In this case it's possible
             // for Node B to get notification of addPartition of partition 1 at "t+2" before Node A gets removePartition
             // notification (at t+4). If a main cluster update happens between "t+2" and "t+4", then two nodes might try
             // to update vcr cluster at the same time.
-            // TODO: find a solution for this race condition.
+            // TODO: use helix distributed lock to avoid race condition.
             isVcrHelixUpdater = true;
             scheduleVcrHelix();
           } finally {
@@ -377,7 +377,8 @@ public class VcrReplicationManager extends ReplicationEngine {
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName, vcrHelixConfig,
           cloudConfig.vcrHelixUpdateDryRun);
     } catch (Exception e) {
-      // TODO: metric, alert
+      // SRE and DEVs should be alerted on this metric.
+      vcrMetrics.vcrHelixUpdateFailCount.inc();
       logger.warn("VCR Helix cluster update failed: ", e);
     } finally {
       isVcrHelixUpdateInProgress = false;
