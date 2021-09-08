@@ -62,6 +62,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import io.netty.util.ReferenceCountUtil;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -708,12 +709,12 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
    * @param containers the containers to update.
    */
   private void updateContainersAndVerify(Account account, Container... containers) throws Exception {
-    JSONObject containersUpdateJson = AccountCollectionSerde.containersToJson(Arrays.asList(containers));
+    byte[] containersUpdateJson = AccountCollectionSerde.serializeContainersInJson(Arrays.asList(containers));
     String accountName = account.getName();
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
-    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS_CONTAINERS, headers,
-        ByteBuffer.wrap(containersUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
+    FullHttpRequest request =
+        buildRequest(HttpMethod.POST, Operations.ACCOUNTS_CONTAINERS, headers, ByteBuffer.wrap(containersUpdateJson));
     ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
@@ -725,7 +726,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     verifyTrackingHeaders(response);
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     Collection<Container> outputContainers =
-        AccountCollectionSerde.containersFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8)),
+        AccountCollectionSerde.containersFromInputStreamInJson(new ByteArrayInputStream(content.array()),
             account.getId());
 
     for (Container container : outputContainers) {
@@ -775,8 +776,9 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     verifyTrackingHeaders(response);
     short accountId = Short.parseShort(response.headers().get(RestUtils.Headers.TARGET_ACCOUNT_ID));
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
-    return AccountCollectionSerde.containersFromJson(
-        new JSONObject(new String(content.array(), StandardCharsets.UTF_8)), accountId).iterator().next();
+    return AccountCollectionSerde.containersFromInputStreamInJson(new ByteArrayInputStream(content.array()), accountId)
+        .iterator()
+        .next();
   }
 
   /**
@@ -799,6 +801,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     verifyTrackingHeaders(response);
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     return new HashSet<>(
-        AccountCollectionSerde.accountsFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
+        AccountCollectionSerde.accountsFromInputStreamInJson(new ByteArrayInputStream(content.array())));
   }
 }

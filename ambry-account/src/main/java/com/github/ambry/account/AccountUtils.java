@@ -14,6 +14,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.server.StatsSnapshot;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -100,69 +101,74 @@ public class AccountUtils {
 
       StringBuilder accountsInfo = new StringBuilder();
 
-      if (!accountsMissingInSecondary.isEmpty()) {
-        accountsInfo.append("[");
-        for (Account account : accountsMissingInSecondary) {
-          accountsInfo.append(AccountCollectionSerde.accountToJsonNoContainers(account).toString()).append(",");
-        }
-        accountsInfo.append("]");
-        logger.warn("Accounts found in primary and absent in secondary = {}", accountsInfo.toString());
-        mismatchCount += accountsMissingInSecondary.size();
-      }
-
-      if (!accountsDifferentInSecondary.isEmpty()) {
-        accountsInfo.setLength(0);
-        accountsInfo.append("[");
-        for (Account account : accountsDifferentInSecondary) {
-          accountsInfo.append("{Account = ")
-              .append(account.toString())
-              .append(", primary = ")
-              .append(AccountCollectionSerde.accountToJsonNoContainers(account).toString())
-              .append(", secondary = ")
-              .append(AccountCollectionSerde.accountToJsonNoContainers(secondaryAccountMap.get(account.getName()))
-                  .toString());
-
-          Set<Container> containersMissingInSecondary = account.getAllContainers()
-              .stream()
-              .filter(container -> secondaryAccountMap.get(account.getName()).getContainerByName(container.getName())
-                  == null)
-              .collect(Collectors.toSet());
-
-          Set<Container> containersDifferentInSecondary = new HashSet<>(account.getAllContainers());
-          containersDifferentInSecondary.removeAll(secondaryAccountMap.get(account.getName()).getAllContainers());
-          containersDifferentInSecondary.removeAll(containersMissingInSecondary);
-
-          if (!containersMissingInSecondary.isEmpty()) {
-            accountsInfo.append(", Containers missing in secondary: [");
-            for (Container container : containersMissingInSecondary) {
-              accountsInfo.append(container.toJson().toString()).append(",");
-            }
-            accountsInfo.append("]");
-            mismatchCount += containersMissingInSecondary.size();
+      try {
+        if (!accountsMissingInSecondary.isEmpty()) {
+          accountsInfo.append("[");
+          for (Account account : accountsMissingInSecondary) {
+            accountsInfo.append(new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(account)))
+                .append(",");
           }
-
-          if (!containersDifferentInSecondary.isEmpty()) {
-            accountsInfo.append(", Containers different in secondary: [");
-            for (Container container : containersDifferentInSecondary) {
-              accountsInfo.append("{container = ")
-                  .append(container.toString())
-                  .append(", primary = ")
-                  .append(container.toJson().toString())
-                  .append(", secondary = ")
-                  .append(secondaryAccountMap.get(account.getName())
-                      .getContainerByName(container.getName())
-                      .toJson()
-                      .toString())
-                  .append("},");
-            }
-            accountsInfo.append("]");
-            mismatchCount += containersDifferentInSecondary.size();
-          }
-          accountsInfo.append("}");
+          accountsInfo.append("]");
+          logger.warn("Accounts found in primary and absent in secondary = {}", accountsInfo.toString());
+          mismatchCount += accountsMissingInSecondary.size();
         }
-        accountsInfo.append("]");
 
-        logger.warn("Accounts mismatch in primary and secondary = {}", accountsInfo.toString());
+        if (!accountsDifferentInSecondary.isEmpty()) {
+          accountsInfo.setLength(0);
+          accountsInfo.append("[");
+          for (Account account : accountsDifferentInSecondary) {
+            accountsInfo.append("{Account = ")
+                .append(account.toString())
+                .append(", primary = ")
+                .append(new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(account)))
+                .append(", secondary = ")
+                .append(new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(
+                    secondaryAccountMap.get(account.getName()))));
+
+            Set<Container> containersMissingInSecondary = account.getAllContainers()
+                .stream()
+                .filter(container -> secondaryAccountMap.get(account.getName()).getContainerByName(container.getName())
+                    == null)
+                .collect(Collectors.toSet());
+
+            Set<Container> containersDifferentInSecondary = new HashSet<>(account.getAllContainers());
+            containersDifferentInSecondary.removeAll(secondaryAccountMap.get(account.getName()).getAllContainers());
+            containersDifferentInSecondary.removeAll(containersMissingInSecondary);
+
+            if (!containersMissingInSecondary.isEmpty()) {
+              accountsInfo.append(", Containers missing in secondary: [");
+              for (Container container : containersMissingInSecondary) {
+                accountsInfo.append(container.toJson().toString()).append(",");
+              }
+              accountsInfo.append("]");
+              mismatchCount += containersMissingInSecondary.size();
+            }
+
+            if (!containersDifferentInSecondary.isEmpty()) {
+              accountsInfo.append(", Containers different in secondary: [");
+              for (Container container : containersDifferentInSecondary) {
+                accountsInfo.append("{container = ")
+                    .append(container.toString())
+                    .append(", primary = ")
+                    .append(container.toJson().toString())
+                    .append(", secondary = ")
+                    .append(secondaryAccountMap.get(account.getName())
+                        .getContainerByName(container.getName())
+                        .toJson()
+                        .toString())
+                    .append("},");
+              }
+              accountsInfo.append("]");
+              mismatchCount += containersDifferentInSecondary.size();
+            }
+            accountsInfo.append("}");
+          }
+          accountsInfo.append("]");
+
+          logger.warn("Accounts mismatch in primary and secondary = {}", accountsInfo.toString());
+        }
+      } catch (IOException e) {
+        throw new RuntimeException("Fail to serialize accounts", e);
       }
     }
     return mismatchCount;

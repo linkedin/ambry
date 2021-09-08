@@ -13,10 +13,10 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.quota.QuotaResourceType;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.github.ambry.quota.QuotaResourceType;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -355,20 +355,24 @@ public class Account {
     }
 
     Account account = (Account) o;
+    return equalsWithoutContainers(account) && containerIdToContainerMap.equals(account.containerIdToContainerMap);
+  }
 
-    if (id != account.id) {
+  /**
+   * Compare this account with the given {@link Account}, return true if they are equal without comparing containers.
+   * @param account The account to compare
+   * @return True when they are equal without comparing containers.
+   */
+  public boolean equalsWithoutContainers(Account account) {
+    if (this == account) {
+      return true;
+    }
+    if (account == null) {
       return false;
     }
-    if (!name.equals(account.name)) {
-      return false;
-    }
-    if (status != account.status) {
-      return false;
-    }
-    if (quotaResourceType != account.quotaResourceType) {
-      return false;
-    }
-    return containerIdToContainerMap.equals(account.containerIdToContainerMap);
+    // We don't compare snapshot version and lastModifiedTime
+    return id == account.id && name.equals(account.name) && status == account.status
+        && aclInheritedByContainer == account.aclInheritedByContainer && quotaResourceType == account.quotaResourceType;
   }
 
   @Override

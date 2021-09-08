@@ -65,7 +65,6 @@ import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
-import org.json.JSONObject;
 import org.junit.Assert;
 
 import static com.github.ambry.utils.TestUtils.*;
@@ -960,9 +959,9 @@ public class FrontendIntegrationTestBase {
    * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
    */
   void updateAccountsAndVerify(AccountService accountService, Account... accounts) throws Exception {
-    JSONObject accountUpdateJson = AccountCollectionSerde.accountsToJson(Arrays.asList(accounts));
-    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null,
-        ByteBuffer.wrap(accountUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
+    byte[] accountUpdateJson = AccountCollectionSerde.serializeAccountsInJson(Arrays.asList(accounts));
+    FullHttpRequest request =
+        buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null, ByteBuffer.wrap(accountUpdateJson));
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());

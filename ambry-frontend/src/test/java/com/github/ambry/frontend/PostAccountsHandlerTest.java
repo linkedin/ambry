@@ -72,7 +72,7 @@ public class PostAccountsHandlerTest {
   @Test
   public void validRequestsTest() throws Exception {
     ThrowingConsumer<Collection<Account>> testAction = accountsToUpdate -> {
-      String requestBody = AccountCollectionSerde.accountsToJson(accountsToUpdate).toString();
+      String requestBody = new String(AccountCollectionSerde.serializeAccountsInJson(accountsToUpdate));
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       sendRequestGetResponse(requestBody, restResponseChannel);
       assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
@@ -110,7 +110,7 @@ public class PostAccountsHandlerTest {
     testAction.accept(new JSONObject().append("accounts", "ABC").toString(), RestServiceErrorCode.BadRequest);
     // AccountService update failure
     accountService.setShouldUpdateSucceed(false);
-    testAction.accept(AccountCollectionSerde.accountsToJson(Collections.emptyList()).toString(),
+    testAction.accept(new String(AccountCollectionSerde.serializeAccountsInJson(Collections.emptyList())),
         RestServiceErrorCode.InternalServerError);
   }
 
@@ -121,9 +121,9 @@ public class PostAccountsHandlerTest {
   @Test
   public void securityServiceDenialTest() throws Exception {
     IllegalStateException injectedException = new IllegalStateException("@@expected");
-    TestUtils.ThrowingRunnable testAction =
-        () -> sendRequestGetResponse(AccountCollectionSerde.accountsToJson(Collections.emptyList()).toString(),
-            new MockRestResponseChannel());
+    TestUtils.ThrowingRunnable testAction = () -> sendRequestGetResponse(
+        new String(AccountCollectionSerde.serializeAccountsInJson(Collections.emptyList())),
+        new MockRestResponseChannel());
     ThrowingConsumer<IllegalStateException> errorChecker = e -> assertEquals("Wrong exception", injectedException, e);
     securityServiceFactory.exceptionToReturn = injectedException;
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;

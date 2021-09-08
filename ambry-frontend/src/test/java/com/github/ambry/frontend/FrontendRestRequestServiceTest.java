@@ -81,6 +81,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.google.common.collect.Lists;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
@@ -956,8 +957,8 @@ public class FrontendRestRequestServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     Set<Account> expected = new HashSet<>(accountService.getAllAccounts());
-    Set<Account> actual = new HashSet<>(
-        AccountCollectionSerde.accountsFromJson(new JSONObject(new String(restResponseChannel.getResponseBody()))));
+    Set<Account> actual = new HashSet<>(AccountCollectionSerde.accountsFromInputStreamInJson(
+        new ByteArrayInputStream(restResponseChannel.getResponseBody())));
     assertEquals("Unexpected GET /accounts response", expected, actual);
 
     // test an account not found case to ensure that it goes through the exception path
@@ -980,9 +981,7 @@ public class FrontendRestRequestServiceTest {
   public void postAccountsTest() throws Exception {
     Account accountToAdd = accountService.generateRandomAccount();
     List<ByteBuffer> body = new LinkedList<>();
-    body.add(ByteBuffer.wrap(AccountCollectionSerde.accountsToJson(Collections.singleton(accountToAdd))
-        .toString()
-        .getBytes(StandardCharsets.UTF_8)));
+    body.add(ByteBuffer.wrap(AccountCollectionSerde.serializeAccountsInJson(Collections.singleton(accountToAdd))));
     body.add(null);
     RestRequest restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS, null, body);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();

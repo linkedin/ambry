@@ -532,8 +532,7 @@ public class MySqlAccountService extends AbstractAccountService {
         isAccountAdded = true;
         addedContainers = new ArrayList<>(account.getAllContainers());
       } else {
-        if (!AccountCollectionSerde.accountToJsonNoContainers(accountInCache)
-            .similar(AccountCollectionSerde.accountToJsonNoContainers(account))) {
+        if (!accountInCache.equalsWithoutContainers(account)) {
           isAccountUpdated = true;
         }
         // Get list of added and updated containers in the account.
