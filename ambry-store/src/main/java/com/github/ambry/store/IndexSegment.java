@@ -828,10 +828,15 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @throws StoreException if there are problems with the index
    */
   void seal() throws StoreException {
-    sealed.set(true);
-    map();
-    // we should be fine reading bloom filter here without synchronization as the index is read only
-    persistBloomFilter();
+    rwLock.writeLock().lock();
+    try {
+      sealed.set(true);
+      map();
+      // we should be fine reading bloom filter here without synchronization as the index is read only
+      persistBloomFilter();
+    } finally {
+      rwLock.writeLock().unlock();
+    }
   }
 
   /**
@@ -879,7 +884,6 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @throws StoreException if there are problems with the index
    */
   private void map() throws StoreException {
-    rwLock.writeLock().lock();
     try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
       switch (config.storeIndexMemState) {
         case IN_DIRECT_MEM:
@@ -966,8 +970,6 @@ class IndexSegment implements Iterable<IndexEntry> {
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while mapping the segment of index", e, errorCode);
-    } finally {
-      rwLock.writeLock().unlock();
     }
   }
 
