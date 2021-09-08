@@ -497,7 +497,7 @@ public class BlobStore implements Store {
             FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
             index.addToIndex(indexEntries, fileSpan);
             for (IndexEntry newEntry : indexEntries) {
-              blobStoreStats.handleNewPutEntry(newEntry.getValue());
+              blobStoreStats.handleNewPutEntry(newEntry.getKey(), newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
             checkCapacityAndUpdateReplicaStatusDelegate();
@@ -771,7 +771,8 @@ public class BlobStore implements Store {
               index.markAsPermanent(info.getStoreKey(), fileSpan, null, info.getOperationTimeMs(),
                   MessageInfo.LIFE_VERSION_FROM_FRONTEND);
           endOffsetOfLastMessage = fileSpan.getEndOffset();
-          blobStoreStats.handleNewTtlUpdateEntry(ttlUpdateValue, indexValuesToUpdate.get(correspondingPutIndex++));
+          blobStoreStats.handleNewTtlUpdateEntry(info.getStoreKey(), ttlUpdateValue,
+              indexValuesToUpdate.get(correspondingPutIndex++));
         }
         logger.trace("Store : {} ttl update has been marked in the index ", dataDir);
       }
