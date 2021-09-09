@@ -78,6 +78,11 @@ class CompositeClusterManager implements ClusterMap {
     return partitionIdStatic;
   }
 
+  @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) {
+    return helixClusterManager.getPartitionIdByName(partitionIdStr);
+  }
+
   /**
    * {@inheritDoc}
    * Get writable partition ids from both the underlying {@link StaticClusterManager} and the underlying

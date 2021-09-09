@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.io.InputStream;
@@ -375,6 +376,11 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) {
+    return partitionNameToAmbryPartition.get(partitionIdStr);
+  }
+
+  @Override
   public List<PartitionId> getWritablePartitionIds(String partitionClass) {
     return partitionSelectionHelper.getWritablePartitions(partitionClass);
   }
@@ -582,6 +588,13 @@ public class HelixClusterManager implements ClusterMap {
    */
   HelixClusterManagerCallback getManagerCallback() {
     return helixClusterManagerCallback;
+  }
+
+  /**
+   * @return localDC's zk connect string.
+   */
+  public String getLocalDcZkConnectString() {
+    return dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getZkConnectStrs().get(0);
   }
 
   /**

@@ -21,6 +21,10 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterParticipantListener;
+import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.RetryExecutor;
+import com.github.ambry.commons.RetryPolicies;
+import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -33,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
@@ -57,7 +62,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   private final DataNodeId currentDataNode;
   private final String vcrClusterName;
   private final String vcrInstanceName;
-  private final Map<String, PartitionId> partitionIdMap;
+  private final Map<String, PartitionId> partitionIdMap = new ConcurrentHashMap<>();
   private final Set<PartitionId> assignedPartitionIds = ConcurrentHashMap.newKeySet();
   private final HelixVcrClusterMetrics metrics;
   private final List<VcrClusterParticipantListener> listeners = new ArrayList<>();
@@ -68,6 +73,9 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   private HelixManager manager;
   private HelixAdmin helixAdmin;
   private VcrMetrics vcrMetrics;
+  private final RetryPolicy retryPolicy = RetryPolicies.exponentialPolicy(3, 2000);
+  private final RetryExecutor retryExecutor = new RetryExecutor(Executors.newScheduledThreadPool(2));
+  private final ClusterMap clusterMap;
 
   /**
    * Construct the helix VCR cluster.
@@ -88,7 +96,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     currentDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
     List<? extends PartitionId> allPartitions = clusterMap.getAllPartitionIds(null);
     logger.info("All partitions from clusterMap: {}.", allPartitions);
-    partitionIdMap = allPartitions.stream().collect(Collectors.toMap(PartitionId::toPathString, Function.identity()));
     vcrClusterName = cloudConfig.vcrClusterName;
     vcrInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -96,6 +103,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     this.accountService = accountService;
     this.cloudDestination = cloudDestination;
     this.vcrMetrics = vcrMetrics;
+    this.clusterMap = clusterMap;
   }
 
   /**
@@ -105,21 +113,37 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void addPartition(String partitionIdStr) {
-    PartitionId partitionId = partitionIdMap.get(partitionIdStr);
-    if (partitionId != null) {
-      if (assignedPartitionIds.add(partitionId)) {
+    // Add partition with retry logic in case Ambry clustermap is not update to date(IllegalStateException).
+    retryExecutor.runWithRetries(retryPolicy, callback -> doAddPartition(partitionIdStr, callback),
+        e -> e instanceof IllegalStateException, (result, exception) -> {
+          if (exception != null) {
+            // use this condition to capture all potential exceptions.
+            logger.warn("AddPartition for {} failed after retry: ", partitionIdStr, exception);
+          } else {
+            logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
+                vcrInstanceName, assignedPartitionIds.size());
+          }
+        });
+  }
+
+  private void doAddPartition(String partitionIdStr, Callback<Object> callback) {
+    PartitionId partitionId = clusterMap.getPartitionIdByName(partitionIdStr);
+    if (partitionId == null) {
+      metrics.partitionIdNotInClusterMapOnAdd.inc();
+      callback.onCompletion(null,
+          new IllegalStateException("Partition not in clusterMap on add: Partition Id: " + partitionIdStr));
+    } else {
+      if (partitionIdMap.putIfAbsent(partitionIdStr, partitionId) == null) {
+        // TODO: get rid of assignedPartitionIds
+        assignedPartitionIds.add(partitionId);
         for (VcrClusterParticipantListener listener : listeners) {
           listener.onPartitionAdded(partitionId);
         }
-        logger.info("Partition {} is added to current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
-            vcrInstanceName, assignedPartitionIds.size());
         logger.debug("Assigned Partitions: {}", assignedPartitionIds);
       } else {
         logger.info("Partition {} exists on current VCR: {}", partitionIdStr, vcrInstanceName);
       }
-    } else {
-      logger.error("Partition {} not in clusterMap on add.", partitionIdStr);
-      metrics.partitionIdNotInClusterMapOnAdd.inc();
+      callback.onCompletion(null, null);
     }
   }
 
@@ -130,21 +154,18 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
    * @param partitionIdStr The partitionIdStr notified by Helix.
    */
   public void removePartition(String partitionIdStr) {
-    PartitionId partitionId = partitionIdMap.get(partitionIdStr);
-    if (partitionId != null) {
-      if (assignedPartitionIds.remove(partitionId)) {
-        for (VcrClusterParticipantListener listener : listeners) {
-          listener.onPartitionRemoved(partitionId);
-        }
-        logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
-            vcrInstanceName, assignedPartitionIds.size());
-        logger.debug("Assigned Partitions: {}", assignedPartitionIds);
-      } else {
-        logger.info("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
-      }
-    } else {
-      logger.error("Partition {} not in clusterMap on remove.", partitionIdStr);
+    PartitionId partitionId = partitionIdMap.remove(partitionIdStr);
+    if (partitionId == null) {
       metrics.partitionIdNotInClusterMapOnRemove.inc();
+      logger.warn("Partition {} not exists on current VCR: {}", partitionIdStr, vcrInstanceName);
+    } else {
+      for (VcrClusterParticipantListener listener : listeners) {
+        listener.onPartitionRemoved(partitionId);
+      }
+      assignedPartitionIds.remove(partitionId);
+      logger.info("Partition {} is removed from current VCR: {}. Number of assigned partitions: {}", partitionIdStr,
+          vcrInstanceName, assignedPartitionIds.size());
+      logger.debug("Current assigned partitions: {}", partitionIdMap.keySet());
     }
   }
 
@@ -202,12 +223,6 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   @Override
   public Collection<? extends PartitionId> getAssignedPartitionIds() {
     return Collections.unmodifiableCollection(assignedPartitionIds);
-  }
-
-  @Override
-  public boolean isPartitionAssigned(String partitionPath) {
-    return (partitionIdMap.get(partitionPath) != null) && assignedPartitionIds.contains(
-        partitionIdMap.get(partitionPath));
   }
 
   @Override

@@ -63,6 +63,10 @@ public class CloudConfig {
   public static final String VCR_SOURCE_DATACENTERS = "vcr.source.datacenters";
   public static final String CLOUD_COMPACTION_NUM_THREADS = "cloud.compaction.num.threads";
   public static final String VCR_HELIX_STATE_MODEL_FACTORY_CLASS = "vcr.helix.state.model.factory.class";
+  public static final String VCR_HELIX_UPDATER_PARTITION_ID = "vcr.helix.updater.partition.id";
+  public static final String VCR_HELIX_UPDATE_CONFIG = "vcr.helix.update.config";
+  public static final String VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS = "vcr.helix.update.delay.time.in.seconds";
+  public static final String VCR_HELIX_UPDATE_DRY_RUN = "vcr.helix.update.dry.run";
 
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
@@ -93,6 +97,15 @@ public class CloudConfig {
       "com.github.ambry.cloud.HelixVcrClusterAgentsFactory";
   public static final String DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS =
       "com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory";
+  public static final String DEFAULT_VCR_HELIX_UPDATE_CONFIG =
+      "{\n" + "  \"clusterConfigFields\": {\n" + "    \"maxOfflineInstancesAllowed\": 4,\n"
+          + "    \"numOfflineInstancesForAutoExit\": 2,\n" + "    \"allowAutoJoin\": true\n" + "  },\n"
+          + "  \"idealStateConfigFields\": {\n" + "    \"numReplicas\": 1,\n"
+          + "    \"stateModelDefRef\": \"OnlineOffline\",\n"
+          + "    \"rebalanceStrategy\": \"org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy\",\n"
+          + "    \"minActiveReplicas\": 0,\n"
+          + "    \"rebalancerClassName\": \"org.apache.helix.controller.rebalancer.DelayedAutoRebalancer\",\n"
+          + "    \"rebalanceDelayInMins\": 20\n" + "  }\n" + "}";
 
   /**
    * True for VCR node, false for live serving node.
@@ -351,6 +364,34 @@ public class CloudConfig {
   @Default(DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS)
   public final String vcrHelixStateModelFactoryClass;
 
+  /**
+   * The vcr node responsible for partition 1 is the vcr helix updater. Use empty string to disable vcr helix auto update.
+   */
+  @Config(VCR_HELIX_UPDATER_PARTITION_ID)
+  @Default("")
+  public final String vcrHelixUpdaterPartitionId;
+
+  /**
+   * The config string used when update VCR helix.
+   */
+  @Config(VCR_HELIX_UPDATE_CONFIG)
+  @Default(DEFAULT_VCR_HELIX_UPDATE_CONFIG)
+  public final String vcrHelixUpdateConfig;
+
+  /**
+   * The delay between an ambry cluster change notification arrive and VCR helix update action
+   */
+  @Config(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS)
+  @Default("60")
+  public final int vcrHelixUpdateDelayTimeInSeconds;
+
+  /**
+   * If true, VCR helix update will be in dry run mode. We can also use this to turn off automated VCR cluster update.
+   */
+  @Config(VCR_HELIX_UPDATE_DRY_RUN)
+  @Default("false")
+  public final boolean vcrHelixUpdateDryRun;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
@@ -409,5 +450,10 @@ public class CloudConfig {
         Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
     vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
         DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
+    vcrHelixUpdaterPartitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "");
+    vcrHelixUpdateConfig =
+        verifiableProperties.getString(VCR_HELIX_UPDATE_CONFIG, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
+    vcrHelixUpdateDelayTimeInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 60);
+    vcrHelixUpdateDryRun = verifiableProperties.getBoolean(VCR_HELIX_UPDATE_DRY_RUN, false);
   }
 }

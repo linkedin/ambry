@@ -48,13 +48,6 @@ public interface VcrClusterParticipant extends AutoCloseable {
   Collection<? extends PartitionId> getAssignedPartitionIds();
 
   /**
-   * Check is a partition is assigned to current node.
-   * @param partitionPath partition id of the partition.
-   * @return {@code true} if partition is assigned to current node. {@code false} otherwise.
-   */
-  boolean isPartitionAssigned(String partitionPath);
-
-  /**
    * Add {@link VcrClusterParticipantListener} to listen for cluster change.
    * @param listener to add.
    */

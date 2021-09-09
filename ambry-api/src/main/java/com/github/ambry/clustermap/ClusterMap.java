@@ -38,6 +38,13 @@ public interface ClusterMap extends AutoCloseable {
   PartitionId getPartitionIdFromStream(InputStream stream) throws IOException;
 
   /**
+   * Gets PartitionId based on partitionId string.
+   * @param partitionIdStr {@link String} the partition id in string format
+   * @return PartitionId or null if the partition doesn't exist
+   */
+  PartitionId getPartitionIdByName(String partitionIdStr);
+
+  /**
    * Gets a list of partitions that are available for writes. Gets a mutable shallow copy of the list of the partitions
    * that are available for writes
    * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}

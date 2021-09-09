@@ -101,6 +101,11 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) {
+    return null;
+  }
+
+  @Override
   public boolean hasDatacenter(String datacenterName) {
     return hardwareLayout.findDatacenter(datacenterName) != null;
   }

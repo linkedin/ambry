@@ -447,7 +447,7 @@ public class ClusterMapUtils {
    * @param longValue a Long value.
    * @return the serialized byte array.
    */
-  static byte[] serializeShortAndLong(Short shortValue, Long longValue) {
+  public static byte[] serializeShortAndLong(Short shortValue, Long longValue) {
     ByteBuffer buffer = ByteBuffer.allocate(Short.SIZE / Byte.SIZE + Long.SIZE / Byte.SIZE);
     buffer.putShort(shortValue);
     buffer.putLong(longValue);

@@ -86,6 +86,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final Map<String, AtomicInteger> nextReplicaThreadIndexByDc;
   private final StoreKeyFactory storeKeyFactory;
   private final List<String> sslEnabledDatacenters;
+  protected final ClusterMapConfig clusterMapConfig;
   protected final StoreKeyConverterFactory storeKeyConverterFactory;
   private final String transformerClassName;
   private final Predicate<MessageInfo> skipPredicate;
@@ -153,6 +154,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.metricRegistry = metricRegistry;
     this.dataNodeIdToReplicaThread = new ConcurrentHashMap<>();
     this.nextReplicaThreadIndexByDc = new ConcurrentHashMap<>();
+    this.clusterMapConfig = clusterMapConfig;
     this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.storeKeyConverterFactory = storeKeyConverterFactory;
     this.transformerClassName = transformerClassName;
@@ -698,6 +700,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
      */
     @Override
     public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+      logger.trace("onReplicaAddedOrRemoved added: {}, removed: {}", addedReplicas, removedReplicas);
       // 1. wait for start() to complete
       try {
         startupLatch.await();

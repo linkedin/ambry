@@ -308,6 +308,11 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) {
+    return null;
+  }
+
+  @Override
   public List<? extends PartitionId> getWritablePartitionIds(String partitionClass) {
     throw new IllegalStateException();
   }

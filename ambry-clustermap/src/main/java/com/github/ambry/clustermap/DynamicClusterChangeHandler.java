@@ -302,9 +302,9 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
     }
     // if this is not initial InstanceConfig change and any replicas are added or removed, we should invoke callbacks
     // for different clustermap change listeners (i.e replication manager, partition selection helper)
+    logger.info("In total, {} replicas are being added and {} replicas are being removed. instanceConfigInitialized: {}", totalAddedReplicas.size(),
+        totalRemovedReplicas.size(), instanceConfigInitialized);
     if (instanceConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
-      logger.info("In total, {} replicas are being added and {} replicas are being removed", totalAddedReplicas.size(),
-          totalRemovedReplicas.size());
       for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
         listener.onReplicaAddedOrRemoved(totalAddedReplicas, totalRemovedReplicas);
       }
