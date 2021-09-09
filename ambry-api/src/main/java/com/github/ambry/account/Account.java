@@ -17,17 +17,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.github.ambry.quota.QuotaResourceType;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 
 /**
@@ -40,10 +35,6 @@ import org.json.JSONObject;
  *   Account name is provided by an Ambry user as an external reference. Account id is an internal identifier
  *   of the user, and is one-to-one mapped to an account name. Account name and id are generated through user
  *   registration process.
- * </p>
- * <p>
- *   Account is serialized into {@link JSONObject} in the {@code currentJsonVersion}, which is version 1 for now.
- *   Below lists all the json versions and their formats:
  * </p>
  * <pre><code>
  * Version 1:
@@ -132,43 +123,6 @@ public class Account {
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
 
   /**
-   * Constructing an {@link Account} object from account metadata.
-   * @param metadata The metadata of the account in JSON.
-   * @throws JSONException If fails to parse metadata.
-   */
-  private Account(JSONObject metadata) throws JSONException {
-    if (metadata == null) {
-      throw new IllegalArgumentException("metadata cannot be null.");
-    }
-    short metadataVersion = (short) metadata.getInt(JSON_VERSION_KEY);
-    switch (metadataVersion) {
-      case JSON_VERSION_1:
-        id = (short) metadata.getInt(ACCOUNT_ID_KEY);
-        name = metadata.getString(ACCOUNT_NAME_KEY);
-        status = AccountStatus.valueOf(metadata.getString(STATUS_KEY));
-        snapshotVersion = metadata.optInt(SNAPSHOT_VERSION_KEY, SNAPSHOT_VERSION_DEFAULT_VALUE);
-        lastModifiedTime = metadata.optLong(LAST_MODIFIED_TIME_KEY, LAST_MODIFIED_TIME_DEFAULT_VALUE);
-        aclInheritedByContainer =
-            metadata.optBoolean(ACL_INHERITED_BY_CONTAINER_KEY, ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE);
-        checkRequiredFieldsForBuild();
-        JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
-        if (containerArray != null) {
-          List<Container> containers = new ArrayList<>();
-          for (int index = 0; index < containerArray.length(); index++) {
-            containers.add(Container.fromJson(containerArray.getJSONObject(index), id));
-          }
-          updateContainerMap(containers);
-        }
-        quotaResourceType =
-            metadata.optEnum(QuotaResourceType.class, QUOTA_RESOURCE_TYPE_KEY, QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
-        break;
-
-      default:
-        throw new IllegalStateException("Unsupported account json version=" + metadataVersion);
-    }
-  }
-
-  /**
    * Constructor that takes individual arguments.
    * @param id The id of the account. Cannot be null.
    * @param name The name of the account. Cannot be null.
@@ -208,41 +162,6 @@ public class Account {
       updateContainerMap(containers);
     }
     this.quotaResourceType = quotaResourceType;
-  }
-
-  /**
-   * Deserializes a {@link JSONObject} to an account object.
-   * @param json The {@link JSONObject} to deserialize.
-   * @return An account object deserialized from the {@link JSONObject}.
-   * @throws JSONException If parsing the {@link JSONObject} fails.
-   */
-  public static Account fromJson(JSONObject json) throws JSONException {
-    return new Account(json);
-  }
-
-  /**
-   * Gets the metadata of the account in {@link JSONObject}. This will increment the snapshot version by one if
-   * {@code incrementSnapshotVersion} is {@code true}.
-   * @param incrementSnapshotVersion {@code true} to increment the snapshot version by one.
-   * @return The metadata of the account in {@link JSONObject}.
-   * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
-   */
-  public JSONObject toJson(boolean incrementSnapshotVersion) throws JSONException {
-    JSONObject metadata = new JSONObject();
-    metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
-    metadata.put(ACCOUNT_ID_KEY, id);
-    metadata.put(ACCOUNT_NAME_KEY, name);
-    metadata.put(STATUS_KEY, status.name());
-    metadata.put(SNAPSHOT_VERSION_KEY, incrementSnapshotVersion ? snapshotVersion + 1 : snapshotVersion);
-    metadata.put(LAST_MODIFIED_TIME_KEY, lastModifiedTime);
-    metadata.put(ACL_INHERITED_BY_CONTAINER_KEY, aclInheritedByContainer);
-    JSONArray containerArray = new JSONArray();
-    for (Container container : containerIdToContainerMap.values()) {
-      containerArray.put(container.toJson());
-    }
-    metadata.put(CONTAINERS_KEY, containerArray);
-    metadata.put(QUOTA_RESOURCE_TYPE_KEY, quotaResourceType.name());
-    return metadata;
   }
 
   /**

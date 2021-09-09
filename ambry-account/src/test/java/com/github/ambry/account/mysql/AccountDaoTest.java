@@ -14,6 +14,7 @@
 package com.github.ambry.account.mysql;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
@@ -48,6 +49,7 @@ import static org.mockito.Mockito.*;
 /** Unit test for AccountDao class */
 @RunWith(MockitoJUnitRunner.class)
 public class AccountDaoTest {
+  private static final ObjectMapper objectMapper = new ObjectMapper();
   private final short accountId = 101;
   private final Account testAccount;
   private final Container testContainer;
@@ -95,7 +97,7 @@ public class AccountDaoTest {
     when(mockAccountQueryStatement.executeQuery()).thenReturn(mockAccountResultSet);
 
     // Container mock statements
-    String containerJson = testContainer.toJson().toString();
+    String containerJson = objectMapper.writeValueAsString(testContainer);
     mockContainerInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into Containers"))).thenReturn(mockContainerInsertStatement);
     when(mockContainerInsertStatement.executeBatch()).thenReturn(new int[]{1});

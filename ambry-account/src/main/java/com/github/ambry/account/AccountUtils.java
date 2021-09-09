@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.server.StatsSnapshot;
 import java.io.IOException;
 import java.util.Collection;
@@ -33,6 +34,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AccountUtils {
   private static final Logger logger = LoggerFactory.getLogger(AccountUtils.class);
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * Checks if there are duplicate accountId or accountName in the given collection of {@link Account}s.
@@ -138,7 +140,7 @@ public class AccountUtils {
             if (!containersMissingInSecondary.isEmpty()) {
               accountsInfo.append(", Containers missing in secondary: [");
               for (Container container : containersMissingInSecondary) {
-                accountsInfo.append(container.toJson().toString()).append(",");
+                accountsInfo.append(objectMapper.writeValueAsString(container)).append(",");
               }
               accountsInfo.append("]");
               mismatchCount += containersMissingInSecondary.size();
@@ -150,12 +152,10 @@ public class AccountUtils {
                 accountsInfo.append("{container = ")
                     .append(container.toString())
                     .append(", primary = ")
-                    .append(container.toJson().toString())
+                    .append(objectMapper.writeValueAsString(container))
                     .append(", secondary = ")
-                    .append(secondaryAccountMap.get(account.getName())
-                        .getContainerByName(container.getName())
-                        .toJson()
-                        .toString())
+                    .append(objectMapper.writeValueAsString(
+                        secondaryAccountMap.get(account.getName()).getContainerByName(container.getName())))
                     .append("},");
               }
               accountsInfo.append("]");
