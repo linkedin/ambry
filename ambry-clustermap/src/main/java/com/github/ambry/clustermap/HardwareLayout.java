@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 /**
  * An Ambry hardwareLayout consists of a set of {@link Datacenter}s.
  */
-class HardwareLayout {
+public class HardwareLayout {
   private final String clusterName;
   private final long version;
   private final ArrayList<Datacenter> datacenters;

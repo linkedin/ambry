@@ -1130,7 +1130,7 @@ public class TestUtils {
    * Construct a {@link TestHardwareLayout}
    * @return return the constructed layout.
    */
-  static TestHardwareLayout constructInitialHardwareLayoutJSON(String clusterName) throws JSONException {
+  public static TestHardwareLayout constructInitialHardwareLayoutJSON(String clusterName) throws JSONException {
     return new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 2, 18088, 20, false);
   }
 
@@ -1138,7 +1138,7 @@ public class TestUtils {
    * Construct a {@link TestPartitionLayout}
    * @return return the constructed layout.
    */
-  static TestPartitionLayout constructInitialPartitionLayoutJSON(TestHardwareLayout testHardwareLayout,
+  public static TestPartitionLayout constructInitialPartitionLayoutJSON(TestHardwareLayout testHardwareLayout,
       int partitionCount, String localDc) throws JSONException {
     return new TestPartitionLayout(testHardwareLayout, partitionCount, PartitionState.READ_WRITE, 1024L * 1024 * 1024,
         3, localDc);

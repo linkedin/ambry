@@ -129,7 +129,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             // to update vcr cluster at the same time.
             // TODO: use helix distributed lock to avoid race condition.
             isVcrHelixUpdater = true;
-            scheduleVcrHelix();
+            scheduleVcrHelix("VCR starts");
           } finally {
             vcrHelixUpdateLock.unlock();
           }
@@ -352,7 +352,7 @@ public class VcrReplicationManager extends ReplicationEngine {
    * 1. On a node become online role of partition, which usually happens on restart or deployment.
    * 2. On Ambry cluster change.
    */
-  private void scheduleVcrHelix() {
+  private void scheduleVcrHelix(String reason) {
     if (vcrHelixUpdateFuture != null && vcrHelixUpdateFuture.cancel(false)) {
       // If a vcrHelixUpdate task is scheduled, try to cancel it first.
       logger.info("There was a scheduled vcrHelixUpdate task. Canceled.");
@@ -360,15 +360,16 @@ public class VcrReplicationManager extends ReplicationEngine {
     }
     // either success cancel or not, we should schedule a new job to updateVcrHelix
     vcrHelixUpdateFuture =
-        scheduler.schedule(() -> updateVcrHelix(), cloudConfig.vcrHelixUpdateDelayTimeInSeconds, TimeUnit.SECONDS);
+        scheduler.schedule(() -> updateVcrHelix(reason), cloudConfig.vcrHelixUpdateDelayTimeInSeconds,
+            TimeUnit.SECONDS);
     logger.info("VcrHelixUpdate task scheduled. Will run in {} seconds.", cloudConfig.vcrHelixUpdateDelayTimeInSeconds);
   }
 
   /**
    * The actual performer to update VCR Helix:
    */
-  synchronized private void updateVcrHelix() {
-    logger.info("Going to update VCR Helix Cluster. Dryrun: {}", cloudConfig.vcrHelixUpdateDryRun);
+  synchronized private void updateVcrHelix(String reason) {
+    logger.info("Going to update VCR Helix Cluster. Reason: {}, Dryrun: {}", reason, cloudConfig.vcrHelixUpdateDryRun);
     logger.info("Current partitions in clustermap data structure: {}",
         clusterMap.getAllPartitionIds(null).stream().map(Object::toString).collect(Collectors.joining(",")));
     try {
@@ -403,7 +404,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         vcrHelixUpdateLock.lock();
         try {
           if (isVcrHelixUpdater) {
-            scheduleVcrHelix();
+            scheduleVcrHelix("Ambry clustermap changed");
           }
         } finally {
           vcrHelixUpdateLock.unlock();

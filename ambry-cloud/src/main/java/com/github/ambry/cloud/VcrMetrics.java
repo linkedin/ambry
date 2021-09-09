@@ -112,7 +112,7 @@ public class VcrMetrics {
     vcrHelixUpdaterGauge = registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdaterGauge"),
         () -> updaterGaugeCount);
     vcrHelixUpdateInProgressGauge =
-        registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdaterGauge"),
+        registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdateInProgressGauge"),
             () -> vcrHelixUpdateInProgressGaugeCount);
   }
 }
