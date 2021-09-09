@@ -588,7 +588,7 @@ public class TestUtils {
       for (int ia = 0; ia < numAccount; ia++) {
         for (int ic = 0; ic < numContainer; ic++) {
           String key = Utils.partitionClassStatsAccountContainerKey((short) ia, (short) ic);
-          classNameStats.getSubMap().put(key, new StatsSnapshot(random.nextLong() % maxValue, null));
+          classNameStats.getSubMap().put(key, new StatsSnapshot(Math.abs(random.nextLong() % maxValue), null));
         }
       }
       long classNameValue = classNameStats.getSubMap().values().stream().mapToLong(StatsSnapshot::getValue).sum();
