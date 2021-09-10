@@ -66,6 +66,10 @@ public class CloudConfig {
   public static final String VCR_HELIX_UPDATER_PARTITION_ID = "vcr.helix.updater.partition.id";
   public static final String VCR_HELIX_UPDATE_CONFIG = "vcr.helix.update.config";
   public static final String VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS = "vcr.helix.update.delay.time.in.seconds";
+  public static final String VCR_HELIX_SYNC_CHECK_INTERVAL_IN_SECONDS = "vcr.helix.sync.check.interval.in.seconds";
+  public static final String VCR_HELIX_LOCK_TIMEOUT_IN_MS = "vcr.helix.lock.timeout.in.ms";
+  public static final String VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS =
+      "vcr.wait.time.if.helix.lock.not.obtained.in.ms";
   public static final String VCR_HELIX_UPDATE_DRY_RUN = "vcr.helix.update.dry.run";
 
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
@@ -386,6 +390,27 @@ public class CloudConfig {
   public final int vcrHelixUpdateDelayTimeInSeconds;
 
   /**
+   * The period to check if Ambry Helix and VCR Helix on sync.
+   */
+  @Config(VCR_HELIX_SYNC_CHECK_INTERVAL_IN_SECONDS)
+  @Default("3600")
+  public final int vcrHelixSyncCheckIntervalInSeconds;
+
+  /**
+   * Helix lock timeout in ms. Use 10 minutes by default.
+   */
+  @Config(VCR_HELIX_LOCK_TIMEOUT_IN_MS)
+  @Default("600000")
+  public final long vcrHelixLockTimeoutInMs;
+
+  /**
+   * Sleep time if failed to obtain helix lock to update vcr helix.1
+   */
+  @Config(VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS)
+  @Default("500")
+  public final long vcrWaitTimeIfHelixLockNotObtainedInMs;
+
+  /**
    * If true, VCR helix update will be in dry run mode. We can also use this to turn off automated VCR cluster update.
    */
   @Config(VCR_HELIX_UPDATE_DRY_RUN)
@@ -451,9 +476,12 @@ public class CloudConfig {
     vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
         DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
     vcrHelixUpdaterPartitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "");
-    vcrHelixUpdateConfig =
-        verifiableProperties.getString(VCR_HELIX_UPDATE_CONFIG, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
+    vcrHelixUpdateConfig = verifiableProperties.getString(VCR_HELIX_UPDATE_CONFIG, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
     vcrHelixUpdateDelayTimeInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 60);
     vcrHelixUpdateDryRun = verifiableProperties.getBoolean(VCR_HELIX_UPDATE_DRY_RUN, false);
+    vcrHelixSyncCheckIntervalInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 3600);
+    vcrHelixLockTimeoutInMs = verifiableProperties.getLong(VCR_HELIX_LOCK_TIMEOUT_IN_MS, 600000);
+    vcrWaitTimeIfHelixLockNotObtainedInMs =
+        verifiableProperties.getLong(VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS, 500);
   }
 }

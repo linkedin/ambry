@@ -41,6 +41,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +52,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import org.apache.helix.lock.DistributedLock;
+import org.apache.helix.lock.LockScope;
+import org.apache.helix.lock.helix.HelixLockScope;
+import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
 
 
 /**
@@ -70,6 +75,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private volatile boolean isAmbryListenerToUpdateVcrHelixRegistered = false;
   private volatile ScheduledFuture<?> vcrHelixUpdateFuture = null;
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
+  private DistributedLock vcrUpdateDistributedLock = null;
 
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
@@ -115,10 +121,20 @@ public class VcrReplicationManager extends ReplicationEngine {
           vcrHelixUpdateLock.lock();
           try {
             if (!isAmbryListenerToUpdateVcrHelixRegistered) {
+              // Prepare the vcrUpdateDistributedLock. Only one instance can update vcr helix cluster at one time.
+              LockScope distributedLockScope = new HelixLockScope(HelixLockScope.LockScopeProperty.CLUSTER,
+                  Arrays.asList(cloudConfig.vcrClusterName, cloudConfig.vcrClusterName));
+              vcrUpdateDistributedLock =
+                  new ZKDistributedNonblockingLock(distributedLockScope, cloudConfig.vcrClusterZkConnectString,
+                      cloudConfig.vcrHelixLockTimeoutInMs, "Updating VCR Cluster", clusterMapConfig.clusterMapHostName);
               // Only register the listener once. Unfortunately, we can't unregister a listener, so we use
               // isAmbryListenerToUpdateVcrHelixRegistered as the flag.
               clusterMap.registerClusterMapListener(new AmbryListenerToUpdateVcrHelix());
               isAmbryListenerToUpdateVcrHelixRegistered = true;
+              // Schedule a fixed rate task to check if ambry helix and vcr helix on sync.
+              scheduler.scheduleAtFixedRate(() -> checkAmbryHelixAndVcrHelixOnSync(),
+                  cloudConfig.vcrHelixSyncCheckIntervalInSeconds, cloudConfig.vcrHelixSyncCheckIntervalInSeconds,
+                  TimeUnit.SECONDS);
               logger.info("VCR updater registered.");
             }
             // It's possible isVcrHelixUpdater to be true on two nodes.
@@ -369,8 +385,18 @@ public class VcrReplicationManager extends ReplicationEngine {
    * The actual performer to update VCR Helix:
    */
   synchronized private void updateVcrHelix(String reason) {
+
     logger.info("Going to update VCR Helix Cluster. Reason: {}, Dryrun: {}", reason, cloudConfig.vcrHelixUpdateDryRun);
-    logger.info("Current partitions in clustermap data structure: {}",
+    while (!vcrUpdateDistributedLock.tryLock()) {
+      logger.warn("Could not obtain vcr update distributed lock. Sleep and retry.");
+      try {
+        Thread.sleep(cloudConfig.vcrWaitTimeIfHelixLockNotObtainedInMs);
+      } catch (InterruptedException e) {
+        logger.warn("Vcr sleep on helix lock interrupted", e);
+      }
+    }
+    logger.info("vcrUpdateDistributedLock obtained");
+    logger.debug("Current partitions in clustermap data structure: {}",
         clusterMap.getAllPartitionIds(null).stream().map(Object::toString).collect(Collectors.joining(",")));
     try {
       String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
@@ -384,8 +410,25 @@ public class VcrReplicationManager extends ReplicationEngine {
       logger.warn("VCR Helix cluster update failed: ", e);
     } finally {
       isVcrHelixUpdateInProgress = false;
+      vcrUpdateDistributedLock.unlock();
     }
     logger.info("VCR Helix cluster update done.");
+  }
+
+  private void checkAmbryHelixAndVcrHelixOnSync() {
+    boolean isSrcAndDstSync = false;
+    try {
+      String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
+      isSrcAndDstSync = HelixVcrUtil.isSrcDestSync(localDcZkStr, clusterMapConfig.clusterMapClusterName,
+          cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName);
+    } catch (Exception e) {
+      logger.warn("Ambry Helix and Vcr Helix sync check runs into exception: ", e);
+    }
+    if (!isSrcAndDstSync) {
+      logger.warn("Ambry Helix cluster and VCR helix cluster are not on sync");
+      // Raise alert on this metric
+      vcrMetrics.vcrHelixNotOnSync.inc();
+    }
   }
 
   int getVcrHelixUpdaterAsCount() {
