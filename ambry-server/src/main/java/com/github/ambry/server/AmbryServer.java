@@ -264,7 +264,7 @@ public class AmbryServer {
 
       accountStatsMySqlStore =
           statsConfig.enableMysqlReport ? (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(properties,
-              clusterMapConfig, statsConfig, registry).getAccountStatsStore() : null;
+              clusterMapConfig, registry).getAccountStatsStore() : null;
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
           clusterParticipants.get(0), accountStatsMySqlStore, accountService);
       if (serverConfig.serverStatsPublishLocalEnabled) {

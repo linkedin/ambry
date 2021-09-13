@@ -340,25 +340,21 @@ public class AggregatedAccountReportsDao {
     /**
      * Supply values to the prepared statement and add it to the batch updater.
      * @param accountId The account id.
-     * @param containerId The container id.
-     * @param storageUsage The storage usage in bytes.
+     * @param containerStats The {@link ContainerStorageStats}.
      * @throws SQLException
      */
-    public void addUpdateToBatch(String clusterName, short accountId, short containerId, long storageUsage)
+    public void addUpdateToBatch(String clusterName, short accountId, ContainerStorageStats containerStats)
         throws SQLException {
-      // TODO: adding real physical storage usage and number of blobs here
-      final long physicalStorageUsage = storageUsage;
-      final long numberOfBlobs = 1L;
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setInt(2, accountId);
-        statement.setInt(3, containerId);
-        statement.setLong(4, storageUsage);
-        statement.setLong(5, physicalStorageUsage);
-        statement.setLong(6, numberOfBlobs);
-        statement.setLong(7, storageUsage);
-        statement.setLong(8, physicalStorageUsage);
-        statement.setLong(9, numberOfBlobs);
+        statement.setInt(3, containerStats.getContainerId());
+        statement.setLong(4, containerStats.getLogicalStorageUsage());
+        statement.setLong(5, containerStats.getPhysicalStorageUsage());
+        statement.setLong(6, containerStats.getNumberOfBlobs());
+        statement.setLong(7, containerStats.getLogicalStorageUsage());
+        statement.setLong(8, containerStats.getPhysicalStorageUsage());
+        statement.setLong(9, containerStats.getNumberOfBlobs());
       });
     }
   }

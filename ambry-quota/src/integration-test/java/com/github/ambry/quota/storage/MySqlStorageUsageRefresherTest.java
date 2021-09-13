@@ -20,7 +20,6 @@ import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.StatsSnapshot;
@@ -341,8 +340,7 @@ public class MySqlStorageUsageRefresherTest {
   private AccountStatsMySqlStore createAccountStatsMySqlStore() throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
-        new ClusterMapConfig(verifiableProperties), new StatsManagerConfig(verifiableProperties),
-        new MetricRegistry()).getAccountStatsStore();
+        new ClusterMapConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 
   private Map<String, Map<String, Long>> cloneMap(Map<String, Map<String, Long>> origin) {

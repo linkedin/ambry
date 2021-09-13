@@ -201,7 +201,9 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       }
     }
     for (Pair<String, String> pair : toBeDeletedPartitionClassNameAndAccountContainer) {
-      accountStatsStore.deleteAggregatedPartitionClassStatsForAccountContainer(pair.getFirst(), pair.getSecond());
+      short[] accountContainerId = Utils.accountContainerIdFromPartitionClassStatsKey(pair.getSecond());
+      accountStatsStore.deleteAggregatedPartitionClassStatsForAccountContainer(pair.getFirst(), accountContainerId[0],
+          accountContainerId[1]);
     }
   }
 

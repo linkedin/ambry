@@ -263,27 +263,23 @@ public class AccountReportsDao {
      * @param hostname the hostname
      * @param partitionId The partition id of this account/container usage.
      * @param accountId The account id.
-     * @param containerId The container id.
-     * @param storageUsage The storage usage in bytes.
+     * @param containerStats The {@link ContainerStorageStats}.
      * @throws SQLException
      */
     public void addUpdateToBatch(String clusterName, String hostname, int partitionId, short accountId,
-        short containerId, long storageUsage) throws SQLException {
-      // TODO: adding real physical storage usage and number of blobs here
-      final long physicalStorageUsage = storageUsage;
-      final long numberOfBlobs = 1L;
+        ContainerStorageStats containerStats) throws SQLException {
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setString(2, hostname);
         statement.setInt(3, partitionId);
         statement.setInt(4, accountId);
-        statement.setInt(5, containerId);
-        statement.setLong(6, storageUsage);
-        statement.setLong(7, physicalStorageUsage);
-        statement.setLong(8, numberOfBlobs);
-        statement.setLong(9, storageUsage);
-        statement.setLong(10, physicalStorageUsage);
-        statement.setLong(11, numberOfBlobs);
+        statement.setInt(5, containerStats.getContainerId());
+        statement.setLong(6, containerStats.getLogicalStorageUsage());
+        statement.setLong(7, containerStats.getPhysicalStorageUsage());
+        statement.setLong(8, containerStats.getNumberOfBlobs());
+        statement.setLong(9, containerStats.getLogicalStorageUsage());
+        statement.setLong(10, containerStats.getPhysicalStorageUsage());
+        statement.setLong(11, containerStats.getNumberOfBlobs());
       });
     }
   }

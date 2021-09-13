@@ -16,7 +16,6 @@ package com.github.ambry.accountstats;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -42,23 +41,20 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
   private final String clusterName;
   private final String hostname;
   private final MetricRegistry registry;
-  private final String localBackupFilePath;
 
   /**
    * Constructor to create a {@link AccountStatsMySqlStoreFactory}.
    * @param verifiableProperties
    * @param clusterMapConfig
-   * @param statsManagerConfig
    * @param registry
    */
   public AccountStatsMySqlStoreFactory(VerifiableProperties verifiableProperties, ClusterMapConfig clusterMapConfig,
-      StatsManagerConfig statsManagerConfig, MetricRegistry registry) {
+      MetricRegistry registry) {
     accountStatsMySqlConfig = new AccountStatsMySqlConfig(verifiableProperties);
     clusterName = clusterMapConfig.clusterMapClusterName;
     hostnameHelper = new HostnameHelper(accountStatsMySqlConfig, clusterMapConfig.clusterMapPort);
     hostname = hostnameHelper.simplifyHostname(clusterMapConfig.clusterMapHostName);
     localDC = clusterMapConfig.clusterMapDatacenterName;
-    localBackupFilePath = statsManagerConfig.outputFilePath;
     this.registry = registry;
   }
 
@@ -76,7 +72,7 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
     }
     dbEndpoints.forEach(ep -> logger.info("DBUrl: {}", ep.getUrl()));
     return new AccountStatsMySqlStore(accountStatsMySqlConfig, buildDataSource(dbEndpoints.get(0)), clusterName,
-        hostname, localBackupFilePath, hostnameHelper, registry);
+        hostname, hostnameHelper, registry);
   }
 
   private HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {

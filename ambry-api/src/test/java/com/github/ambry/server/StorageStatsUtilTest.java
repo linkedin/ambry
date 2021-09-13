@@ -57,16 +57,12 @@ public class StorageStatsUtilTest {
    */
   @Test
   public void testAggregatedPartitionClassStorageStatsConverter() {
-    String[] partitionClassNames = {"default", "newClass"};
-    Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = new HashMap<>();
-    short accountIdStart = (short) 1000;
-    for (String partitionClassName : partitionClassNames) {
-      storageStats.put(partitionClassName,
-          generateRandomAggregatedAccountStorageStats(accountIdStart, 10, 10, 10000L, 2, 10));
-      accountIdStart += 10;
-    }
     AggregatedPartitionClassStorageStats aggregatedPartitionClassStorageStats =
-        new AggregatedPartitionClassStorageStats(storageStats);
+        new AggregatedPartitionClassStorageStats(
+            generateRandomAggregatedPartitionClassStorageStats(new String[]{"default", "newClass"}, (short) 100, 10, 10,
+                10000L, 2, 10));
+    Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats =
+        aggregatedPartitionClassStorageStats.getStorageStats();
 
     StatsSnapshot expected = TestUtils.makePartitionClassSnasphotFromContainerStorageMap(
         convertAggregatedPartitionClassStorageStatsMapToContainerStorageMap(storageStats, false));
@@ -91,19 +87,17 @@ public class StorageStatsUtilTest {
    * @param maxNumberOfBlobs The maximum value for number of blobs.
    * @return
    */
-  static Map<Short, Map<Short, ContainerStorageStats>> generateRandomAggregatedAccountStorageStats(short accountIdStart,
-      int numberOfAccounts, int numberOfContainersPerAccount, long maxLogicalStorageUsage, int physicalFactor,
-      int maxNumberOfBlobs) {
+  public static Map<Short, Map<Short, ContainerStorageStats>> generateRandomAggregatedAccountStorageStats(
+      short accountIdStart, int numberOfAccounts, int numberOfContainersPerAccount, long maxLogicalStorageUsage,
+      int physicalFactor, int maxNumberOfBlobs) {
     short accountId = accountIdStart;
-    short containerId = 1;
     Map<Short, Map<Short, ContainerStorageStats>> result = new HashMap<>();
     for (int i = 0; i < numberOfAccounts; i++) {
-      accountId++;
       if (!result.containsKey(accountId)) {
         result.put(accountId, new HashMap<>());
       }
+      short containerId = 0;
       for (int j = 0; j < numberOfContainersPerAccount; j++) {
-        containerId++;
         long logicalStorageUsage = Math.abs(random.nextLong() % maxLogicalStorageUsage);
         int numberOfBlobs = random.nextInt(maxNumberOfBlobs);
         if (numberOfBlobs == 0) {
@@ -114,9 +108,35 @@ public class StorageStatsUtilTest {
                 .physicalStorageUsage(logicalStorageUsage * physicalFactor)
                 .numberOfBlobs(numberOfBlobs)
                 .build());
+        containerId++;
       }
+      accountId++;
     }
     return result;
+  }
+
+  public static Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> generateRandomHostAccountStorageStats(
+      int numberOfPartitions, int numberOfAccounts, int numberOfContainersPerAccount, long maxLogicalStorageUsage,
+      int physicalFactor, int maxNumberOfBlobs) {
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> result = new HashMap<>();
+    for (int i = 0; i < numberOfPartitions; i++) {
+      result.put((long) i,
+          generateRandomAggregatedAccountStorageStats((short) 0, numberOfAccounts, numberOfContainersPerAccount,
+              maxLogicalStorageUsage, physicalFactor, maxNumberOfBlobs));
+    }
+    return result;
+  }
+
+  public static Map<String, Map<Short, Map<Short, ContainerStorageStats>>> generateRandomAggregatedPartitionClassStorageStats(
+      String[] partitionClassNames, short accountIdStart, int numberOfAccounts, int numberOfContainersPerAccount,
+      long maxLogicalStorageUsage, int physicalFactor, int maxNumberOfBlobs) {
+    Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = new HashMap<>();
+    for (String partitionClassName : partitionClassNames) {
+      storageStats.put(partitionClassName,
+          generateRandomAggregatedAccountStorageStats(accountIdStart, numberOfAccounts, numberOfContainersPerAccount,
+              maxLogicalStorageUsage, physicalFactor, maxNumberOfBlobs));
+    }
+    return storageStats;
   }
 
   /**
@@ -126,7 +146,7 @@ public class StorageStatsUtilTest {
    * @param usePhysicalStorageUsage True to use physical storage usage, otherwise, use logical storage usage.
    * @return
    */
-  static Map<String, Map<String, Long>> convertAggregatedAccountStorageStatsMapToContainerStorageMap(
+  public static Map<String, Map<String, Long>> convertAggregatedAccountStorageStatsMapToContainerStorageMap(
       Map<Short, Map<Short, ContainerStorageStats>> storageStats, boolean usePhysicalStorageUsage) {
     Map<String, Map<String, Long>> result = new HashMap<>();
     for (short accountId : storageStats.keySet()) {
@@ -141,7 +161,7 @@ public class StorageStatsUtilTest {
     return result;
   }
 
-  static Map<String, Map<String, Map<String, Long>>> convertAggregatedPartitionClassStorageStatsMapToContainerStorageMap(
+  public static Map<String, Map<String, Map<String, Long>>> convertAggregatedPartitionClassStorageStatsMapToContainerStorageMap(
       Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats, boolean usePhysicalStorageUsage) {
     Map<String, Map<String, Map<String, Long>>> result = new HashMap<>();
     for (String key : storageStats.keySet()) {
