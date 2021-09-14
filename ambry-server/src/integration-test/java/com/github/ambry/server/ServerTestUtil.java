@@ -649,8 +649,12 @@ final class ServerTestUtil {
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 
-    Port port = clientSSLConfig == null ? new Port(dataNode.getPort(), PortType.PLAINTEXT)
-        : new Port(dataNode.getSSLPort(), PortType.SSL);
+    Port port;
+    if (clientSSLConfig == null) {
+      port = new Port(dataNode.getPort(), PortType.PLAINTEXT);
+    } else {
+      port = new Port(dataNode.getSSLPort(), PortType.SSL);
+    }
     ConnectedChannel channel =
         getBlockingChannelBasedOnPortType(port, "localhost", clientSSLSocketFactory, clientSSLConfig);
     channel.connect();

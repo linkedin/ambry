@@ -169,6 +169,8 @@ class BlockingChannelInfo {
       channel = new BlockingChannel(host, port, config);
     } else if (this.port.getPortType() == PortType.SSL) {
       channel = new SSLBlockingChannel(host, port, registry, config, sslSocketFactory, sslConfig);
+    } else {
+      logger.error("No port type: {}", this.port.getPortType());
     }
     return channel;
   }
