@@ -57,25 +57,12 @@ public class StorageStatsUtil {
     return new StatsSnapshot(accountValue, accountSubMap);
   }
 
-  public static Map<String, Map<String, Long>> convertAggregatedAccountStorageStatsToMap(
-      AggregatedAccountStorageStats aggregatedAccountStorageStats, boolean usePhysicalStorageUsage) {
-    Map<String, Map<String, Long>> result = new HashMap<>();
-    if (aggregatedAccountStorageStats == null) {
-      return result;
-    }
-    Map<Short, Map<Short, ContainerStorageStats>> storageStats = aggregatedAccountStorageStats.getStorageStats();
-    for (short accountId : storageStats.keySet()) {
-      Map<String, Long> containerMap = storageStats.get(accountId)
-          .entrySet()
-          .stream()
-          .collect(Collectors.toMap(ent -> String.valueOf(ent.getKey()),
-              ent -> usePhysicalStorageUsage ? ent.getValue().getPhysicalStorageUsage()
-                  : ent.getValue().getLogicalStorageUsage()));
-      result.put(String.valueOf(accountId), containerMap);
-    }
-    return result;
-  }
-
+  /**
+   * Convert a {@link StatsSnapshot} to {@link AggregatedAccountStorageStats}. We assume the given {@link StatsSnapshot}
+   * follows the proper format so we can construct an {@link AggregatedAccountStorageStats} from it.
+   * @param snapshot The {@link StatsSnapshot}.
+   * @return The {@link AggregatedAccountStorageStats}.
+   */
   public static AggregatedAccountStorageStats convertStatsSnapshotToAggregatedAccountStorageStats(
       StatsSnapshot snapshot) {
     if (snapshot == null) {
@@ -97,6 +84,38 @@ public class StorageStatsUtil {
     return aggregatedAccountStorageStats;
   }
 
+  /**
+   * Convert an {@link AggregatedAccountStorageStats} to a map from account id to container id to storage usage.
+   * The account id and container id are keys of the outer map and the inner map, they are both in string format.
+   * @param aggregatedAccountStorageStats The {@link AggregatedAccountStorageStats}.
+   * @param usePhysicalStorageUsage True to use physical storage, false to use logical storage usage.
+   * @return A map from account id to container id to storage usage.
+   */
+  public static Map<String, Map<String, Long>> convertAggregatedAccountStorageStatsToMap(
+      AggregatedAccountStorageStats aggregatedAccountStorageStats, boolean usePhysicalStorageUsage) {
+    Map<String, Map<String, Long>> result = new HashMap<>();
+    if (aggregatedAccountStorageStats == null) {
+      return result;
+    }
+    Map<Short, Map<Short, ContainerStorageStats>> storageStats = aggregatedAccountStorageStats.getStorageStats();
+    for (short accountId : storageStats.keySet()) {
+      Map<String, Long> containerMap = storageStats.get(accountId)
+          .entrySet()
+          .stream()
+          .collect(Collectors.toMap(ent -> String.valueOf(ent.getKey()),
+              ent -> usePhysicalStorageUsage ? ent.getValue().getPhysicalStorageUsage()
+                  : ent.getValue().getLogicalStorageUsage()));
+      result.put(String.valueOf(accountId), containerMap);
+    }
+    return result;
+  }
+
+  /**
+   * Convert a {@link HostAccountStorageStats} to {@link StatsSnapshot}.
+   * @param hostAccountStorageStats The {@link HostAccountStorageStats}.
+   * @param usePhysicalStorageUsage True to use physical storage usage, false to use logical storage usage.
+   * @return The {@link StatsSnapshot}.
+   */
   public static StatsSnapshot convertHostAccountStorageStatsToStatsSnapshot(
       HostAccountStorageStats hostAccountStorageStats, boolean usePhysicalStorageUsage) {
     if (hostAccountStorageStats == null) {
@@ -126,6 +145,12 @@ public class StorageStatsUtil {
     return new StatsSnapshot(partitionTotalValue, partitionSubMap);
   }
 
+  /**
+   * Convert a {@link StatsSnapshot} to {@link HostAccountStorageStats}. We assume the given {@link StatsSnapshot} follows
+   * the proper format so we can construct a {@link HostAccountStorageStats} from it.
+   * @param snapshot The {@link StatsSnapshot}.
+   * @return The {@link HostAccountStorageStats}.
+   */
   public static HostAccountStorageStats convertStatsSnapshotToHostAccountStorageStats(StatsSnapshot snapshot) {
     if (snapshot == null) {
       return null;
@@ -187,6 +212,12 @@ public class StorageStatsUtil {
     return new StatsSnapshot(partitionClassNameValue, partitionClassNameSubMap);
   }
 
+  /**
+   * Convert a {@link StatsSnapshot} to an {@link AggregatedPartitionClassStorageStats}. We assume the given {@link StatsSnapshot}
+   * follows the proper format so we can construct an {@link AggregatedPartitionClassStorageStats} from it.
+   * @param snapshot The {@link StatsSnapshot}.
+   * @return The {@link AggregatedPartitionClassStorageStats}.
+   */
   public static AggregatedPartitionClassStorageStats convertStatsSnapshotToAggregatedPartitionClassStorageStats(
       StatsSnapshot snapshot) {
     if (snapshot == null) {
@@ -213,6 +244,12 @@ public class StorageStatsUtil {
     return aggregatedPartitionClassStorageStats;
   }
 
+  /**
+   * Convert a {@link StatsSnapshot} to a {@link HostPartitionClassStorageStats}. We assume the given {@link StatsSnapshot}
+   * follows the proper format so we can construct an {@link HostPartitionClassStorageStats} from it.
+   * @param snapshot The {@link StatsSnapshot}.
+   * @return The {@link HostPartitionClassStorageStats}.
+   */
   public static HostPartitionClassStorageStats convertStatsSnapshotToHostPartitionClassStorageStats(
       StatsSnapshot snapshot) {
     if (snapshot == null) {
@@ -242,6 +279,12 @@ public class StorageStatsUtil {
     return hostPartitionClassStorageStats;
   }
 
+  /**
+   * Convert a {@link HostPartitionClassStorageStats} to a {@link StatsSnapshot}.
+   * @param hostPartitionClassStorageStats The {@link HostPartitionClassStorageStats}.
+   * @param usePhysicalStorageUsage True to use physical storage usage, false to use logical storage usage.
+   * @return The {@link StatsSnapshot}
+   */
   public static StatsSnapshot convertHostPartitionClassStorageStatsToStatsSnapshot(
       HostPartitionClassStorageStats hostPartitionClassStorageStats, boolean usePhysicalStorageUsage) {
     if (hostPartitionClassStorageStats == null) {

@@ -415,8 +415,8 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
     // Compare container usage map
     Map<String, Map<String, Long>> obtainedContainerStorageUsages = mySqlStore.queryAggregatedAccountStats();
-    assertEquals(StorageStatsUtilTest.convertAggregatedAccountStorageStatsMapToContainerStorageMap(
-        aggregatedAccountStorageStats.getStorageStats(), false), obtainedContainerStorageUsages);
+    assertEquals(StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false),
+        obtainedContainerStorageUsages);
 
     // Compare StatsSnapshot
     StatsSnapshot obtainedSnapshot = mySqlStore.queryAggregatedAccountStatsByClusterName(clusterName1);
@@ -424,7 +424,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
         StorageStatsUtil.convertAggregatedAccountStorageStatsToStatsSnapshot(aggregatedAccountStorageStats, false),
         obtainedSnapshot);
 
-    // Comapre AggregatedAccountStorageStats
+    // Compare AggregatedAccountStorageStats
     AggregatedAccountStorageStats obtainedStats = mySqlStore.queryAggregatedAccountStorageStats();
     assertEquals(aggregatedAccountStorageStats.getStorageStats(), obtainedStats.getStorageStats());
 
@@ -480,8 +480,8 @@ public class AccountStatsMySqlStoreIntegrationTest {
     Assert.assertEquals("", mySqlStore.queryRecordedMonth());
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
     Map<String, Map<String, Long>> monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedAccountStats();
-    assertEquals(StorageStatsUtilTest.convertAggregatedAccountStorageStatsMapToContainerStorageMap(
-        currentAggregatedStats.getStorageStats(), false), monthlyContainerStorageUsages);
+    assertEquals(StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(currentAggregatedStats, false),
+        monthlyContainerStorageUsages);
     String obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 
@@ -492,8 +492,8 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storeAggregatedAccountStorageStats(currentAggregatedStats);
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
     monthlyContainerStorageUsages = mySqlStore.queryMonthlyAggregatedAccountStats();
-    assertEquals(StorageStatsUtilTest.convertAggregatedAccountStorageStatsMapToContainerStorageMap(
-        currentAggregatedStats.getStorageStats(), false), monthlyContainerStorageUsages);
+    assertEquals(StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(currentAggregatedStats, false),
+        monthlyContainerStorageUsages);
     obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 

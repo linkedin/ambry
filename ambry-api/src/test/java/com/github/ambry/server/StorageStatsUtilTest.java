@@ -40,13 +40,13 @@ public class StorageStatsUtilTest {
     AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(storageStats);
 
     StatsSnapshot expected = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(
-        convertAggregatedAccountStorageStatsMapToContainerStorageMap(storageStats, false));
+        StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false));
     StatsSnapshot snapshot =
         StorageStatsUtil.convertAggregatedAccountStorageStatsToStatsSnapshot(aggregatedAccountStorageStats, false);
     Assert.assertEquals(expected, snapshot);
 
     expected = TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(
-        convertAggregatedAccountStorageStatsMapToContainerStorageMap(storageStats, true));
+        StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, true));
     snapshot =
         StorageStatsUtil.convertAggregatedAccountStorageStatsToStatsSnapshot(aggregatedAccountStorageStats, true);
     Assert.assertEquals(expected, snapshot);
@@ -78,7 +78,7 @@ public class StorageStatsUtilTest {
   }
 
   /**
-   * Generate account storage stats in a map with random values.
+   * Generate aggregated account storage stats in a map with random values.
    * @param accountIdStart The start value of account id
    * @param numberOfAccounts The number of accounts
    * @param numberOfContainersPerAccount The number of containers per account
@@ -115,6 +115,16 @@ public class StorageStatsUtilTest {
     return result;
   }
 
+  /**
+   * Generate host account storage stats in a map with random values.
+   * @param numberOfPartitions The number of partitions
+   * @param numberOfAccounts The number of accounts
+   * @param numberOfContainersPerAccount The number of containers per account
+   * @param maxLogicalStorageUsage the maximum value for logical storage usage
+   * @param physicalFactor The multiply factor for physical storage usage
+   * @param maxNumberOfBlobs The maximum value for number of blobs.
+   * @return
+   */
   public static Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> generateRandomHostAccountStorageStats(
       int numberOfPartitions, int numberOfAccounts, int numberOfContainersPerAccount, long maxLogicalStorageUsage,
       int physicalFactor, int maxNumberOfBlobs) {
@@ -127,6 +137,17 @@ public class StorageStatsUtilTest {
     return result;
   }
 
+  /**
+   * Generate aggregated partition class storage stats in a map with random values.
+   * @param partitionClassNames The array of the partition class names
+   * @param accountIdStart  The start value of account id
+   * @param numberOfAccounts The number of accounts
+   * @param numberOfContainersPerAccount The number of containers per account
+   * @param maxLogicalStorageUsage the maximum value for logical storage usage
+   * @param physicalFactor The multiply factor for physical storage usage
+   * @param maxNumberOfBlobs The maximum value for number of blobs.
+   * @return
+   */
   public static Map<String, Map<Short, Map<Short, ContainerStorageStats>>> generateRandomAggregatedPartitionClassStorageStats(
       String[] partitionClassNames, short accountIdStart, int numberOfAccounts, int numberOfContainersPerAccount,
       long maxLogicalStorageUsage, int physicalFactor, int maxNumberOfBlobs) {
@@ -140,33 +161,18 @@ public class StorageStatsUtilTest {
   }
 
   /**
-   * Convert aggregated account storage stats in a map to container storage map so we can use the converted map to generate
-   * a {@link StatsSnapshot}.
-   * @param storageStats The account storage stats.
+   * Convert aggregated partition class storage stats in a map to container storage map so we can use converted map to
+   * generate a {@link StatsSnapshot}.
+   * @param storageStats The aggregated partition class storage stats in a map.
    * @param usePhysicalStorageUsage True to use physical storage usage, otherwise, use logical storage usage.
    * @return
    */
-  public static Map<String, Map<String, Long>> convertAggregatedAccountStorageStatsMapToContainerStorageMap(
-      Map<Short, Map<Short, ContainerStorageStats>> storageStats, boolean usePhysicalStorageUsage) {
-    Map<String, Map<String, Long>> result = new HashMap<>();
-    for (short accountId : storageStats.keySet()) {
-      result.put(String.valueOf(accountId), new HashMap<>());
-      for (short containerId : storageStats.get(accountId).keySet()) {
-        ContainerStorageStats stats = storageStats.get(accountId).get(containerId);
-        result.get(String.valueOf(accountId))
-            .put(String.valueOf(containerId),
-                usePhysicalStorageUsage ? stats.getPhysicalStorageUsage() : stats.getLogicalStorageUsage());
-      }
-    }
-    return result;
-  }
-
   public static Map<String, Map<String, Map<String, Long>>> convertAggregatedPartitionClassStorageStatsMapToContainerStorageMap(
       Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats, boolean usePhysicalStorageUsage) {
     Map<String, Map<String, Map<String, Long>>> result = new HashMap<>();
     for (String key : storageStats.keySet()) {
-      result.put(key,
-          convertAggregatedAccountStorageStatsMapToContainerStorageMap(storageStats.get(key), usePhysicalStorageUsage));
+      result.put(key, StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(
+          new AggregatedAccountStorageStats(storageStats.get(key)), usePhysicalStorageUsage));
     }
     return result;
   }
