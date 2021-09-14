@@ -126,6 +126,7 @@ public class VcrServerTest {
     props.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "false");
     props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
         "com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory");
+    props.setProperty("clustermap.enable.http2.replication", "true");
     return new VerifiableProperties(props);
   }
 }

@@ -184,6 +184,7 @@ public class VcrTestUtil {
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
     props.setProperty("replication.token.flush.delay.seconds", "100000");
     props.setProperty("replication.token.flush.interval.seconds", "500000");
+    props.setProperty("clustermap.enable.http2.replication", "true");
     return props;
   }
 }

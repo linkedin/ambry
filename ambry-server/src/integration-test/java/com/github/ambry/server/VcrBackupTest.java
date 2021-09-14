@@ -101,6 +101,8 @@ public class VcrBackupTest {
   public void setup() throws Exception {
     Properties props = new Properties();
     TestSSLUtils.addHttp2Properties(props, SSLFactory.Mode.SERVER, true);
+    // VCR use this mockCluster to initiate cluster map.
+    props.setProperty("clustermap.enable.http2.replication", "true");
     mockCluster = new MockCluster(props, false, SystemTime.getInstance(), 1, 1, numOfPartitions);
     notificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     mockCluster.initializeServers(notificationSystem);
