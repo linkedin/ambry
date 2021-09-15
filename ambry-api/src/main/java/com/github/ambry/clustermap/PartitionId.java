@@ -30,6 +30,12 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
   byte[] getBytes();
 
   /**
+   * Return a numeric id of this partition
+   * @return
+   */
+  long getId();
+
+  /**
    * Gets Replicas that comprise this PartitionId.
    *
    * @return list of the Replicas that comprise this PartitionId.

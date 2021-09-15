@@ -150,7 +150,8 @@ public class Partition implements PartitionId {
     return replicas;
   }
 
-  long getId() {
+  @Override
+  public long getId() {
     return id;
   }
 

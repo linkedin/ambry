@@ -67,6 +67,11 @@ public class AmbryPartition implements PartitionId {
   }
 
   @Override
+  public long getId() {
+    return id;
+  }
+
+  @Override
   public List<AmbryReplica> getReplicaIds() {
     return clusterManagerCallback.getReplicaIdsForPartition(this);
   }

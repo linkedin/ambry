@@ -134,6 +134,11 @@ public class AzureCompactionTool {
     }
 
     @Override
+    public long getId()  {
+      return 0;
+    }
+
+    @Override
     public List<? extends ReplicaId> getReplicaIds() {
       return null;
     }

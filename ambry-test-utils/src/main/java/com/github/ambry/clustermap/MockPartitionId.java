@@ -93,6 +93,11 @@ public class MockPartitionId implements PartitionId {
   }
 
   @Override
+  public long getId() {
+    return partition.longValue();
+  }
+
+  @Override
   public List<ReplicaId> getReplicaIds() {
     return new ArrayList<>(replicaIds);
   }

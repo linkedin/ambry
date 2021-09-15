@@ -17,8 +17,6 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
-import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
@@ -40,7 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -922,49 +919,10 @@ public class BlobStoreStatsTest {
   }
 
   /**
-   * Test the static method that converts the quota stats stored in a nested Map to an {@link StatsSnapshot} object.
-   * This test verifies both {@link com.github.ambry.store.BlobStoreStats#convertStoreUsageToAccountStatsSnapshot(Map)} and
-   * {@link com.github.ambry.store.BlobStoreStats#convertStoreUsageToContainerStatsSnapshot(Map)}
+   * Test the getContainerStorageStats method by verifying the returned stats against the original quota {@link Map}.
    */
   @Test
-  public void testConvertStoreUsageToStatsSnapshot() {
-    Random random = new Random();
-    Map<Short, Map<Short, ContainerStorageStats>> statsMap = new HashMap<>();
-    Map<String, StatsSnapshot> accountSubMap = new HashMap<>();
-    Map<String, StatsSnapshot> accountContainerPairSubMap = new HashMap<>();
-
-    long total = 0;
-    for (int i = 0; i < 10; i++) {
-      Map<String, StatsSnapshot> containerSubMap = new HashMap<>();
-      Map<Short, ContainerStorageStats> innerStatsMap = new HashMap<>();
-      long subTotal = 0;
-      for (int j = 0; j < 3; j++) {
-        long randValue = random.nextInt(10000);
-        subTotal += randValue;
-        innerStatsMap.put((short) j, new ContainerStorageStats((short) j, randValue, randValue + 1, 1L));
-        containerSubMap.put(Utils.statsContainerKey((short) j), new StatsSnapshot(randValue, null));
-        accountContainerPairSubMap.put(Utils.partitionClassStatsAccountContainerKey((short) i, (short) j),
-            new StatsSnapshot(randValue, null));
-      }
-      total += subTotal;
-      statsMap.put((short) i, innerStatsMap);
-      accountSubMap.put(Utils.statsAccountKey((short) i), new StatsSnapshot(subTotal, containerSubMap));
-    }
-    StatsSnapshot expectAccountSnapshot = new StatsSnapshot(total, accountSubMap);
-    StatsSnapshot convertedAccountStatsSnapshot = BlobStoreStats.convertStoreUsageToAccountStatsSnapshot(statsMap);
-    assertEquals("Mismatch between the converted Account StatsSnapshot and expected StatsSnapshot",
-        expectAccountSnapshot, convertedAccountStatsSnapshot);
-    StatsSnapshot convertedContainerStatsSnapshot = BlobStoreStats.convertStoreUsageToContainerStatsSnapshot(statsMap);
-    StatsSnapshot expectContainerSnapshot = new StatsSnapshot(total, accountContainerPairSubMap);
-    assertEquals("Mismatch between the converted Container StatsSnapshot and expected StatsSnapshot",
-        expectContainerSnapshot, convertedContainerStatsSnapshot);
-  }
-
-  /**
-   * Test the getStatsSnapshots method by verifying the returned {@link StatsSnapshot} against the original quota {@link Map}.
-   */
-  @Test
-  public void testGetStatsSnapshots() throws StoreException {
+  public void testGetContainerStorageStats() throws StoreException {
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
     List<Short> allAccountIds =
         state.allKeys.keySet().stream().map(mockId -> mockId.getAccountId()).distinct().collect(Collectors.toList());
@@ -980,86 +938,14 @@ public class BlobStoreStatsTest {
           forEach(id -> statsMap.remove(id));
 
       // Verify account stats snapshot
-      Map<StatsReportType, StatsSnapshot> snapshotsByType =
-          blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), deleteAndExpirationRefTimeInMs,
-              accountIdToExclude);
-      verifyStatsSnapshots(statsMap, snapshotsByType, EnumSet.of(StatsReportType.ACCOUNT_REPORT));
-      // Verify partition class stats snapshot
-      snapshotsByType = blobStoreStats.getStatsSnapshots(EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT),
-          deleteAndExpirationRefTimeInMs, accountIdToExclude);
-      verifyStatsSnapshots(statsMap, snapshotsByType, EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT));
-      // Verify all types of stats snapshots
-      Map<StatsReportType, StatsSnapshot> allStatsSnapshots =
-          blobStoreStats.getStatsSnapshots(EnumSet.allOf(StatsReportType.class), deleteAndExpirationRefTimeInMs,
-              accountIdToExclude);
-      verifyStatsSnapshots(statsMap, allStatsSnapshots, EnumSet.allOf(StatsReportType.class));
+      Map<Short, Map<Short, ContainerStorageStats>> obtainedStatsMap =
+          blobStoreStats.getContainerStorageStats(deleteAndExpirationRefTimeInMs, accountIdToExclude);
+      assertEquals(statsMap, obtainedStatsMap);
       if (accountIdToExclude == null) {
         accountIdToExclude = Arrays.asList(allAccountIds.get(0), (short) (maxAccountId + 1));
       } else {
         break;
       }
-    }
-  }
-
-  /**
-   * Verify the correctness of specified stats snapshots fetched from {@link BlobStoreStats}
-   * @param accountContainerStatsMap the map of account to each container quota map. The container quota map presents
-   *                                 each container name to its valid data size
-   * @param snapshotsByType the map of {@link StatsReportType} to {@link StatsSnapshot} to be verified
-   * @param typesToVerify the {@link StatsReportType} to be verified
-   */
-  private void verifyStatsSnapshots(Map<Short, Map<Short, ContainerStorageStats>> accountContainerStatsMap,
-      Map<StatsReportType, StatsSnapshot> snapshotsByType, EnumSet<StatsReportType> typesToVerify) {
-    for (StatsReportType type : typesToVerify) {
-      switch (type) {
-        case ACCOUNT_REPORT:
-          Map<String, StatsSnapshot> accountToSnapshot =
-              snapshotsByType.get(StatsReportType.ACCOUNT_REPORT).getSubMap();
-          assertEquals("Mismatch on number of accounts for " + StatsReportType.ACCOUNT_REPORT,
-              accountContainerStatsMap.size(), accountToSnapshot.size());
-          for (Map.Entry<Short, Map<Short, ContainerStorageStats>> accountToContainerEntry : accountContainerStatsMap.entrySet()) {
-            Map<Short, ContainerStorageStats> containerStatsMap = accountToContainerEntry.getValue();
-            Map<String, StatsSnapshot> containerToSnapshot =
-                accountToSnapshot.get(Utils.statsAccountKey(accountToContainerEntry.getKey())).getSubMap();
-            assertEquals("Mismatch on number of containers", containerStatsMap.size(), containerToSnapshot.size());
-            for (Map.Entry<Short, ContainerStorageStats> containerEntry : containerStatsMap.entrySet()) {
-
-              // Ensure container value and name in ACCOUNT_SNAPSHOT match that in UtilizationMap
-              assertNotNull("Expected container: " + containerEntry.getKey() + " doesn't exist",
-                  containerToSnapshot.get(Utils.statsContainerKey(containerEntry.getKey())));
-              assertEquals("Mismatch on value of container in account snapshot",
-                  containerEntry.getValue().getLogicalStorageUsage(),
-                  containerToSnapshot.get(Utils.statsContainerKey(containerEntry.getKey())).getValue());
-            }
-          }
-          break;
-        case PARTITION_CLASS_REPORT:
-          Map<String, StatsSnapshot> acctContPairToSnapshot =
-              snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT).getSubMap();
-          for (Map.Entry<Short, Map<Short, ContainerStorageStats>> accountToContainerEntry : accountContainerStatsMap.entrySet()) {
-            Map<Short, ContainerStorageStats> containerStatsMap = accountToContainerEntry.getValue();
-            for (Map.Entry<Short, ContainerStorageStats> containerEntry : containerStatsMap.entrySet()) {
-              // Ensure account_container value and name in CONTAINER_SNAPSHOT match that in UtilizationMap
-              String accountContainerName =
-                  Utils.partitionClassStatsAccountContainerKey(accountToContainerEntry.getKey(),
-                      containerEntry.getKey());
-              assertNotNull("Expected account_container pair: " + accountContainerName + " doesn't exist",
-                  acctContPairToSnapshot.get(accountContainerName));
-              assertEquals("Mismatch on value of container in container snapshot",
-                  containerEntry.getValue().getLogicalStorageUsage(),
-                  acctContPairToSnapshot.get(accountContainerName).getValue());
-            }
-          }
-          break;
-        default:
-          fail("Unsupported stats report type!");
-      }
-    }
-    if (typesToVerify.equals(EnumSet.allOf(StatsReportType.class))) {
-      // Ensure two snapshots have same aggregated value
-      assertEquals("Mismatch on total aggregated value for two snapshots",
-          snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT).getValue(),
-          snapshotsByType.get(StatsReportType.ACCOUNT_REPORT).getValue());
     }
   }
 
