@@ -1323,8 +1323,7 @@ class PersistentIndex {
           //2.StoreFindToken is JournalBased, but the journal somehow moved too much ahead, the offset in the FindToken is no longer within journal.
           //  2.1 There might just be lots of new entries coming to journal so the journal moves ahead.
           //  2.2 The journal might be cleared and new log segment is created for compaction (auto-close last segment)
-          if (entry != null && !entry.getKey().equals(indexSegments.lastKey())
-              || isJournalEmptyAfterAutoClose()) {
+          if (entry != null && !entry.getKey().equals(indexSegments.lastKey()) || isJournalEmptyAfterAutoClose()) {
             startTimeInMs = time.milliseconds();
             newToken = findEntriesFromSegmentStartOffset(entry.getKey(), null, messageEntries,
                 new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
@@ -1355,8 +1354,8 @@ class PersistentIndex {
         StoreFindToken newToken;
         //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
         //segment auto close, we should return the original index based token instead of getting from journal.
-        if (indexBasedTokenPointsToLastEntryOfLastIndexSegment(storeToken, indexSegments)
-            && isJournalEmptyAfterAutoClose()) {
+        if (isJournalEmptyAfterAutoClose() && indexBasedTokenPointsToLastEntryOfLastIndexSegment(storeToken,
+            indexSegments)) {
           newToken = storeToken;
         } else {
           newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
@@ -1562,15 +1561,16 @@ class PersistentIndex {
    * @return the absolute read bytes represented by token.
    * @throws StoreException
    */
-  private long getAbsoluteReadBytesFromIndexBasedToken(StoreFindToken indexBasedToken, ConcurrentSkipListMap<Offset, IndexSegment> indexSegments)
-      throws StoreException {
+  private long getAbsoluteReadBytesFromIndexBasedToken(StoreFindToken indexBasedToken,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
     Offset offset = indexBasedToken.getOffset();
     LogSegment logSegment = log.getSegment(offset.getName());
     if (logSegment == null || offset.getOffset() > logSegment.getEndOffset()) {
       throw new IllegalArgumentException("Offset is invalid: " + offset + "; LogSegment: " + logSegment);
     }
     int numPrecedingLogSegments = getLogSegmentToIndexSegmentMapping(indexSegments).headMap(offset.getName()).size();
-    return numPrecedingLogSegments * log.getSegmentCapacity() + logSegment.getEndOffset() - getTotalOffsetAfterTokenPointedStoreKey(indexBasedToken);
+    return numPrecedingLogSegments * log.getSegmentCapacity() + logSegment.getEndOffset()
+        - getTotalOffsetAfterTokenPointedStoreKey(indexBasedToken);
   }
 
   /**
@@ -1607,7 +1607,7 @@ class PersistentIndex {
     if (journal.getCurrentNumberOfEntries() != 0) {
       Offset firstOffsetInJournal = journal.getFirstOffset();
       int index = logSegmentNamesToReturn.indexOf(firstOffsetInJournal.getName());
-      if(index != -1) {
+      if (index != -1) {
         logSegmentNamesToReturn = logSegmentNamesToReturn.subList(0, index);
       }
     }
@@ -1650,7 +1650,9 @@ class PersistentIndex {
       List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments, boolean inclusive) throws StoreException {
     Offset segmentStartOffset = initialSegmentStartOffset;
-    if (segmentStartOffset.equals(indexSegments.lastKey()) && !isJournalEmptyAfterAutoClose()) {
+    //Always checking journal before indexSegments to avoid race condition since when we put new entry, the index segment
+    //will be updated first.
+    if (!isJournalEmptyAfterAutoClose() && segmentStartOffset.equals(indexSegments.lastKey())) {
       //We would never have given away a token with a segmentStartOffset of the latest segment unless the journal has
       //been cleaned up by (auto close last log segment).
       throw new IllegalArgumentException(
@@ -1729,8 +1731,10 @@ class PersistentIndex {
         break; // we have entered and finished reading from the journal, so we are done.
       }
 
-      //if journal is empty due to auto close last log segment, there's no need to check this.
-      if (segmentStartOffset.equals(validIndexSegments.lastKey()) && !isJournalEmptyAfterAutoClose()) {
+      //If journal is empty due to auto close last log segment, there's no need to check this.
+      //Always checking journal before indexSegments to avoid race condition since when we put new entry, the index segment
+      //will be updated first.
+      if (!isJournalEmptyAfterAutoClose() && segmentStartOffset.equals(validIndexSegments.lastKey())) {
         /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
          * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
          * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
@@ -1811,7 +1815,8 @@ class PersistentIndex {
     logger.trace("DataDir: {} last log segment start offset: {}, end offset: {}", dataDir,
         log.getLastSegment().getStartOffset(), log.getLastSegment().getEndOffset());
     return journal.getCurrentNumberOfEntries() == 0 && log.getLastSegment().isEmpty() && !log.getLastSegment()
-        .getName().equals(log.getFirstSegment().getName());
+        .getName()
+        .equals(log.getFirstSegment().getName());
   }
 
   /**
