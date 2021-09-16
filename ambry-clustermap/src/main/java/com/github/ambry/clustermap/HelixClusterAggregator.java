@@ -72,11 +72,6 @@ public class HelixClusterAggregator {
   }
 
   Pair<StatsSnapshot, StatsSnapshot> doWorkOnStatsWrapperMap(Map<String, StatsWrapper> statsWrappers,
-      StatsReportType type) throws IOException {
-    return doWorkOnStatsWrapperMap(statsWrappers, type, true);
-  }
-
-  Pair<StatsSnapshot, StatsSnapshot> doWorkOnStatsWrapperMap(Map<String, StatsWrapper> statsWrappers,
       StatsReportType type, boolean removeExceptionOnType) throws IOException {
     StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<>());
     Map<String, Long> partitionTimestampMap = new HashMap<>();

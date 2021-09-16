@@ -592,7 +592,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
         logger.error("Can't find partition class name for partition id {}", partitionId);
       }
     }
-    HostPartitionClassStorageStats hostPartitionClassStorageStats = new HostPartitionClassStorageStats(null);
+    HostPartitionClassStorageStats hostPartitionClassStorageStats = new HostPartitionClassStorageStats();
     for (Map.Entry<String, Set<Integer>> nameAndIdsEntry : partitionNameAndIdsForHost.entrySet()) {
       String partitionClassName = nameAndIdsEntry.getKey();
       for (int partitionId : nameAndIdsEntry.getValue()) {
