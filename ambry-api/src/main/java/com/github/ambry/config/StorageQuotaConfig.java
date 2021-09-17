@@ -26,6 +26,7 @@ public class StorageQuotaConfig {
   public static final String MYSQL_STORE_RETRY_BACKOFF_MS = STORAGE_QUOTA_PREFIX + "mysql.store.retry.backoff.ms";
   public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
   public static final String SHOULD_THROTTLE = STORAGE_QUOTA_PREFIX + "should.throttle";
+  public static final String USE_PHYSICAL_STORAGE = STORAGE_QUOTA_PREFIX + "use.physical.storage";
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -95,6 +96,13 @@ public class StorageQuotaConfig {
   public final boolean shouldThrottle;
 
   /**
+   * True to use physical storage instead of logical storage usage to enforce storage quota.
+   */
+  @Config(USE_PHYSICAL_STORAGE)
+  @Default("false")
+  public final boolean usePhysicalStorage;
+
+  /**
    * Constructor to create a {@link StorageQuotaConfig}.
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
@@ -107,5 +115,6 @@ public class StorageQuotaConfig {
     mysqlStoreRetryMaxCount = verifiableProperties.getInt(MYSQL_STORE_RETRY_MAX_COUNT, 1);
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
     shouldThrottle = verifiableProperties.getBoolean(SHOULD_THROTTLE, true);
+    usePhysicalStorage = verifiableProperties.getBoolean(USE_PHYSICAL_STORAGE, false);
   }
 }

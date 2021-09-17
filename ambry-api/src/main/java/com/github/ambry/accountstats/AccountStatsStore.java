@@ -111,17 +111,19 @@ public interface AccountStatsStore {
    *     }
    *   }
    * </pre>
+   * @param usePhysicalStorage Use physical storage in the result map.
    * @return The map that represents the container storage usage.
    * @throws Exception
    */
-  default Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
+  default Map<String, Map<String, Long>> queryAggregatedAccountStats(boolean usePhysicalStorage) throws Exception {
     AggregatedAccountStorageStats aggregatedAccountStorageStats = queryAggregatedAccountStorageStats();
-    return StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false);
+    return StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats,
+        usePhysicalStorage);
   }
 
   /**
    * Returns the aggregated account stats for the given {@code clusterName} in {@link StatsSnapshot}. The returned value
-   * is the same data set as {@link #queryAggregatedAccountStats()}, just in different format. It also returns null when
+   * is the same data set as {@link #queryAggregatedAccountStats}, just in different format. It also returns null when
    * the {@code clusterName} doesn't exist.
    * @param clusterName The clusterName.
    * @return A {@link StatsSnapshot} represents the aggregated account stats.
@@ -150,15 +152,32 @@ public interface AccountStatsStore {
   AggregatedAccountStorageStats queryAggregatedAccountStorageStatsByClusterName(String clusterName) throws Exception;
 
   /**
+   * Return the monthly aggregated storage stats. The only difference between this method and {@link #queryAggregatedAccountStorageStats()}
+   * is that this method's returned value only changes in the beginning of each month. For every new month(in local zone
+   * offset), an aggregated storage stats will be written to storage and a snapshot will be created. This method will
+   * return current snapshot. This method doesn't require a month value to fetch the snapshot as this new snapshot will
+   * be override the old ones.
+   * @return The {@link AggregatedAccountStorageStats}that represents the monthly aggregated storage stats
+   * @throws Exception
+   */
+  AggregatedAccountStorageStats queryMonthlyAggregatedAccountStorageStats() throws Exception;
+
+  /**
    * Return the monthly aggregated stats. This method returns a map in the same format as the {@link #queryAggregatedAccountStats}.
    * The only difference these two methods have is that this method's returned value only changes in the beginning of each
    * month. For every new month(in local zone offset), an aggregated stats will be written to storage and a snapshot will
    * be created. This method will return current snapshot. This method doesn't require a month value to fetch the snapshot
    * as this new snapshot will be override the old ones.
+   * @param usePhysicalStorage Use physical storage in the result map.
    * @return The map that represents the container storage usage.
    * @throws Exception
    */
-  Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception;
+  default Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats(boolean usePhysicalStorage)
+      throws Exception {
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = queryMonthlyAggregatedAccountStorageStats();
+    return StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats,
+        usePhysicalStorage);
+  }
 
   /**
    * Return the month value of the current container storage snapshot.

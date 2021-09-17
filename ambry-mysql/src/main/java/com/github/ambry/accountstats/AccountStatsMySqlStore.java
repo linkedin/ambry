@@ -403,15 +403,14 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
   }
 
   @Override
-  public Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
+  public AggregatedAccountStorageStats queryMonthlyAggregatedAccountStorageStats() throws Exception {
     long startTimeMs = System.currentTimeMillis();
-    Map<String, Map<String, Long>> result = new HashMap<>();
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(null);
     aggregatedAccountReportsDao.queryMonthlyContainerUsageForCluster(clusterName, (accountId, containerStats) -> {
-      result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-          .put(String.valueOf(containerStats.getContainerId()), containerStats.getLogicalStorageUsage());
+      aggregatedAccountStorageStats.addContainerStorageStats(accountId, containerStats);
     });
     storeMetrics.queryMonthlyAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
-    return result;
+    return aggregatedAccountStorageStats;
   }
 
   @Override
