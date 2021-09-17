@@ -29,6 +29,9 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StorageStatsUtilTest;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingBiConsumer;
 import java.util.concurrent.TimeUnit;
@@ -98,6 +101,57 @@ public class GetStatsReportHandlerTest {
   }
 
   @Test
+  public void handleGoodCaseWithNewFormatTest() throws Exception {
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(
+        StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 1, 10, 10, 1000L, 2, 100));
+    doAnswer(invocation -> {
+      String clusterName = invocation.getArgument(0);
+      if (clusterName.equals(CLUSTER_NAME)) {
+        return aggregatedAccountStorageStats;
+      } else {
+        return null;
+      }
+    }).when(accountStatsStore).queryAggregatedAccountStorageStatsByClusterName(anyString());
+    RestRequest restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.ACCOUNT_REPORT.name(), true);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
+    assertNotNull("There should be a response", channel);
+    assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Content-length is not as expected", channel.getSize(),
+        Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Storage stats mismatch", aggregatedAccountStorageStats.getStorageStats(),
+        mapper.readValue(RestTestUtils.getResponseBody(channel), AggregatedAccountStorageStats.class)
+            .getStorageStats());
+
+    AggregatedPartitionClassStorageStats aggregatedPartitionClassStorageStats =
+        new AggregatedPartitionClassStorageStats(
+            StorageStatsUtilTest.generateRandomAggregatedPartitionClassStorageStats(new String[]{"default", "newClass"},
+                (short) 1, 10, 10, 1000L, 2, 100));
+    doAnswer(invocation -> {
+      String clusterName = invocation.getArgument(0);
+      if (clusterName.equals(CLUSTER_NAME)) {
+        return aggregatedPartitionClassStorageStats;
+      } else {
+        return null;
+      }
+    }).when(accountStatsStore).queryAggregatedPartitionClassStorageStatsByClusterName(anyString());
+    restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.PARTITION_CLASS_REPORT.name(), true);
+    restResponseChannel = new MockRestResponseChannel();
+    channel = sendRequestGetResponse(restRequest, restResponseChannel);
+    assertNotNull("There should be a response", channel);
+    assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Content-length is not as expected", channel.getSize(),
+        Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Storage stats mismatch", aggregatedPartitionClassStorageStats.getStorageStats(),
+        mapper.readValue(RestTestUtils.getResponseBody(channel), AggregatedPartitionClassStorageStats.class)
+            .getStorageStats());
+  }
+
+  @Test
   public void handleBadCaseTest() throws Exception {
     ThrowingBiConsumer<RestRequest, RestServiceErrorCode> testAction = (request, expectedErrorCode) -> {
       TestUtils.assertException(RestServiceException.class,
@@ -117,6 +171,10 @@ public class GetStatsReportHandlerTest {
   // Helpers
 
   private RestRequest createRestRequest(String clusterName, String reportType) throws Exception {
+    return createRestRequest(clusterName, reportType, false);
+  }
+
+  private RestRequest createRestRequest(String clusterName, String reportType, boolean newFormat) throws Exception {
     JSONObject data = new JSONObject();
     data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
     data.put(MockRestRequest.URI_KEY, Operations.STATS_REPORT);
@@ -126,6 +184,9 @@ public class GetStatsReportHandlerTest {
     }
     if (clusterName != null) {
       headers.put(RestUtils.Headers.CLUSTER_NAME, clusterName);
+    }
+    if (newFormat) {
+      headers.put(RestUtils.Headers.GET_STATS_NEW_FORMAT, String.valueOf(newFormat));
     }
     data.put(MockRestRequest.HEADERS_KEY, headers);
     return new MockRestRequest(data, null);

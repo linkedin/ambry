@@ -264,6 +264,12 @@ public class RestUtils {
      * Request header to carry {@link StatsReportType} for GetStatsReport request.
      */
     public final static String GET_STATS_REPORT_TYPE = "x-ambry-stats-type";
+
+    /**
+     * Request header to request new format. Set it to be true so that ambry would return new format stats that includes
+     * new storage stats information.
+     */
+    public final static String GET_STATS_NEW_FORMAT = "x-ambry-stats-new-format";
   }
 
   public static final class TrackingHeaders {

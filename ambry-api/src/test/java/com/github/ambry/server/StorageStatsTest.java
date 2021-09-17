@@ -14,6 +14,8 @@
 package com.github.ambry.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import java.util.HashMap;
@@ -120,7 +122,36 @@ public class StorageStatsTest {
     Assert.assertEquals(host1.getStorageStats(), deserialized.getStorageStats());
   }
 
- /**
+  @Test
+  public void testAggregatedAccountStorageStats() throws Exception {
+    Map<Short, Map<Short, ContainerStorageStats>> storageStatsMap =
+        StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 10, 10, 5, 10000L, 2, 10);
+    String serialized = objectMapper.writeValueAsString(storageStatsMap);
+    AggregatedAccountStorageStats deserialized =
+        objectMapper.readValue(serialized, AggregatedAccountStorageStats.class);
+    Assert.assertEquals(storageStatsMap, deserialized.getStorageStats());
+
+    serialized = objectMapper.writeValueAsString(deserialized);
+    deserialized = objectMapper.readValue(serialized, AggregatedAccountStorageStats.class);
+    Assert.assertEquals(storageStatsMap, deserialized.getStorageStats());
+  }
+
+  @Test
+  public void testAggregatedPartitionClassStorageStats() throws Exception {
+    Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStatsMap =
+        StorageStatsUtilTest.generateRandomAggregatedPartitionClassStorageStats(new String[]{"default", "newClass"},
+            (short) 10, 10, 5, 10000L, 2, 100);
+    String serialized = objectMapper.writeValueAsString(storageStatsMap);
+    AggregatedPartitionClassStorageStats deserialized =
+        objectMapper.readValue(serialized, AggregatedPartitionClassStorageStats.class);
+    Assert.assertEquals(storageStatsMap, deserialized.getStorageStats());
+
+    serialized = objectMapper.writeValueAsString(deserialized);
+    deserialized = objectMapper.readValue(serialized, AggregatedPartitionClassStorageStats.class);
+    Assert.assertEquals(storageStatsMap, deserialized.getStorageStats());
+  }
+
+  /**
    * Helper method to compare {@link ContainerStorageStats}.
    * @param stats The {@link ContainerStorageStats}.
    * @param containerId the container id
