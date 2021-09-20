@@ -834,6 +834,14 @@ class IndexSegment implements Iterable<IndexEntry> {
       map();
       // we should be fine reading bloom filter here without synchronization as the index is read only
       persistBloomFilter();
+    } catch (StoreException e) {
+      // If the in-memory map is already set to null, it means we are here because we failed writing the bloom filter
+      // to disk. The index segment can still function with bloom filter file being missing, so don't know anything
+      // in this case.
+      if (index != null) {
+        sealed.set(false);
+      }
+      throw e;
     } finally {
       rwLock.writeLock().unlock();
     }
