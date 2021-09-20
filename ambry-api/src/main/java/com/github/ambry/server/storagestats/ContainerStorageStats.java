@@ -157,7 +157,7 @@ public class ContainerStorageStats {
     }
 
     /**
-     * Construtor to instantiate a new {@link Builder} with the given {@link ContainerStorageStats}.
+     * Constructor to instantiate a new {@link Builder} with the given {@link ContainerStorageStats}.
      * @param origin The given {@link ContainerStorageStats}.
      */
     public Builder(ContainerStorageStats origin) {
