@@ -61,6 +61,7 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.server.VcrBackupTest.*;
 import static com.github.ambry.utils.TestUtils.*;
+import static org.mockito.Mockito.*;
 
 
 public class VcrAutomationTest {
@@ -169,7 +170,12 @@ public class VcrAutomationTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     HelixClusterAgentsFactory helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, null, null);
     VcrServer vcrServer =
-        new VcrServer(verifiableProperties, helixClusterAgentsFactory, null, new NoOpCloudFactory(), null);
+        new VcrServer(verifiableProperties, helixClusterAgentsFactory, null, new CloudDestinationFactory() {
+          @Override
+          public CloudDestination getCloudDestination() throws IllegalStateException {
+            return mock(CloudDestination.class);
+          }
+        }, null);
     vcrServer.startup();
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
@@ -204,90 +210,5 @@ public class VcrAutomationTest {
     helixControllerManager.syncStop();
     vcrHelixControllerManager.syncStop();
     zkInfoList.get(0).shutdown();
-  }
-
-  class NoOpCloudFactory implements CloudDestinationFactory {
-
-    @Override
-    public CloudDestination getCloudDestination() throws IllegalStateException {
-      return new CloudDestination() {
-        @Override
-        public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
-            InputStream blobInputStream) throws CloudStorageException {
-          return false;
-        }
-
-        @Override
-        public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
-
-        }
-
-        @Override
-        public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
-            CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
-          return false;
-        }
-
-        @Override
-        public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
-            throws CloudStorageException {
-          return 0;
-        }
-
-        @Override
-        public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
-            throws CloudStorageException {
-          return 0;
-        }
-
-        @Override
-        public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
-          return null;
-        }
-
-        @Override
-        public FindResult findEntriesSince(String partitionPath, FindToken findToken, long maxTotalSizeOfEntries)
-            throws CloudStorageException {
-          return null;
-        }
-
-        @Override
-        public int compactPartition(String partitionPath) throws CloudStorageException {
-          return 0;
-        }
-
-        @Override
-        public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
-            throws CloudStorageException {
-
-        }
-
-        @Override
-        public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
-            throws CloudStorageException {
-          return false;
-        }
-
-        @Override
-        public void stopCompaction() {
-
-        }
-
-        @Override
-        public void deprecateContainers(Collection<Container> deprecatedContainers) throws CloudStorageException {
-
-        }
-
-        @Override
-        public CloudContainerCompactor getContainerCompactor() {
-          return null;
-        }
-
-        @Override
-        public void close() throws IOException {
-
-        }
-      };
-    }
   }
 }

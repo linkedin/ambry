@@ -404,7 +404,7 @@ public class CloudConfig {
   public final long vcrHelixLockTimeoutInMs;
 
   /**
-   * Sleep time if failed to obtain helix lock to update vcr helix.1
+   * Sleep time if failed to obtain helix lock to update vcr helix.
    */
   @Config(VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS)
   @Default("500")

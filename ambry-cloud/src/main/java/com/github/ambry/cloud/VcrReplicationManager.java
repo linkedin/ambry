@@ -74,6 +74,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private volatile boolean isVcrHelixUpdateInProgress = false;
   private volatile boolean isAmbryListenerToUpdateVcrHelixRegistered = false;
   private volatile ScheduledFuture<?> vcrHelixUpdateFuture = null;
+  private volatile ScheduledFuture<?> ambryVcrHelixSyncCheckTaskFuture = null;
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
   private DistributedLock vcrUpdateDistributedLock = null;
 
@@ -122,6 +123,12 @@ public class VcrReplicationManager extends ReplicationEngine {
           try {
             if (!isAmbryListenerToUpdateVcrHelixRegistered) {
               // Prepare the vcrUpdateDistributedLock. Only one instance can update vcr helix cluster at one time.
+              // It's possible isVcrHelixUpdater to be true on two nodes.
+              // For example, at time "t" node A is the owner of partition 1. Due to some partition reassignment
+              // (lets say new node addition), partition 1 get assigned to node B at time "t+1". In this case it's possible
+              // for Node B to get notification of addPartition of partition 1 at "t+2" before Node A gets removePartition
+              // notification (at t+4). If a main cluster update happens between "t+2" and "t+4", then two nodes might try
+              // to update vcr cluster at the same time. Therefore, we need this distributed lock.
               LockScope distributedLockScope = new HelixLockScope(HelixLockScope.LockScopeProperty.CLUSTER,
                   Arrays.asList(cloudConfig.vcrClusterName, cloudConfig.vcrClusterName));
               vcrUpdateDistributedLock =
@@ -132,18 +139,11 @@ public class VcrReplicationManager extends ReplicationEngine {
               clusterMap.registerClusterMapListener(new AmbryListenerToUpdateVcrHelix());
               isAmbryListenerToUpdateVcrHelixRegistered = true;
               // Schedule a fixed rate task to check if ambry helix and vcr helix on sync.
-              scheduler.scheduleAtFixedRate(() -> checkAmbryHelixAndVcrHelixOnSync(),
+              ambryVcrHelixSyncCheckTaskFuture = scheduler.scheduleAtFixedRate(() -> checkAmbryHelixAndVcrHelixOnSync(),
                   cloudConfig.vcrHelixSyncCheckIntervalInSeconds, cloudConfig.vcrHelixSyncCheckIntervalInSeconds,
                   TimeUnit.SECONDS);
               logger.info("VCR updater registered.");
             }
-            // It's possible isVcrHelixUpdater to be true on two nodes.
-            // For example, at time "t" node A is the owner of partition 1. Due to some partition reassignment
-            // (lets say new node addition), partition 1 get assigned to node B at time "t+1". In this case it's possible
-            // for Node B to get notification of addPartition of partition 1 at "t+2" before Node A gets removePartition
-            // notification (at t+4). If a main cluster update happens between "t+2" and "t+4", then two nodes might try
-            // to update vcr cluster at the same time.
-            // TODO: use helix distributed lock to avoid race condition.
             isVcrHelixUpdater = true;
             scheduleVcrHelix("VCR starts");
           } finally {
@@ -171,6 +171,9 @@ public class VcrReplicationManager extends ReplicationEngine {
             isVcrHelixUpdater = false;
             if (vcrHelixUpdateFuture != null) {
               vcrHelixUpdateFuture.cancel(false);
+            }
+            if (ambryVcrHelixSyncCheckTaskFuture != null) {
+              ambryVcrHelixSyncCheckTaskFuture.cancel(false);
             }
           } finally {
             vcrHelixUpdateLock.unlock();
