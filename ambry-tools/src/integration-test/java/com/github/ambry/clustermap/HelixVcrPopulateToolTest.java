@@ -37,7 +37,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.clustermap.HelixVcrPopulateTool.*;
 import static com.github.ambry.clustermap.HelixVcrUtil.*;
 
 

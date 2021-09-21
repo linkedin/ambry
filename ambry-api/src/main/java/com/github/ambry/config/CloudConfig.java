@@ -397,7 +397,7 @@ public class CloudConfig {
   public final int vcrHelixSyncCheckIntervalInSeconds;
 
   /**
-   * Helix lock timeout in ms. Use 10 minutes by default.
+   * THe max time in ms that a helix lock can be held. After timeout, it can be obtained by others.
    */
   @Config(VCR_HELIX_LOCK_TIMEOUT_IN_MS)
   @Default("600000")
