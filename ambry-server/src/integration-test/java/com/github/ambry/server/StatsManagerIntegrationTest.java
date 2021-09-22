@@ -90,11 +90,11 @@ public class StatsManagerIntegrationTest {
       PartitionId partitionId =
           new MockPartitionId(i, partitionClassName, Collections.singletonList((MockDataNodeId) dataNodeId), 0);
       StoreStats storeStats =
-          new StatsManagerTest.MockStoreStats(hostAccountStorageStats.getStorageStats().get(i), false, null);
+          new StatsManagerTest.MockStoreStats(hostAccountStorageStats.getStorageStats().get((long)i), false, null);
       storeMap.put(partitionId, new StatsManagerTest.MockStore(storeStats));
       replicas.add(partitionId.getReplicaIds().get(0));
       hostPartitionClassStorageStatsMap.computeIfAbsent(partitionClassName, k -> new HashMap<>())
-          .put((long) i, hostAccountStorageStats.getStorageStats().get(i));
+          .put((long) i, hostAccountStorageStats.getStorageStats().get((long)i));
     }
     hostPartitionClassStorageStats = new HostPartitionClassStorageStats(hostPartitionClassStorageStatsMap);
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
