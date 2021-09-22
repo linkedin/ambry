@@ -13,8 +13,14 @@
  */
 package com.github.ambry.accountstats;
 
+import com.github.ambry.server.HostAccountStorageStatsWrapper;
+import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
+import com.github.ambry.server.StatsHeader;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StatsWrapper;
+import com.github.ambry.server.StorageStatsUtil;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,7 +34,16 @@ public interface AccountStatsStore {
    * and container. This method will be used for individual ambry server to store local stats.
    * @param statsWrapper The {@link StatsWrapper} that contains stats and other metadata.
    */
-  void storeAccountStats(StatsWrapper statsWrapper) throws Exception;
+  default void storeAccountStats(StatsWrapper statsWrapper) throws Exception {
+    storeHostAccountStorageStats(new HostAccountStorageStatsWrapper(statsWrapper.getHeader(),
+        StorageStatsUtil.convertStatsSnapshotToHostAccountStorageStats(statsWrapper.getSnapshot())));
+  }
+
+  /**
+   * Store stats in the {@link HostAccountStorageStatsWrapper}. This method will be used for individual ambry server to store local stats.
+   * @param statsWrapper The {@link HostAccountStorageStatsWrapper} that contains stats and other metadata.
+   */
+  void storeHostAccountStorageStats(HostAccountStorageStatsWrapper statsWrapper) throws Exception;
 
   /**
    * Store aggregated stats in the {@link StatsSnapshot}. The StatsSnapshot should include account and container. This
@@ -36,7 +51,17 @@ public interface AccountStatsStore {
    * @param snapshot The {@link StatsSnapshot} that contains aggregated container usage.
    * @throws Exception
    */
-  void storeAggregatedAccountStats(StatsSnapshot snapshot) throws Exception;
+  default void storeAggregatedAccountStats(StatsSnapshot snapshot) throws Exception {
+    storeAggregatedAccountStorageStats(StorageStatsUtil.convertStatsSnapshotToAggregatedAccountStorageStats(snapshot));
+  }
+
+  /**
+   * Store aggregated storage stats in the {@link AggregatedAccountStorageStats}. This method will be used for aggregation
+   * task to store aggregated stats.
+   * @param stats The {@link AggregatedAccountStorageStats} that contains aggregated container usage.
+   * @throws Exception
+   */
+  void storeAggregatedAccountStorageStats(AggregatedAccountStorageStats stats) throws Exception;
 
   /**
    * Delete aggregated account stats for the given {@code accountId} and {@code containerId}.
@@ -53,7 +78,22 @@ public interface AccountStatsStore {
    * @return {@link StatsWrapper} of given {@code hostname}.
    * @throws Exception
    */
-  StatsWrapper queryAccountStatsByHost(String hostname, int port) throws Exception;
+  default StatsWrapper queryAccountStatsByHost(String hostname, int port) throws Exception {
+    HostAccountStorageStatsWrapper hostAccountStorageStatsWrapper = queryHostAccountStorageStatsByHost(hostname, port);
+    return new StatsWrapper(hostAccountStorageStatsWrapper.getHeader(),
+        StorageStatsUtil.convertHostAccountStorageStatsToStatsSnapshot(hostAccountStorageStatsWrapper.getStats(),
+            false));
+  }
+
+  /**
+   * Return individual ambry server's storage stats for the given {@code hostname}. This is the stats stored by method
+   * {@link #storeHostAccountStorageStats}.
+   * @param hostname The hostname.
+   * @param port The port number.
+   * @return {@link HostAccountStorageStatsWrapper} of given {@code hostname}.
+   * @throws Exception
+   */
+  HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHost(String hostname, int port) throws Exception;
 
   /**
    * Return the aggregated stats. This is the stats stored by method {@link #storeAggregatedAccountStats}.
@@ -74,7 +114,10 @@ public interface AccountStatsStore {
    * @return The map that represents the container storage usage.
    * @throws Exception
    */
-  Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception;
+  default Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = queryAggregatedAccountStorageStats();
+    return StorageStatsUtil.convertAggregatedAccountStorageStatsToMap(aggregatedAccountStorageStats, false);
+  }
 
   /**
    * Returns the aggregated account stats for the given {@code clusterName} in {@link StatsSnapshot}. The returned value
@@ -84,7 +127,27 @@ public interface AccountStatsStore {
    * @return A {@link StatsSnapshot} represents the aggregated account stats.
    * @throws Exception
    */
-  StatsSnapshot queryAggregatedAccountStatsByClusterName(String clusterName) throws Exception;
+  default StatsSnapshot queryAggregatedAccountStatsByClusterName(String clusterName) throws Exception {
+    AggregatedAccountStorageStats aggregatedAccountStorageStats =
+        queryAggregatedAccountStorageStatsByClusterName(clusterName);
+    return StorageStatsUtil.convertAggregatedAccountStorageStatsToStatsSnapshot(aggregatedAccountStorageStats, false);
+  }
+
+  /**
+   * Returns the aggregated account storage stats in {@link AggregatedAccountStorageStats}.
+   * @return An {@link AggregatedAccountStorageStats} represents the aggregated account stats.
+   * @throws Exception
+   */
+  AggregatedAccountStorageStats queryAggregatedAccountStorageStats() throws Exception;
+
+  /**
+   * Same as {@link #queryAggregatedAccountStorageStats()}. The only difference is that it takes {@code clusterName} as
+   * the first parameter and return the aggregated account storage stats for the given {@code clusterName}.
+   * @param clusterName The ambry cluster name.
+   * @return An {@link AggregatedAccountStorageStats} represents the aggregated account stats.
+   * @throws Exception
+   */
+  AggregatedAccountStorageStats queryAggregatedAccountStorageStatsByClusterName(String clusterName) throws Exception;
 
   /**
    * Return the monthly aggregated stats. This method returns a map in the same format as the {@link #queryAggregatedAccountStats}.
@@ -153,11 +216,23 @@ public interface AccountStatsStore {
    *   }
    * </pre>
    * This is the same data as account stats and we store account stats with method {@link #storeAccountStats} much more often
-   * then partition class stats, in this method, we have have to store the same container storage usage data again.
+   * then partition class stats, in this method, we don't have to store the same container storage usage data again.
    * @param statsWrapper
    * @throws Exception
    */
-  void storePartitionClassStats(StatsWrapper statsWrapper) throws Exception;
+  default void storePartitionClassStats(StatsWrapper statsWrapper) throws Exception {
+    storeHostPartitionClassStorageStats(new HostPartitionClassStorageStatsWrapper(statsWrapper.getHeader(),
+        StorageStatsUtil.convertStatsSnapshotToHostPartitionClassStorageStats(statsWrapper.getSnapshot())));
+  }
+
+  /**
+   * Store host partition class storage stats in {@link HostPartitionClassStorageStatsWrapper}. This is the same data as
+   * account storage stats and we store account stats with method {@link #storeHostAccountStorageStats(HostAccountStorageStatsWrapper)}
+   * much more often then partition class storage stats, in this method, we don't have to store the same container storage usage data again.
+   * @param statsWrapper
+   * @throws Exception
+   */
+  void storeHostPartitionClassStorageStats(HostPartitionClassStorageStatsWrapper statsWrapper) throws Exception;
 
   /**
    * Return the per host partition class stats for given {@code hostname}. The {@code partitionNameAndIds} are the return
@@ -169,8 +244,25 @@ public interface AccountStatsStore {
    * @return A {@link StatsWrapper} represents the per host partition class stats.
    * @throws Exception
    */
-  StatsWrapper queryPartitionClassStatsByHost(String hostname, int port, Map<String, Set<Integer>> partitionNameAndIds)
-      throws Exception;
+  default StatsWrapper queryPartitionClassStatsByHost(String hostname, int port,
+      Map<String, Set<Integer>> partitionNameAndIds) throws Exception {
+    HostPartitionClassStorageStatsWrapper statsWrapper =
+        queryHostPartitionClassStorageStatsByHost(hostname, port, partitionNameAndIds);
+    return new StatsWrapper(new StatsHeader(statsWrapper.getHeader()),
+        StorageStatsUtil.convertHostPartitionClassStorageStatsToStatsSnapshot(statsWrapper.getStats(), false));
+  }
+
+  /**
+   * Return the per host partition class stats for given {@code hostname}. The {@code partitionNameAndIds} are the return
+   * value from {@link #queryPartitionNameAndIds()}.
+   * @param hostname The hostname
+   * @param port The port number
+   * @param partitionNameAndIds the return value of {@link #queryPartitionNameAndIds()}.
+   * @return The {@link HostPartitionClassStorageStatsWrapper}.
+   * @throws Exception
+   */
+  HostPartitionClassStorageStatsWrapper queryHostPartitionClassStorageStatsByHost(String hostname, int port,
+      Map<String, Set<Integer>> partitionNameAndIds) throws Exception;
 
   /**
    * Store aggregated partition class stats in the {@link StatsWrapper}. The stats looks a bit different then the per host
@@ -192,18 +284,29 @@ public interface AccountStatsStore {
    * @param statsSnapshot The {@link StatsSnapshot} that contains aggregated partition class container usage stats
    * @throws Exception
    */
-  void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws Exception;
+  default void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws Exception {
+    storeAggregatedPartitionClassStorageStats(
+        StorageStatsUtil.convertStatsSnapshotToAggregatedPartitionClassStorageStats(statsSnapshot));
+  }
 
   /**
-   * Delete aggregated partition class stats for the given {@code partitionClassName} and the {@code accountContainerKey}.
-   * The {@code accountContainerKey} is the key in the PartitionClass StatsSnapshot. It includes account id and container id.
-   * The account id and container id can be extracted from this key.
-   * @param partitionClassName The partition class name.
-   * @param accountContainerKey The key that contains account id and container id.
+   * Store the aggregated partition class storage stats in the {@link AggregatedPartitionClassStorageStats}.
+   * @param aggregatedPartitionClassStorageStats The {@link AggregatedPartitionClassStorageStats} that contains aggregated
+   *                                             partition class container storage stats.
    * @throws Exception
    */
-  void deleteAggregatedPartitionClassStatsForAccountContainer(String partitionClassName, String accountContainerKey)
-      throws Exception;
+  void storeAggregatedPartitionClassStorageStats(
+      AggregatedPartitionClassStorageStats aggregatedPartitionClassStorageStats) throws Exception;
+
+  /**
+   * Delete aggregated partition class stats for the given {@code partitionClassName} and the {@code accountId} and {@code containerId}.
+   * @param partitionClassName The partition class name.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @throws Exception
+   */
+  void deleteAggregatedPartitionClassStatsForAccountContainer(String partitionClassName, short accountId,
+      short containerId) throws Exception;
 
   /**
    * Return the aggregated partition class stats for given. The returned StatsSnapshot is constructed in the same way
@@ -211,7 +314,12 @@ public interface AccountStatsStore {
    * @return A {@link StatsSnapshot} represents the aggregated partition class stats.
    * @throws Exception
    */
-  StatsSnapshot queryAggregatedPartitionClassStats() throws Exception;
+  default StatsSnapshot queryAggregatedPartitionClassStats() throws Exception {
+    return StorageStatsUtil.convertAggregatedPartitionClassStorageStatsToStatsSnapshot(
+        queryAggregatedPartitionClassStorageStats(), false);
+  }
+
+  AggregatedPartitionClassStorageStats queryAggregatedPartitionClassStorageStats() throws Exception;
 
   /**
    * Same as {@link #queryAggregatedPartitionClassStats()}, the only difference is that it takes {@code clusterName}
@@ -221,7 +329,13 @@ public interface AccountStatsStore {
    * @return A {@link StatsSnapshot} represents the aggregated partition class stats.
    * @throws Exception
    */
-  StatsSnapshot queryAggregatedPartitionClassStatsByClusterName(String clusterName) throws Exception;
+  default StatsSnapshot queryAggregatedPartitionClassStatsByClusterName(String clusterName) throws Exception {
+    return StorageStatsUtil.convertAggregatedPartitionClassStorageStatsToStatsSnapshot(
+        queryAggregatedPartitionClassStorageStatsByClusterName(clusterName), false);
+  }
+
+  AggregatedPartitionClassStorageStats queryAggregatedPartitionClassStorageStatsByClusterName(String clusterName)
+      throws Exception;
 
   /**
    * Close all underlying connections and release all resources.

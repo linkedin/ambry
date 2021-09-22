@@ -22,6 +22,7 @@ public class AccountStatsMySqlConfig {
   public static final String UPDATE_BATCH_SIZE = PREFIX + "update.batch.size";
   public static final String ENABLE_REWRITE_BATCHED_STATEMENT = PREFIX + "enable.rewrite.batched.statements";
   public static final String CONNECTION_IDLE_TIMEOUT = PREFIX + "connection.idle.timeout.ms";
+  public static final String LOCAL_BACKUP_FILE_PATH = PREFIX + "local.backup.file.path";
 
   /**
    * Serialized json containing the information about all mysql end points. This information should be of the following form:
@@ -92,6 +93,13 @@ public class AccountStatsMySqlConfig {
   @Default("60 * 1000")
   public final long connectionIdleTimeoutMs;
 
+  /**
+   * Backup file path for each host to save host account storage stats.
+   */
+  @Config(LOCAL_BACKUP_FILE_PATH)
+  @Default("")
+  public final String localBackupFilePath;
+
   public AccountStatsMySqlConfig(VerifiableProperties verifiableProperties) {
     dbInfo = verifiableProperties.getString(DB_INFO, "");
     domainNamesToRemove = verifiableProperties.getString(DOMAIN_NAMES_TO_REMOVE, "");
@@ -99,5 +107,6 @@ public class AccountStatsMySqlConfig {
     updateBatchSize = verifiableProperties.getInt(UPDATE_BATCH_SIZE, 0);
     enableRewriteBatchedStatement = verifiableProperties.getBoolean(ENABLE_REWRITE_BATCHED_STATEMENT, false);
     connectionIdleTimeoutMs = verifiableProperties.getLong(CONNECTION_IDLE_TIMEOUT, 60 * 1000);
+    localBackupFilePath = verifiableProperties.getString(LOCAL_BACKUP_FILE_PATH, "");
   }
 }

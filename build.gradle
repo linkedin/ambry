@@ -479,6 +479,7 @@ project(':ambry-mysql') {
         compile "com.zaxxer:HikariCP:$hikariVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testCompile project(path: ':ambry-api', configuration: 'testArchives')
     }
 }
 

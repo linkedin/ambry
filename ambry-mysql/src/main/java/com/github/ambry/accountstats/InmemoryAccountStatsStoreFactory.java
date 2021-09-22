@@ -15,7 +15,6 @@ package com.github.ambry.accountstats;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 
 
@@ -29,11 +28,10 @@ public class InmemoryAccountStatsStoreFactory implements AccountStatsStoreFactor
    * Constructor to create a {@link InmemoryAccountStatsStoreFactory}.
    * @param verifiableProperties
    * @param clusterMapConfig
-   * @param statsManagerConfig
    * @param registry
    */
   public InmemoryAccountStatsStoreFactory(VerifiableProperties verifiableProperties, ClusterMapConfig clusterMapConfig,
-      StatsManagerConfig statsManagerConfig, MetricRegistry registry) {
+      MetricRegistry registry) {
     accountStatsStore =
         new InmemoryAccountStatsStore(clusterMapConfig.clusterMapClusterName, clusterMapConfig.clusterMapHostName);
   }

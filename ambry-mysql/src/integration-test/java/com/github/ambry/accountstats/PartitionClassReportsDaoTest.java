@@ -16,9 +16,9 @@ package com.github.ambry.accountstats;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.Utils;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -158,18 +158,17 @@ public class PartitionClassReportsDaoTest {
     dao.insertPartitionClassName(clusterName, className2);
     dao.insertPartitionClassName(clusterName1, className1);
 
-    final Map<String, Map<Short, Map<Short, Long>>> usagesInDB = new HashMap<>();
-    final Map<String, Map<Short, Map<Short, Long>>> physicalUsagesInDB = new HashMap<>();
+    final Map<String, Map<Short, Map<Short, ContainerStorageStats>>> usagesInDB = new HashMap<>();
     dao.queryAggregatedPartitionClassReport(clusterName, (partitionClassName, accountId, containerStats, updatedAt) -> {
       usagesInDB.computeIfAbsent(partitionClassName, k -> new HashMap<>())
           .computeIfAbsent(accountId, k -> new HashMap<>())
-          .put(containerStats.getContainerId(), containerStats.getLogicalStorageUsage());
+          .put(containerStats.getContainerId(), containerStats);
     });
     assertTrue(usagesInDB.isEmpty());
 
     final int numAccount = 100;
     final int numContainer = 10;
-    Map<String, Map<Short, Map<Short, Long>>> classNameAccountContainerUsages = new HashMap<>();
+    Map<String, Map<Short, Map<Short, ContainerStorageStats>>> classNameAccountContainerUsages = new HashMap<>();
     Random random = new Random();
     final long maxUsage = 10000;
 
@@ -181,15 +180,21 @@ public class PartitionClassReportsDaoTest {
             .boxed()
             .collect(Collectors.toMap(Integer::shortValue, a -> IntStream.range(0, numContainer)
                 .boxed()
-                .collect(Collectors.toMap(Integer::shortValue, c -> random.nextLong() % maxUsage)))));
+                .collect(Collectors.toMap(Integer::shortValue,
+                    c -> new ContainerStorageStats.Builder(c.shortValue()).logicalStorageUsage(
+                        random.nextLong() % maxUsage)
+                        .physicalStorageUsage(random.nextLong() % maxUsage)
+                        .numberOfBlobs(10)
+                        .build())))));
       }
 
       PartitionClassReportsDao.StorageBatchUpdater batch = dao.new StorageBatchUpdater(17);
       for (String className : classNameAccountContainerUsages.keySet()) {
         for (short accountId : classNameAccountContainerUsages.get(className).keySet()) {
           for (short containerId : classNameAccountContainerUsages.get(className).get(accountId).keySet()) {
-            long usage = classNameAccountContainerUsages.get(className).get(accountId).get(containerId);
-            batch.addUpdateToBatch(clusterName, className, accountId, containerId, usage);
+            ContainerStorageStats containerStats =
+                classNameAccountContainerUsages.get(className).get(accountId).get(containerId);
+            batch.addUpdateToBatch(clusterName, className, accountId, containerStats);
           }
         }
       }
@@ -198,14 +203,10 @@ public class PartitionClassReportsDaoTest {
           (partitionClassName, accountId, containerStats, updatedAt) -> {
             usagesInDB.computeIfAbsent(partitionClassName, k -> new HashMap<>())
                 .computeIfAbsent(accountId, k -> new HashMap<>())
-                .put(containerStats.getContainerId(), containerStats.getLogicalStorageUsage());
-            physicalUsagesInDB.computeIfAbsent(partitionClassName, k -> new HashMap<>())
-                .computeIfAbsent(accountId, k -> new HashMap<>())
-                .put(containerStats.getContainerId(), containerStats.getPhysicalStorageUsage());
+                .put(containerStats.getContainerId(), containerStats);
           });
 
       assertEquals(classNameAccountContainerUsages, usagesInDB);
-      assertEquals(classNameAccountContainerUsages, physicalUsagesInDB);
     }
   }
 
@@ -219,10 +220,9 @@ public class PartitionClassReportsDaoTest {
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(port));
     configProps.setProperty(AccountStatsMySqlConfig.DOMAIN_NAMES_TO_REMOVE, ".github.com");
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(batchSize));
-    configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, tempDir.toString());
+    configProps.setProperty(AccountStatsMySqlConfig.LOCAL_BACKUP_FILE_PATH, tempDir.toString());
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
-        new ClusterMapConfig(verifiableProperties), new StatsManagerConfig(verifiableProperties),
-        new MetricRegistry()).getAccountStatsStore();
+        new ClusterMapConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 }

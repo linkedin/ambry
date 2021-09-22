@@ -20,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 
 /**
@@ -65,6 +66,25 @@ public class HostAccountStorageStats {
    * Empty constructor for Jackson
    */
   public HostAccountStorageStats() {
+  }
+
+  /**
+   * This is a copy constructor.
+   * @param other
+   */
+  public HostAccountStorageStats(HostAccountStorageStats other) {
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = other.getStorageStats();
+    for (long partitionId : storageStats.keySet()) {
+      Map<Short, Map<Short, ContainerStorageStats>> accountStorageStatsMap = storageStats.get(partitionId);
+      this.storageStats.put(partitionId, new HashMap<>());
+      for (short accountId : accountStorageStatsMap.keySet()) {
+        Map<Short, ContainerStorageStats> containerStorageStatsMap = accountStorageStatsMap.get(accountId);
+        this.storageStats.get(partitionId)
+            .put(accountId, containerStorageStatsMap.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, ent -> new ContainerStorageStats(ent.getValue()))));
+      }
+    }
   }
 
   /**

@@ -49,6 +49,14 @@ public class ContainerStorageStats {
   }
 
   /**
+   * Copy constructor
+   * @param other The {@link ContainerStorageStats} to copy
+   */
+  public ContainerStorageStats(ContainerStorageStats other) {
+    this(other.containerId, other.logicalStorageUsage, other.physicalStorageUsage, other.numberOfBlobs);
+  }
+
+  /**
    * @return The container id
    */
   public short getContainerId() {
@@ -146,6 +154,17 @@ public class ContainerStorageStats {
      */
     public Builder(short containerId) {
       this.containerId = containerId;
+    }
+
+    /**
+     * Constructor to instantiate a new {@link Builder} with the given {@link ContainerStorageStats}.
+     * @param origin The given {@link ContainerStorageStats}.
+     */
+    public Builder(ContainerStorageStats origin) {
+      this.containerId = origin.containerId;
+      this.logicalStorageUsage = origin.logicalStorageUsage;
+      this.physicalStorageUsage = origin.physicalStorageUsage;
+      this.numberOfBlobs = origin.numberOfBlobs;
     }
 
     /**

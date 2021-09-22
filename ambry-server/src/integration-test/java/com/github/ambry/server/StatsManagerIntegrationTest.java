@@ -157,7 +157,7 @@ public class StatsManagerIntegrationTest {
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(PORT));
     configProps.setProperty(AccountStatsMySqlConfig.DOMAIN_NAMES_TO_REMOVE, ".github.com");
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(BATCH_SIZE));
-    configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, accountStatsOutputFileString);
+    configProps.setProperty(AccountStatsMySqlConfig.LOCAL_BACKUP_FILE_PATH, accountStatsOutputFileString);
     configProps.setProperty(StatsManagerConfig.STATS_ENABLE_MYSQL_REPORT, Boolean.TRUE.toString());
     return configProps;
   }
@@ -165,7 +165,6 @@ public class StatsManagerIntegrationTest {
   private AccountStatsMySqlStore createAccountStatsMySqlStore(Properties configProps) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
-        new ClusterMapConfig(verifiableProperties), new StatsManagerConfig(verifiableProperties),
-        new MetricRegistry()).getAccountStatsStore();
+        new ClusterMapConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 }
