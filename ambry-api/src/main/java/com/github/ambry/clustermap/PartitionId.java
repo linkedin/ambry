@@ -30,7 +30,7 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
   byte[] getBytes();
 
   /**
-   * Return a numeric id of this partition
+   * Return a numeric id of this partition. If implementation doesn't have a numeric value for partition, just return -1.
    * @return
    */
   long getId();

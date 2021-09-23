@@ -135,7 +135,7 @@ public class AzureCompactionTool {
 
     @Override
     public long getId()  {
-      return 0;
+      return -1;
     }
 
     @Override
