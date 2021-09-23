@@ -264,6 +264,13 @@ class IndexSegment implements Iterable<IndexEntry> {
     return sealed.get();
   }
 
+  boolean isSealedLocked() {
+    rwLock.readLock().lock();
+    boolean isSealed = sealed.get();
+    rwLock.readLock().unlock();
+    return isSealed;
+  }
+
   /**
    * @return The file that this segment represents
    */
@@ -275,13 +282,10 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return number of IndexEntry items in this segment.
    */
   int size() {
-    if (sealed.get()) {
-      if (serEntries == null) {
-        return 0;
-      }
+    if (isSealedLocked()) {
       return numberOfEntries(serEntries);
     } else {
-      return getNumberOfItems();
+      return numberOfItems.get();
     }
   }
 
@@ -372,10 +376,15 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   NavigableSet<IndexValue> find(StoreKey keyToFind) throws StoreException {
     NavigableSet<IndexValue> toReturn = null;
-    rwLock.readLock().lock();
+    // We deliberately get a reference to index before calling isSealedLocked.
+    // With rwLock, "serEntries != null" is an atomic operation with "sealed.get() == true", which means,
+    // when sealed.get() == true, then serEntries will not be null.
+    // Also, getting reference of index before checking sealed.get() would make sure tha when sealed.get()
+    // returns false, the reference will always be not null.
+    NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
     try {
-      if (!sealed.get()) {
-        ConcurrentSkipListSet<IndexValue> values = index.get(keyToFind);
+      if (!isSealedLocked()) {
+        ConcurrentSkipListSet<IndexValue> values = indexCopy.get(keyToFind);
         if (values != null) {
           metrics.blobFoundInMemSegmentCount.inc();
           toReturn = values.clone();
@@ -435,8 +444,6 @@ class IndexSegment implements Iterable<IndexEntry> {
     } catch (StoreException e) {
       throw new StoreException(String.format("IndexSegment %s : %s", indexFile.getAbsolutePath(), e.getMessage()), e,
           e.getErrorCode());
-    } finally {
-      rwLock.readLock().unlock();
     }
     return toReturn != null ? Collections.unmodifiableNavigableSet(toReturn) : null;
   }
@@ -624,15 +631,10 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return The total size in bytes written to this segment so far
    */
   long getSizeWritten() {
-    rwLock.readLock().lock();
-    try {
-      if (sealed.get()) {
-        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
-      }
-      return sizeWritten.get();
-    } finally {
-      rwLock.readLock().unlock();
+    if (isSealedLocked()) {
+      throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
     }
+    return sizeWritten.get();
   }
 
   /**
@@ -640,16 +642,11 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return The number of items contained in this segment
    */
   int getNumberOfItems() {
-    rwLock.readLock().lock();
-    try {
-      if (sealed.get()) {
-        throw new UnsupportedOperationException(
-            "Operation supported only on index segments that are not sealed: " + getStartOffset());
-      }
-      return numberOfItems.get();
-    } finally {
-      rwLock.readLock().unlock();
+    if (isSealedLocked()) {
+      throw new UnsupportedOperationException(
+          "Operation supported only on index segments that are not sealed: " + getStartOffset());
     }
+    return numberOfItems.get();
   }
 
   /**
@@ -832,27 +829,24 @@ class IndexSegment implements Iterable<IndexEntry> {
     try {
       sealed.set(true);
       map();
-      // we should be fine reading bloom filter here without synchronization as the index is read only
-      persistBloomFilter();
     } catch (StoreException e) {
-      // If the in-memory map is already set to null, it means we are here because we failed writing the bloom filter
-      // to disk. The index segment can still function with bloom filter file being missing, so don't know anything
-      // in this case.
-      if (index != null) {
-        sealed.set(false);
-      }
+      sealed.set(false);
       throw e;
     } finally {
       rwLock.writeLock().unlock();
     }
+    // we should be fine reading bloom filter here without synchronization as the index is read only
+    persistBloomFilter();
   }
 
   /**
    * @return index value of last PUT record in this index segment. Return {@code null} if no PUT is found
    */
   IndexValue getIndexValueOfLastPut() throws StoreException {
+
     IndexValue indexValueOfLastPut = null;
-    if (sealed.get()) {
+    NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
+    if (isSealedLocked()) {
       ByteBuffer readBuf = serEntries.duplicate();
       int numOfIndexEntries = numberOfEntries(readBuf);
       NavigableSet<IndexValue> values = new TreeSet<>();
@@ -873,7 +867,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         }
       }
     } else {
-      for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
+      for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : indexCopy.entrySet()) {
         for (IndexValue indexValue : entry.getValue()) {
           // FLAGS_DEFAULT_VALUE means PUT record
           if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
@@ -1159,10 +1153,11 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return an {@link Iterator<IndexEntry>}.
    */
   public Iterator<IndexEntry> iterator() {
-    if (!sealed.get()) {
-      return new UnsealedIndexSegmentEntryIterator();
+    NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
+    if (!isSealedLocked()) {
+      return new UnsealedIndexSegmentEntryIterator(indexCopy);
     }
-    return new SealedIndexSegmentEntryIterator();
+    return new SealedIndexSegmentEntryIterator(serEntries);
   }
 
   /**
@@ -1185,10 +1180,11 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return an {@link Iterator<IndexEntry>}.
    */
   ListIterator<IndexEntry> listIterator(int idx) {
-    if (!sealed.get()) {
-      return new UnsealedIndexSegmentEntryListIterator(idx);
+    NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
+    if (!isSealedLocked()) {
+      return new UnsealedIndexSegmentEntryListIterator(indexCopy, idx);
     }
-    return new SealedIndexSegmentEntryListIterator(idx);
+    return new SealedIndexSegmentEntryListIterator(serEntries, idx);
   }
 
   /**
@@ -1210,9 +1206,12 @@ class IndexSegment implements Iterable<IndexEntry> {
     if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
       return false;
     }
+
+    // These variables would change with sealed boolean
+    NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
     NavigableSet<IndexValue> values = new TreeSet<>();
     List<IndexEntry> entriesLocal = new ArrayList<>();
-    if (sealed.get()) {
+    if (isSealedLocked()) {
       int index = 0;
       if (key != null) {
         index = findIndex(key, serEntries.duplicate());
@@ -1238,10 +1237,10 @@ class IndexSegment implements Iterable<IndexEntry> {
         logger.error("IndexSegment : {} index not found for key {}", indexFile.getAbsolutePath(), key);
         metrics.keyInFindEntriesAbsent.inc();
       }
-    } else if (key == null || index.containsKey(key)) {
-      NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = index;
+    } else if (key == null || indexCopy.containsKey(key)) {
+      NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = indexCopy;
       if (key != null) {
-        tempMap = index.tailMap(key, inclusive);
+        tempMap = indexCopy.tailMap(key, inclusive);
       }
       for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : tempMap.entrySet()) {
         for (IndexValue value : entry.getValue()) {
@@ -1269,7 +1268,7 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return the first key (in lexicographical order) of sealed index segment
    */
   StoreKey getFirstKeyInSealedSegment() throws StoreException {
-    if (!sealed.get()) {
+    if (!isSealedLocked()) {
       throw new IllegalStateException("Index segment {} is not sealed, not able to determine the first key.");
     }
     ByteBuffer readBuf = serEntries.duplicate();
@@ -1384,9 +1383,14 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   private class SealedIndexSegmentEntryIterator implements Iterator<IndexEntry> {
     protected int cursor = 0;
-    protected ByteBuffer mmap = serEntries.duplicate();
-    protected int numberOfEntries = numberOfEntries(mmap);
+    protected final ByteBuffer mmap;
+    protected final int numberOfEntries;
     protected byte[] valueBuf = new byte[valueSize];
+
+    SealedIndexSegmentEntryIterator(ByteBuffer serEntries) {
+      mmap = serEntries.duplicate();
+      numberOfEntries = numberOfEntries(mmap);
+    }
 
     @Override
     public boolean hasNext() {
@@ -1417,7 +1421,8 @@ class IndexSegment implements Iterable<IndexEntry> {
   private class SealedIndexSegmentEntryListIterator extends SealedIndexSegmentEntryIterator
       implements ListIterator<IndexEntry> {
 
-    SealedIndexSegmentEntryListIterator(int currentIndex) {
+    SealedIndexSegmentEntryListIterator(ByteBuffer serEntries, int currentIndex) {
+      super(serEntries);
       this.cursor = currentIndex;
     }
 
@@ -1477,7 +1482,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     protected final ArrayList<IndexEntry> entries = new ArrayList<>();
     protected final Iterator<IndexEntry> it;
 
-    UnsealedIndexSegmentEntryIterator() {
+    UnsealedIndexSegmentEntryIterator(NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index) {
       NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexMap = index;
       StoreKey keyCursor = indexMap.firstKey();
       while (keyCursor != null) {
@@ -1510,8 +1515,9 @@ class IndexSegment implements Iterable<IndexEntry> {
       implements ListIterator<IndexEntry> {
     private final ListIterator<IndexEntry> listiter;
 
-    UnsealedIndexSegmentEntryListIterator(int currentIndex) {
-      super();
+    UnsealedIndexSegmentEntryListIterator(NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index,
+        int currentIndex) {
+      super(index);
       listiter = entries.listIterator(currentIndex);
     }
 
