@@ -264,6 +264,11 @@ class IndexSegment implements Iterable<IndexEntry> {
     return sealed.get();
   }
 
+  /**
+   * Return true if segment is sealed. This is the same with {@link #isSealed()}, but we get the value under
+   * lock's protection.
+   * @return
+   */
   boolean isSealedLocked() {
     rwLock.readLock().lock();
     boolean isSealed = sealed.get();
