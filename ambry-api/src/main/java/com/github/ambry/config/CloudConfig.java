@@ -70,6 +70,7 @@ public class CloudConfig {
   public static final String VCR_HELIX_LOCK_TIMEOUT_IN_MS = "vcr.helix.lock.timeout.in.ms";
   public static final String VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS =
       "vcr.wait.time.if.helix.lock.not.obtained.in.ms";
+  public static final String VCR_HELIX_LOCK_MAX_RETRY_COUNT = "vcr.helix.lock.max.retry.count";
   public static final String VCR_HELIX_UPDATE_DRY_RUN = "vcr.helix.update.dry.run";
 
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
@@ -411,6 +412,13 @@ public class CloudConfig {
   public final long vcrWaitTimeIfHelixLockNotObtainedInMs;
 
   /**
+   * Sleep time if failed to obtain helix lock to update vcr helix.
+   */
+  @Config(VCR_HELIX_LOCK_MAX_RETRY_COUNT)
+  @Default("10")
+  public final int vcrHelixLockMaxRetryCount;
+
+  /**
    * If true, VCR helix update will be in dry run mode. We can also use this to turn off automated VCR cluster update.
    */
   @Config(VCR_HELIX_UPDATE_DRY_RUN)
@@ -483,5 +491,6 @@ public class CloudConfig {
     vcrHelixLockTimeoutInMs = verifiableProperties.getLong(VCR_HELIX_LOCK_TIMEOUT_IN_MS, 600000);
     vcrWaitTimeIfHelixLockNotObtainedInMs =
         verifiableProperties.getLong(VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS, 500);
+    vcrHelixLockMaxRetryCount = verifiableProperties.getInt(VCR_HELIX_LOCK_MAX_RETRY_COUNT, 10);
   }
 }

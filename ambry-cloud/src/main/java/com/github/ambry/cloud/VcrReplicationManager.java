@@ -388,14 +388,21 @@ public class VcrReplicationManager extends ReplicationEngine {
    * The actual performer to update VCR Helix:
    */
   synchronized private void updateVcrHelix(String reason) {
-
     logger.info("Going to update VCR Helix Cluster. Reason: {}, Dryrun: {}", reason, cloudConfig.vcrHelixUpdateDryRun);
-    while (!vcrUpdateDistributedLock.tryLock()) {
-      logger.warn("Could not obtain vcr update distributed lock. Sleep and retry.");
+    int retryCount = 0;
+    while (retryCount <= cloudConfig.vcrHelixLockMaxRetryCount && !vcrUpdateDistributedLock.tryLock()) {
+      logger.warn("Could not obtain vcr update distributed lock. Sleep and retry {}/{}.", retryCount,
+          cloudConfig.vcrHelixLockMaxRetryCount);
       try {
         Thread.sleep(cloudConfig.vcrWaitTimeIfHelixLockNotObtainedInMs);
       } catch (InterruptedException e) {
         logger.warn("Vcr sleep on helix lock interrupted", e);
+      }
+      retryCount++;
+      if (retryCount == cloudConfig.vcrHelixLockMaxRetryCount) {
+        logger.warn("Still can't obtain lock after {} retries with backoff time {}ms", retryCount,
+            cloudConfig.vcrWaitTimeIfHelixLockNotObtainedInMs);
+        return;
       }
     }
     logger.info("vcrUpdateDistributedLock obtained");
@@ -418,6 +425,10 @@ public class VcrReplicationManager extends ReplicationEngine {
     logger.info("VCR Helix cluster update done.");
   }
 
+  /**
+   * A method to check if Ambry Helix and VCR Helix are on sync or not.
+   * If not, it will log warnning message and emit metric.
+   */
   private void checkAmbryHelixAndVcrHelixOnSync() {
     boolean isSrcAndDstSync = false;
     try {
@@ -427,7 +438,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     } catch (Exception e) {
       logger.warn("Ambry Helix and Vcr Helix sync check runs into exception: ", e);
     }
-    if (!isSrcAndDstSync) {
+    if (vcrHelixUpdateFuture == null && !isSrcAndDstSync) {
       logger.warn("Ambry Helix cluster and VCR helix cluster are not on sync");
       // Raise alert on this metric
       vcrMetrics.vcrHelixNotOnSync.inc();
