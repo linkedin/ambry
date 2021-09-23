@@ -15,14 +15,13 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -100,52 +99,6 @@ class BlobStoreStats implements StoreStats, Closeable {
   private QueueProcessor queueProcessor;
   private ValidDataSizeCollector validDataSizeCollector;
 
-  /**
-   * Convert a given nested {@link Map} of accountId to containerId to storage stats to its corresponding
-   * account {@link StatsSnapshot} object.
-   * @param statsMap the nested {@link Map} to be converted
-   * @return the corresponding {@link StatsSnapshot} object.
-   */
-  static StatsSnapshot convertStoreUsageToAccountStatsSnapshot(Map<Short, Map<Short, ContainerStorageStats>> statsMap) {
-    Map<String, StatsSnapshot> accountValidSizeMap = new HashMap<>();
-    long totalSize = 0;
-    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> accountEntry : statsMap.entrySet()) {
-      long subTotalSize = 0;
-      Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
-      for (Map.Entry<Short, ContainerStorageStats> containerEntry : accountEntry.getValue().entrySet()) {
-        subTotalSize += containerEntry.getValue().getLogicalStorageUsage();
-        containerValidSizeMap.put(Utils.statsContainerKey(containerEntry.getKey()),
-            new StatsSnapshot(containerEntry.getValue().getLogicalStorageUsage(), null));
-      }
-      totalSize += subTotalSize;
-      accountValidSizeMap.put(Utils.statsAccountKey(accountEntry.getKey()),
-          new StatsSnapshot(subTotalSize, containerValidSizeMap));
-    }
-    return new StatsSnapshot(totalSize, accountValidSizeMap);
-  }
-
-  /**
-   * Convert a given nested {@link Map} of accountId to containerId to storage stats to its corresponding
-   * container {@link StatsSnapshot} object. The container snapshot does not have account level, each container is
-   * uniquely identified by "Account[]_Container[]" pair.
-   * @param statsMap the nested {@link Map} to be converted
-   * @return the corresponding {@link StatsSnapshot} object.
-   */
-  static StatsSnapshot convertStoreUsageToContainerStatsSnapshot(
-      Map<Short, Map<Short, ContainerStorageStats>> statsMap) {
-    Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
-    long totalSize = 0;
-    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> accountEntry : statsMap.entrySet()) {
-      for (Map.Entry<Short, ContainerStorageStats> containerEntry : accountEntry.getValue().entrySet()) {
-        totalSize += containerEntry.getValue().getLogicalStorageUsage();
-        containerValidSizeMap.put(
-            Utils.partitionClassStatsAccountContainerKey(accountEntry.getKey(), containerEntry.getKey()),
-            new StatsSnapshot(containerEntry.getValue().getLogicalStorageUsage(), null));
-      }
-    }
-    return new StatsSnapshot(totalSize, containerValidSizeMap);
-  }
-
   BlobStoreStats(String storeId, PersistentIndex index, StoreConfig config, Time time,
       ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
@@ -210,62 +163,35 @@ class BlobStoreStats implements StoreStats, Closeable {
     return validDataSize.get();
   }
 
-  /**
-   * {@inheritDoc}
-   * Implementation in {@link BlobStoreStats} which returns the all types of snapshots for a {@link BlobStore}. Size of
-   * delete records are not accounted as valid data size here. The formats of all snapshots are presented as follows.
-   * <pre>
-   *  AccountSnapshot (used for ACCOUNT_REPORT)   | ContainerSnapshot (used for PARTITION_CLASS_REPORT)
-   * ---------------------------------------------------------------------------------------------------
-   * {                                            |    {
-   *   value: 1000,                               |      value: 1000,
-   *   subMap: {                                  |      subMap: {
-   *     Account[1]:{                             |         Account[1]_Container[1]: {
-   *       value: 200,                            |             value: 200,
-   *       subMap: {                              |             subMap: null
-   *         Container[1]:{                       |         },
-   *           value: 200,                        |         Account[2]_Container[3]: {
-   *           subMap: null                       |             value: 800,
-   *         }                                    |             subMap: null
-   *       }                                      |         }
-   *     },                                       |      }
-   *     Account[2]:{                             |    }
-   *       value: 800,                            |
-   *       subMap:{                               |
-   *         Container[3]:{                       |
-   *           value: 800,                        |
-   *           subMap: null                       |
-   *         }                                    |
-   *       }                                      |
-   *     }                                        |
-   *   }                                          |
-   * }                                            |
-   * </pre>
-   */
   @Override
-  public Map<StatsReportType, StatsSnapshot> getStatsSnapshots(Set<StatsReportType> statsReportTypes,
-      long referenceTimeInMs, List<Short> accountIdsToExclude) throws StoreException {
-    Map<StatsReportType, StatsSnapshot> statsSnapshotsByType = new HashMap<>();
+  public Map<Short, Map<Short, ContainerStorageStats>> getContainerStorageStats(long referenceTimeInMs,
+      List<Short> accountIdsToExclude) throws StoreException {
     Map<Short, Map<Short, ContainerStorageStats>> containerStatsMap = getContainerStorageStats(referenceTimeInMs);
     if (accountIdsToExclude != null && !accountIdsToExclude.isEmpty()) {
       accountIdsToExclude.forEach(id -> containerStatsMap.remove(id));
     }
-    for (StatsReportType reportType : statsReportTypes) {
-      switch (reportType) {
-        case ACCOUNT_REPORT:
-          statsSnapshotsByType.put(StatsReportType.ACCOUNT_REPORT,
-              convertStoreUsageToAccountStatsSnapshot(containerStatsMap));
-          break;
-        case PARTITION_CLASS_REPORT:
-          statsSnapshotsByType.put(StatsReportType.PARTITION_CLASS_REPORT,
-              convertStoreUsageToContainerStatsSnapshot(containerStatsMap));
-          break;
-        default:
-          logger.error("Unrecognized stats report type: {}", reportType);
+    // Remove zero storage stats
+    List<Short> accountIdToRemove = new ArrayList<>();
+    List<Short> containerIdToRemove = new ArrayList<>();
+    for (short accountId : containerStatsMap.keySet()) {
+      containerIdToRemove.clear();
+      for (short containerId : containerStatsMap.get(accountId).keySet()) {
+        ContainerStorageStats stats = containerStatsMap.get(accountId).get(containerId);
+        if (stats.isEmpty()) {
+          containerIdToRemove.add(containerId);
+        }
+      }
+      for (short containerId : containerIdToRemove) {
+        containerStatsMap.get(accountId).remove(containerId);
+      }
+      if (containerStatsMap.get(accountId).size() == 0) {
+        accountIdToRemove.add(accountId);
       }
     }
-    statsSnapshotsByType.forEach((k, v) -> v.removeZeroValueSnapshots());
-    return statsSnapshotsByType;
+    for (short accountId : accountIdToRemove) {
+      containerStatsMap.remove(accountId);
+    }
+    return containerStatsMap;
   }
 
   @Override

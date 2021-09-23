@@ -84,6 +84,14 @@ public class ContainerStorageStats {
     return logicalStorageUsage;
   }
 
+  /**
+   * True if all the storage stats values are 0.
+   * @return True if all the stats values are 0.
+   */
+  public boolean isEmpty() {
+    return logicalStorageUsage == 0 && physicalStorageUsage == 0 && numberOfBlobs == 0;
+  }
+
   @Override
   public int hashCode() {
     return Objects.hash(containerId, logicalStorageUsage, physicalStorageUsage, numberOfBlobs);

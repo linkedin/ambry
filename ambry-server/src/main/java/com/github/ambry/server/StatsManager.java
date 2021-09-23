@@ -26,6 +26,9 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
 import com.github.ambry.config.StatsManagerConfig;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
+import com.github.ambry.server.storagestats.HostAccountStorageStats;
+import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -34,15 +37,15 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -126,11 +129,13 @@ class StatsManager {
    */
   void start() {
     scheduler = Utils.newScheduler(1, false);
-    accountsStatsPublisher = new AccountStatsPublisher(accountStatsStore);
-    int actualDelay = config.initialDelayUpperBoundInSecs > 0 ? ThreadLocalRandom.current()
-        .nextInt(config.initialDelayUpperBoundInSecs) : 0;
-    logger.info("Scheduling account stats publishing job with an initial delay of {} secs", actualDelay);
-    scheduler.scheduleAtFixedRate(accountsStatsPublisher, actualDelay, config.publishPeriodInSecs, TimeUnit.SECONDS);
+    if (accountStatsStore != null) {
+      accountsStatsPublisher = new AccountStatsPublisher(accountStatsStore);
+      int actualDelay = config.initialDelayUpperBoundInSecs > 0 ? ThreadLocalRandom.current()
+          .nextInt(config.initialDelayUpperBoundInSecs) : 0;
+      logger.info("Scheduling account stats publishing job with an initial delay of {} secs", actualDelay);
+      scheduler.scheduleAtFixedRate(accountsStatsPublisher, actualDelay, config.publishPeriodInSecs, TimeUnit.SECONDS);
+    }
 
     if (config.publishPartitionClassReportPeriodInSecs != 0) {
       partitionClassStatsPublisher = new PartitionClassStatsPublisher(accountStatsStore);
@@ -172,30 +177,13 @@ class StatsManager {
   }
 
   /**
-   * Publishes stats to a local file in JSON format.
-   * @param statsWrapper the {@link StatsWrapper} to be published
-   * @throws IOException Any exception
-   */
-  void publish(StatsWrapper statsWrapper) throws IOException {
-    File tempFile = new File(statsOutputFile.getAbsolutePath() + ".tmp");
-    if (tempFile.createNewFile()) {
-      mapper.writerWithDefaultPrettyPrinter().writeValue(tempFile, statsWrapper);
-      if (!tempFile.renameTo(statsOutputFile)) {
-        throw new IOException(
-            "Failed to rename " + tempFile.getAbsolutePath() + " to " + statsOutputFile.getAbsolutePath());
-      }
-    } else {
-      throw new IOException("Temporary file creation failed when publishing stats " + tempFile.getAbsolutePath());
-    }
-  }
-
-  /**
    * Fetch and aggregate account stats from a given {@link Store}
-   * @param aggregatedSnapshot the {@link StatsSnapshot} to hold the aggregated result
+   * @param hostStorageStatsMap map from partition id to container storage stats.
    * @param partitionId specifies the {@link Store} to be fetched from
    * @param unreachablePartitions a {@link List} containing partition Ids that were unable to successfully fetch from
    */
-  void collectAndAggregateAccountStats(StatsSnapshot aggregatedSnapshot, PartitionId partitionId,
+  void collectAndAggregateAccountStorageStats(
+      Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> hostStorageStatsMap, PartitionId partitionId,
       List<PartitionId> unreachablePartitions) {
     Store store = storageManager.getStore(partitionId, false);
     if (store == null) {
@@ -204,10 +192,9 @@ class StatsManager {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StoreStats storeStats = store.getStoreStats();
-        Map<StatsReportType, StatsSnapshot> snapshotsByType =
-            storeStats.getStatsSnapshots(EnumSet.of(StatsReportType.ACCOUNT_REPORT), time.milliseconds(),
-                publishExcludeAccountIds);
-        aggregatedSnapshot.getSubMap().put(partitionId.toString(), snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
+        Map<Short, Map<Short, ContainerStorageStats>> containerStatsMap =
+            storeStats.getContainerStorageStats(time.milliseconds(), publishExcludeAccountIds);
+        hostStorageStatsMap.put(partitionId.getId(), containerStatsMap);
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
         // update delete tombstone stats
         updateDeleteTombstoneStats(storeStats);
@@ -219,12 +206,13 @@ class StatsManager {
 
   /**
    * Fetch and aggregate partition class stats from a given {@link Store}
-   * @param aggregatedSnapshot the {@link StatsSnapshot} to hold the aggregated result
+   * @param hostPartitionClassStorageStatsMap map from partition class to all partition storage stats.
    * @param partitionId specifies the {@link Store} to be fetched from
    * @param unreachablePartitions a {@link List} containing partition Ids that were unable to successfully fetch from
    */
-  void collectAndAggregatePartitionClassStats(StatsSnapshot aggregatedSnapshot, PartitionId partitionId,
-      List<PartitionId> unreachablePartitions) {
+  void collectAndAggregatePartitionClassStorageStats(
+      Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> hostPartitionClassStorageStatsMap,
+      PartitionId partitionId, List<PartitionId> unreachablePartitions) {
     Store store = storageManager.getStore(partitionId, false);
     if (store == null) {
       unreachablePartitions.add(partitionId);
@@ -232,47 +220,16 @@ class StatsManager {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StoreStats storeStats = store.getStoreStats();
-        Map<StatsReportType, StatsSnapshot> snapshotsByType =
-            storeStats.getStatsSnapshots(EnumSet.of(StatsReportType.PARTITION_CLASS_REPORT), time.milliseconds(),
-                publishExcludeAccountIds);
-        StatsSnapshot statsSnapshot = snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT);
-        StatsSnapshot partitionClassSnapshot = aggregatedSnapshot.getSubMap()
-            .getOrDefault(partitionId.getPartitionClass(), new StatsSnapshot(0L, new HashMap<>()));
-        partitionClassSnapshot.setValue(partitionClassSnapshot.getValue() + statsSnapshot.getValue());
-        partitionClassSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
-        aggregatedSnapshot.getSubMap().put(partitionId.getPartitionClass(), partitionClassSnapshot);
+        Map<Short, Map<Short, ContainerStorageStats>> containerStatsMap =
+            storeStats.getContainerStorageStats(time.milliseconds(), publishExcludeAccountIds);
+        String partitionClassName = partitionId.getPartitionClass();
+        hostPartitionClassStorageStatsMap.computeIfAbsent(partitionClassName, k -> new HashMap<>())
+            .put(partitionId.getId(), containerStatsMap);
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachablePartitions.add(partitionId);
       }
     }
-  }
-
-  /**
-   * Fetch the {@link StatsSnapshot} for the given {@link PartitionId}.
-   * @param partitionId the {@link PartitionId} to try to fetch the {@link StatsSnapshot} from
-   * @param unreachablePartitions a list of partitionIds to keep track of the unreachable partitions
-   * @return the generated {@link StatsSnapshot}
-   */
-  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<PartitionId> unreachablePartitions,
-      StatsReportType reportType) {
-    StatsSnapshot statsSnapshot = null;
-    Store store = storageManager.getStore(partitionId, false);
-    if (store == null) {
-      unreachablePartitions.add(partitionId);
-    } else {
-      try {
-        Map<StatsReportType, StatsSnapshot> snapshotsByType = store.getStoreStats()
-            .getStatsSnapshots(EnumSet.of(reportType), time.milliseconds(), healthReportExcludeAccountIds);
-        statsSnapshot = snapshotsByType.get(reportType);
-      } catch (StoreException e) {
-        String reportTypeStr = reportType.toString();
-        logger.error("StoreException on fetching {} stats snapshot for store {}",
-            reportTypeStr.substring(0, reportTypeStr.lastIndexOf('_')), store, e);
-        unreachablePartitions.add(partitionId);
-      }
-    }
-    return statsSnapshot;
   }
 
   /**
@@ -399,17 +356,17 @@ class StatsManager {
         // as well. So before starting collecting account stats, let's reset the delete tombstone stats.
         resetDeleteTombstoneStats();
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-        StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, new HashMap<>());
         List<PartitionId> unreachablePartitions = new ArrayList<>();
+        Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> hostStorageStatsMap = new HashMap<>();
 
         // 1. First, collect account stats from each replicas and aggregate the result to aggregatedSnapshot.
-        Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
+        Set<PartitionId> partitionIds = new HashSet<>(partitionToReplicaMap.keySet());
+        Iterator<PartitionId> iterator = partitionIds.iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
           logger.debug("Aggregating account stats for local report started for store {}", partitionId);
-          collectAndAggregateAccountStats(aggregatedSnapshot, partitionId, unreachablePartitions);
+          collectAndAggregateAccountStorageStats(hostStorageStatsMap, partitionId, unreachablePartitions);
         }
-        aggregatedSnapshot.updateValue();
 
         // 2. Second, filter out the unreachable partitions that are not in the map.
         List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
@@ -420,17 +377,13 @@ class StatsManager {
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
           // 4. Construct a StatsWrapper.
-          StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
-              partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
-              unreachableStores);
-          StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
+          StatsHeader statsHeader =
+              new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(), partitionIds.size(),
+                  partitionIds.size() - unreachableStores.size(), unreachableStores);
+          HostAccountStorageStatsWrapper statsWrapper =
+              new HostAccountStorageStatsWrapper(statsHeader, new HostAccountStorageStats(hostStorageStatsMap));
           // 5. Persist this statsWrapper to mysql database if connection exists.
-          if (accountStatsStore != null) {
-            accountStatsStore.storeAccountStats(statsWrapper);
-          }
-          // 6. Persist this statsWrapper to local backup file.
-          publish(statsWrapper);
-          logger.info("Local account stats snapshot published to {}", statsOutputFile.getAbsolutePath());
+          accountStatsStore.storeHostAccountStorageStats(statsWrapper);
         }
       } catch (Exception e) {
         metrics.statsAggregationFailureCount.inc();
@@ -460,29 +413,32 @@ class StatsManager {
       logger.info("Aggregating partition class stats for local report");
       try {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-        StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, new HashMap<>());
         List<PartitionId> unreachablePartitions = new ArrayList<>();
+        Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> hostPartitionClassStorageStatsMap =
+            new HashMap<>();
 
         // 1. First, collect partition class stats from each replicas and aggregate the result to aggregatedSnapshot.
-        Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
+        Set<PartitionId> partitionIds = new HashSet<>(partitionToReplicaMap.keySet());
+        Iterator<PartitionId> iterator = partitionIds.iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
           logger.debug("Aggregating partition class stats for local report started for store {}", partitionId);
-          collectAndAggregatePartitionClassStats(aggregatedSnapshot, partitionId, unreachablePartitions);
+          collectAndAggregatePartitionClassStorageStats(hostPartitionClassStorageStatsMap, partitionId,
+              unreachablePartitions);
         }
-        aggregatedSnapshot.updateValue();
 
         // 2. Second, filter out the unreachable partitions that are not in the map.
         List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
           // 3. Construct a StatsWrapper.
-          StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(),
-              partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
-              unreachableStores);
-          StatsWrapper statsWrapper = new StatsWrapper(statsHeader, aggregatedSnapshot);
+          StatsHeader statsHeader =
+              new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, time.milliseconds(), partitionIds.size(),
+                  partitionIds.size() - unreachableStores.size(), unreachableStores);
+          HostPartitionClassStorageStatsWrapper statsWrapper = new HostPartitionClassStorageStatsWrapper(statsHeader,
+              new HostPartitionClassStorageStats(hostPartitionClassStorageStatsMap));
           // 4. Persist this statsWrapper to mysql database.
-          accountStatsStore.storePartitionClassStats(statsWrapper);
+          accountStatsStore.storeHostPartitionClassStorageStats(statsWrapper);
         }
       } catch (Exception e) {
         metrics.statsAggregationFailureCount.inc();
