@@ -37,7 +37,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.clustermap.HelixVcrPopulateTool.*;
+import static com.github.ambry.clustermap.HelixVcrUtil.*;
 
 
 @RunWith(Parameterized.class)
@@ -170,35 +170,4 @@ public class HelixVcrPopulateToolTest {
     destZkInfo.shutdown();
   }
 
-  /**
-   * A method to verify resources and partitions in src cluster and dest cluster are same.
-   */
-  private boolean isSrcDestSync(String srcZkString, String srcClusterName, String destZkString,
-      String destClusterName) {
-
-    HelixAdmin srcAdmin = new ZKHelixAdmin(srcZkString);
-    Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
-    HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
-    Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
-
-    for (String resource : srcResources) {
-      if (HelixVcrUtil.ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
-        System.out.println("Resource " + resource + " from src cluster is ignored");
-        continue;
-      }
-      if (destResources.contains(resource)) {
-        // check if every partition exist.
-        Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
-        Set<String> destPartitions = destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet();
-        for (String partition : srcPartitions) {
-          if (!destPartitions.contains(partition)) {
-            return false;
-          }
-        }
-      } else {
-        return false;
-      }
-    }
-    return true;
-  }
 }

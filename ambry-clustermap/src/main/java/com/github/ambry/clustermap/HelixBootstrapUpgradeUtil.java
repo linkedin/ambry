@@ -153,7 +153,7 @@ public class HelixBootstrapUpgradeUtil {
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
 
-  enum HelixAdminOperation {
+  public enum HelixAdminOperation {
     BootstrapCluster,
     ValidateCluster,
     UpdateIdealState,
@@ -218,7 +218,7 @@ public class HelixBootstrapUpgradeUtil {
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
-  static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+  public static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager, String stateModelDef,
       HelixAdminOperation helixAdminOperation, DataNodeConfigSourceType dataNodeConfigSourceType,
@@ -1235,6 +1235,9 @@ public class HelixBootstrapUpgradeUtil {
         } else {
           if (!dryRun) {
             dcAdmin.setResourceIdealState(clusterName, resourceName, resourceIs);
+            System.out.println("------------------add resource!");
+            System.out.println(resourceName);
+            System.out.println(resourceName);
           }
           resourcesUpdated.getAndIncrement();
         }

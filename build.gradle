@@ -432,6 +432,9 @@ project(':ambry-cloud') {
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "com.microsoft.azure:azure-cosmosdb:$azureCosmosDbVersion"
         compile "com.microsoft.azure:msal4j:$azureMsal4jVersion"
+        compile ("org.apache.helix:helix-lock:$helixVersion") {
+            exclude group: "log4j", module: "log4j"
+        }
         testCompile project(':ambry-router')
         testCompile project(':ambry-store')
         testCompile project(':ambry-test-utils')

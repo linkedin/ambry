@@ -422,7 +422,7 @@ public class VcrBackupTest {
    * @param vcrServer a sample server to detect ideal state change.
    * @param helixBalanceVerifier helix balance verifier.
    */
-  private void makeSureHelixBalance(VcrServer vcrServer, StrictMatchExternalViewVerifier helixBalanceVerifier) {
+  static void makeSureHelixBalance(VcrServer vcrServer, StrictMatchExternalViewVerifier helixBalanceVerifier) {
     Assert.assertTrue("Helix topology change timeout.", TestUtils.checkAndSleep(true,
         () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size() > 0, 15000));
     assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(15000));

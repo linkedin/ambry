@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  */
 public class HelixVcrUtil {
   private static final Logger logger = LoggerFactory.getLogger(HelixVcrUtil.class);
-  static final List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
+  public static final List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
   static final String SEPARATOR = "/";
   private static final ZNRecordSerializer ZN_RECORD_SERIALIZER = new ZNRecordSerializer();
   private static final String DELAYED_REBALANCER_CLASS_NAME = "DelayedAutoRebalancer";
@@ -53,7 +53,7 @@ public class HelixVcrUtil {
    * @param destZkString the cluster's zk string
    * @param destClusterName the cluster's name
    */
-  static void createCluster(String destZkString, String destClusterName, VcrHelixConfig config) {
+  public static void createCluster(String destZkString, String destClusterName, VcrHelixConfig config) {
     HelixZkClient destZkClient = getHelixZkClient(destZkString);
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkClient);
     if (ZKUtil.isClusterSetup(destClusterName, destZkClient)) {
@@ -163,7 +163,20 @@ public class HelixVcrUtil {
     Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
     HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
-
+    logger.info("========VCR Helix Update Starts========");
+    // Remove stale resources
+    for (String resource : destResources) {
+      if (!srcResources.contains(resource)) {
+        if (dryRun) {
+          logger.info("DryRun: Drop Resource {}", resource);
+        } else {
+          // This resource need to be dropped.
+          logger.info("Dropped Resource {}, Partitions: {}", resource,
+              destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet());
+          destAdmin.dropResource(destClusterName, resource);
+        }
+      }
+    }
     for (String resource : srcResources) {
       if (ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
         logger.info("Resource {} from src cluster is ignored", resource);
@@ -214,6 +227,7 @@ public class HelixVcrUtil {
       }
     }
     logger.info("Cluster {} is updated successfully!", destClusterName);
+    logger.info("========VCR Helix Update Ends========");
   }
 
   /**
@@ -264,6 +278,37 @@ public class HelixVcrUtil {
    */
   private static boolean isDelayedRebalanceEnabled(String rebalancerClassName) {
     return (rebalancerClassName != null) && rebalancerClassName.endsWith(DELAYED_REBALANCER_CLASS_NAME);
+  }
+
+  /**
+   * A method to verify resources and partitions in src cluster and dest cluster are same.
+   */
+  public static boolean isSrcDestSync(String srcZkString, String srcClusterName, String destZkString, String destClusterName) {
+
+    HelixAdmin srcAdmin = new ZKHelixAdmin(srcZkString);
+    Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
+    HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
+    Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
+
+    for (String resource : srcResources) {
+      if (HelixVcrUtil.ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
+        System.out.println("Resource " + resource + " from src cluster is ignored");
+        continue;
+      }
+      if (destResources.contains(resource)) {
+        // check if every partition exist.
+        Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
+        Set<String> destPartitions = destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet();
+        for (String partition : srcPartitions) {
+          if (!destPartitions.contains(partition)) {
+            return false;
+          }
+        }
+      } else {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

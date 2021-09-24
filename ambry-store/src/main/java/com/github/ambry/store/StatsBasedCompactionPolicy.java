@@ -66,7 +66,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
           details =
               new CompactionDetails(validDataSizeByLogSegment.getFirst(), bestCandidateToCompact.getSegmentsToCompact(),
                   bestCandidateToCompact);
-          logger.info("Best candidate to compact {}", bestCandidateToCompact);
+          logger.info("Best candidate to compact {} on {}", bestCandidateToCompact, dataDir);
         } else {
           logger.trace("No best candidate found");
         }

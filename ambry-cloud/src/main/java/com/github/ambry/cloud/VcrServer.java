@@ -106,7 +106,7 @@ public class VcrServer {
    * @param reporterFactory if non-null, use this function to set up a {@link JmxReporter} with custom settings. If this
    *                        option is null the default settings for the reporter will be used.
    */
-  VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+  public VcrServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, CloudDestinationFactory cloudDestinationFactory,
       Function<MetricRegistry, JmxReporter> reporterFactory) {
     this(properties, clusterAgentsFactory, notificationSystem, reporterFactory);
