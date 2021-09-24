@@ -13,6 +13,9 @@
  */
 package com.github.ambry.server.storagestats;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,6 +44,7 @@ import java.util.Map;
  * }
  */
 public class AggregatedAccountStorageStats {
+  @JsonIgnore
   private Map<Short, Map<Short, ContainerStorageStats>> storageStats = new HashMap<>();
 
   /**
@@ -54,9 +58,26 @@ public class AggregatedAccountStorageStats {
   }
 
   /**
+   * Empty constructor for jackson
+   */
+  public AggregatedAccountStorageStats() {
+  }
+
+  /**
+   * Add account id and account level storage stats in this {@link AggregatedAccountStorageStats}.
+   * @param accountId The account id in string
+   * @param allContainerStats The account level (all containers in this account) stats.
+   */
+  @JsonAnySetter
+  public void add(String accountId, Map<Short, ContainerStorageStats> allContainerStats) {
+    storageStats.put(Short.valueOf(accountId), allContainerStats);
+  }
+
+  /**
    * Return aggregated account stats in a map.
    * @return
    */
+  @JsonAnyGetter
   public Map<Short, Map<Short, ContainerStorageStats>> getStorageStats() {
     return Collections.unmodifiableMap(storageStats);
   }

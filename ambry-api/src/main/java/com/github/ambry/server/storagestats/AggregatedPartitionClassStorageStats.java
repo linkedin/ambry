@@ -13,6 +13,9 @@
  */
 package com.github.ambry.server.storagestats;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -44,6 +47,7 @@ import java.util.Map;
  * }
  */
 public class AggregatedPartitionClassStorageStats {
+  @JsonIgnore
   private Map<String, Map<Short, Map<Short, ContainerStorageStats>>> storageStats = new HashMap<>();
 
   /**
@@ -57,9 +61,26 @@ public class AggregatedPartitionClassStorageStats {
   }
 
   /**
+   * Empty constructor for jackson
+   */
+  public AggregatedPartitionClassStorageStats() {
+  }
+
+  /**
+   * Add partition class name and partition class storage stats in this {@link AggregatedPartitionClassStorageStats}.
+   * @param partitionClassName The partition class name.
+   * @param allAccountStats The partition class level (all accounts in this partition class) stats.
+   */
+  @JsonAnySetter
+  public void add(String partitionClassName, Map<Short, Map<Short, ContainerStorageStats>> allAccountStats) {
+    storageStats.put(partitionClassName, allAccountStats);
+  }
+
+  /**
    * Return aggregated partition class stats in a map.
    * @return
    */
+  @JsonAnyGetter
   public Map<String, Map<Short, Map<Short, ContainerStorageStats>>> getStorageStats() {
     return Collections.unmodifiableMap(storageStats);
   }
