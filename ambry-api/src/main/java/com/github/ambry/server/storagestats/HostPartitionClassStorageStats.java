@@ -16,6 +16,7 @@ package com.github.ambry.server.storagestats;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 
 /**
@@ -46,6 +47,9 @@ import java.util.Map;
 public class HostPartitionClassStorageStats {
   private Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> storageStats = new HashMap<>();
 
+  public HostPartitionClassStorageStats() {
+  }
+
   /**
    * Constructor to instantiate a {@link HostPartitionClassStorageStats}.
    * @param storageStats The storage stats map that contains all partition class level storage stats.
@@ -54,6 +58,30 @@ public class HostPartitionClassStorageStats {
       Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> storageStats) {
     if (storageStats != null) {
       this.storageStats = storageStats;
+    }
+  }
+
+  /**
+   * This is a copy constructor
+   * @param other
+   */
+  public HostPartitionClassStorageStats(HostPartitionClassStorageStats other) {
+    Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> storageStats = other.getStorageStats();
+    for (String partitionClassName : storageStats.keySet()) {
+      this.storageStats.put(partitionClassName, new HashMap<>());
+      for (long partitionId : storageStats.get(partitionClassName).keySet()) {
+        Map<Short, Map<Short, ContainerStorageStats>> accountStorageStatsMap =
+            storageStats.get(partitionClassName).get(partitionId);
+        this.storageStats.get(partitionClassName).put(partitionId, new HashMap<>());
+        for (short accountId : accountStorageStatsMap.keySet()) {
+          Map<Short, ContainerStorageStats> containerStorageStatsMap = accountStorageStatsMap.get(accountId);
+          this.storageStats.get(partitionClassName)
+              .get(partitionId)
+              .put(accountId, containerStorageStatsMap.entrySet()
+                  .stream()
+                  .collect(Collectors.toMap(Map.Entry::getKey, ent -> new ContainerStorageStats(ent.getValue()))));
+        }
+      }
     }
   }
 

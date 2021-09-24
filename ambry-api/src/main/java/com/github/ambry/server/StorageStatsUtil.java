@@ -255,7 +255,7 @@ public class StorageStatsUtil {
     if (snapshot == null) {
       return null;
     }
-    HostPartitionClassStorageStats hostPartitionClassStorageStats = new HostPartitionClassStorageStats(null);
+    HostPartitionClassStorageStats hostPartitionClassStorageStats = new HostPartitionClassStorageStats();
     Map<String, StatsSnapshot> partitionClassSubMap = Optional.ofNullable(snapshot.getSubMap()).orElseGet(HashMap::new);
     for (Map.Entry<String, StatsSnapshot> partitionClassSubMapEntry : partitionClassSubMap.entrySet()) {
       String partitionClassName = partitionClassSubMapEntry.getKey();

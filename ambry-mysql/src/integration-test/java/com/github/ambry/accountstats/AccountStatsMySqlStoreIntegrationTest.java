@@ -839,7 +839,7 @@ public class AccountStatsMySqlStoreIntegrationTest {
 
   private HostPartitionClassStorageStatsWrapper convertHostAccountStorageStatsToHostPartitionClassStorageStats(
       HostAccountStorageStatsWrapper accountStatsWrapper, Map<Long, String> partitionIdToClassName) {
-    HostPartitionClassStorageStats hostPartitionClassStorageStats = new HostPartitionClassStorageStats(null);
+    HostPartitionClassStorageStats hostPartitionClassStorageStats = new HostPartitionClassStorageStats();
     Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> storageStats =
         accountStatsWrapper.getStats().getStorageStats();
     for (long partitionId : storageStats.keySet()) {

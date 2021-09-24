@@ -458,7 +458,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
                 @Override
                 public Task createNewTask(TaskCallbackContext context) {
                   return new MySqlReportAggregatorTask(context.getManager(),
-                      statsReport.getAggregateIntervalInMinutes(), statsReport.getStatsReportType(), accountStatsStore,
+                     statsReport.getAggregateIntervalInMinutes(), statsReport.getStatsReportType(), accountStatsStore,
                       callback, clusterMapConfig, metricRegistry);
                 }
               });
