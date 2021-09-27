@@ -52,7 +52,7 @@ public interface QuotaChargeCallback {
                 && quotaManager.getQuotaConfig().throttleInProgressRequests) {
               throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
             } else {
-              logger.info("Quota exceeded for an in progress request.");
+              logger.debug("Quota exceeded for an in progress request.");
             }
           }
         } catch (Exception ex) {
