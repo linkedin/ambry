@@ -96,6 +96,8 @@ class BlobStoreStats implements StoreStats, Closeable {
   private IndexScanner indexScanner;
   private QueueProcessor queueProcessor;
   private ValidDataSizeCollector validDataSizeCollector;
+  private final ScheduledExecutorService longLiveTaskScheduler;
+  private final ScheduledExecutorService shortLiveTaskScheduler;
 
   BlobStoreStats(String storeId, PersistentIndex index, StoreConfig config, Time time,
       ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
@@ -126,6 +128,8 @@ class BlobStoreStats implements StoreStats, Closeable {
     this.metrics = metrics;
     this.enableBucketForLogSegmentReports = enableBucketForLogSegmentReports;
     this.enablePurgeDeleteTombstone = enablePurgeDeleteTombstone;
+    this.longLiveTaskScheduler = longLiveTaskScheduler;
+    this.shortLiveTaskScheduler = shortLiveTaskScheduler;
 
     if (bucketCount > 0) {
       indexScanner = new IndexScanner();
@@ -198,6 +202,13 @@ class BlobStoreStats implements StoreStats, Closeable {
     deleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE, expiredDeleteTombstoneStats.get());
     deleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE, permanentDeleteTombstoneStats.get());
     return deleteTombstoneStats;
+  }
+
+  public void onCompactionFinished() {
+    // Compaction is finished, we need to reconstruct the log segments and physical storage usage in the scan result.
+    if (bucketCount > 0) {
+      longLiveTaskScheduler.submit(indexScanner);
+    }
   }
 
   /**
@@ -1253,6 +1264,10 @@ class BlobStoreStats implements StoreStats, Closeable {
     public void run() {
       try {
         if (cancelled) {
+          return;
+        }
+        if (isScanning) {
+          // There is an IndexScanner running
           return;
         }
         logger.trace("IndexScanner triggered for store {}", storeId);
