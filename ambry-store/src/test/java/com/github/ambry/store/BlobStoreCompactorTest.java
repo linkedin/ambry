@@ -39,6 +39,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -52,12 +54,13 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -329,6 +332,30 @@ public class BlobStoreCompactorTest {
     } finally {
       compactor.close(0);
     }
+  }
+
+  @Test
+  public void getIndexSegmentDetailsTest() throws Exception {
+    // Create 0_1 log and 0_10 log and their index segment files, use getIndexSegmentDetails to load all the index segment
+    // files for 0_1, making sure that 0_10 log's index segment files won't be included in the final result.
+    refreshState(false, false, false);
+    LogSegmentName name01 = LogSegmentName.fromPositionAndGeneration(0, 1);
+    LogSegmentName name010 = LogSegmentName.fromPositionAndGeneration(0, 10);
+    Files.createFile(Paths.get(tempDirStr, name01.toFilename()));
+    Files.createFile(Paths.get(tempDirStr, name010.toFilename()));
+
+    // Create 3 index segment files for each log segment
+
+    for (LogSegmentName logSegmentName : new LogSegmentName[]{name01, name010}) {
+      for (long off : new long[]{18, 1000, 2000}) {
+        Offset offset = new Offset(logSegmentName, off);
+        Files.createFile(Paths.get(tempDirStr,
+            IndexSegment.generateIndexSegmentFilenamePrefix(offset) + IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX));
+      }
+    }
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
+    SortedMap<Offset, File> details = compactor.getIndexSegmentDetails(name01);
+    assertEquals(3, details.size());
   }
 
   /**

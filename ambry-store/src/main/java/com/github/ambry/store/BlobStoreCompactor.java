@@ -1206,13 +1206,20 @@ class BlobStoreCompactor {
    * @param logSegmentName the name of the log segment whose index segment files are required.
    * @return a map that contains all the index segment files of the log segment - keyed on the start offset.
    */
-  private SortedMap<Offset, File> getIndexSegmentDetails(LogSegmentName logSegmentName) {
+  SortedMap<Offset, File> getIndexSegmentDetails(LogSegmentName logSegmentName) {
     SortedMap<Offset, File> indexSegmentStartOffsetToFile = new TreeMap<>();
     File[] indexSegmentFiles =
         PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir.getAbsolutePath(), logSegmentName);
     for (File indexSegmentFile : indexSegmentFiles) {
-      indexSegmentStartOffsetToFile.put(IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName()),
-          indexSegmentFile);
+      Offset indexOffset = IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName());
+      // Only add index offset that has same log segment name with the given log segment name.
+      // This is because we have to deal with filename filter issue in getIndexSegmentFilesForLogSegment.
+      // If we have log segment 0_1 and 0_10, and we are only looking for index segment files for 0_1, the above method
+      // would return the index segment files for 0_10 as well, since they start with the same string and ends with the
+      // same string in filename.
+      if (indexOffset.getName().equals(logSegmentName)) {
+        indexSegmentStartOffsetToFile.put(indexOffset, indexSegmentFile);
+      }
     }
     return indexSegmentStartOffsetToFile;
   }
