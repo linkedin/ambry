@@ -37,6 +37,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -94,6 +95,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   private volatile boolean recentEntryQueueEnabled = false;
   private final AtomicReference<ScanResults> scanResults = new AtomicReference<>();
   private IndexScanner indexScanner;
+  private ScheduledFuture indexScannerScheduledFuture;
   private QueueProcessor queueProcessor;
   private ValidDataSizeCollector validDataSizeCollector;
   private final ScheduledExecutorService longLiveTaskScheduler;
@@ -115,7 +117,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs,
       boolean enableBucketForLogSegmentReports, boolean enablePurgeDeleteTombstone, Time time,
       ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
-      DiskIOScheduler diskIOScheduler, StoreMetrics metrics, long storeGetValidSizeIntervalInSecs,
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics, long storeGetValidSizeIntervalInMs,
       boolean storeEnableCurrentInvalidSizeMetric) {
     this.storeId = storeId;
     this.index = index;
@@ -133,14 +135,14 @@ class BlobStoreStats implements StoreStats, Closeable {
 
     if (bucketCount > 0) {
       indexScanner = new IndexScanner();
-      longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
+      indexScannerScheduledFuture = longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
           TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);
       queueProcessor = new QueueProcessor();
       shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessingPeriodInMs, TimeUnit.MILLISECONDS);
     }
     if (storeEnableCurrentInvalidSizeMetric && shortLiveTaskScheduler != null) {
       validDataSizeCollector = new ValidDataSizeCollector();
-      shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInSecs,
+      shortLiveTaskScheduler.scheduleAtFixedRate(validDataSizeCollector, 0, storeGetValidSizeIntervalInMs,
           TimeUnit.MILLISECONDS);
     }
   }
@@ -204,10 +206,34 @@ class BlobStoreStats implements StoreStats, Closeable {
     return deleteTombstoneStats;
   }
 
+  /**
+   * Callback method when a cycle of compaction is finished.
+   */
   public void onCompactionFinished() {
-    // Compaction is finished, we need to reconstruct the log segments and physical storage usage in the scan result.
     if (bucketCount > 0) {
-      longLiveTaskScheduler.submit(indexScanner);
+      // Compaction is finished, we need to reconstruct the log segments and physical storage usage in the scan result.
+      scanLock.lock();
+      try {
+        long delay = indexScannerScheduledFuture.getDelay(TimeUnit.SECONDS);
+        if (delay > 0) {
+          // We haven't started the next index scanner tasks, just cancel it and reschedule.
+          indexScannerScheduledFuture.cancel(false);
+          indexScannerScheduledFuture = longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
+              TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);
+        } else {
+          // Wait until the ongoing index scanner tasks is finished.
+          if (!waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS)) {
+            logger.error("Timed out while waiting for BlobStoreStats index scan to complete for store {}", storeId);
+          }
+          indexScannerScheduledFuture.cancel(false);
+          indexScannerScheduledFuture = longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
+              TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);
+        }
+      } catch (InterruptedException e) {
+        logger.error("Waiting for scanner to finish is interrupted for store {}", storeId);
+      } finally {
+        scanLock.unlock();
+      }
     }
   }
 
@@ -1264,10 +1290,6 @@ class BlobStoreStats implements StoreStats, Closeable {
     public void run() {
       try {
         if (cancelled) {
-          return;
-        }
-        if (isScanning) {
-          // There is an IndexScanner running
           return;
         }
         logger.trace("IndexScanner triggered for store {}", storeId);

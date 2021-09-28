@@ -1205,6 +1205,7 @@ public class BlobStore implements Store {
     }
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
+    blobStoreStats.onCompactionFinished();
     logger.info("One cycle of compaction is completed on the store {}", storeId);
   }
 
