@@ -903,6 +903,12 @@ public class AccountContainerTest {
     }
   }
 
+  /**
+   * Deserialize a {@link JSONObject} to an {@link Account}.
+   * @param metadata The {@link JSONObject}.
+   * @return A {@link Account}.
+   * @throws JSONException
+   */
   private Account accountFromJson(JSONObject metadata) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
@@ -941,6 +947,13 @@ public class AccountContainerTest {
     }
   }
 
+  /**
+   * Deserialize a {@link JSONObject} to a {@link Container}.
+   * @param metadata The {@link JSONObject}.
+   * @param parentAccountId The parent account id
+   * @return A {@link Container}.
+   * @throws JSONException
+   */
   private Container containerFromJson(JSONObject metadata, short parentAccountId) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
@@ -1308,6 +1321,13 @@ public class AccountContainerTest {
     return toRet;
   }
 
+  /**
+   * Construct an account JSON object in the version specified by {@link Account#CURRENT_JSON_VERSION}.
+   * @param account The {@link Account} to serialize
+   * @param incrementSnapshotVersion True to increase the snapshot version.
+   * @return The {@link JSONObject}.
+   * @throws JSONException
+   */
   private JSONObject buildAccountJson(Account account, boolean incrementSnapshotVersion) throws JSONException {
     JSONObject metadata = new JSONObject();
     metadata.put(Account.JSON_VERSION_KEY, CURRENT_JSON_VERSION);
