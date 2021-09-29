@@ -414,6 +414,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       HelixVcrUtil.updateResourceAndPartition(localDcZkStr, clusterMapConfig.clusterMapClusterName,
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName, vcrHelixConfig,
           cloudConfig.vcrHelixUpdateDryRun);
+      vcrMetrics.vcrHelixUpdateSuccessCount.inc();
     } catch (Exception e) {
       // SRE and DEVs should be alerted on this metric.
       vcrMetrics.vcrHelixUpdateFailCount.inc();
