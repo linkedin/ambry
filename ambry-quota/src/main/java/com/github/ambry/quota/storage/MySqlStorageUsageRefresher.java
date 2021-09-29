@@ -139,7 +139,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       try {
         // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
         logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
-        containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
+        containerStorageUsageMonthlyBase =
+            accountStatsStore.queryMonthlyAggregatedAccountStats(config.usePhysicalStorage);
         // If the monthly base is indeed for this month, then try to persist it in the backup file.
         // There is a chance that the database has a snapshot from last month since the aggregation task is executed
         // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
@@ -178,7 +179,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       String monthValue = accountStatsStore.queryRecordedMonth();
       if (monthValue.equals(currentMonth)) {
         logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}", currentMonth);
-        containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
+        containerStorageUsageMonthlyBase =
+            accountStatsStore.queryMonthlyAggregatedAccountStats(config.usePhysicalStorage);
       } else {
         logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
             monthValue);
@@ -252,7 +254,8 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
       try {
         long startTimeMs = System.currentTimeMillis();
         Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
-        Map<String, Map<String, Long>> storageUsage = accountStatsStore.queryAggregatedAccountStats();
+        Map<String, Map<String, Long>> storageUsage =
+            accountStatsStore.queryAggregatedAccountStats(config.usePhysicalStorage);
         if (storageUsage != null) {
           subtract(storageUsage, base);
           containerStorageUsageForCurrentMonthRef.set(storageUsage);
