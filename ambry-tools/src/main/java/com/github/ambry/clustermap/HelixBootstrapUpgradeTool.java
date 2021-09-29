@@ -250,7 +250,7 @@ public class HelixBootstrapUpgradeTool {
     String stateModelDef = options.valueOf(stateModelDefinitionOpt) == null ? ClusterMapConfig.DEFAULT_STATE_MODEL_DEF
         : options.valueOf(stateModelDefinitionOpt);
     DataNodeConfigSourceType dataNodeConfigSourceType =
-        options.valueOf(dataNodeConfigSourceOpt) == null ? DataNodeConfigSourceType.INSTANCE_CONFIG
+        options.valueOf(dataNodeConfigSourceOpt) == null ? DataNodeConfigSourceType.PROPERTY_STORE
             : DataNodeConfigSourceType.valueOf(options.valueOf(dataNodeConfigSourceOpt));
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);

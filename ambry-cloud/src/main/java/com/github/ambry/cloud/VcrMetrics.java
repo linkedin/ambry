@@ -58,6 +58,7 @@ public class VcrMetrics {
 
   // VCR Automation
   public final Counter vcrHelixUpdateFailCount;
+  public final Counter vcrHelixUpdateSuccessCount;
   public Gauge<Integer> vcrHelixUpdaterGauge;
   public Gauge<Integer> vcrHelixUpdateInProgressGauge;
   public final Counter vcrHelixNotOnSync;
@@ -99,6 +100,8 @@ public class VcrMetrics {
         MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecationSyncTaskRegistrationFailureCount"));
     vcrHelixUpdateFailCount =
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdateFailCount"));
+    vcrHelixUpdateSuccessCount =
+        registry.counter(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdateSuccessCount"));
     vcrHelixNotOnSync =
         registry.counter(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixNotOnSync"));
   }

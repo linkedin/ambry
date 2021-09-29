@@ -93,7 +93,8 @@ public class VcrAutomationTest {
     DataNodeConfigSourceType dataNodeConfigSourceType = DataNodeConfigSourceType.INSTANCE_CONFIG;
     int zkPort = 2100;
     int numberOfDataNode = 3;
-    int partitionCount = 2;
+    int partitionCount = 9;
+    int newPartitionCount = 13;
 
     String zkHostName = "localhost";
     String zkConnectString = zkHostName + ":" + zkPort;
@@ -184,7 +185,8 @@ public class VcrAutomationTest {
     // vcr server start up done.
 
     // Partition add case:
-    testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, partitionCount + 1, null);
+    testPartitionLayout =
+        constructInitialPartitionLayoutJSON(testHardwareLayout, partitionCount + newPartitionCount, null);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
 
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
@@ -192,8 +194,9 @@ public class VcrAutomationTest {
         HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false);
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
-    Assert.assertTrue("Partition assignment is not correct.", TestUtils.checkAndSleep(partitionCount + 1,
-        () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size(), 5000));
+    Assert.assertTrue("Partition assignment is not correct.",
+        TestUtils.checkAndSleep(partitionCount + newPartitionCount,
+            () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size(), 5000));
 
     // Partition remove case:
 
