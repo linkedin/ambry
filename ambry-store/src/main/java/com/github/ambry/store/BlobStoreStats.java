@@ -365,13 +365,13 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
     Map<Short, Map<Short, Long>> validSizeMap = null;
     Map<Short, Map<Short, Long>> physicalUsageMap = null;
-    Map<Short, Map<Short, Long>> numberStoreKeyMap = null;
+    //Map<Short, Map<Short, Long>> numberStoreKeyMap = null;
     ScanResults currentScanResults = scanResults.get();
     if (currentScanResults != null && isWithinRange(currentScanResults.containerForecastStartTimeMs,
         currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
       validSizeMap = currentScanResults.getValidSizePerContainer(referenceTimeInMs);
       physicalUsageMap = currentScanResults.getContainerPhysicalStorageUsage();
-      numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
+      //numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
     } else {
       if (isScanning && isWithinRange(indexScanner.newScanResults.containerForecastStartTimeMs,
           indexScanner.newScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
@@ -384,7 +384,7 @@ class BlobStoreStats implements StoreStats, Closeable {
                   currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
                 validSizeMap = currentScanResults.getValidSizePerContainer(referenceTimeInMs);
                 physicalUsageMap = currentScanResults.getContainerPhysicalStorageUsage();
-                numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
+                //numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
               }
             } else {
               metrics.blobStoreStatsIndexScannerErrorCount.inc();
@@ -396,7 +396,7 @@ class BlobStoreStats implements StoreStats, Closeable {
                 currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
               validSizeMap = currentScanResults.getValidSizePerContainer(referenceTimeInMs);
               physicalUsageMap = currentScanResults.getContainerPhysicalStorageUsage();
-              numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
+              //numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
             }
           }
         } catch (InterruptedException e) {
@@ -420,7 +420,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       for (short containerId : validSizeMap.get(accountId).keySet()) {
         retValue.computeIfAbsent(accountId, k -> new HashMap<>())
             .put(containerId, new ContainerStorageStats(containerId, validSizeMap.get(accountId).get(containerId),
-                physicalUsageMap.get(accountId).get(containerId), numberStoreKeyMap.get(accountId).get(containerId)));
+                physicalUsageMap.get(accountId).get(containerId), 1));
       }
     }
     return retValue;

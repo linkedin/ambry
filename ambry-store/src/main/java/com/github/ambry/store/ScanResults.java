@@ -17,7 +17,6 @@ package com.github.ambry.store;
 import com.github.ambry.utils.Pair;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
@@ -213,9 +212,10 @@ class ScanResults {
    */
   void updateContainerPhysicalStorageUsageAndStoreKey(short accountId, short containerId, long usage, StoreKey key) {
     updateNestedMapHelper(containerPhysicalStorageUsage, accountId, containerId, usage);
-    containerStoreKeys.computeIfAbsent(accountId, k -> new HashMap<>())
-        .computeIfAbsent(containerId, k -> new HashSet<>())
-        .add(key);
+    // Disable this for now.
+    //containerStoreKeys.computeIfAbsent(accountId, k -> new HashMap<>())
+    //    .computeIfAbsent(containerId, k -> new HashSet<>())
+    //    .add(key);
   }
 
   /**
