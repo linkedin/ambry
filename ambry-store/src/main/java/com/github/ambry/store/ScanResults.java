@@ -17,13 +17,10 @@ package com.github.ambry.store;
 import com.github.ambry.utils.Pair;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import static com.github.ambry.store.StatsUtils.*;
 
@@ -94,7 +91,7 @@ class ScanResults {
   // This is for container physical storage usage, it doesn't have to take delta into consideration, so it's more like a base
   // bucket for valid  storage usage.
   private final Map<Short, Map<Short, Long>> containerPhysicalStorageUsage = new ConcurrentHashMap<>();
-  private final Map<Short, Map<Short, Set<StoreKey>>> containerStoreKeys = new ConcurrentHashMap<>();
+  private final Map<Short, Map<Short, Long>> containerNumberOfStoreKeys = new ConcurrentHashMap<>();
 
   // LogSegment buckets keep track of valid IndexValue size in each log segments. So the base value of log segment bucket
   // is a map, whose key is the log segment name and the value is the sum of valid IndexValues' sizes. To test if an
@@ -209,13 +206,12 @@ class ScanResults {
    * @param accountId The account id
    * @param containerId The container id
    * @param usage The new physical storage usage
-   * @param key The new store key
+   * @param newKey The number of new keys to add
    */
-  void updateContainerPhysicalStorageUsageAndStoreKey(short accountId, short containerId, long usage, StoreKey key) {
+  void updateContainerPhysicalStorageUsageAndStoreKey(short accountId, short containerId, long usage, long newKey) {
     updateNestedMapHelper(containerPhysicalStorageUsage, accountId, containerId, usage);
-    containerStoreKeys.computeIfAbsent(accountId, k -> new HashMap<>())
-        .computeIfAbsent(containerId, k -> new HashSet<>())
-        .add(key);
+    containerNumberOfStoreKeys.computeIfAbsent(accountId, k -> new HashMap<>())
+        .compute(containerId, (k, v) -> v == null ? newKey : v.longValue() + newKey);
   }
 
   /**
@@ -326,12 +322,6 @@ class ScanResults {
   }
 
   Map<Short, Map<Short, Long>> getContainerNumberOfStoreKeys() {
-    Map<Short, Map<Short, Long>> numberOfStoreKeysPerContainer = new HashMap<>();
-    containerStoreKeys.entrySet()
-        .forEach(ent -> numberOfStoreKeysPerContainer.put(ent.getKey(), ent.getValue()
-            .entrySet()
-            .stream()
-            .collect(Collectors.toMap(Map.Entry::getKey, entry -> (long) entry.getValue().size()))));
-    return numberOfStoreKeysPerContainer;
+    return Collections.unmodifiableMap(containerNumberOfStoreKeys);
   }
 }
