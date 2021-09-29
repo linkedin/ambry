@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
@@ -33,7 +32,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Queue;
-import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -365,13 +363,13 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
     Map<Short, Map<Short, Long>> validSizeMap = null;
     Map<Short, Map<Short, Long>> physicalUsageMap = null;
-    //Map<Short, Map<Short, Long>> numberStoreKeyMap = null;
+    Map<Short, Map<Short, Long>> numberStoreKeyMap = null;
     ScanResults currentScanResults = scanResults.get();
     if (currentScanResults != null && isWithinRange(currentScanResults.containerForecastStartTimeMs,
         currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
       validSizeMap = currentScanResults.getValidSizePerContainer(referenceTimeInMs);
       physicalUsageMap = currentScanResults.getContainerPhysicalStorageUsage();
-      //numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
+      numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
     } else {
       if (isScanning && isWithinRange(indexScanner.newScanResults.containerForecastStartTimeMs,
           indexScanner.newScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
@@ -384,7 +382,7 @@ class BlobStoreStats implements StoreStats, Closeable {
                   currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
                 validSizeMap = currentScanResults.getValidSizePerContainer(referenceTimeInMs);
                 physicalUsageMap = currentScanResults.getContainerPhysicalStorageUsage();
-                //numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
+                numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
               }
             } else {
               metrics.blobStoreStatsIndexScannerErrorCount.inc();
@@ -396,7 +394,7 @@ class BlobStoreStats implements StoreStats, Closeable {
                 currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
               validSizeMap = currentScanResults.getValidSizePerContainer(referenceTimeInMs);
               physicalUsageMap = currentScanResults.getContainerPhysicalStorageUsage();
-              //numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
+              numberStoreKeyMap = currentScanResults.getContainerNumberOfStoreKeys();
             }
           }
         } catch (InterruptedException e) {
@@ -420,7 +418,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       for (short containerId : validSizeMap.get(accountId).keySet()) {
         retValue.computeIfAbsent(accountId, k -> new HashMap<>())
             .put(containerId, new ContainerStorageStats(containerId, validSizeMap.get(accountId).get(containerId),
-                physicalUsageMap.get(accountId).get(containerId), 1));
+                physicalUsageMap.get(accountId).get(containerId), numberStoreKeyMap.get(accountId).get(containerId)));
       }
     }
     return retValue;
@@ -517,7 +515,7 @@ class BlobStoreStats implements StoreStats, Closeable {
     Map<StoreKey, IndexFinalState> keyFinalStates = new HashMap<>();
     Map<Short, Map<Short, Long>> validDataSizePerContainer = new HashMap<>();
     Map<Short, Map<Short, Long>> physicalDataSizePerContainer = new HashMap<>();
-    Map<Short, Map<Short, Set<StoreKey>>> storeKeysPerContainer = new HashMap<>();
+    Map<Short, Map<Short, Long>> storeKeysPerContainer = new HashMap<>();
     Map<Short, Map<Short, ContainerStorageStats>> result = new HashMap<>();
     int indexSegmentCount = 0;
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
@@ -538,9 +536,8 @@ class BlobStoreStats implements StoreStats, Closeable {
             }
             updateNestedMapHelper(physicalDataSizePerContainer, indexValue.getAccountId(), indexValue.getContainerId(),
                 indexValue.getSize());
-            storeKeysPerContainer.computeIfAbsent(indexValue.getAccountId(), k -> new HashMap<>())
-                .computeIfAbsent(indexValue.getContainerId(), k -> new HashSet<>())
-                .add(entry.getKey());
+            updateNestedMapHelper(storeKeysPerContainer, indexValue.getAccountId(), indexValue.getContainerId(),
+                (long) (indexValue.isPut() ? 1 : 0));
           });
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
           TimeUnit.MILLISECONDS);
@@ -556,7 +553,7 @@ class BlobStoreStats implements StoreStats, Closeable {
             .put(containerId,
                 new ContainerStorageStats(containerId, validDataSizePerContainer.get(accountId).get(containerId),
                     physicalDataSizePerContainer.get(accountId).get(containerId),
-                    storeKeysPerContainer.get(accountId).get(containerId).size()));
+                    storeKeysPerContainer.get(accountId).get(containerId)));
       }
     }
     // The remaining index entries in keyFinalStates are DELETE tombstones left by compaction (whose associated PUT is not found)
@@ -1051,7 +1048,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       Map<StoreKey, IndexFinalState> keyFinalStates) {
     IndexValue indexValue = indexEntry.getValue();
     results.updateContainerPhysicalStorageUsageAndStoreKey(indexValue.getAccountId(), indexValue.getContainerId(),
-        indexValue.getSize(), indexEntry.getKey());
+        indexValue.getSize(), indexValue.isPut() ? 1 : 0);
     if (isValid && indexValue.isPut()) {
       // delete and TTL update records does not count towards valid data size for usage (containers)
       results.updateContainerBaseBucket(indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getSize());
@@ -1192,7 +1189,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           // checkpoint is taken
           if (newValue.getOffset().compareTo(currentScanResults.scannedEndOffset) >= 0) {
             currentScanResults.updateContainerPhysicalStorageUsageAndStoreKey(newValue.getAccountId(),
-                newValue.getContainerId(), newValue.getSize(), key);
+                newValue.getContainerId(), newValue.getSize(), newValue.isPut() ? 1 : 0);
             if (newValue.isDelete()) {
               // new delete
               processNewDelete(currentScanResults, key, newValue, originalPut, previousValue);
@@ -1365,7 +1362,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           if (indexValue.getOffset().compareTo(startOffset) >= 0 && indexValue.getOffset().compareTo(endOffset) < 0) {
             // index value is not yet processed and should be processed
             newScanResults.updateContainerPhysicalStorageUsageAndStoreKey(indexValue.getAccountId(),
-                indexValue.getContainerId(), indexValue.getSize(), entry.getKey());
+                indexValue.getContainerId(), indexValue.getSize(), indexValue.isPut() ? 1 : 0);
             if (!indexValue.isPut()) {
               IndexValue originalPut;
               if (indexValue.getOriginalMessageOffset() == indexValue.getOffset().getOffset()) {
