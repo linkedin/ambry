@@ -14,6 +14,7 @@
 package com.github.ambry.server.storagestats;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -88,6 +89,7 @@ public class ContainerStorageStats {
    * True if all the storage stats values are 0.
    * @return True if all the stats values are 0.
    */
+  @JsonIgnore
   public boolean isEmpty() {
     return logicalStorageUsage == 0 && physicalStorageUsage == 0 && numberOfBlobs == 0;
   }
