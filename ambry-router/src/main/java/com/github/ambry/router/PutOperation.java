@@ -1233,7 +1233,7 @@ class PutOperation {
         cryptoJobHandler.submitJob(
             new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
                 isMetadataChunk() ? null : buf.retainedDuplicate(), ByteBuffer.wrap(chunkUserMetadata),
-                kms.getRandomKey(), cryptoService, kms, encryptJobMetricsTracker, this::encryptionCallback));
+                kms.getRandomKey(), cryptoService, kms, options, encryptJobMetricsTracker, this::encryptionCallback));
       } catch (GeneralSecurityException e) {
         encryptJobMetricsTracker.incrementOperationError();
         logger.trace("Exception thrown while generating random key for chunk at index {}", chunkIndex, e);

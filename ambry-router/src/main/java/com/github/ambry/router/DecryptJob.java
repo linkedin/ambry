@@ -32,6 +32,7 @@ class DecryptJob implements CryptoJob {
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   private final CryptoJobMetricsTracker decryptJobMetricsTracker;
+  private final GetBlobOptions getBlobOptions;
 
   /**
    * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
@@ -42,12 +43,14 @@ class DecryptJob implements CryptoJob {
    * @param encryptedUserMetadata encrypted user metadata. Could be {@null}
    * @param cryptoService the {@link CryptoService} instance to use
    * @param kms the {@link KeyManagementService} instance to use
+   * @param getBlobOptions the {@link GetBlobOptions} instance to use
    * @param decryptJobMetricsTracker metrics tracker to track the decryption job
    * @param callback {@link Callback} to be invoked on completion
    */
   DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuf encryptedBlobContent,
       ByteBuffer encryptedUserMetadata, CryptoService cryptoService, KeyManagementService kms,
-      CryptoJobMetricsTracker decryptJobMetricsTracker, Callback<DecryptJobResult> callback) {
+      GetBlobOptions getBlobOptions, CryptoJobMetricsTracker decryptJobMetricsTracker,
+      Callback<DecryptJobResult> callback) {
     this.blobId = blobId;
     this.encryptedBlobContent = encryptedBlobContent;
     this.encryptedUserMetadata = encryptedUserMetadata;
@@ -56,6 +59,7 @@ class DecryptJob implements CryptoJob {
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.decryptJobMetricsTracker = decryptJobMetricsTracker;
+    this.getBlobOptions = getBlobOptions;
   }
 
   /**
@@ -72,7 +76,9 @@ class DecryptJob implements CryptoJob {
     ByteBuf decryptedBlobContent = null;
     ByteBuffer decryptedUserMetadata = null;
     try {
-      Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
+      Object containerKey =
+          kms.getKey(getBlobOptions == null ? null : getBlobOptions.getRestRequest(), blobId.getAccountId(),
+              blobId.getContainerId());
       Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
       if (encryptedBlobContent != null) {
         decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);

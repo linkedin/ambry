@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.config.KMSConfig;
+import com.github.ambry.rest.RestRequest;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.crypto.spec.SecretKeySpec;
@@ -30,11 +31,12 @@ class MockKeyManagementService extends SingleKeyManagementService {
   }
 
   @Override
-  public SecretKeySpec getKey(short accountId, short containerId) throws GeneralSecurityException {
+  public SecretKeySpec getKey(RestRequest restRequest, short accountId, short containerId)
+      throws GeneralSecurityException {
     if (exceptionToThrow.get() != null) {
       throw exceptionToThrow.get();
     } else {
-      return super.getKey(accountId, containerId);
+      return super.getKey(restRequest, accountId, containerId);
     }
   }
 }

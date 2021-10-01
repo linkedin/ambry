@@ -283,7 +283,7 @@ public class GetBlobOperationTest {
       FutureResult<EncryptJob.EncryptJobResult> futureResult = new FutureResult<>();
       cryptoJobHandler.submitJob(new EncryptJob(blobProperties.getAccountId(), blobProperties.getContainerId(),
           blobType == BlobType.MetadataBlob ? null : blobContent.retainedDuplicate(), userMetadataBuf.duplicate(),
-          kms.getRandomKey(), cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
+          kms.getRandomKey(), cryptoService, kms, null, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
           futureResult::done));
       EncryptJob.EncryptJobResult result = futureResult.get(5, TimeUnit.SECONDS);
       blobEncryptionKey = result.getEncryptedKey();

@@ -15,12 +15,16 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.rest.RestRequest;
+
+
 /**
  * A builder for {@link PutBlobOptions} objects.
  */
 public class PutBlobOptionsBuilder {
   private boolean chunkUpload = false;
   private long maxUploadSize = Long.MAX_VALUE;
+  private RestRequest restRequest = null;
 
   /**
    * @param chunkUpload {@code true} to indicate that this is an upload of a data chunk of a stitched upload.
@@ -41,9 +45,18 @@ public class PutBlobOptionsBuilder {
   }
 
   /**
+   * @param restRequest The {@link RestRequest} that triggered this put operation.
+   * @return this builder.
+   */
+  public PutBlobOptionsBuilder restRequest(RestRequest restRequest) {
+    this.restRequest = restRequest;
+    return this;
+  }
+
+  /**
    * @return the {@link PutBlobOptions} built.
    */
   public PutBlobOptions build() {
-    return new PutBlobOptions(chunkUpload, maxUploadSize);
+    return new PutBlobOptions(chunkUpload, maxUploadSize, restRequest);
   }
 }

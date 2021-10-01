@@ -15,6 +15,9 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.rest.RestRequest;
+
+
 /**
  * Represents any options associated with a putBlob request.
  */
@@ -22,15 +25,18 @@ public class PutBlobOptions {
   public static final PutBlobOptions DEFAULT = new PutBlobOptionsBuilder().build();
   private final boolean chunkUpload;
   private final long maxUploadSize;
+  private final RestRequest restRequest;
 
   /**
    * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
    *                    stitched blob.
    * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
+   * @param restRequest The {@link RestRequest} that triggered this put operation.
    */
-  public PutBlobOptions(boolean chunkUpload, long maxUploadSize) {
+  public PutBlobOptions(boolean chunkUpload, long maxUploadSize, RestRequest restRequest) {
     this.chunkUpload = chunkUpload;
     this.maxUploadSize = maxUploadSize;
+    this.restRequest = restRequest;
   }
 
   /**
@@ -46,6 +52,10 @@ public class PutBlobOptions {
    */
   public long getMaxUploadSize() {
     return maxUploadSize;
+  }
+
+  public RestRequest getRestRequest() {
+    return restRequest;
   }
 
   @Override

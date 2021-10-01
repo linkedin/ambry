@@ -32,6 +32,7 @@ public class EncryptJob implements CryptoJob {
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   private final CryptoJobMetricsTracker encryptJobMetricsTracker;
+  private final PutBlobOptions putBlobOptions;
 
   /**
    * Instantiates {@link EncryptJob} for an upload.
@@ -40,11 +41,12 @@ public class EncryptJob implements CryptoJob {
    * @param blobContentToEncrypt {@link ByteBuf} to be encrypted. Could be {@code null} for a metadata chunk.
    * @param userMetadataToEncrypt user metadata to be encrypted. Could be {@code null} for data chunks.
    * @param perBlobKey per blob key to use to encrypt the blob content
+   * @param putBlobOptions the {@link PutBlobOptions} to use
    * @param encryptJobMetricsTracker metrics tracker to track the encryption job
    * @param callback {@link Callback} to be invoked on completion
    */
   EncryptJob(short accountId, short containerId, ByteBuf blobContentToEncrypt, ByteBuffer userMetadataToEncrypt,
-      Object perBlobKey, CryptoService cryptoService, KeyManagementService kms,
+      Object perBlobKey, CryptoService cryptoService, KeyManagementService kms, PutBlobOptions putBlobOptions,
       CryptoJobMetricsTracker encryptJobMetricsTracker, Callback<EncryptJobResult> callback) {
     this.accountId = accountId;
     this.containerId = containerId;
@@ -55,6 +57,7 @@ public class EncryptJob implements CryptoJob {
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.encryptJobMetricsTracker = encryptJobMetricsTracker;
+    this.putBlobOptions = putBlobOptions;
   }
 
   /**
@@ -79,7 +82,8 @@ public class EncryptJob implements CryptoJob {
       if (userMetadataToEncrypt != null) {
         encryptedUserMetadata = cryptoService.encrypt(userMetadataToEncrypt, perBlobKey);
       }
-      Object containerKey = kms.getKey(accountId, containerId);
+      Object containerKey =
+          kms.getKey(putBlobOptions == null ? null : putBlobOptions.getRestRequest(), accountId, containerId);
       encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
     } catch (Exception e) {
       exception = e;
