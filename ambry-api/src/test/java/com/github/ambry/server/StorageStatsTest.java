@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
@@ -50,6 +51,13 @@ public class StorageStatsTest {
     assertContainerStorageStats(stats, containerId, logicalStorageUsage, physicalStorageUsage, numberOfBlobs);
 
     String serialized = objectMapper.writeValueAsString(stats);
+    Map<String, Object> tempMap = objectMapper.readValue(serialized, new TypeReference<Map<String, Object>>() {
+    });
+    // We are only expecting "containerId", "logicalStorageUsage", "physicalStorageUsage" and "numberOfBlobs" in the serialized string
+    Assert.assertEquals(4, tempMap.size());
+    for (String key : new String[]{"containerId", "logicalStorageUsage", "physicalStorageUsage", "numberOfBlobs"}) {
+      Assert.assertTrue(tempMap.containsKey(key));
+    }
     ContainerStorageStats deserialized = objectMapper.readValue(serialized, ContainerStorageStats.class);
     Assert.assertEquals(stats, deserialized);
 
