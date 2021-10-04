@@ -170,8 +170,10 @@ public class VcrServer {
       if (clusterMapConfig.clusterMapEnableHttp2Replication) {
         connectionPool = new Http2BlockingChannelPool(sslFactory, new Http2ClientConfig(properties),
             new Http2ClientMetrics(registry));
+        logger.info("Using http2 for VCR replication.");
       } else {
         connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        logger.info("Using blocking channel for VCR replication.");
       }
       connectionPool.start();
 
