@@ -145,7 +145,8 @@ class BlockingChannelInfo {
       blockingChannelActiveConnections.add(channel);
       return channel;
     } catch (SocketException e) {
-      logger.error("Socket exception when trying to connect to remote host {} and port {}", host, port.getPort());
+      logger.error("Socket exception when trying to connect to remote host {} and port {}. Exception: ", host,
+          port.getPort(), e);
       throw new ConnectionPoolTimeoutException(
           "Socket exception when trying to connect to remote host " + host + " port " + port.getPort(), e);
     } catch (IOException e) {
@@ -163,12 +164,14 @@ class BlockingChannelInfo {
    * @param port upon which connection has to be established
    * @return BlockingChannel
    */
-  private BlockingChannel getBlockingChannelBasedOnPortType(String host, int port) {
-    BlockingChannel channel = null;
+  private BlockingChannel getBlockingChannelBasedOnPortType(String host, int port) throws SocketException {
+    BlockingChannel channel;
     if (this.port.getPortType() == PortType.PLAINTEXT) {
       channel = new BlockingChannel(host, port, config);
     } else if (this.port.getPortType() == PortType.SSL) {
       channel = new SSLBlockingChannel(host, port, registry, config, sslSocketFactory, sslConfig);
+    } else {
+      throw new SocketException("No port type: " + this.port.getPortType());
     }
     return channel;
   }
@@ -192,8 +195,9 @@ class BlockingChannelInfo {
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port.getPort());
       blockingChannelAvailableConnections.add(channel);
     } catch (Exception e) {
-      logger.error("Connection failure to remote host {} and port {} when destroying and recreating the connection",
-          host, port.getPort());
+      logger.error(
+          "Connection failure to remote host {} and port {} when destroying and recreating the connection. Exception: ",
+          host, port.getPort(), e);
       synchronized (lock) {
         // decrement the number of connections to the host and port. we were not able to maintain the count
         numberOfConnections.decrementAndGet();

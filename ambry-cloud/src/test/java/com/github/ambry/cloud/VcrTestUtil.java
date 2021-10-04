@@ -140,7 +140,7 @@ public class VcrTestUtil {
   public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
       int clusterMapPort, int vcrSslPort, Properties vcrSSLProps) {
     return createVcrProperties(datacenter, vcrClusterName, zkConnectString, clusterMapPort, vcrSslPort, vcrSSLProps,
-        OnlineOfflineHelixVcrStateModelFactory.class.getName());
+        OnlineOfflineHelixVcrStateModelFactory.class.getName(), false);
   }
 
   /**
@@ -152,10 +152,12 @@ public class VcrTestUtil {
    * @param vcrSslPort the vcrSslPort to use.
    * @param vcrSSLProps the SSL Properties to use if exist. Can be {@code null}.
    * @param vcrHelixStateModelFactoryClass the state model factory class.
+   * @param enableHttp2Replication enable http2 replication or not.
    * @return the created VCR {@link Properties}.
    */
   public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
-      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps, String vcrHelixStateModelFactoryClass) {
+      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps, String vcrHelixStateModelFactoryClass,
+      boolean enableHttp2Replication) {
     // Start the VCR and CloudBackupManager
     Properties props = new Properties();
     props.setProperty(CloudConfig.CLOUD_IS_VCR, Boolean.TRUE.toString());
@@ -184,6 +186,7 @@ public class VcrTestUtil {
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(16));
     props.setProperty("replication.token.flush.delay.seconds", "100000");
     props.setProperty("replication.token.flush.interval.seconds", "500000");
+    props.setProperty("clustermap.enable.http2.replication", Boolean.toString(enableHttp2Replication));
     return props;
   }
 }

@@ -22,10 +22,13 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
+import com.github.ambry.commons.NettySslHttp2Factory;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
@@ -38,6 +41,8 @@ import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
+import com.github.ambry.network.http2.Http2BlockingChannelPool;
+import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.FindTokenHelper;
@@ -161,7 +166,15 @@ public class VcrServer {
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
 
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+      SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
+      if (clusterMapConfig.clusterMapEnableHttp2Replication) {
+        connectionPool = new Http2BlockingChannelPool(sslFactory, new Http2ClientConfig(properties),
+            new Http2ClientMetrics(registry));
+        logger.info("Using http2 for VCR replication.");
+      } else {
+        connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        logger.info("Using blocking channel for VCR replication.");
+      }
       connectionPool.start();
 
       StoreKeyConverterFactory storeKeyConverterFactory =
