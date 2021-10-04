@@ -265,18 +265,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
-   * Return true if segment is sealed. This is the same with {@link #isSealed()}, but we get the value under
-   * lock's protection.
-   * @return
-   */
-  boolean isSealedLocked() {
-    rwLock.readLock().lock();
-    boolean isSealed = sealed.get();
-    rwLock.readLock().unlock();
-    return isSealed;
-  }
-
-  /**
    * @return The file that this segment represents
    */
   File getFile() {
@@ -287,10 +275,15 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return number of IndexEntry items in this segment.
    */
   int size() {
-    if (isSealedLocked()) {
-      return numberOfEntries(serEntries);
-    } else {
-      return numberOfItems.get();
+    rwLock.readLock().lock();
+    try {
+      if (sealed.get()) {
+        return numberOfEntries(serEntries);
+      } else {
+        return numberOfItems.get();
+      }
+    } finally {
+      rwLock.readLock().unlock();
     }
   }
 
@@ -381,14 +374,10 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   NavigableSet<IndexValue> find(StoreKey keyToFind) throws StoreException {
     NavigableSet<IndexValue> toReturn = null;
-    // We deliberately get a reference to index before calling isSealedLocked.
-    // With rwLock, "serEntries != null" is an atomic operation with "sealed.get() == true", which means,
-    // when sealed.get() == true, then serEntries will not be null.
-    // Also, getting reference of index before checking sealed.get() would make sure tha when sealed.get()
-    // returns false, the reference will always be not null.
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
+    rwLock.readLock().lock();
     try {
-      if (!isSealedLocked()) {
+      if (!sealed.get()) {
         ConcurrentSkipListSet<IndexValue> values = indexCopy.get(keyToFind);
         if (values != null) {
           metrics.blobFoundInMemSegmentCount.inc();
@@ -449,6 +438,8 @@ class IndexSegment implements Iterable<IndexEntry> {
     } catch (StoreException e) {
       throw new StoreException(String.format("IndexSegment %s : %s", indexFile.getAbsolutePath(), e.getMessage()), e,
           e.getErrorCode());
+    } finally {
+      rwLock.readLock().unlock();
     }
     return toReturn != null ? Collections.unmodifiableNavigableSet(toReturn) : null;
   }
@@ -636,10 +627,15 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return The total size in bytes written to this segment so far
    */
   long getSizeWritten() {
-    if (isSealedLocked()) {
-      throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
+    rwLock.readLock().lock();
+    try {
+      if (sealed.get()) {
+        throw new UnsupportedOperationException("Operation supported only on index segments that are not sealed");
+      }
+      return sizeWritten.get();
+    } finally {
+      rwLock.readLock().unlock();
     }
-    return sizeWritten.get();
   }
 
   /**
@@ -647,11 +643,16 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return The number of items contained in this segment
    */
   int getNumberOfItems() {
-    if (isSealedLocked()) {
-      throw new UnsupportedOperationException(
-          "Operation supported only on index segments that are not sealed: " + getStartOffset());
+    rwLock.readLock().lock();
+    try {
+      if (sealed.get()) {
+        throw new UnsupportedOperationException(
+            "Operation supported only on index segments that are not sealed: " + getStartOffset());
+      }
+      return numberOfItems.get();
+    } finally {
+      rwLock.readLock().unlock();
     }
-    return numberOfItems.get();
   }
 
   /**
@@ -848,40 +849,44 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return index value of last PUT record in this index segment. Return {@code null} if no PUT is found
    */
   IndexValue getIndexValueOfLastPut() throws StoreException {
-
     IndexValue indexValueOfLastPut = null;
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
-    if (isSealedLocked()) {
-      ByteBuffer readBuf = serEntries.duplicate();
-      int numOfIndexEntries = numberOfEntries(readBuf);
-      NavigableSet<IndexValue> values = new TreeSet<>();
-      for (int i = 0; i < numOfIndexEntries; i++) {
-        StoreKey key = getKeyAt(readBuf, i);
-        values.clear();
-        getAllValuesFromMmap(readBuf, key, i, numOfIndexEntries, values);
-        for (IndexValue indexValue : values) {
-          // FLAGS_DEFAULT_VALUE means PUT record
-          if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
-              || indexValue.compareTo(indexValueOfLastPut) > 0)) {
-            indexValueOfLastPut = indexValue;
-            // note that values set contains all entries associated with specific key, so there are at most 3 entries in
-            // this set (one PUT, one TTL Update and one DELETE). Due to nature of log, PUT always comes first. And if we
-            // already find PUT, we can jump out of the inner loop.
-            break;
+    rwLock.readLock().lock();
+    try {
+      if (sealed.get()) {
+        ByteBuffer readBuf = serEntries.duplicate();
+        int numOfIndexEntries = numberOfEntries(readBuf);
+        NavigableSet<IndexValue> values = new TreeSet<>();
+        for (int i = 0; i < numOfIndexEntries; i++) {
+          StoreKey key = getKeyAt(readBuf, i);
+          values.clear();
+          getAllValuesFromMmap(readBuf, key, i, numOfIndexEntries, values);
+          for (IndexValue indexValue : values) {
+            // FLAGS_DEFAULT_VALUE means PUT record
+            if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
+                || indexValue.compareTo(indexValueOfLastPut) > 0)) {
+              indexValueOfLastPut = indexValue;
+              // note that values set contains all entries associated with specific key, so there are at most 3 entries in
+              // this set (one PUT, one TTL Update and one DELETE). Due to nature of log, PUT always comes first. And if we
+              // already find PUT, we can jump out of the inner loop.
+              break;
+            }
+          }
+        }
+      } else {
+        for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : indexCopy.entrySet()) {
+          for (IndexValue indexValue : entry.getValue()) {
+            // FLAGS_DEFAULT_VALUE means PUT record
+            if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
+                || indexValue.compareTo(indexValueOfLastPut) > 0)) {
+              indexValueOfLastPut = indexValue;
+              break;
+            }
           }
         }
       }
-    } else {
-      for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : indexCopy.entrySet()) {
-        for (IndexValue indexValue : entry.getValue()) {
-          // FLAGS_DEFAULT_VALUE means PUT record
-          if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
-              || indexValue.compareTo(indexValueOfLastPut) > 0)) {
-            indexValueOfLastPut = indexValue;
-            break;
-          }
-        }
-      }
+    } finally {
+      rwLock.readLock().unlock();
     }
     return indexValueOfLastPut;
   }
@@ -1159,10 +1164,15 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   public Iterator<IndexEntry> iterator() {
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
-    if (!isSealedLocked()) {
-      return new UnsealedIndexSegmentEntryIterator(indexCopy);
+    rwLock.readLock().lock();
+    try {
+      if (!sealed.get()) {
+        return new UnsealedIndexSegmentEntryIterator(indexCopy);
+      }
+      return new SealedIndexSegmentEntryIterator(serEntries);
+    } finally {
+      rwLock.readLock().unlock();
     }
-    return new SealedIndexSegmentEntryIterator(serEntries);
   }
 
   /**
@@ -1186,10 +1196,15 @@ class IndexSegment implements Iterable<IndexEntry> {
    */
   ListIterator<IndexEntry> listIterator(int idx) {
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
-    if (!isSealedLocked()) {
-      return new UnsealedIndexSegmentEntryListIterator(indexCopy, idx);
+    rwLock.readLock().lock();
+    try {
+      if (!sealed.get()) {
+        return new UnsealedIndexSegmentEntryListIterator(indexCopy, idx);
+      }
+      return new SealedIndexSegmentEntryListIterator(serEntries, idx);
+    } finally {
+      rwLock.readLock().unlock();
     }
-    return new SealedIndexSegmentEntryListIterator(serEntries, idx);
   }
 
   /**
@@ -1216,51 +1231,56 @@ class IndexSegment implements Iterable<IndexEntry> {
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
     NavigableSet<IndexValue> values = new TreeSet<>();
     List<IndexEntry> entriesLocal = new ArrayList<>();
-    if (isSealedLocked()) {
-      int index = 0;
-      if (key != null) {
-        index = findIndex(key, serEntries.duplicate());
-      }
-      if (index != -1) {
-        ByteBuffer readBuf = serEntries.duplicate();
-        int totalEntries = numberOfEntries(readBuf);
-        while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())
-            && index < totalEntries) {
-          StoreKey newKey = getKeyAt(readBuf, index);
-          // we include the key in the final list if it is not the initial key or if the initial key was null
-          if (key == null || newKey.compareTo(key) != 0 || inclusive) {
-            values.clear();
-            index = getAllValuesFromMmap(readBuf, newKey, index, totalEntries, values).getSecond();
-            for (IndexValue value : values) {
-              entriesLocal.add(new IndexEntry(newKey, value));
-              currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
+    rwLock.readLock().lock();
+    try {
+      if (sealed.get()) {
+        int index = 0;
+        if (key != null) {
+          index = findIndex(key, serEntries.duplicate());
+        }
+        if (index != -1) {
+          ByteBuffer readBuf = serEntries.duplicate();
+          int totalEntries = numberOfEntries(readBuf);
+          while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())
+              && index < totalEntries) {
+            StoreKey newKey = getKeyAt(readBuf, index);
+            // we include the key in the final list if it is not the initial key or if the initial key was null
+            if (key == null || newKey.compareTo(key) != 0 || inclusive) {
+              values.clear();
+              index = getAllValuesFromMmap(readBuf, newKey, index, totalEntries, values).getSecond();
+              for (IndexValue value : values) {
+                entriesLocal.add(new IndexEntry(newKey, value));
+                currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
+              }
             }
+            index++;
           }
-          index++;
+        } else {
+          logger.error("IndexSegment : {} index not found for key {}", indexFile.getAbsolutePath(), key);
+          metrics.keyInFindEntriesAbsent.inc();
+        }
+      } else if (key == null || indexCopy.containsKey(key)) {
+        NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = indexCopy;
+        if (key != null) {
+          tempMap = indexCopy.tailMap(key, inclusive);
+        }
+        for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : tempMap.entrySet()) {
+          for (IndexValue value : entry.getValue()) {
+            IndexValue newValue = new IndexValue(startOffset.getName(), value.getBytes(), getVersion());
+            entriesLocal.add(new IndexEntry(entry.getKey(), newValue));
+            currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
+          }
+          // will break if size exceeded only after processing ALL entries for a key
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
+            break;
+          }
         }
       } else {
-        logger.error("IndexSegment : {} index not found for key {}", indexFile.getAbsolutePath(), key);
+        logger.error("IndexSegment : {} key not found: {}", indexFile.getAbsolutePath(), key);
         metrics.keyInFindEntriesAbsent.inc();
       }
-    } else if (key == null || indexCopy.containsKey(key)) {
-      NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = indexCopy;
-      if (key != null) {
-        tempMap = indexCopy.tailMap(key, inclusive);
-      }
-      for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : tempMap.entrySet()) {
-        for (IndexValue value : entry.getValue()) {
-          IndexValue newValue = new IndexValue(startOffset.getName(), value.getBytes(), getVersion());
-          entriesLocal.add(new IndexEntry(entry.getKey(), newValue));
-          currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
-        }
-        // will break if size exceeded only after processing ALL entries for a key
-        if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
-          break;
-        }
-      }
-    } else {
-      logger.error("IndexSegment : {} key not found: {}", indexFile.getAbsolutePath(), key);
-      metrics.keyInFindEntriesAbsent.inc();
+    } finally {
+      rwLock.readLock().unlock();
     }
     if (oneEntryPerKey) {
       eliminateDuplicates(entriesLocal);
@@ -1273,11 +1293,16 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return the first key (in lexicographical order) of sealed index segment
    */
   StoreKey getFirstKeyInSealedSegment() throws StoreException {
-    if (!isSealedLocked()) {
-      throw new IllegalStateException("Index segment {} is not sealed, not able to determine the first key.");
+    rwLock.readLock().lock();
+    try {
+      if (!sealed.get()) {
+        throw new IllegalStateException("Index segment {} is not sealed, not able to determine the first key.");
+      }
+      ByteBuffer readBuf = serEntries.duplicate();
+      return getKeyAt(readBuf, 0);
+    } finally {
+      rwLock.readLock().unlock();
     }
-    ByteBuffer readBuf = serEntries.duplicate();
-    return getKeyAt(readBuf, 0);
   }
 
   /**
