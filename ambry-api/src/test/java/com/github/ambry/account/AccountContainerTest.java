@@ -36,6 +36,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -141,7 +142,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testConstructAccountFromJson() {
-    assertAccountAgainstReference(Account.fromJson(refAccountJson), true, true);
+    assertAccountAgainstReference(accountFromJson(refAccountJson), true, true);
   }
 
   /**
@@ -298,7 +299,7 @@ public class AccountContainerTest {
   @Test
   public void testConstructContainerFromJson() throws JSONException {
     for (int i = 0; i < CONTAINER_COUNT; i++) {
-      Container containerFromJson = Container.fromJson(containerJsonList.get(i), refAccountId);
+      Container containerFromJson = containerFromJson(containerJsonList.get(i), refAccountId);
       assertContainer(containerFromJson, i);
     }
   }
@@ -332,42 +333,42 @@ public class AccountContainerTest {
   @Test
   public void badInputs() throws Exception {
     // null account metadata
-    TestUtils.assertException(IllegalArgumentException.class, () -> Account.fromJson(null), null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> accountFromJson(null), null);
 
     // account metadata in wrong format
     JSONObject badMetadata1 = new JSONObject().put("badKey", "badValue");
-    TestUtils.assertException(JSONException.class, () -> Account.fromJson(badMetadata1), null);
+    TestUtils.assertException(JSONException.class, () -> accountFromJson(badMetadata1), null);
 
     // required fields are missing in the metadata
     JSONObject badMetadata2 = deepCopy(refAccountJson);
     badMetadata2.remove(ACCOUNT_ID_KEY);
-    TestUtils.assertException(JSONException.class, () -> Account.fromJson(badMetadata2), null);
+    TestUtils.assertException(JSONException.class, () -> accountFromJson(badMetadata2), null);
 
     // unsupported account json version
     JSONObject badMetadata3 = deepCopy(refAccountJson).put(Account.JSON_VERSION_KEY, 2);
-    TestUtils.assertException(IllegalStateException.class, () -> Account.fromJson(badMetadata3), null);
+    TestUtils.assertException(IllegalStateException.class, () -> accountFromJson(badMetadata3), null);
 
     // invalid account status
     JSONObject badMetadata4 = deepCopy(refAccountJson).put(Account.STATUS_KEY, "invalidAccountStatus");
-    TestUtils.assertException(IllegalArgumentException.class, () -> Account.fromJson(badMetadata4), null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> accountFromJson(badMetadata4), null);
 
     // null container metadata
-    TestUtils.assertException(IllegalArgumentException.class, () -> Container.fromJson(null, refAccountId), null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> containerFromJson(null, refAccountId), null);
 
     // invalid container status
     JSONObject badMetadata5 = deepCopy(containerJsonList.get(0)).put(Container.STATUS_KEY, "invalidContainerStatus");
-    TestUtils.assertException(IllegalArgumentException.class, () -> Container.fromJson(badMetadata5, refAccountId),
+    TestUtils.assertException(IllegalArgumentException.class, () -> containerFromJson(badMetadata5, refAccountId),
         null);
 
     // required fields are missing.
     JSONObject badMetadata6 = deepCopy(containerJsonList.get(0));
     badMetadata6.remove(CONTAINER_ID_KEY);
-    TestUtils.assertException(JSONException.class, () -> Container.fromJson(badMetadata6, refAccountId), null);
+    TestUtils.assertException(JSONException.class, () -> containerFromJson(badMetadata6, refAccountId), null);
 
     // unsupported container json version
     JSONObject badMetadata7 =
         deepCopy(containerJsonList.get(0)).put(Container.JSON_VERSION_KEY, LATEST_CONTAINER_JSON_VERSION + 1);
-    TestUtils.assertException(IllegalStateException.class, () -> Container.fromJson(badMetadata7, refAccountId), null);
+    TestUtils.assertException(IllegalStateException.class, () -> containerFromJson(badMetadata7, refAccountId), null);
   }
 
   // Tests for builders
@@ -378,10 +379,10 @@ public class AccountContainerTest {
    */
   @Test
   public void testToString() throws JSONException {
-    Account account = Account.fromJson(refAccountJson);
+    Account account = accountFromJson(refAccountJson);
     assertEquals("Account[" + account.getId() + "," + account.getSnapshotVersion() + "]", account.toString());
     for (int i = 0; i < CONTAINER_COUNT; i++) {
-      Container container = Container.fromJson(containerJsonList.get(i), refAccountId);
+      Container container = containerFromJson(containerJsonList.get(i), refAccountId);
       assertEquals("Container[" + account.getId() + ":" + container.getId() + "]", container.toString());
     }
   }
@@ -401,7 +402,7 @@ public class AccountContainerTest {
 
     // set containers
     for (int i = 0; i < CONTAINER_COUNT; i++) {
-      Container container = Container.fromJson(containerJsonList.get(i), refAccountId);
+      Container container = containerFromJson(containerJsonList.get(i), refAccountId);
       accountBuilder.addOrUpdateContainer(container);
     }
     accountByBuilder = accountBuilder.build();
@@ -497,7 +498,7 @@ public class AccountContainerTest {
   @Test
   public void testUpdateAccount() throws JSONException {
     // set an account with different field value
-    Account origin = Account.fromJson(refAccountJson);
+    Account origin = accountFromJson(refAccountJson);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
     short updatedAccountId = (short) (refAccountId + 1);
     String updatedAccountName = refAccountName + "-updated";
@@ -538,7 +539,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testRemovingContainers() throws JSONException {
-    Account origin = Account.fromJson(refAccountJson);
+    Account origin = accountFromJson(refAccountJson);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
 
     // first, remove 10 containers
@@ -572,7 +573,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testUpdateContainerInAccount() throws JSONException {
-    Account account = Account.fromJson(refAccountJson);
+    Account account = accountFromJson(refAccountJson);
     AccountBuilder accountBuilder = new AccountBuilder(account);
 
     // updating with different containers
@@ -660,8 +661,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testUpdateContainerParentAccountId() throws JSONException {
-    ContainerBuilder containerBuilder =
-        new ContainerBuilder(Container.fromJson(containerJsonList.get(0), refAccountId));
+    ContainerBuilder containerBuilder = new ContainerBuilder(containerFromJson(containerJsonList.get(0), refAccountId));
     short newParentAccountId = (short) (refAccountId + 1);
     containerBuilder.setParentAccountId(newParentAccountId);
     assertEquals("Container's parent account id is incorrectly updated.", newParentAccountId,
@@ -674,7 +674,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testRemoveNonExistContainer() throws JSONException {
-    Account origin = Account.fromJson(refAccountJson);
+    Account origin = accountFromJson(refAccountJson);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
     ContainerBuilder containerBuilder =
         new ContainerBuilder((short) -999, refContainerNames.get(0), refContainerStatuses.get(0),
@@ -786,8 +786,8 @@ public class AccountContainerTest {
     assertEquals("Two accounts should be equal.", accountNoContainer, accountNoContainerDuplicate);
 
     // Check two accounts with same fields and containers.
-    Account accountWithContainers = Account.fromJson(refAccountJson);
-    Account accountWithContainersDuplicate = Account.fromJson(refAccountJson);
+    Account accountWithContainers = accountFromJson(refAccountJson);
+    Account accountWithContainersDuplicate = accountFromJson(refAccountJson);
     assertEquals("Two accounts should be equal.", accountWithContainers, accountWithContainersDuplicate);
 
     // Check two accounts with same fields but one has containers, the other one does not.
@@ -828,13 +828,13 @@ public class AccountContainerTest {
       refAccountJson.write(writer);
     }
     Account deserialized = objectMapper.readValue(outputStream.toByteArray(), Account.class);
-    Account fromJson = Account.fromJson(refAccountJson);
+    Account fromJson = accountFromJson(refAccountJson);
     assertTrue(deserialized.equals(fromJson));
 
     // Make sure jackson string can be deserialized to JSONObject object
     String serialized = objectMapper.writer(new DefaultPrettyPrinter()).writeValueAsString(deserialized);
     JSONObject jsonObject = new JSONObject(serialized);
-    fromJson = Account.fromJson(jsonObject);
+    fromJson = accountFromJson(jsonObject);
     assertTrue(deserialized.equals(fromJson));
 
     @JsonIgnoreProperties({"containers"})
@@ -904,6 +904,150 @@ public class AccountContainerTest {
   }
 
   /**
+   * Deserialize a {@link JSONObject} to an {@link Account}.
+   * @param metadata The {@link JSONObject}.
+   * @return A {@link Account}.
+   * @throws JSONException
+   */
+  private Account accountFromJson(JSONObject metadata) throws JSONException {
+    if (metadata == null) {
+      throw new IllegalArgumentException("metadata cannot be null.");
+    }
+    short metadataVersion = (short) metadata.getInt(Account.JSON_VERSION_KEY);
+    switch (metadataVersion) {
+      case Account.JSON_VERSION_1:
+        short id = (short) metadata.getInt(ACCOUNT_ID_KEY);
+        String name = metadata.getString(ACCOUNT_NAME_KEY);
+        AccountStatus status = AccountStatus.valueOf(metadata.getString(Account.STATUS_KEY));
+        int snapshotVersion = metadata.optInt(Account.SNAPSHOT_VERSION_KEY, Account.SNAPSHOT_VERSION_DEFAULT_VALUE);
+        long lastModifiedTime =
+            metadata.optLong(Account.LAST_MODIFIED_TIME_KEY, Account.LAST_MODIFIED_TIME_DEFAULT_VALUE);
+        boolean aclInheritedByContainer =
+            metadata.optBoolean(ACL_INHERITED_BY_CONTAINER_KEY, ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE);
+        if (name == null || status == null) {
+          throw new IllegalStateException(
+              "Either of required fields name=" + name + " or status=" + status + " is null");
+        }
+        JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
+        List<Container> containers = new ArrayList<>();
+        if (containerArray != null) {
+          for (int index = 0; index < containerArray.length(); index++) {
+            containers.add(containerFromJson(containerArray.getJSONObject(index), id));
+          }
+        }
+        QuotaResourceType quotaResourceType =
+            metadata.optEnum(QuotaResourceType.class, QUOTA_RESOURCE_TYPE_KEY, QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
+        return new AccountBuilder(id, name, status, quotaResourceType).snapshotVersion(snapshotVersion)
+            .lastModifiedTime(lastModifiedTime)
+            .aclInheritedByContainer(aclInheritedByContainer)
+            .containers(containers)
+            .build();
+      default:
+        throw new IllegalStateException("Unsupported account json version=" + metadataVersion);
+    }
+  }
+
+  /**
+   * Deserialize a {@link JSONObject} to a {@link Container}.
+   * @param metadata The {@link JSONObject}.
+   * @param parentAccountId The parent account id
+   * @return A {@link Container}.
+   * @throws JSONException
+   */
+  private Container containerFromJson(JSONObject metadata, short parentAccountId) throws JSONException {
+    if (metadata == null) {
+      throw new IllegalArgumentException("metadata cannot be null.");
+    }
+    short metadataVersion = (short) metadata.getInt(Container.JSON_VERSION_KEY);
+    switch (metadataVersion) {
+      case Container.JSON_VERSION_1:
+        short id = (short) metadata.getInt(CONTAINER_ID_KEY);
+        String name = metadata.getString(CONTAINER_NAME_KEY);
+        ContainerStatus status = ContainerStatus.valueOf(metadata.getString(Container.STATUS_KEY));
+        long deleteTriggerTime = CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE;
+        String description = metadata.optString(DESCRIPTION_KEY);
+        boolean encrypted = ENCRYPTED_DEFAULT_VALUE;
+        boolean previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+        boolean cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
+        boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
+        boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+        String replicationPolicy = null;
+        boolean ttlRequired = TTL_REQUIRED_DEFAULT_VALUE;
+        boolean securePathRequired = SECURE_PATH_REQUIRED_DEFAULT_VALUE;
+        Set<String> contentTypeWhitelistForFilenamesOnDownload =
+            CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
+        long lastModifiedTime =
+            metadata.optLong(Container.LAST_MODIFIED_TIME_KEY, Container.LAST_MODIFIED_TIME_DEFAULT_VALUE);
+        int snapshotVersion = metadata.optInt(Container.SNAPSHOT_VERSION_KEY, Container.SNAPSHOT_VERSION_DEFAULT_VALUE);
+        boolean overrideAccountAcl = OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE;
+        NamedBlobMode namedBlobMode = NAMED_BLOB_MODE_DEFAULT_VALUE;
+        return new ContainerBuilder(id, name, status, description, parentAccountId).setDeleteTriggerTime(
+            deleteTriggerTime)
+            .setEncrypted(encrypted)
+            .setPreviouslyEncrypted(previouslyEncrypted)
+            .setCacheable(cacheable)
+            .setBackupEnabled(backupEnabled)
+            .setMediaScanDisabled(mediaScanDisabled)
+            .setReplicationPolicy(replicationPolicy)
+            .setTtlRequired(ttlRequired)
+            .setSecurePathRequired(securePathRequired)
+            .setLastModifiedTime(lastModifiedTime)
+            .setContentTypeWhitelistForFilenamesOnDownload(contentTypeWhitelistForFilenamesOnDownload)
+            .setSnapshotVersion(snapshotVersion)
+            .setOverrideAccountAcl(overrideAccountAcl)
+            .setNamedBlobMode(namedBlobMode)
+            .build();
+      case JSON_VERSION_2:
+        id = (short) metadata.getInt(CONTAINER_ID_KEY);
+        name = metadata.getString(CONTAINER_NAME_KEY);
+        status = ContainerStatus.valueOf(metadata.getString(Container.STATUS_KEY));
+        deleteTriggerTime =
+            metadata.optLong(CONTAINER_DELETE_TRIGGER_TIME_KEY, CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE);
+        description = metadata.optString(DESCRIPTION_KEY);
+        encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
+        previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
+        cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
+        backupEnabled = metadata.optBoolean(BACKUP_ENABLED_KEY, BACKUP_ENABLED_DEFAULT_VALUE);
+        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
+        replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
+        ttlRequired = metadata.optBoolean(TTL_REQUIRED_KEY, TTL_REQUIRED_DEFAULT_VALUE);
+        securePathRequired = metadata.optBoolean(SECURE_PATH_REQUIRED_KEY, SECURE_PATH_REQUIRED_DEFAULT_VALUE);
+        JSONArray contentTypeWhitelistForFilenamesOnDownloadJson =
+            metadata.optJSONArray(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD);
+        if (contentTypeWhitelistForFilenamesOnDownloadJson != null) {
+          contentTypeWhitelistForFilenamesOnDownload = new HashSet<>();
+          contentTypeWhitelistForFilenamesOnDownloadJson.forEach(
+              contentType -> contentTypeWhitelistForFilenamesOnDownload.add(contentType.toString()));
+        } else {
+          contentTypeWhitelistForFilenamesOnDownload = CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
+        }
+        lastModifiedTime =
+            metadata.optLong(Container.LAST_MODIFIED_TIME_KEY, Container.LAST_MODIFIED_TIME_DEFAULT_VALUE);
+        snapshotVersion = metadata.optInt(Container.SNAPSHOT_VERSION_KEY, Container.SNAPSHOT_VERSION_DEFAULT_VALUE);
+        overrideAccountAcl = metadata.optBoolean(OVERRIDE_ACCOUNT_ACL_KEY, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE);
+        namedBlobMode = metadata.optEnum(NamedBlobMode.class, NAMED_BLOB_MODE_KEY, NAMED_BLOB_MODE_DEFAULT_VALUE);
+        return new ContainerBuilder(id, name, status, description, parentAccountId).setDeleteTriggerTime(
+            deleteTriggerTime)
+            .setEncrypted(encrypted)
+            .setPreviouslyEncrypted(previouslyEncrypted)
+            .setCacheable(cacheable)
+            .setBackupEnabled(backupEnabled)
+            .setMediaScanDisabled(mediaScanDisabled)
+            .setReplicationPolicy(replicationPolicy)
+            .setTtlRequired(ttlRequired)
+            .setSecurePathRequired(securePathRequired)
+            .setLastModifiedTime(lastModifiedTime)
+            .setContentTypeWhitelistForFilenamesOnDownload(contentTypeWhitelistForFilenamesOnDownload)
+            .setSnapshotVersion(snapshotVersion)
+            .setOverrideAccountAcl(overrideAccountAcl)
+            .setNamedBlobMode(namedBlobMode)
+            .build();
+      default:
+        throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
+    }
+  }
+
+  /**
    * Asserts an {@link Account} against the reference account.
    * @param account The {@link Account} to assert.
    * @param compareMetadata {@code true} to compare account metadata generated from {@link Account#toJson(boolean)}, and
@@ -942,12 +1086,12 @@ public class AccountContainerTest {
    * @throws JSONException
    */
   private void assertAccountJsonSerDe(boolean incrementSnapshotVersion, Account account) throws JSONException {
-    assertEquals("Failed to compare account to a reference account", Account.fromJson(refAccountJson), account);
+    assertEquals("Failed to compare account to a reference account", accountFromJson(refAccountJson), account);
     JSONObject expectedAccountJson = deepCopy(refAccountJson);
     if (incrementSnapshotVersion) {
       expectedAccountJson.put(Account.SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion + 1);
     }
-    JSONObject accountJson = account.toJson(incrementSnapshotVersion);
+    JSONObject accountJson = buildAccountJson(account, incrementSnapshotVersion);
     // extra check for snapshot version since the lengths would likely not differ even if the snapshot version was not
     // correct
     assertEquals("Snapshot versions in JSON do not match", expectedAccountJson.get(Account.SNAPSHOT_VERSION_KEY),
@@ -961,11 +1105,11 @@ public class AccountContainerTest {
       expectedAccountBuilder.snapshotVersion(refAccountSnapshotVersion + 1);
     }
     assertEquals("Wrong behavior in serialize and then deserialize", expectedAccountBuilder.build(),
-        Account.fromJson(account.toJson(incrementSnapshotVersion)));
+        accountFromJson(buildAccountJson(account, incrementSnapshotVersion)));
   }
 
   /**
-   * Asserts a {@link Container} against the reference account for every internal field, {@link Container#toJson()}
+   * Asserts a {@link Container} against the reference account for every internal field, {@link #buildContainerJson}
    * method, and also asserts the same object after serialize and then deserialize.
    * @param container The {@link Container} to assert.
    * @param index The index in the reference container list to assert against.
@@ -1021,8 +1165,9 @@ public class AccountContainerTest {
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
     }
-    assertEquals("Serialization error", containerJsonList.get(index).toString(), container.toJson().toString());
-    assertEquals("Serde chain error", Container.fromJson(container.toJson(), refAccountId), container);
+    assertEquals("Serialization error", containerJsonList.get(index).toString(),
+        buildContainerJson(container).toString());
+    assertEquals("Serde chain error", containerFromJson(buildContainerJson(container), refAccountId), container);
   }
 
   /**
@@ -1046,7 +1191,7 @@ public class AccountContainerTest {
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
     }
-    assertEquals("Deserialization failed", container, Container.fromJson(buildContainerJson(container), refAccountId));
+    assertEquals("Deserialization failed", container, containerFromJson(buildContainerJson(container), refAccountId));
   }
 
   /**
@@ -1174,6 +1319,32 @@ public class AccountContainerTest {
     Set<String> toRet = new HashSet<>();
     IntStream.range(0, random.nextInt(10) + 1).boxed().forEach(i -> toRet.add(TestUtils.getRandomString(10)));
     return toRet;
+  }
+
+  /**
+   * Construct an account JSON object in the version specified by {@link Account#CURRENT_JSON_VERSION}.
+   * @param account The {@link Account} to serialize
+   * @param incrementSnapshotVersion True to increase the snapshot version.
+   * @return The {@link JSONObject}.
+   * @throws JSONException
+   */
+  private JSONObject buildAccountJson(Account account, boolean incrementSnapshotVersion) throws JSONException {
+    JSONObject metadata = new JSONObject();
+    metadata.put(Account.JSON_VERSION_KEY, CURRENT_JSON_VERSION);
+    metadata.put(ACCOUNT_ID_KEY, account.getId());
+    metadata.put(ACCOUNT_NAME_KEY, account.getName());
+    metadata.put(Account.STATUS_KEY, account.getStatus().name());
+    metadata.put(Account.SNAPSHOT_VERSION_KEY,
+        incrementSnapshotVersion ? account.getSnapshotVersion() + 1 : account.getSnapshotVersion());
+    metadata.put(Account.LAST_MODIFIED_TIME_KEY, account.getLastModifiedTime());
+    metadata.put(ACL_INHERITED_BY_CONTAINER_KEY, account.isAclInheritedByContainer());
+    JSONArray containerArray = new JSONArray();
+    for (Container container : account.getAllContainers()) {
+      containerArray.put(buildContainerJson(container));
+    }
+    metadata.put(CONTAINERS_KEY, containerArray);
+    metadata.put(QUOTA_RESOURCE_TYPE_KEY, account.getQuotaResourceType().name());
+    return metadata;
   }
 
   /**

@@ -401,14 +401,20 @@ public class AccountDao {
    */
   private void bindContainer(PreparedStatement statement, int accountId, Container container,
       StatementType statementType) throws SQLException {
+    String containerInJson;
+    try {
+      containerInJson = objectMapper.writeValueAsString(container);
+    } catch (IOException e) {
+      throw new SQLException("Fail to serialize container: " + container.toString(), e);
+    }
     switch (statementType) {
       case Insert:
         statement.setInt(1, accountId);
-        statement.setString(2, container.toJson().toString());
+        statement.setString(2, containerInJson);
         statement.setInt(3, container.getSnapshotVersion());
         break;
       case Update:
-        statement.setString(1, container.toJson().toString());
+        statement.setString(1, containerInJson);
         statement.setInt(2, (container.getSnapshotVersion() + 1));
         statement.setInt(3, accountId);
         statement.setInt(4, container.getId());

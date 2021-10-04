@@ -67,7 +67,6 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -895,18 +894,6 @@ public class Utils {
    */
   public static void writeJsonObjectToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
     writeStringToFile(jsonObject.toString(2), path);
-  }
-
-  /**
-   * Pretty prints specified {@link JSONArray} to specified file path.
-   *
-   * @param jsonArray to pretty print
-   * @param path file path
-   * @throws IOException
-   * @throws JSONException
-   */
-  public static void writeJsonArrayToFile(JSONArray jsonArray, String path) throws IOException, JSONException {
-    writeStringToFile(jsonArray.toString(2), path);
   }
 
   /**
