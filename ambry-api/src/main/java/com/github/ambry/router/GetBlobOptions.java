@@ -119,6 +119,9 @@ public class GetBlobOptions {
     return blobSegmentIdx != NO_BLOB_SEGMENT_IDX_SPECIFIED;
   }
 
+  /**
+   * @return The {@link RestRequest} that triggered this get operation.
+   */
   public RestRequest getRestRequest() {
     return restRequest;
   }
@@ -126,7 +129,7 @@ public class GetBlobOptions {
   @Override
   public String toString() {
     return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range
-        + ", rawMode=" + rawMode + ", blobSegmentIdx=" + blobSegmentIdx + '}';
+        + ", rawMode=" + rawMode + ", blobSegmentIdx=" + blobSegmentIdx + ", restRequest=" + restRequest + '}';
   }
 
   @Override
@@ -140,12 +143,12 @@ public class GetBlobOptions {
     GetBlobOptions that = (GetBlobOptions) o;
     return resolveRangeOnEmptyBlob == that.resolveRangeOnEmptyBlob && rawMode == that.rawMode
         && blobSegmentIdx == that.blobSegmentIdx && operationType == that.operationType && getOption == that.getOption
-        && Objects.equals(range, that.range);
+        && Objects.equals(range, that.range) && Objects.equals(restRequest, that.restRequest);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx);
+    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx, restRequest);
   }
 
   /**

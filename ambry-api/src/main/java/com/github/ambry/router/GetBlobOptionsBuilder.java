@@ -72,7 +72,7 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
-   * @param restRequest The {@link RestRequest} that triggered this get operationt.
+   * @param restRequest The {@link RestRequest} that triggered this get operation.
    * @return this builder.
    */
   public GetBlobOptionsBuilder restRequest(RestRequest restRequest) {

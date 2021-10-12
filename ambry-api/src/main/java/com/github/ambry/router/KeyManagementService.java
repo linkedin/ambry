@@ -48,7 +48,8 @@ public interface KeyManagementService<T> extends Closeable {
   /**
    * Fetches the key associated with the pair of AccountId and ContainerId. User is expected to have
    * registered using {@link #register(short, short)} for this pair before fetching keys.
-   * @param restRequest the {@link RestRequest} to use
+   * @param restRequest the {@link RestRequest} to use. A null pointer might be passed for this argument, service has to
+   *                    be able to deal with null {@link RestRequest}.
    * @param accountId refers to the id of the {@link Account} for which key is expected
    * @param containerId refers to the id of the {@link Container} for which key is expected
    * @return T the key associated with the accountId and containerId
@@ -59,7 +60,8 @@ public interface KeyManagementService<T> extends Closeable {
   /**
    * Fetches the key associated with the specified context. User is expected to have
    * registered using {@link #register(String)} for this context before fetching keys.
-   * @param restRequest the {@link RestRequest} to use
+   * @param restRequest the {@link RestRequest} to use. A null pointer might be passed for this argument, service has to
+   *                    be able to deal with null {@link RestRequest}.
    * @param context refers to the context for which key is expected
    * @return T the key associated with the context
    * @throws {@link GeneralSecurityException} on KMS unavailability or if key is not registered

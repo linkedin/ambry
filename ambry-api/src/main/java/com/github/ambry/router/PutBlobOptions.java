@@ -16,6 +16,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.rest.RestRequest;
+import java.util.Objects;
 
 
 /**
@@ -54,6 +55,9 @@ public class PutBlobOptions {
     return maxUploadSize;
   }
 
+  /**
+   * @return The {@link RestRequest} that triggered this put operation.
+   */
   public RestRequest getRestRequest() {
     return restRequest;
   }
@@ -68,18 +72,18 @@ public class PutBlobOptions {
     }
 
     PutBlobOptions options = (PutBlobOptions) o;
-    return chunkUpload == options.chunkUpload && maxUploadSize == options.maxUploadSize;
+    return chunkUpload == options.chunkUpload && maxUploadSize == options.maxUploadSize && Objects.equals(restRequest,
+        options.restRequest);
   }
 
   @Override
   public int hashCode() {
-    int result = (chunkUpload ? 1 : 0);
-    result = 31 * result + (int) (maxUploadSize ^ (maxUploadSize >>> 32));
-    return result;
+    return Objects.hash(chunkUpload, maxUploadSize, restRequest);
   }
 
   @Override
   public String toString() {
-    return "PutBlobOptions{" + "chunkUpload=" + chunkUpload + ", maxUploadSize=" + maxUploadSize + '}';
+    return "PutBlobOptions{" + "chunkUpload=" + chunkUpload + ", maxUploadSize=" + maxUploadSize + ", restRequest="
+        + restRequest + '}';
   }
 }

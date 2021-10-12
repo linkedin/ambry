@@ -25,6 +25,7 @@ import javax.crypto.spec.SecretKeySpec;
  */
 class MockKeyManagementService extends SingleKeyManagementService {
   AtomicReference<GeneralSecurityException> exceptionToThrow = new AtomicReference<>();
+  AtomicReference<RestRequest> currentRestRequest = new AtomicReference<>();
 
   MockKeyManagementService(KMSConfig KMSConfig, String defaultKey) throws GeneralSecurityException {
     super(KMSConfig, defaultKey);
@@ -33,10 +34,19 @@ class MockKeyManagementService extends SingleKeyManagementService {
   @Override
   public SecretKeySpec getKey(RestRequest restRequest, short accountId, short containerId)
       throws GeneralSecurityException {
+    currentRestRequest.set(restRequest);
     if (exceptionToThrow.get() != null) {
       throw exceptionToThrow.get();
     } else {
       return super.getKey(restRequest, accountId, containerId);
     }
+  }
+
+  /**
+   * Return the restRequest that just passed to this service.
+   * @return
+   */
+  public RestRequest getCurrentRestRequest() {
+    return currentRestRequest.get();
   }
 }
