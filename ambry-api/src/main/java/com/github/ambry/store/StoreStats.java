@@ -46,7 +46,6 @@ public interface StoreStats {
    */
   Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException;
 
-
   /**
    * Fetches specified types of stats for corresponding {@link Store} as a map whose key is {@link StatsReportType} and
    * value is {@link StatsSnapshot}.

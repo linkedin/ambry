@@ -464,6 +464,13 @@ public class BlobStoreStatsTest {
     verifyContainerStorageStatsAndGetTotalValidSize(blobStoreStats, state.time.milliseconds());
     assertEquals("Throttle count mismatch from expected value", expectedThrottleCount,
         mockThrottler.throttleCount.get());
+
+    CountDownLatch secondScanStartedLatch = new CountDownLatch(1);
+    mockThrottler = new MockThrottler(secondScanStartedLatch, new CountDownLatch(0));
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
+    blobStoreStats.onCompactionFinished();
+    // Make sure index scanner starts again
+    assertTrue("IndexScanner took too long to start", secondScanStartedLatch.await(5, TimeUnit.SECONDS));
     blobStoreStats.close();
   }
 
