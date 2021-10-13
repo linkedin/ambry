@@ -344,7 +344,7 @@ public abstract class StorageClient {
     HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
 
     // Note: retry decisions are made at CloudBlobStore level.  Configure storageClient with no retries.
-    RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, null, null, null, null);
+    RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, (Integer) null, null, null, null);
     try {
       return buildBlobServiceClient(client, storageConfiguration, noRetries, azureCloudConfig);
     } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
