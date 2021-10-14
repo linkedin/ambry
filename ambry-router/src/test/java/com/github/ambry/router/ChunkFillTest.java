@@ -338,7 +338,7 @@ public class ChunkFillTest {
       for (int i = 0; i < numChunks; i++) {
         DecryptJob decryptJob =
             new DecryptJob(compositeBlobIds[i], compositeEncryptionKeys[i], compositeBuffers[i], null, cryptoService,
-                kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, exception) -> {
+                kms, null, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, exception) -> {
               Assert.assertNull("Exception shouldn't have been thrown", exception);
               ByteBuf decryptedBlobContent = result.getDecryptedBlobContent();
               int chunkSize = decryptedBlobContent.readableBytes();

@@ -43,7 +43,7 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.context = context;
-    contextKey = kms.getKey(context);
+    contextKey = kms.getKey(null, context);
   }
 
   @Override

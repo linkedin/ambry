@@ -18,6 +18,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.security.GeneralSecurityException;
@@ -41,7 +42,7 @@ public class SingleKeyManagementServiceTest {
   private static final MetricRegistry REGISTRY = new MetricRegistry();
 
   /**
-   * Test {@link SingleKeyManagementService#getKey(short, short)}
+   * Test {@link SingleKeyManagementService#getKey(RestRequest, short, short)}
    */
   @Test
   public void testSingleKMS() throws Exception {
@@ -55,7 +56,7 @@ public class SingleKeyManagementServiceTest {
       KeyManagementService<SecretKeySpec> kms =
           new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();
       SecretKeySpec keyFromKMS =
-          kms.getKey(Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+          kms.getKey(null, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
       Assert.assertEquals("Secret key mismatch ", secretKeySpec, keyFromKMS);
     }
   }
@@ -90,7 +91,7 @@ public class SingleKeyManagementServiceTest {
         new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();
     kms.close();
     try {
-      kms.getKey(Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+      kms.getKey(null, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
       Assert.fail("getKey() on KMS should have failed as KMS is closed");
     } catch (GeneralSecurityException e) {
     }

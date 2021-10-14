@@ -1101,7 +1101,7 @@ public class PutManagerTest {
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
-            new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
+            null, new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
           assertNull("Exception should not be thrown", exception);
           assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
           assertArrayEquals("UserMetadata mismatch", requestAndResult.putUserMetadata,
@@ -1132,7 +1132,7 @@ public class PutManagerTest {
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), Unpooled.wrappedBuffer(content),
-            userMetadata, cryptoService, kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics),
+            userMetadata, cryptoService, kms, null, new CryptoJobMetricsTracker(metrics.decryptJobMetrics),
             (result, exception) -> {
               assertNull("Exception should not be thrown", exception);
               assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
@@ -1178,7 +1178,7 @@ public class PutManagerTest {
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
             Unpooled.wrappedBuffer(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService,
-            kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
+            kms, null, new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
           Assert.assertNull("Exception should not be thrown", exception);
           assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
           Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,

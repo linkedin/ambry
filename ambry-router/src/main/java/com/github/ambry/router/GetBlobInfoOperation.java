@@ -368,7 +368,7 @@ class GetBlobInfoOperation extends GetOperation {
       decryptJobMetricsTracker.onJobSubmission();
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
-          new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
+          new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms, options.getBlobOptions,
               decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
             decryptJobMetricsTracker.onJobResultProcessingStart();
             logger.trace("Handling decrypt job callback results for {}", blobId);

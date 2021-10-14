@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.rest.RestRequest;
 import java.io.Closeable;
 import java.security.GeneralSecurityException;
 
@@ -22,7 +23,7 @@ import java.security.GeneralSecurityException;
 /**
  * Interface that defines the Key management service. KMS is responsible for maintaining keys for every
  * unique pair of AccountId and ContainerId that is registered with the KMS
- * Every caller is expected to register before making any {@link #getKey(short, short)} calls.
+ * Every caller is expected to register before making any {@link #getKey(RestRequest, short, short)} calls.
  * T refers to the Key type that this {@link KeyManagementService} will generate and return.
  * Ensure that {@link CryptoService} implementation is compatible with the key type that
  * {@link KeyManagementService} generates
@@ -47,21 +48,25 @@ public interface KeyManagementService<T> extends Closeable {
   /**
    * Fetches the key associated with the pair of AccountId and ContainerId. User is expected to have
    * registered using {@link #register(short, short)} for this pair before fetching keys.
+   * @param restRequest the {@link RestRequest} to use. A null pointer might be passed for this argument, service has to
+   *                    be able to deal with null {@link RestRequest}.
    * @param accountId refers to the id of the {@link Account} for which key is expected
    * @param containerId refers to the id of the {@link Container} for which key is expected
    * @return T the key associated with the accountId and containerId
    * @throws {@link GeneralSecurityException} on KMS unavailability or if key is not registered
    */
-  T getKey(short accountId, short containerId) throws GeneralSecurityException;
+  T getKey(RestRequest restRequest, short accountId, short containerId) throws GeneralSecurityException;
 
   /**
    * Fetches the key associated with the specified context. User is expected to have
    * registered using {@link #register(String)} for this context before fetching keys.
+   * @param restRequest the {@link RestRequest} to use. A null pointer might be passed for this argument, service has to
+   *                    be able to deal with null {@link RestRequest}.
    * @param context refers to the context for which key is expected
    * @return T the key associated with the context
    * @throws {@link GeneralSecurityException} on KMS unavailability or if key is not registered
    */
-  T getKey(String context) throws GeneralSecurityException;
+  T getKey(RestRequest restRequest, String context) throws GeneralSecurityException;
 
   /**
    * Generate and return a random key (of type T)
