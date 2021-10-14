@@ -13,6 +13,7 @@ Ambry is a distributed object store that supports storage of trillion of small i
 5. Easy to use
 
 Requires at least JDK 1.8.
+
 ## Documentation
 Detailed documentation is available at https://github.com/linkedin/ambry/wiki
 
@@ -98,4 +99,3 @@ In addition to the simple APIs demonstrated above, Ambry provides support for `G
 Other features of interest include:
 * **Time To Live (TTL)**: During `POST`, a TTL in seconds can be provided through the addition of a header named `x-ambry-ttl`. This means that Ambry will stop serving the blob after the TTL has expired. On `GET`, expired blobs behave the same way as deleted blobs.
 * **Private**: During `POST`, providing a header named `x-ambry-private` with the value `true` will mark the blob as private. API behavior can be configured based on whether a blob is public or private.
-
