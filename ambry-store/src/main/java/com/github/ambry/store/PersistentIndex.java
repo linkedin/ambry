@@ -2333,7 +2333,7 @@ class PersistentIndex {
             toWrite.writeIndexSegmentToFile(toWrite.getEndOffset());
             toWrite.seal();
           }
-          //Compaction may seal the current last index segment.
+          // Compaction may seal the current last index segment.
           currentInfo.writeIndexSegmentToFile(indexEndOffsetBeforeFlush);
         }
       } catch (FileNotFoundException e) {
