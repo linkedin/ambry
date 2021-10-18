@@ -15,6 +15,7 @@ package com.github.ambry.quota;
 
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
@@ -32,9 +33,9 @@ public class QuotaUtils {
    */
   public static boolean isRequestResourceQuotaManaged(RestRequest restRequest) {
     RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
-    return !(requestPath.matchesOperation(Operations.GET_PEERS) || requestPath.matchesOperation(
-        Operations.GET_CLUSTER_MAP_SNAPSHOT) || requestPath.matchesOperation(Operations.ACCOUNTS)
-        || requestPath.matchesOperation(Operations.STATS_REPORT) || requestPath.matchesOperation(
+    return !(restRequest.getRestMethod() == RestMethod.OPTIONS || requestPath.matchesOperation(Operations.GET_PEERS)
+        || requestPath.matchesOperation(Operations.GET_CLUSTER_MAP_SNAPSHOT) || requestPath.matchesOperation(
+        Operations.ACCOUNTS) || requestPath.matchesOperation(Operations.STATS_REPORT) || requestPath.matchesOperation(
         Operations.ACCOUNTS_CONTAINERS));
   }
 }
