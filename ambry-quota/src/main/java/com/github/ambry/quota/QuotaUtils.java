@@ -28,6 +28,7 @@ public class QuotaUtils {
 
   /**
    * Returns checks if user request quota should be applied to the request.
+   * Request quota should not be applied to Admin requests and OPTIONS requests.
    * @param restRequest {@link RestRequest} object.
    * @return {@code true} if user request quota should be applied to the request. {@code false} otherwise.
    */
