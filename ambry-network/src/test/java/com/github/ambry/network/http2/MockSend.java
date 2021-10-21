@@ -21,7 +21,7 @@ import java.nio.channels.WritableByteChannel;
 
 
 /**
- * A mock {@link Send} implementation that returns non-null value for {@link #content()} method.
+ * A mock implementation for {@link Send} that returns non-null value for {@link #content()} method.
  */
 public class MockSend extends AbstractByteBufHolder<MockSend> implements Send {
   protected ByteBuf buf;
