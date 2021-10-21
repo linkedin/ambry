@@ -45,6 +45,7 @@ import java.util.concurrent.TimeoutException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -75,6 +76,7 @@ public class Http2BlockingChannelTest {
    * @throws Exception
    */
   @Test
+  @Ignore
   public void testSendAndReceive() throws Exception {
     EmbeddedChannelPool channelPool = new EmbeddedChannelPool();
     InetSocketAddress address = new InetSocketAddress("localhost", 2021);
