@@ -96,7 +96,6 @@ public class Http2BlockingChannelTest {
     new Random().nextBytes(byteArray);
     ByteBuf response =
         PooledByteBufAllocator.DEFAULT.heapBuffer(responseSize + 8).writeLong(responseSize + 8).writeBytes(byteArray);
-    System.out.println("Starting writing messages here: " + System.currentTimeMillis());
     channel.writeInbound(new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, response));
 
     ChannelOutput output = future.get();

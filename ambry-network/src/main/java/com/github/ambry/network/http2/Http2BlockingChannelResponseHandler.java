@@ -30,10 +30,8 @@ import java.util.concurrent.CompletableFuture;
 public class Http2BlockingChannelResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-    System.out.println("Getting message in channel handler: " + System.currentTimeMillis());
     CompletableFuture<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).getAndSet(null);
     if (promise != null) {
-      System.out.println("Setting message in channel handler: " + System.currentTimeMillis());
       promise.complete(msg.content().retainedDuplicate());
       // Stream channel can't be reused. Release it here.
       releaseStreamChannel(ctx);
