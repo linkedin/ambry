@@ -48,7 +48,7 @@ public class Http2BlockingChannel implements ConnectedChannel {
   private final Http2ClientConfig http2ClientConfig;
   private final InetSocketAddress inetSocketAddress;
   final static AttributeKey<CompletableFuture<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
-  final static AttributeKey<ChannelPool> CHANNEL_POOL_ATTRIBUTE_KEY = AttributeKey.newInstance("channelPool");
+  final static AttributeKey<ChannelPool> CHANNEL_POOL_ATTRIBUTE_KEY = AttributeKey.newInstance("ChannelPool");
 
   public Http2BlockingChannel(ChannelPool channelPool, InetSocketAddress inetSocketAddress,
       Http2ClientConfig http2ClientConfig) {
