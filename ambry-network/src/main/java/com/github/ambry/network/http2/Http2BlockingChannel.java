@@ -124,9 +124,11 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
     ByteBuf responseByteBuf;
     try {
+      System.out.println("Starting waiting: " + System.currentTimeMillis());
       responseByteBuf =
           responsePromise.get(http2ClientConfig.http2BlockingChannelReceiveTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      System.out.println("Times out: " + System.currentTimeMillis());
       if (streamChannel.attr(RESPONSE_PROMISE).getAndSet(null) != null) {
         channelPool.release(streamChannel);
       }
