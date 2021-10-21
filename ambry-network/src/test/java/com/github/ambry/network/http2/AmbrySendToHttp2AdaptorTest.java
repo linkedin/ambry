@@ -14,15 +14,12 @@
 package com.github.ambry.network.http2;
 
 import com.github.ambry.network.Send;
-import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
-import java.io.IOException;
-import java.nio.channels.WritableByteChannel;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
@@ -83,43 +80,5 @@ public class AmbrySendToHttp2AdaptorTest {
     data.content().release();
     Assert.assertArrayEquals(byteArray, resultArray);
     content.release();
-  }
-
-  /**
-   * A mock {@link Send} implementation that returns non-null value for {@link #content()} method.
-   */
-  private static class MockSend extends AbstractByteBufHolder<MockSend> implements Send {
-    protected ByteBuf buf;
-
-    MockSend(ByteBuf content) {
-      buf = content;
-    }
-
-    @Override
-    public long writeTo(WritableByteChannel channel) throws IOException {
-      long written = channel.write(buf.nioBuffer());
-      buf.skipBytes((int) written);
-      return written;
-    }
-
-    @Override
-    public boolean isSendComplete() {
-      return buf.readableBytes() == 0;
-    }
-
-    @Override
-    public long sizeInBytes() {
-      return 16;
-    }
-
-    @Override
-    public ByteBuf content() {
-      return buf;
-    }
-
-    @Override
-    public MockSend replace(ByteBuf content) {
-      return null;
-    }
   }
 }
