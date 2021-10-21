@@ -49,15 +49,15 @@ public class Http2BlockingChannelResponseHandler extends SimpleChannelInboundHan
 
   private void releaseStreamChannel(ChannelHandlerContext ctx) {
     ChannelPool pool = ctx.channel().attr(Http2BlockingChannel.CHANNEL_POOL_ATTRIBUTE_KEY).get();
-    if (pool == null) {
+    if (pool != null) {
+      pool.release(ctx.channel());
+    } else {
       // We don't have a pool in the attribute, just release it by using pool in parent channel.
       ctx.channel()
           .parent()
           .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
           .get()
           .release(ctx.channel());
-    } else {
-      pool.release(ctx.channel());
     }
   }
 }
