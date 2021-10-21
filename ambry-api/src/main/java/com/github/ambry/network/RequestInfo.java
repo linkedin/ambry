@@ -15,7 +15,6 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.quota.Chargeable;
-import com.github.ambry.quota.QuotaResource;
 
 
 /**
@@ -28,6 +27,7 @@ public class RequestInfo {
   private final SendWithCorrelationId request;
   private final ReplicaId replicaId;
   private final Chargeable chargeable;
+  private final long requestCreateTime;
   private long streamSendTime = -1;
   private long streamHeaderFrameReceiveTime = -1;
   public int responseFramesCount = 0;
@@ -40,12 +40,14 @@ public class RequestInfo {
    * @param replicaId the {@link ReplicaId} associated with this request.
    * @param chargeable the {@link Chargeable} associated with this request.
    */
-  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId, Chargeable chargeable) {
+  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId,
+      Chargeable chargeable) {
     this.host = host;
     this.port = port;
     this.request = request;
     this.replicaId = replicaId;
     this.chargeable = chargeable;
+    requestCreateTime = System.currentTimeMillis();
   }
 
   /**
@@ -97,6 +99,13 @@ public class RequestInfo {
 
   public void setStreamSendTime(long streamSendTime) {
     this.streamSendTime = streamSendTime;
+  }
+
+  /**
+   * @return creation time of this request in msec.
+   */
+  public long getRequestCreateTime() {
+    return requestCreateTime;
   }
 
   @Override
