@@ -18,8 +18,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.pool.ChannelPool;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.util.concurrent.Promise;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -29,9 +30,9 @@ import io.netty.util.concurrent.Promise;
 public class Http2BlockingChannelResponseHandler extends SimpleChannelInboundHandler<FullHttpResponse> {
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpResponse msg) throws Exception {
-    Promise<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).getAndSet(null);
+    CompletableFuture<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).getAndSet(null);
     if (promise != null) {
-      promise.setSuccess(msg.content().retainedDuplicate());
+      promise.complete(msg.content().retainedDuplicate());
       // Stream channel can't be reused. Release it here.
       releaseStreamChannel(ctx);
     }
@@ -39,18 +40,24 @@ public class Http2BlockingChannelResponseHandler extends SimpleChannelInboundHan
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-    Promise<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).getAndSet(null);
+    CompletableFuture<ByteBuf> promise = ctx.channel().attr(Http2BlockingChannel.RESPONSE_PROMISE).getAndSet(null);
     if (promise != null) {
-      promise.setFailure(cause);
+      promise.completeExceptionally(cause);
       releaseStreamChannel(ctx);
     }
   }
 
   private void releaseStreamChannel(ChannelHandlerContext ctx) {
-    ctx.channel()
-        .parent()
-        .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
-        .get()
-        .release(ctx.channel());
+    ChannelPool pool = ctx.channel().attr(Http2BlockingChannel.CHANNEL_POOL_ATTRIBUTE_KEY).get();
+    if (pool != null) {
+      pool.release(ctx.channel());
+    } else {
+      // We don't have a pool in the attribute, just release it by using pool in parent channel.
+      ctx.channel()
+          .parent()
+          .attr(Http2MultiplexedChannelPool.HTTP2_MULTIPLEXED_CHANNEL_POOL)
+          .get()
+          .release(ctx.channel());
+    }
   }
 }

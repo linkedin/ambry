@@ -73,7 +73,8 @@ public class Http2BlockingChannelPool implements ConnectionPool {
   public ConnectedChannel checkOutConnection(String host, Port port, long timeout)
       throws IOException, InterruptedException, ConnectionPoolTimeoutException {
     InetSocketAddress inetSocketAddress = new InetSocketAddress(host, port.getPort());
-    return new Http2BlockingChannel((Http2MultiplexedChannelPool) (http2ChannelPoolMap.get(inetSocketAddress)));
+    Http2MultiplexedChannelPool pool = (Http2MultiplexedChannelPool) http2ChannelPoolMap.get(inetSocketAddress);
+    return new Http2BlockingChannel(pool, pool.getInetSocketAddress(), pool.getHttp2ClientConfig());
   }
 
   @Override
