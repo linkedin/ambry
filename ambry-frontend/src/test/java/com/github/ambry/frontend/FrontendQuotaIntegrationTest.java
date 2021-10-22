@@ -41,6 +41,7 @@ import com.github.ambry.router.ByteRange;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -191,8 +192,6 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    */
   @Before
   public void setup() throws Exception {
-    ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     String quotaEnforcerSourceInfoPairConfig = buildDefaultQuotaEnforcerSourceInfoPairConfig(throttleRequest);
     VerifiableProperties quotaProps =
         buildFrontendVPropsForQuota(TRUST_STORE_FILE, quotaEnforcerSourceInfoPairConfig, true, quotaMode);
@@ -259,6 +258,23 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       HttpResponse response = getHttpResponse(responseParts);
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     }
+  }
+
+  /**
+   * Tests that {@link com.github.ambry.rest.RestMethod#OPTIONS} requests are never charged.
+   * @throws Exception
+   */
+  @Test
+  public void optionsTest() throws Exception {
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.OPTIONS,
+        "/media/AAEAAQAAAAAAAAcUAAAAJGNjNTEzNWIwLTFmMTMtNDNhOC1hNjZjLTg3ZjU0MWZlYzM0Yw.png", new DefaultHttpHeaders(),
+        ByteBuffer.wrap(TestUtils.getRandomBytes(0)));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    assertFalse(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_USAGE));
+    assertFalse(response.headers().contains(RestUtils.RequestQuotaHeaders.RETRY_AFTER_MS));
+    assertFalse(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_WARNING));
   }
 
   /**
