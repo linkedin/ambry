@@ -62,7 +62,7 @@ public class AmbryQuotaManagerUpdateNotificationTest {
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     AccountTestUtils.generateRefAccounts(idToRefAccountMap, new HashMap<>(), accountIdSet, 2, 3);
     accountService.notifyAccountUpdateConsumers(idToRefAccountMap.values());
-    assertEquals("Invalid size of updated containers", quotaSource.getQuotaResourceList().size(), 6);
+    assertEquals("Invalid size of updated accounts", quotaSource.getQuotaResourceList().size(), 2);
   }
 
   /**
