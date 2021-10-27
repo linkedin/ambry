@@ -426,7 +426,8 @@ project(':ambry-cloud') {
             project(':ambry-utils'),
             project(':ambry-commons'),
             project(':ambry-account'),
-            project(':ambry-replication')
+            project(':ambry-replication'),
+            project(':ambry-server')
         compile "com.azure:azure-storage-blob:$azureStorageBlobVersion"
         compile "com.azure:azure-storage-blob-batch:$azureStorageBlobBatchVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"

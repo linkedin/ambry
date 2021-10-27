@@ -678,7 +678,7 @@ final class ServerTestUtil {
     // Start the VCR and CloudBackupManager
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            vcrSSLProps);
+            12510, vcrSSLProps);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds, clusterAgentsFactory.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =

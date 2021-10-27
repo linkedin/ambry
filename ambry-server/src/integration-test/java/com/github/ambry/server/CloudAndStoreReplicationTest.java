@@ -160,7 +160,7 @@ public class CloudAndStoreReplicationTest {
 
     Properties vcrProperties =
         VcrTestUtil.createVcrProperties(vcrNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            null);
+            12510, null);
     vcrProperties.putAll(recoveryProperties);
     MockNotificationSystem notificationSystem = new MockNotificationSystem(recoveryCluster.getClusterMap());
 

@@ -14,14 +14,8 @@
 package com.github.ambry.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.ambry.account.Container;
-import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.CloudStorageException;
-import com.github.ambry.cloud.CloudUpdateValidator;
-import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.VcrServer;
 import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeConfigSourceType;
@@ -30,24 +24,19 @@ import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil;
 import com.github.ambry.clustermap.HelixClusterAgentsFactory;
 import com.github.ambry.clustermap.HelixVcrUtil;
 
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 
-import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import org.apache.helix.tools.ClusterVerifiers.StrictMatchExternalViewVerifier;
 import org.json.JSONObject;
@@ -121,7 +110,8 @@ public class VcrAutomationTest {
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
 
-    Properties props = VcrTestUtil.createVcrProperties("DC0", vcrClusterName, zkConnectString, 12300, 12400, null);
+    Properties props =
+        VcrTestUtil.createVcrProperties("DC0", vcrClusterName, zkConnectString, 12300, 12400, 12510, null);
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.port", "1100");
     props.setProperty("clustermap.cluster.name", clusterName);
