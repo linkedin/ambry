@@ -1241,6 +1241,7 @@ public class BlobStore implements Store {
       }
       compactor.resumeCompaction(bundleReadBuffer);
       checkCapacityAndUpdateReplicaStatusDelegate();
+      blobStoreStats.onCompactionFinished();
     }
   }
 
