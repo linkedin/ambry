@@ -28,6 +28,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.ServerConfig;
@@ -38,6 +39,8 @@ import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.SocketNetworkClientFactory;
+import com.github.ambry.network.http2.Http2ClientMetrics;
+import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
@@ -63,7 +66,9 @@ public class CloudRouterFactory implements RouterFactory {
   private final ClusterMapConfig clusterMapConfig;
   private final RouterConfig routerConfig;
   private final NetworkConfig networkConfig;
+  private final Http2ClientConfig http2ClientConfig;
   private final NonBlockingRouterMetrics routerMetrics;
+  private final Http2ClientMetrics http2ClientMetrics;
   private final NetworkMetrics networkMetrics;
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
@@ -104,12 +109,14 @@ public class CloudRouterFactory implements RouterFactory {
           "Router datacenter " + routerConfig.routerDatacenterName + " is not part of the clustermap");
     }
     networkConfig = new NetworkConfig(verifiableProperties);
+    http2ClientConfig = new Http2ClientConfig(verifiableProperties);
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
     this.accountService = accountService;
     MetricRegistry registry = clusterMap.getMetricRegistry();
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     networkMetrics = new NetworkMetrics(registry);
+    http2ClientMetrics = new Http2ClientMetrics(registry);
     time = SystemTime.getInstance();
     KeyManagementServiceFactory kmsFactory =
         Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties,
@@ -193,10 +200,7 @@ public class CloudRouterFactory implements RouterFactory {
         new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(), networkConfig,
             networkMetrics, time);
     NetworkClientFactory diskNetworkClientFactory =
-        new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
-            routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-            routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs,
-            time);
+        new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
 
     Map<ReplicaType, NetworkClientFactory> childFactories = new EnumMap<>(ReplicaType.class);
     childFactories.put(ReplicaType.CLOUD_BACKED, cloudNetworkClientFactory);
