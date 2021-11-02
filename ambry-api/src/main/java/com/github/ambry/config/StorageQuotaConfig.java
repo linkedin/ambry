@@ -27,6 +27,13 @@ public class StorageQuotaConfig {
   public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
   public static final String SHOULD_THROTTLE = STORAGE_QUOTA_PREFIX + "should.throttle";
   public static final String USE_PHYSICAL_STORAGE = STORAGE_QUOTA_PREFIX + "use.physical.storage";
+  public static final String ENFORCEMENT_POLICY_FACTORY = STORAGE_QUOTA_PREFIX + "enforcement.policy.factory";
+  public static final String ADAPTIVE_ENFORCEMENT_CLUSTERMAP_UPDATE_INTERVAL_MS =
+      STORAGE_QUOTA_PREFIX + "adaptive.enforcement.clustermap.update.interval.ms";
+  public static final String ADAPTIVE_ENFORCEMENT_WRITEABLE_PARTITION_THRESHOLD =
+      STORAGE_QUOTA_PREFIX + "adaptive.enforcement.writable.partition.threshold";
+  public static final String DEFAULT_ENFORCEMENT_POLICY_FACTORY =
+      "com.github.ambry.quota.storage.SimpleStorageQuotaEnforcementPolicyFactory";
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -103,6 +110,28 @@ public class StorageQuotaConfig {
   public final boolean usePhysicalStorage;
 
   /**
+   * The factory class for {@link com.github.ambry.quota.storage.StorageQuotaEnforcementPolicy}.
+   */
+  @Config(ENFORCEMENT_POLICY_FACTORY)
+  @Default(DEFAULT_ENFORCEMENT_POLICY_FACTORY)
+  public final String enforcementPolicyFactory;
+
+  /**
+   * Interval to update clustermap data in adaptive enforcement policy.
+   */
+  @Config(ADAPTIVE_ENFORCEMENT_CLUSTERMAP_UPDATE_INTERVAL_MS)
+  @Default("10 * 60 * 1000")
+  public final long adaptiveEnforcementClusterMapUpdateIntervalMs;
+
+  /**
+   * Threshold in percentage when percentage of writable partitions drops below this threshold, we adaptive enforcement
+   * policy will start throttling upload requests.
+   */
+  @Config(ADAPTIVE_ENFORCEMENT_WRITEABLE_PARTITION_THRESHOLD)
+  @Default("25")
+  public final int adaptiveEnforcementWritablePartitionThreshold;
+
+  /**
    * Constructor to create a {@link StorageQuotaConfig}.
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
@@ -116,5 +145,11 @@ public class StorageQuotaConfig {
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
     shouldThrottle = verifiableProperties.getBoolean(SHOULD_THROTTLE, true);
     usePhysicalStorage = verifiableProperties.getBoolean(USE_PHYSICAL_STORAGE, false);
+    enforcementPolicyFactory =
+        verifiableProperties.getString(ENFORCEMENT_POLICY_FACTORY, DEFAULT_ENFORCEMENT_POLICY_FACTORY);
+    adaptiveEnforcementClusterMapUpdateIntervalMs =
+        verifiableProperties.getLong(ADAPTIVE_ENFORCEMENT_CLUSTERMAP_UPDATE_INTERVAL_MS, 10 * 60 * 1000);
+    adaptiveEnforcementWritablePartitionThreshold =
+        verifiableProperties.getIntInRange(ADAPTIVE_ENFORCEMENT_WRITEABLE_PARTITION_THRESHOLD, 25, 1, 99);
   }
 }

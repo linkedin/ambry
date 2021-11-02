@@ -55,7 +55,8 @@ public class StorageQuotaEnforcerTest {
   public void testInitEmptyStorageUsage() {
     JSONStringStorageQuotaSource quotaSource =
         new JSONStringStorageQuotaSource(new HashMap<>(), new InMemAccountService(false, false));
-    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, quotaSource, (StorageUsageRefresher) null);
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, quotaSource, (StorageUsageRefresher) null,
+        new SimpleStorageQuotaEnforcementPolicy());
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
     assertEquals(Collections.EMPTY_MAP, enforcer.getStorageUsages());
   }
@@ -93,7 +94,7 @@ public class StorageQuotaEnforcerTest {
 
     StorageQuotaEnforcer enforcer =
         new StorageQuotaEnforcer(config, new JSONStringStorageQuotaSource(new HashMap<>(), accountService),
-            (StorageUsageRefresher) null);
+            (StorageUsageRefresher) null, new SimpleStorageQuotaEnforcementPolicy());
     enforcer.initStorageUsage(containerUsage);
     assertEquals(expectedStorageUsages, enforcer.getStorageUsages());
   }
@@ -131,7 +132,7 @@ public class StorageQuotaEnforcerTest {
     }
     StorageQuotaEnforcer enforcer =
         new StorageQuotaEnforcer(config, new JSONStringStorageQuotaSource(new HashMap<>(), accountService),
-            (StorageUsageRefresher) null);
+            (StorageUsageRefresher) null, new SimpleStorageQuotaEnforcementPolicy());
     enforcer.initStorageUsage(containerUsage);
 
     StorageUsageRefresher.Listener listener = enforcer.getUsageRefresherListener();
@@ -213,7 +214,7 @@ public class StorageQuotaEnforcerTest {
       }
     }
     JSONStringStorageQuotaSource quotaSource = new JSONStringStorageQuotaSource(storageQuota, accountService);
-    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, quotaSource, (StorageUsageRefresher) null);
+    StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, quotaSource, (StorageUsageRefresher) null, new SimpleStorageQuotaEnforcementPolicy());
     enforcer.initStorageUsage(Collections.EMPTY_MAP);
 
     for (Map.Entry<String, Map<String, Long>> accountEntry : containerUsage.entrySet()) {

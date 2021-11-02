@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.QuotaConfig;
 
 
@@ -28,9 +29,10 @@ public class RejectQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * @param quotaConfig {@link QuotaConfig} object.
    * @param quotaSource {@link QuotaSource} object.
    * @param accountStatsStore the {@link AccountStatsStore}.
+   * @param clusterMap the {@link ClusterMap}.
    */
   public RejectQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) {
+      AccountStatsStore accountStatsStore, ClusterMap clusterMap) {
     this.rejectQuotaEnforcer = new RejectRequestQuotaEnforcer(quotaSource);
   }
 

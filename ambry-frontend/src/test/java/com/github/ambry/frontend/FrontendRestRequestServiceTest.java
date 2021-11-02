@@ -136,7 +136,7 @@ public class FrontendRestRequestServiceTest {
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER =
           new AmbryQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), Mockito.mock(AccountService.class),
-              null, new MetricRegistry());
+              null, null, new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }

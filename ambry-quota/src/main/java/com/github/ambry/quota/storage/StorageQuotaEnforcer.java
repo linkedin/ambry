@@ -44,6 +44,13 @@ import org.slf4j.LoggerFactory;
 
 /**
  * An {@link QuotaEnforcer} implementation on each container's storage usage.
+ * We have three level of controls on whether this enforcer would recommend throttling request.
+ * 1. Configuration from {@link com.github.ambry.config.QuotaConfig#throttlingMode}. If the mode is TRACKING, there will
+ *    be no throttling.
+ * 2. Configuration from {@link StorageQuotaConfig#shouldThrottle}. If the value if false, there will be no throttling.
+ *    This is implemented in {@link com.github.ambry.quota.MaxThrottlePolicy}.
+ * 3. Result from {@link StorageQuotaEnforcementPolicy#shouldThrottleRequest}. If the return value is false, there will
+ *    be no throttling.
  */
 public class StorageQuotaEnforcer implements QuotaEnforcer {
   private static final Logger logger = LoggerFactory.getLogger(StorageQuotaEnforcer.class);
@@ -61,6 +68,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   protected final StorageQuotaServiceMetrics metrics;
   protected final ScheduledExecutorService scheduler;
   protected final AccountService accountService;
+  protected final StorageQuotaEnforcementPolicy enforcementPolicy;
   protected volatile Map<QuotaResource, Long> storageUsages;
 
   /**
@@ -68,11 +76,14 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    * @param storageQuotaConfig the {@link StorageQuotaConfig}.
    * @param quotaSource the {@link QuotaSource} to get the quota.
    * @param accountStatsStore the {@link AccountStatsStore}.
+   * @param enforcementPolicy the {@link StorageQuotaEnforcementPolicy}.
    * @throws Exception
    */
   public StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) throws Exception {
+      AccountStatsStore accountStatsStore, StorageQuotaEnforcementPolicy enforcementPolicy) throws Exception {
     Objects.requireNonNull(accountStatsStore, "AccountStatsStore is null");
+    Objects.requireNonNull(enforcementPolicy, "EnforcementPolicy is null");
+    this.enforcementPolicy = enforcementPolicy;
     if (!(quotaSource instanceof AccountServiceSupplier)) {
       throw new IllegalArgumentException("QuotaSource has to be able to return AccountService");
     }
@@ -90,10 +101,11 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    * @param storageQuotaConfig the {@link StorageQuotaConfig}.
    * @param quotaSource the {@link QuotaSource} to get the quota.
    * @param storageUsageRefresher the {@link StorageUsageRefresher} to refresh the storage usage for each container.
+   * @param enforcementPolicy The {@link StorageQuotaEnforcementPolicy}.
    * @throws Exception
    */
   StorageQuotaEnforcer(StorageQuotaConfig storageQuotaConfig, QuotaSource quotaSource,
-      StorageUsageRefresher storageUsageRefresher) {
+      StorageUsageRefresher storageUsageRefresher, StorageQuotaEnforcementPolicy enforcementPolicy) {
     if (!(quotaSource instanceof AccountServiceSupplier)) {
       throw new IllegalArgumentException("QuotaSource has to be able to return AccountService");
     }
@@ -103,6 +115,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     this.config = storageQuotaConfig;
     this.quotaSource = quotaSource;
     this.storageUsageRefresher = storageUsageRefresher;
+    this.enforcementPolicy = enforcementPolicy;
   }
 
   @Override
@@ -149,7 +162,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
       // There is no quota set for the given account/container
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
-    boolean shouldThrottle = currentUsage >= quotaValue;
+    boolean shouldThrottle = enforcementPolicy.shouldThrottleRequest(quotaValue, currentUsage);
     float usagePercentage = currentUsage >= quotaValue ? 100f : ((float) currentUsage) / quotaValue * 100f;
     return new QuotaRecommendation(shouldThrottle, usagePercentage, QuotaName.STORAGE_IN_GB,
         shouldThrottle ? HTTP_STATUS_THROTTLE : HTTP_STATUS_ALLOW, NO_RETRY);

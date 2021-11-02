@@ -20,7 +20,6 @@ import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
@@ -288,7 +287,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     public ChargeTesterQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy,
         AccountService accountService, AccountStatsStore accountStatsStore, MetricRegistry metricRegistry,
         AtomicInteger chargeCalledCount) throws ReflectiveOperationException {
-      super(quotaConfig, throttlePolicy, accountService, accountStatsStore, metricRegistry);
+      super(quotaConfig, throttlePolicy, accountService, accountStatsStore, null, metricRegistry);
       this.chargeCalledCount = chargeCalledCount;
     }
 

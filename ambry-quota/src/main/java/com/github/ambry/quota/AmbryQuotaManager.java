@@ -19,6 +19,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
@@ -55,11 +56,13 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
    * @param accountService {@link AccountService} object to get all the accounts and container information.
    * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
+   * @param clusterMap {@link ClusterMap} object.
    * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
    * @throws ReflectiveOperationException in case of any exception.
    */
   public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
-      AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
+      AccountStatsStore accountStatsStore, ClusterMap clusterMap, MetricRegistry metricRegistry)
+      throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
@@ -68,7 +71,7 @@ public class AmbryQuotaManager implements QuotaManager {
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)),
-          accountStatsStore)).getRequestQuotaEnforcer());
+          accountStatsStore, clusterMap)).getRequestQuotaEnforcer());
     }
     this.throttlePolicy = throttlePolicy;
     this.quotaConfig = quotaConfig;

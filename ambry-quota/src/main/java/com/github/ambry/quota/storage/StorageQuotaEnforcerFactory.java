@@ -14,10 +14,12 @@
 package com.github.ambry.quota.storage;
 
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaEnforcerFactory;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.utils.Utils;
 
 
 /**
@@ -31,11 +33,15 @@ public class StorageQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * @param quotaConfig the {@link QuotaConfig}.
    * @param quotaSource the {@link QuotaSource}.
    * @param accountStatsStore the {@link AccountStatsStore}.
+   * @param clusterMap the {@link ClusterMap}.
    * @throws Exception
    */
   public StorageQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) throws Exception {
-    quotaEnforcer = new StorageQuotaEnforcer(quotaConfig.storageQuotaConfig, quotaSource, accountStatsStore);
+      AccountStatsStore accountStatsStore, ClusterMap clusterMap) throws Exception {
+    StorageQuotaEnforcementPolicy policy =
+        ((StorageQuotaEnforcementPolicyFactory) Utils.getObj(quotaConfig.storageQuotaConfig.enforcementPolicyFactory,
+            clusterMap, quotaConfig.storageQuotaConfig)).getPolicy();
+    quotaEnforcer = new StorageQuotaEnforcer(quotaConfig.storageQuotaConfig, quotaSource, accountStatsStore, policy);
   }
 
   @Override

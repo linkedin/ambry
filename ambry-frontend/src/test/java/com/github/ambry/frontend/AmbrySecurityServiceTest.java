@@ -130,7 +130,7 @@ public class AmbrySecurityServiceTest {
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER =
-          new AmbryQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), mock(AccountService.class), null,
+          new AmbryQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), mock(AccountService.class), null, null,
               new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);

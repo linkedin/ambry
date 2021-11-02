@@ -13,9 +13,9 @@
  */
 package com.github.ambry.quota;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.QuotaConfig;
 
 
@@ -30,13 +30,13 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
    * @param throttlePolicy {@link ThrottlePolicy} object.
    * @param accountService {@link AccountService} object.
    * @param accountStatsStore {@link AccountStatsStore} object.
-   * @param metricRegistry {@link MetricRegistry} object.
+   * @param clusterMap {@link ClusterMap} object.
    * @throws ReflectiveOperationException
    */
   public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
-      AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
-    quotaManager =
-        new AmbryQuotaManager(quotaConfig, throttlePolicy, accountService, accountStatsStore, metricRegistry);
+      AccountStatsStore accountStatsStore, ClusterMap clusterMap) throws ReflectiveOperationException {
+    quotaManager = new AmbryQuotaManager(quotaConfig, throttlePolicy, accountService, accountStatsStore, clusterMap,
+        clusterMap.getMetricRegistry());
   }
 
   @Override
