@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Properties;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -71,6 +72,10 @@ public class CloudRouterTest extends NonBlockingRouterTest {
   public CloudRouterTest(boolean testEncryption, int metadataContentVersion) throws Exception {
     super(testEncryption, metadataContentVersion, true);
   }
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
 
   @After
   public void after() {
@@ -79,6 +84,7 @@ public class CloudRouterTest extends NonBlockingRouterTest {
       router.close();
     }
     Assert.assertEquals("Current operations count should be 0", 0, NonBlockingRouter.currentOperationsCount.get());
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**

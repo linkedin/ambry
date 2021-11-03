@@ -125,6 +125,8 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     payload.writeTo(new ByteBufferChannel(ByteBuffer.wrap(SIZE_BYTE_ARRAY)));
     WritableByteChannel byteChannel = Channels.newChannel(new ByteBufOutputStream(buffer));
     payload.writeTo(byteChannel);
+    // Just like MockSelector, LocalRequestResponseChannel needs to release the sends' resources after completed.
+    payload.release();
     return buffer;
   }
 
