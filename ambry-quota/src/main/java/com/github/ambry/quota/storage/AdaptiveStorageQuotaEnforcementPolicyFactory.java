@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -40,26 +41,39 @@ public class AdaptiveStorageQuotaEnforcementPolicyFactory implements StorageQuot
   }
 }
 
+/**
+ * An implementation of {@link StorageQuotaEnforcementPolicy} that takes current cluster capacity into consideration when
+ * deciding whether to throttle upload requests. This implementation would compare the percentage of writable partitions
+ * to all partitions in the cluster, with the threshold provided in the {@link StorageQuotaConfig}, if the writable
+ * partitions percentage is larger then the threshold, we don't throttle even if current usage is bigger than storage quota.
+ */
 class AdaptiveStorageQuotaEnforcementPolicy implements StorageQuotaEnforcementPolicy {
   private final ClusterMap clusterMap;
   private final StorageQuotaConfig config;
   private final Time time;
-  private volatile long lastClusterMapUpdateTimeMs;
+  private AtomicLong lastClusterMapUpdateTimeMs = new AtomicLong();
   private volatile int currentClusterMapWritablePartitionPercentage;
 
+  /**
+   * Constructor to instantiate an {@link AdaptiveStorageQuotaEnforcementPolicy}.
+   * @param clusterMap The {@link ClusterMap} object.
+   * @param time The {@link Time} object.
+   * @param config The {@link StorageQuotaConfig}.
+   */
   public AdaptiveStorageQuotaEnforcementPolicy(ClusterMap clusterMap, Time time, StorageQuotaConfig config) {
     this.clusterMap = clusterMap;
     this.time = time;
     this.config = config;
-    this.lastClusterMapUpdateTimeMs = time.milliseconds();
+    this.lastClusterMapUpdateTimeMs.set(time.milliseconds());
     updateClusterMapWritablePartitionPercentage();
   }
 
   @Override
   public boolean shouldThrottleRequest(long storageQuota, long currentUsage) {
-    synchronized (this) {
-      if (time.milliseconds() - lastClusterMapUpdateTimeMs >= config.adaptiveEnforcementClusterMapUpdateIntervalMs) {
-        lastClusterMapUpdateTimeMs = time.milliseconds();
+    long lastUpdateTimeMs = lastClusterMapUpdateTimeMs.get();
+    if (time.milliseconds() - lastUpdateTimeMs >= config.adaptiveEnforcementClusterMapUpdateIntervalMs) {
+      if (lastClusterMapUpdateTimeMs.compareAndSet(lastUpdateTimeMs, time.milliseconds())) {
+        // Only one thread need to update the percentage. The other threads can just use old percentage value.
         updateClusterMapWritablePartitionPercentage();
       }
     }
@@ -67,8 +81,15 @@ class AdaptiveStorageQuotaEnforcementPolicy implements StorageQuotaEnforcementPo
         && currentClusterMapWritablePartitionPercentage <= config.adaptiveEnforcementWritablePartitionThreshold;
   }
 
+  /**
+   * Update the current writable partition percentage in the cluster.
+   */
   private void updateClusterMapWritablePartitionPercentage() {
+    int numberOfAllPartitionIds = clusterMap.getAllPartitionIds(null).size();
+    // If somehow the number of all partition ids is 0, then set writable partition percentage to 0 so we would fall back
+    // to simple throttling policy.
     this.currentClusterMapWritablePartitionPercentage =
-        100 * clusterMap.getWritablePartitionIds(null).size() / clusterMap.getAllPartitionIds(null).size();
+        numberOfAllPartitionIds != 0 ? 100 * clusterMap.getWritablePartitionIds(null).size() / numberOfAllPartitionIds
+            : 0;
   }
 }

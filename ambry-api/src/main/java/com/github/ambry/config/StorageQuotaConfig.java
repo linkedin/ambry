@@ -124,7 +124,7 @@ public class StorageQuotaConfig {
   public final long adaptiveEnforcementClusterMapUpdateIntervalMs;
 
   /**
-   * Threshold in percentage when percentage of writable partitions drops below this threshold, we adaptive enforcement
+   * Threshold in percentage when percentage of writable partitions drops below this threshold, the adaptive enforcement
    * policy will start throttling upload requests.
    */
   @Config(ADAPTIVE_ENFORCEMENT_WRITEABLE_PARTITION_THRESHOLD)
