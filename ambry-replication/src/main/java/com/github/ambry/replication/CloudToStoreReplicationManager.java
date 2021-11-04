@@ -130,6 +130,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
     started = true;
     startupLatch.countDown();
+    logger.info("CloudToStoreReplicationManager started.");
   }
 
   /**
@@ -174,7 +175,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
           partitionName);
       return;
     }
-    CloudReplica peerCloudReplica = new CloudReplica(partitionId, getCloudDataNode());
+    DataNodeId cloudDataNode = getCloudDataNode();
+    CloudReplica peerCloudReplica = new CloudReplica(partitionId, cloudDataNode);
     FindTokenFactory findTokenFactory =
         tokenHelper.getFindTokenFactoryFromReplicaType(peerCloudReplica.getReplicaType());
     RemoteReplicaInfo remoteReplicaInfo =
@@ -189,7 +191,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     partitionToPartitionInfo.put(partitionId, partitionInfo);
     mountPathToPartitionInfos.computeIfAbsent(localReplica.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);
-    logger.info("Cloud Partition {} added to {}", partitionName, dataNodeId);
+    logger.info("Cloud Partition {} added to {}. CloudNode {} port {}", partitionName, dataNodeId, cloudDataNode,
+        cloudDataNode.getPortToConnectTo());
 
     // Reload replication token if exist.
     reloadReplicationTokenIfExists(localReplica, remoteReplicaInfos);

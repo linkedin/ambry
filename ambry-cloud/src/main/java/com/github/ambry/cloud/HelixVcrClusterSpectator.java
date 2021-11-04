@@ -57,8 +57,6 @@ public class HelixVcrClusterSpectator implements VcrClusterSpectator {
 
   @Override
   public void spectate() throws Exception {
-    Map<String, DcZkInfo> dataCenterToZkAddress =
-        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
     HelixFactory helixFactory = new HelixFactory();
     String selfInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -68,17 +66,12 @@ public class HelixVcrClusterSpectator implements VcrClusterSpectator {
     // zk connection fails on both data centers, then things like replication between data centers might just stop.
     // For now, since we have only one fabric in cloud, and the spectator is being used for only cloud to store replication, this will work.
     // Once we add more fabrics, we should revisit this.
-    for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
-      // only handle vcr clusters for now
-      if (dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED) {
-        HelixManager helixManager =
-            helixFactory.getZkHelixManagerAndConnect(cloudConfig.vcrClusterName, selfInstanceName,
-                InstanceType.SPECTATOR, dcZkInfo.getZkConnectStrs().get(0));
+    HelixManager helixManager =
+        helixFactory.getZkHelixManagerAndConnect(cloudConfig.vcrClusterName, selfInstanceName, InstanceType.SPECTATOR,
+            cloudConfig.vcrClusterZkConnectString);
 
-        helixManager.addInstanceConfigChangeListener(this);
-        helixManager.addLiveInstanceChangeListener(this);
-      }
-    }
+    helixManager.addInstanceConfigChangeListener(this);
+    helixManager.addLiveInstanceChangeListener(this);
   }
 
   @Override

@@ -75,6 +75,8 @@ public class CloudDataNode implements DataNodeId {
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
     validatePorts(plainTextPort, sslPort, http2Port, isSslEnabled);
+    logger.info("CloudDataNode {} created. Plaintext Port {}, SSL Port {} HTTP2 Port {}", hostName, plainTextPort,
+        sslPort, http2Port);
   }
 
   @Override
