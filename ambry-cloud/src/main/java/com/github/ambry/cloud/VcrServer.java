@@ -52,9 +52,9 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
-import com.github.ambry.server.ServerSecurityService;
-import com.github.ambry.server.ServerSecurityServiceFactory;
-import com.github.ambry.server.StorageServerNettyFactory;
+import com.github.ambry.rest.ServerSecurityService;
+import com.github.ambry.rest.ServerSecurityServiceFactory;
+import com.github.ambry.rest.StorageServerNettyFactory;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -238,8 +238,8 @@ public class VcrServer {
             new NettyServerRequestResponseChannel(networkConfig.queuedMaxRequests, http2ServerMetrics);
 
         VcrRequests vcrRequestsForHttp2 =
-            new VcrRequests(cloudStorageManager, networkServer.getRequestResponseChannel(), clusterMap, currentNode,
-                registry, serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
+            new VcrRequests(cloudStorageManager, requestResponseChannel, clusterMap, currentNode, registry,
+                serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
                 vcrReplicationManager, storeKeyFactory, storeKeyConverterFactory);
         requestHandlerPoolForHttp2 =
             new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,

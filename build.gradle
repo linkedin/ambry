@@ -367,7 +367,8 @@ project(':ambry-rest') {
                 project(':ambry-account'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
-                project(':ambry-quota')
+                project(':ambry-quota'),
+                project(':ambry-network')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
@@ -427,7 +428,7 @@ project(':ambry-cloud') {
             project(':ambry-commons'),
             project(':ambry-account'),
             project(':ambry-replication'),
-            project(':ambry-server')
+            project(':ambry-rest')
         compile "com.azure:azure-storage-blob:$azureStorageBlobVersion"
         compile "com.azure:azure-storage-blob-batch:$azureStorageBlobBatchVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"

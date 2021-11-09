@@ -17,7 +17,6 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.server.ServerSecurityService;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.embedded.EmbeddedChannel;

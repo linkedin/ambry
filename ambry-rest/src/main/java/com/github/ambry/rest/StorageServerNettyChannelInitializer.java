@@ -12,14 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.server;
+package com.github.ambry.rest;
 
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.network.http2.Http2ServerStreamHandler;
-import com.github.ambry.rest.ConnectionStatsHandler;
-import com.github.ambry.rest.ServerSecurityHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
