@@ -476,7 +476,7 @@ public class StoreConfig {
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionHours =
-        verifiableProperties.getIntInRange("store.deleted.message.retention.hours", 168, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("store.deleted.message.retention.hours", 168, 0, Integer.MAX_VALUE);
     storeCompactionPolicySwitchTimestampDays =
         verifiableProperties.getIntInRange("store.compaction.policy.switch.timestamp.days", 6, 1, 14);
     storeContainerDeletionRetentionDays = verifiableProperties.getInt("store.container.deletion.retention.days", 14);
