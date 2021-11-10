@@ -309,6 +309,10 @@ class BlobStoreCompactor {
       }
       endCompaction();
     } catch (InterruptedException | IOException e) {
+      if (e instanceof IOException) {
+        diskMetrics.diskCompactionErrorDueToDiskFailureCount.inc();
+        logger.error("Compaction of store {} failed due to disk issue.", dataDir);
+      }
       throw new StoreException("Exception during compaction", e, StoreErrorCodes.Unknown_Error);
     } finally {
       compactionInProgress.set(false);
