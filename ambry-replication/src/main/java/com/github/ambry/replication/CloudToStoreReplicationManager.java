@@ -57,6 +57,7 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static org.apache.helix.model.InstanceConfig.InstanceConfigProperty.*;
 
 
 /**
@@ -296,16 +297,20 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
       // create a new list of available vcr nodes.
       for (InstanceConfig instanceConfig : instanceConfigs) {
-        String instanceName = instanceConfig.getInstanceName();
-        Port sslPort =
-            getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
-        Port http2Port =
-            getHttp2PortStr(instanceConfig) == null ? null : new Port(getHttp2PortStr(instanceConfig), PortType.HTTP2);
-        CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
-            new Port(Integer.parseInt(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, http2Port,
-            clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
-        newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
-        newVcrNodes.add(cloudDataNode);
+        if (instanceConfig.getRecord()
+            .getBooleanField(InstanceConfig.InstanceConfigProperty.HELIX_ENABLED.toString(), false)) {
+          // only when HELIX_ENABLED, we take action on it.
+          String instanceName = instanceConfig.getInstanceName();
+          Port sslPort =
+              getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
+          Port http2Port = getHttp2PortStr(instanceConfig) == null ? null
+              : new Port(getHttp2PortStr(instanceConfig), PortType.HTTP2);
+          CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
+              new Port(Integer.parseInt(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, http2Port,
+              clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
+          newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
+          newVcrNodes.add(cloudDataNode);
+        }
       }
 
       synchronized (notificationLock) {

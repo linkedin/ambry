@@ -53,6 +53,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static org.apache.helix.model.InstanceConfig.InstanceConfigProperty.*;
 
 
 /**
@@ -200,6 +201,8 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     if (cloudConfig.vcrHttp2Port != null) {
       instanceConfig.getRecord().setSimpleField(HTTP2_PORT_STR, Integer.toString(cloudConfig.vcrHttp2Port));
     }
+    // Set HELIX_ENABLED to be true. Listeners take action only when this value is True.
+    instanceConfig.setInstanceEnabled(true);
     helixAdmin.setInstanceConfig(vcrClusterName, vcrInstanceName, instanceConfig);
     logger.info("Participated in HelixVcrCluster successfully.");
   }
