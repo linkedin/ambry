@@ -174,6 +174,7 @@ public class VcrTestUtil {
     props.setProperty("clustermap.port", Integer.toString(clusterMapPort));
     props.setProperty("port", Integer.toString(clusterMapPort));
     props.setProperty("vcr.helix.state.model.factory.class", vcrHelixStateModelFactoryClass);
+    props.setProperty("server.security.service.factory", "com.github.ambry.cloud.AmbryVcrSecurityServiceFactory");
     if (vcrSSLProps == null) {
       props.setProperty("clustermap.ssl.enabled.datacenters", "");
     } else {

@@ -12,9 +12,10 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.rest;
+package com.github.ambry.server;
 
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.ServerSecurityService;
 import java.util.Properties;
 import junit.framework.Assert;
 import org.junit.Test;

@@ -19,7 +19,6 @@ import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.AmbryRequests;
-import com.github.ambry.rest.AmbryServerSecurityService;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;

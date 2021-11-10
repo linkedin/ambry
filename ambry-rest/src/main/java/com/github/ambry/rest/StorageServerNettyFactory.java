@@ -64,8 +64,7 @@ public class StorageServerNettyFactory implements NioServerFactory {
       NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig, ServerMetrics serverMetrics,
       NettyMetrics nettyMetrics, Http2ServerMetrics http2ServerMetrics, ServerSecurityService serverSecurityService) {
     if (requestResponseChannel == null || sslFactory == null || nettyConfig == null || http2ClientConfig == null
-        || serverMetrics == null || nettyMetrics == null || http2ServerMetrics == null
-        || serverSecurityService == null) {
+        || serverMetrics == null || nettyMetrics == null || http2ServerMetrics == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of StorageServerNettyFactory");
     }
     this.nettyConfig = nettyConfig;

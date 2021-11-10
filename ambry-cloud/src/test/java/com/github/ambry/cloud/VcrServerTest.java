@@ -141,6 +141,7 @@ public class VcrServerTest {
     props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
         "com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory");
     props.setProperty("clustermap.enable.http2.replication", "true");
+    props.setProperty("server.security.service.factory", "com.github.ambry.cloud.AmbryVcrSecurityServiceFactory");
     return new VerifiableProperties(props);
   }
 }

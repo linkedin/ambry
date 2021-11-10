@@ -111,7 +111,7 @@ public class ServerConfig {
    * The ServerSecurityServiceFactory that needs to validate connections and requests coming to server.
    */
   @Config("server.security.service.factory")
-  @Default("com.github.ambry.rest.AmbryServerSecurityServiceFactory")
+  @Default("com.github.ambry.server.AmbryServerSecurityServiceFactory")
   public final String serverSecurityServiceFactory;
 
   public ServerConfig(VerifiableProperties verifiableProperties) {
@@ -137,6 +137,6 @@ public class ServerConfig {
     serverParticipantsConsistencyCheckerPeriodSec =
         verifiableProperties.getLong("server.participants.consistency.checker.period.sec", 0);
     serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",
-        "com.github.ambry.rest.AmbryServerSecurityServiceFactory");
+        "com.github.ambry.server.AmbryServerSecurityServiceFactory");
   }
 }

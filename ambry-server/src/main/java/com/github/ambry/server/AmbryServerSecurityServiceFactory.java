@@ -12,12 +12,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.rest;
+package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.ServerSecurityService;
+import com.github.ambry.rest.ServerSecurityServiceFactory;
+
 
 /**
  * Default implementation of {@link ServerSecurityServiceFactory} for Ambry
