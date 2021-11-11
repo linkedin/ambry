@@ -38,6 +38,7 @@ import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -46,6 +47,8 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -155,6 +158,10 @@ class PutOperation {
   private long waitTimeForCurrentChunkAvailabilityMs;
   // The time spent by a chunk for data to be available in the channel.
   private long waitTimeForChannelDataAvailabilityMs;
+
+  // Variables to keep track of netty chunks
+  private final RestRequest restRequest;
+  private final String touchMessage;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -290,6 +297,8 @@ class PutOperation {
     metadataPutChunk = new MetadataPutChunk();
     chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
+    restRequest = options.getRestRequest();
+    touchMessage = makeTouchMessage();
   }
 
   /**
@@ -614,9 +623,18 @@ class PutOperation {
       if (operationCompleted) {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
-          logger.info("Clear unfinished chunk since operation is completed");
+          logger.info("Clear unfinished chunk since operation from " + touchMessage + " is completed");
           // call release blob content, not clear, since clear should only be used in the main thread.
           lastChunk.releaseBlobContent();
+        }
+        // Go over the put chunk list and release ready and complete chunks. This is because the multi-threading.
+        // We have callback in chunk.readInto to release all the ready and complete chunks but that's in different
+        // thread. There might a chance when callback runs, the last chunk is still building and then change to complete.
+        for (PutChunk chunk : putChunks) {
+          if (chunk.isReady() || chunk.isComplete()) {
+            logger.info("Clear unfinished chunk(in complete) since operation from " + touchMessage + " is completed");
+            chunk.releaseBlobContent();
+          }
         }
       }
     } catch (Exception e) {
@@ -1015,7 +1033,7 @@ class PutOperation {
      */
     synchronized void releaseBlobContent() {
       if (buf != null) {
-        buf.release();
+        ReferenceCountUtil.safeRelease(buf);
         buf = null;
       }
     }
@@ -1205,7 +1223,7 @@ class PutOperation {
           // If we are here, then the operation is completed and the exception could be null, in this case,
           // we have to release the content in the result.
           if (result != null) {
-            result.release();
+            ReferenceCountUtil.safeRelease(result);
           }
         }
       }
@@ -1272,10 +1290,12 @@ class PutOperation {
         // If current buf is null, then only read the up to routerMaxPutChunkSizeBytes.
         toWrite = Math.min(channelReadBuf.readableBytes(), routerConfig.routerMaxPutChunkSizeBytes);
         buf = channelReadBuf.readRetainedSlice(toWrite);
+        buf.touch(touchMessage);
       } else {
         int remainingSize = routerConfig.routerMaxPutChunkSizeBytes - buf.readableBytes();
         toWrite = Math.min(channelReadBuf.readableBytes(), remainingSize);
         ByteBuf remainingSlice = channelReadBuf.readRetainedSlice(toWrite);
+        remainingSlice.touch(touchMessage);
         // buf already has some bytes
         if (buf instanceof CompositeByteBuf) {
           // Buf is already a CompositeByteBuf, then just add the slice from
@@ -1286,6 +1306,7 @@ class PutOperation {
               : buf.alloc().compositeHeapBuffer(maxComponents);
           composite.addComponents(true, buf, remainingSlice);
           buf = composite;
+          buf.touch(touchMessage);
         }
       }
       if (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes) {
@@ -1747,6 +1768,18 @@ class PutOperation {
           buf.readableBytes(), BlobType.MetadataBlob,
           encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
+  }
+
+  /**
+   * Return a string message that will be used in {@link ByteBuf#touch()};
+   * @return
+   */
+  private String makeTouchMessage() {
+    if (restRequest == null) {
+      return "";
+    }
+    ChannelHandlerContext ctx = (ChannelHandlerContext) restRequest.getRestRequestContext();
+    return restRequest.getUri() + " " + ctx.channel().toString();
   }
 
   /**
