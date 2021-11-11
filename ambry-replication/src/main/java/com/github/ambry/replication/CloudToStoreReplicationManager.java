@@ -310,6 +310,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
               clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
           newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
           newVcrNodes.add(cloudDataNode);
+          logger.info("Instance config change. VCR Node {} added. SslPort: {}, Http2Port: {}", cloudDataNode, sslPort,
+              http2Port);
         }
       }
 
