@@ -48,6 +48,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.ReferenceCountUtil;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -162,7 +163,7 @@ class GetBlobOperation extends GetOperation {
     for (Integer key : chunkIndexToBuf.keySet()) {
       ByteBuf byteBuf = chunkIndexToBuf.remove(key);
       if (byteBuf != null) {
-        byteBuf.release();
+        ReferenceCountUtil.safeRelease(byteBuf);
       }
     }
     firstChunk.maybeReleaseDecryptionResultBuffer();
@@ -419,7 +420,7 @@ class GetBlobOperation extends GetOperation {
         int currentNumChunk = numChunksWrittenOut.get();
         ByteBuf byteBuf = chunkIndexToBufWaitingForRelease.remove(currentNumChunk);
         if (byteBuf != null) {
-          byteBuf.release();
+          ReferenceCountUtil.safeRelease(byteBuf);
         }
         lastChunkWrittenDoneTime.set(SystemTime.getInstance().milliseconds());
         numChunksWrittenOut.incrementAndGet();
@@ -771,7 +772,7 @@ class GetBlobOperation extends GetOperation {
       if (isInProgress() && progressTracker.isCryptoJobRequired() && decryptCallbackResultInfo.decryptJobComplete) {
         DecryptJob.DecryptJobResult result = decryptCallbackResultInfo.result.getAndSet(null);
         if (result != null) {
-          result.getDecryptedBlobContent().release();
+          ReferenceCountUtil.safeRelease(result.getDecryptedBlobContent());
         }
       }
     }
@@ -897,7 +898,7 @@ class GetBlobOperation extends GetOperation {
 
           successfullyDeserialized = true;
         } finally {
-          chunkBuf.release();
+          ReferenceCountUtil.safeRelease(chunkBuf);
         }
       } else {
         // If successTarget > 1, then content reconciliation may have to be done. For now, ignore subsequent responses.
@@ -1011,7 +1012,7 @@ class GetBlobOperation extends GetOperation {
           logger.trace("Handling decrypt job call back for blob {} to set decrypt callback results", targetBlobId);
           if (isOperationComplete() || operationException.get() != null) {
             if (exception == null && result.getDecryptedBlobContent() != null) {
-              result.getDecryptedBlobContent().release();
+              ReferenceCountUtil.safeRelease(result.getDecryptedBlobContent());
             }
             return;
           }
@@ -1286,7 +1287,7 @@ class GetBlobOperation extends GetOperation {
                 progressTracker.setCryptoJobSuccess();
                 logger.trace("BlobContent available to process for simple blob {}", blobId);
               } else {
-                decryptedBlobContent.release();
+                ReferenceCountUtil.safeRelease(decryptedBlobContent);
                 progressTracker.setCryptoJobFailed();
               }
             } else {
@@ -1353,7 +1354,7 @@ class GetBlobOperation extends GetOperation {
         if (rawMode) {
           if (blobData != null) {
             // RawMode, release blob data.
-            blobData.release();
+            ReferenceCountUtil.safeRelease(blobData);
           }
           // Return the raw bytes from storage
           if (encryptionKey != null) {
@@ -1479,7 +1480,7 @@ class GetBlobOperation extends GetOperation {
                       routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
                       if (isOperationComplete() || operationException.get() != null) {
                         if (result != null && result.getDecryptedBlobContent() != null) {
-                          result.getDecryptedBlobContent().release();
+                          ReferenceCountUtil.safeRelease(result.getDecryptedBlobContent());
                         }
                       } else {
                         decryptJobMetricsTracker.onJobCallbackProcessingStart();
@@ -1494,7 +1495,7 @@ class GetBlobOperation extends GetOperation {
           }
         }
       } finally {
-        serializedMetadataContent.release();
+        ReferenceCountUtil.safeRelease(serializedMetadataContent);
       }
     }
 
@@ -1551,7 +1552,7 @@ class GetBlobOperation extends GetOperation {
           }
         }
       } finally {
-        blobData.release();
+        ReferenceCountUtil.safeRelease(blobData);
       }
     }
 
