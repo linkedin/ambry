@@ -220,7 +220,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           indexScannerScheduledFuture.cancel(false);
           indexScannerScheduledFuture = longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
               TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);
-          logger.error("Reschedule index scanner task for store {}", storeId);
+          logger.info("Reschedule index scanner task for store {}", storeId);
         } else {
           // Wait until the ongoing index scanner tasks is finished.
           if (!waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS)) {
@@ -229,7 +229,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           indexScannerScheduledFuture.cancel(true);
           indexScannerScheduledFuture = longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
               TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);
-          logger.error("Reschedule index scanner task for store {}", storeId);
+          logger.info("Reschedule index scanner task after waiting for store {}", storeId);
         }
       } catch (InterruptedException e) {
         logger.error("Waiting for scanner to finish is interrupted for store {}", storeId);
