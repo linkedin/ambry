@@ -623,7 +623,7 @@ class PutOperation {
       if (operationCompleted) {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
-          logger.info("Clear unfinished chunk since operation from " + touchMessage + " is completed");
+          logger.info("Clear unfinished chunk since operation from [" + touchMessage + "] is completed");
           // call release blob content, not clear, since clear should only be used in the main thread.
           lastChunk.releaseBlobContent();
         }
@@ -632,7 +632,7 @@ class PutOperation {
         // thread. There might a chance when callback runs, the last chunk is still building and then change to complete.
         for (PutChunk chunk : putChunks) {
           if (chunk.isReady() || chunk.isComplete()) {
-            logger.info("Clear unfinished chunk(in complete) since operation from " + touchMessage + " is completed");
+            logger.info("Clear unfinished chunk(in complete) since operation from [" + touchMessage + "] is completed");
             chunk.releaseBlobContent();
           }
         }
