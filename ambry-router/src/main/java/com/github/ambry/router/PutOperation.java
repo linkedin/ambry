@@ -38,6 +38,7 @@ import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
@@ -47,7 +48,6 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -1775,11 +1775,12 @@ class PutOperation {
    * @return
    */
   private String makeTouchMessage() {
-    if (restRequest == null) {
+    if (restRequest == null || restRequest.getRestRequestContext() == null) {
       return "";
     }
-    ChannelHandlerContext ctx = (ChannelHandlerContext) restRequest.getRestRequestContext();
-    return restRequest.getUri() + " " + ctx.channel().toString();
+    String channelStr =
+        ((NettyRequest.NettyRequestContext) restRequest.getRestRequestContext()).getChannel().toString();
+    return restRequest.getUri() + " " + channelStr;
   }
 
   /**
