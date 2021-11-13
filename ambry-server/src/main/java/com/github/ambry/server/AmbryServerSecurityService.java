@@ -16,10 +16,11 @@ package com.github.ambry.server;
 
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.commons.Callback;
+import com.github.ambry.rest.ServerSecurityService;
 import javax.net.ssl.SSLSession;
 
 
@@ -65,5 +66,4 @@ public class AmbryServerSecurityService implements ServerSecurityService {
   public void close() {
     isOpen = false;
   }
-
 }

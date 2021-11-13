@@ -21,19 +21,30 @@ import com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory;
 import com.github.ambry.cloud.VcrServer;
 import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -58,6 +69,7 @@ import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.server.ServerTestUtil.*;
 import static org.junit.Assert.*;
 
 
@@ -76,6 +88,10 @@ public class VcrBackupTest {
   private HelixControllerManager helixControllerManager;
   private DataNodeId dataNode;
   private int numOfPartitions = 20;
+  private int blobSize = 10;
+  private File trustStoreFile;
+  private Properties serverSSLProps;
+  private Properties clientSSLProps;
 
   /**
    * Constructor for {@link VcrBackupTest}.
@@ -116,6 +132,16 @@ public class VcrBackupTest {
     helixControllerManager =
         VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, mockCluster.getClusterMap(),
             vcrStateModelName);
+
+    trustStoreFile = File.createTempFile("truststore", ".jks");
+    serverSSLProps = new Properties();
+    TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    TestSSLUtils.addHttp2Properties(serverSSLProps, SSLFactory.Mode.SERVER, true);
+
+    clientSSLProps = new Properties();
+    TestSSLUtils.addSSLProperties(clientSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile,
+        "http2-blocking-channel-client");
+    TestSSLUtils.addHttp2Properties(clientSSLProps, SSLFactory.Mode.CLIENT, true);
   }
 
   @After
@@ -135,7 +161,7 @@ public class VcrBackupTest {
     // Start the VCR and CloudBackupManager
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, clusterMapPort,
-            12410, null, vcrHelixStateModelFactoryClass, true);
+            12410, 12510, serverSSLProps, vcrHelixStateModelFactoryClass, true);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds, mockCluster.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =
@@ -147,6 +173,30 @@ public class VcrBackupTest {
     // Waiting for backup done
     assertTrue("Did not backup all blobs in 2 minutes",
         latchBasedInMemoryCloudDestination.awaitUpload(2, TimeUnit.MINUTES));
+
+    // Verify a blob by making a http2 request.
+    MockClusterMap clusterMap = mockCluster.getClusterMap();
+    SSLConfig clientSSLConfig = new SSLConfig(new VerifiableProperties(clientSSLProps));
+    ConnectedChannel channel = ServerTestUtil.getBlockingChannelBasedOnPortType(
+        new Port(clusterMap.getDataNodes().get(0).getHttp2Port(), PortType.HTTP2), "localhost", null, clientSSLConfig);
+    BlobId blobToVerify = blobIds.get(0);
+    ArrayList<BlobId> idList = new ArrayList<>(Arrays.asList(blobToVerify));
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobToVerify.getPartition(), idList);
+    partitionRequestInfoList.add(partitionRequestInfo);
+    GetRequest getRequest1 =
+        new GetRequest(1, "clientid1", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
+    DataInputStream stream = channel.sendAndReceive(getRequest1).getInputStream();
+    GetResponse resp1 = GetResponse.readFrom(stream, clusterMap);
+    try {
+      BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
+      // Do a simple check
+      assertEquals(blobSize, propertyOutput.getBlobSize());
+      releaseNettyBufUnderneathStream(stream);
+    } catch (MessageFormatException e) {
+      fail();
+    }
+
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
   }
@@ -169,7 +219,7 @@ public class VcrBackupTest {
     // Start the VCR with token persistor off.
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, clusterMapPort,
-            12410, null, vcrHelixStateModelFactoryClass, true);
+            12410, 12510, null, vcrHelixStateModelFactoryClass, true);
     props.setProperty("replication.persist.token.on.shutdown.or.replica.remove", "false");
     MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     VcrServer vcrServer =
@@ -248,7 +298,7 @@ public class VcrBackupTest {
     // Start the VCR with token persistor on.
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, clusterMapPort,
-            12410, null, vcrHelixStateModelFactoryClass, true);
+            12410, 12510, null, vcrHelixStateModelFactoryClass, true);
     props.setProperty("replication.persist.token.on.shutdown.or.replica.remove", "true");
     MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     VcrServer vcrServer =
@@ -331,7 +381,7 @@ public class VcrBackupTest {
     for (int port = 12310; port < 12310 + initialNumOfVcrs; port++) {
       Properties props =
           VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, port,
-              port + 100, null, vcrHelixStateModelFactoryClass, true);
+              port + 100, port + 200, null, vcrHelixStateModelFactoryClass, true);
       MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
       VcrServer vcrServer =
           VcrTestUtil.createVcrServer(new VerifiableProperties(props), mockCluster.getClusterAgentsFactory(),
@@ -367,7 +417,8 @@ public class VcrBackupTest {
 
     // 2nd phase: Add a new VCR to cluster.
     Properties props = VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString,
-        12310 + initialNumOfVcrs, 12310 + initialNumOfVcrs + 100, null, vcrHelixStateModelFactoryClass, true);
+        12310 + initialNumOfVcrs, 12310 + initialNumOfVcrs + 100, 12310 + initialNumOfVcrs + 200, null,
+        vcrHelixStateModelFactoryClass, true);
     MockNotificationSystem vcrNotificationSystem = new MockNotificationSystem(mockCluster.getClusterMap());
     VcrServer vcrServer =
         VcrTestUtil.createVcrServer(new VerifiableProperties(props), mockCluster.getClusterAgentsFactory(),
@@ -425,8 +476,9 @@ public class VcrBackupTest {
    * @param helixBalanceVerifier helix balance verifier.
    */
   static void makeSureHelixBalance(VcrServer vcrServer, StrictMatchExternalViewVerifier helixBalanceVerifier) {
-    Assert.assertTrue("Helix topology change timeout.", TestUtils.checkAndSleep(true,
-        () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size() > 0, 15000));
+    Assert.assertTrue("Helix topology change timeout.",
+        TestUtils.checkAndSleep(true, () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size() > 0,
+            15000));
     assertTrue("Helix balance timeout.", helixBalanceVerifier.verify(15000));
   }
 
@@ -437,7 +489,6 @@ public class VcrBackupTest {
    * @return list of blobs successfully sent.
    */
   private List<BlobId> sendBlobToDataNode(DataNodeId dataNode, int blobCount) throws Exception {
-    int blobSize = 10;
     int userMetaDataSize = 10;
     // Send blobs to DataNode
     byte[] userMetadata = new byte[userMetaDataSize];

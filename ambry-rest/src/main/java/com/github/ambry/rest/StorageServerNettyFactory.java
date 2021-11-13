@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.rest;
 
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
@@ -21,13 +21,7 @@ import com.github.ambry.network.http2.AmbryNetworkRequestHandler;
 import com.github.ambry.network.http2.AmbrySendToHttp2Adaptor;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.network.http2.Http2ServerStreamHandler;
-import com.github.ambry.rest.ConnectionStatsHandler;
-import com.github.ambry.rest.ServerSecurityHandler;
 import com.github.ambry.network.RequestResponseChannel;
-import com.github.ambry.rest.NettyMetrics;
-import com.github.ambry.rest.NettyServer;
-import com.github.ambry.rest.NioServer;
-import com.github.ambry.rest.NioServerFactory;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
@@ -70,8 +64,7 @@ public class StorageServerNettyFactory implements NioServerFactory {
       NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig, ServerMetrics serverMetrics,
       NettyMetrics nettyMetrics, Http2ServerMetrics http2ServerMetrics, ServerSecurityService serverSecurityService) {
     if (requestResponseChannel == null || sslFactory == null || nettyConfig == null || http2ClientConfig == null
-        || serverMetrics == null || nettyMetrics == null || http2ServerMetrics == null
-        || serverSecurityService == null) {
+        || serverMetrics == null || nettyMetrics == null || http2ServerMetrics == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of StorageServerNettyFactory");
     }
     this.nettyConfig = nettyConfig;

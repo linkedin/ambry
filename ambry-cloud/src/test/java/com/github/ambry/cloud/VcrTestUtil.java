@@ -134,13 +134,14 @@ public class VcrTestUtil {
    * @param zkConnectString the zkConnectString to use.
    * @param clusterMapPort the clusterMapPort to use.
    * @param vcrSslPort the vcrSslPort to use.
+   * @param vcrHttp2Port the vcrHttp2Port to use.
    * @param vcrSSLProps the SSL Properties to use if exist. Can be {@code null}.
    * @return the created VCR {@link Properties}.
    */
   public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
-      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps) {
-    return createVcrProperties(datacenter, vcrClusterName, zkConnectString, clusterMapPort, vcrSslPort, vcrSSLProps,
-        OnlineOfflineHelixVcrStateModelFactory.class.getName(), false);
+      int clusterMapPort, int vcrSslPort, int vcrHttp2Port, Properties vcrSSLProps) {
+    return createVcrProperties(datacenter, vcrClusterName, zkConnectString, clusterMapPort, vcrSslPort, vcrHttp2Port,
+        vcrSSLProps, OnlineOfflineHelixVcrStateModelFactory.class.getName(), false);
   }
 
   /**
@@ -150,14 +151,15 @@ public class VcrTestUtil {
    * @param zkConnectString the zkConnectString to use.
    * @param clusterMapPort the clusterMapPort to use.
    * @param vcrSslPort the vcrSslPort to use.
+   * @param vcrHttp2Port the vcrHttp2Port to use.
    * @param vcrSSLProps the SSL Properties to use if exist. Can be {@code null}.
    * @param vcrHelixStateModelFactoryClass the state model factory class.
    * @param enableHttp2Replication enable http2 replication or not.
    * @return the created VCR {@link Properties}.
    */
   public static Properties createVcrProperties(String datacenter, String vcrClusterName, String zkConnectString,
-      int clusterMapPort, int vcrSslPort, Properties vcrSSLProps, String vcrHelixStateModelFactoryClass,
-      boolean enableHttp2Replication) {
+      int clusterMapPort, int vcrSslPort, int vcrHttp2Port, Properties vcrSSLProps,
+      String vcrHelixStateModelFactoryClass, boolean enableHttp2Replication) {
     // Start the VCR and CloudBackupManager
     Properties props = new Properties();
     props.setProperty(CloudConfig.CLOUD_IS_VCR, Boolean.TRUE.toString());
@@ -172,12 +174,14 @@ public class VcrTestUtil {
     props.setProperty("clustermap.port", Integer.toString(clusterMapPort));
     props.setProperty("port", Integer.toString(clusterMapPort));
     props.setProperty("vcr.helix.state.model.factory.class", vcrHelixStateModelFactoryClass);
+    props.setProperty("server.security.service.factory", "com.github.ambry.cloud.AmbryVcrSecurityServiceFactory");
     if (vcrSSLProps == null) {
       props.setProperty("clustermap.ssl.enabled.datacenters", "");
     } else {
       props.putAll(vcrSSLProps);
       props.setProperty("clustermap.ssl.enabled.datacenters", datacenter);
       props.setProperty(CloudConfig.VCR_SSL_PORT, Integer.toString(vcrSslPort));
+      props.setProperty(CloudConfig.VCR_HTTP2_PORT, Integer.toString(vcrHttp2Port));
     }
     props.setProperty(CloudConfig.VCR_CLUSTER_NAME, vcrClusterName);
     props.setProperty(CloudConfig.VCR_CLUSTER_AGENTS_FACTORY_CLASS, HelixVcrClusterAgentsFactory.class.getName());

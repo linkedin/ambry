@@ -14,7 +14,6 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.server.ServerSecurityService;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;

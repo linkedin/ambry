@@ -12,34 +12,47 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.server;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ServerMetrics;
-import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.ServerSecurityService;
 import com.github.ambry.rest.ServerSecurityServiceFactory;
+import java.io.IOException;
+import javax.net.ssl.SSLSession;
 
 
 /**
- * Default implementation of {@link ServerSecurityServiceFactory} for Ambry
+ * Default implementation of {@link ServerSecurityServiceFactory} for Ambry VCR
  * <p/>
- * Returns a new instance of {@link AmbryServerSecurityService} on {@link #getServerSecurityService()} call.
+ * Returns a new instance of {@link ServerSecurityService} that does nothing.
  */
-public class AmbryServerSecurityServiceFactory implements ServerSecurityServiceFactory {
+public class AmbryVcrSecurityServiceFactory implements ServerSecurityServiceFactory {
 
-  private final ServerConfig serverConfig;
-  private final ServerMetrics serverMetrics;
-
-  public AmbryServerSecurityServiceFactory(VerifiableProperties verifiableProperties, ServerMetrics serverMetrics,
+  public AmbryVcrSecurityServiceFactory(VerifiableProperties verifiableProperties, ServerMetrics serverMetrics,
       MetricRegistry metricRegistry) {
-    this.serverConfig = new ServerConfig(verifiableProperties);
-    this.serverMetrics = serverMetrics;
   }
 
   @Override
   public ServerSecurityService getServerSecurityService() throws InstantiationException {
-    return new AmbryServerSecurityService(serverConfig, serverMetrics);
+    return new ServerSecurityService() {
+      @Override
+      public void validateConnection(SSLSession sslSession, Callback<Void> callback) {
+
+      }
+
+      @Override
+      public void validateRequest(RestRequest restRequest, Callback<Void> callback) {
+
+      }
+
+      @Override
+      public void close() throws IOException {
+
+      }
+    };
   }
 }

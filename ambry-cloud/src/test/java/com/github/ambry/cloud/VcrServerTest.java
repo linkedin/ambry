@@ -19,11 +19,14 @@ import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.jmx.ObjectNameFactory;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
+import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Properties;
@@ -95,13 +98,18 @@ public class VcrServerTest {
    */
   @Test
   public void testVCRServerWithHelixCluster() throws Exception {
+    Properties serverSSLProps = new Properties();
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    TestSSLUtils.addHttp2Properties(serverSSLProps, SSLFactory.Mode.SERVER, true);
     int zkPort = 31999;
     String zkConnectString = "localhost:" + zkPort;
     String vcrClusterName = "vcrTestCluster";
     TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
     HelixControllerManager helixControllerManager =
         VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, mockClusterMap);
-    Properties props = VcrTestUtil.createVcrProperties("DC1", vcrClusterName, zkConnectString, 12300, 12400, null);
+    Properties props =
+        VcrTestUtil.createVcrProperties("DC1", vcrClusterName, zkConnectString, 12300, 12400, 12500, serverSSLProps);
     CloudDestinationFactory cloudDestinationFactory = new LatchBasedInMemoryCloudDestinationFactory(
         new LatchBasedInMemoryCloudDestination(Collections.emptyList(), mockClusterMap));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
@@ -118,8 +126,14 @@ public class VcrServerTest {
   /**
    * @return {@link VerifiableProperties} to start a VCR with a static cluster.
    */
-  private VerifiableProperties getStaticClusterVcrProps() {
-    Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, null);
+  private VerifiableProperties getStaticClusterVcrProps() throws Exception {
+
+    Properties serverSSLProps = new Properties();
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    TestSSLUtils.addHttp2Properties(serverSSLProps, SSLFactory.Mode.SERVER, true);
+    Properties props =
+        VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "", 12300, 12400, 12500, serverSSLProps);
     props.setProperty(CloudConfig.VCR_ASSIGNED_PARTITIONS, "0,1");
     props.setProperty(CloudConfig.VCR_CLUSTER_AGENTS_FACTORY_CLASS, StaticVcrClusterAgentsFactory.class.getName());
     // Run this one with compaction disabled
@@ -127,6 +141,7 @@ public class VcrServerTest {
     props.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS,
         "com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory");
     props.setProperty("clustermap.enable.http2.replication", "true");
+    props.setProperty("server.security.service.factory", "com.github.ambry.cloud.AmbryVcrSecurityServiceFactory");
     return new VerifiableProperties(props);
   }
 }

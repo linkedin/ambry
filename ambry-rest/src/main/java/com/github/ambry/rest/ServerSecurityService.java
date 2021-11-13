@@ -12,9 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.server;
+package com.github.ambry.rest;
 
-import com.github.ambry.rest.RestRequest;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.router.FutureResult;
 import java.io.Closeable;
