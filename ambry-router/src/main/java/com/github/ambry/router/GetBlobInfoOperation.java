@@ -435,6 +435,9 @@ class GetBlobInfoOperation extends GetOperation {
     if (progressTracker.isDone()) {
       if (progressTracker.hasSucceeded()) {
         operationException.set(null);
+      } else if (operationTracker.maybeFailedDueToOfflineReplicas()) {
+        operationException.set(new RouterException("GetBlobInfoOperation failed possibly because of offline replicas",
+            RouterErrorCode.AmbryUnavailable));
       } else if (operationTracker.hasFailedOnNotFound()) {
         operationException.set(new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
             RouterErrorCode.BlobDoesNotExist));

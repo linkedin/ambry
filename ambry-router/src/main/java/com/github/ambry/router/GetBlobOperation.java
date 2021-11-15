@@ -842,6 +842,9 @@ class GetBlobOperation extends GetOperation {
       if (progressTracker.isDone()) {
         if (progressTracker.hasSucceeded() && !retainChunkExceptionOnSuccess) {
           chunkException = null;
+        } else if (chunkOperationTracker.maybeFailedDueToOfflineReplicas()) {
+          chunkException =
+              buildChunkException("Get Chunk failed possibly because of offline replicas", RouterErrorCode.AmbryUnavailable);
         } else if (chunkOperationTracker.hasFailedOnNotFound()) {
           chunkException =
               buildChunkException("Get Chunk failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);

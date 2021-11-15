@@ -357,6 +357,30 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
+  public boolean maybeFailedDueToOfflineReplicas() {
+    if (cloudReplicasPresent) {
+      // TODO define what it means for replicas to be unavailable in presence of cloud replicas.
+      return false;
+    }
+    // We mark the failure as due to offline replicas when we know that we couldn't find the blob in eligible replicas,
+    // and some replicas are offline (maybe due to deployment). The offline replicas can come back up in future and make the request successful.
+    if (diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget) {
+      String dcName = crossColoEnabled ? null:datacenterName;
+      int offlineReplicaCount = getReplicasByState(partitionId, dcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
+      if (offlineReplicaCount > 0) {
+        logger.info(
+            "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
+                + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
+                + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}",
+            routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
+            diskReplicaSuccessTarget, offlineReplicaCount);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Override
   public boolean hasFailedOnNotFound() {
     if (routerOperation == RouterOperation.PutOperation) {
       return false;
@@ -499,7 +523,7 @@ class SimpleOperationTracker implements OperationTracker {
           return true;
         }
       }
-      return hasFailedOnNotFound();
+      return maybeFailedDueToOfflineReplicas() || hasFailedOnNotFound();
     }
   }
 
