@@ -309,6 +309,10 @@ class DeleteOperation {
     if (operationTracker.isDone() || operationCompleted) {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
+      } else if(operationTracker.maybeFailedDueToOfflineReplicas()) {
+        operationException.set(
+            new RouterException("DeleteOperation failed possibly because some replicas are unavailable",
+                RouterErrorCode.AmbryUnavailable));
       } else if (operationTracker.hasFailedOnNotFound()) {
         operationException.set(
             new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
