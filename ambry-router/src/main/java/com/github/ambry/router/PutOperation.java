@@ -1223,7 +1223,7 @@ class PutOperation {
           // If we are here, then the operation is completed and the exception could be null, in this case,
           // we have to release the content in the result.
           if (result != null) {
-            ReferenceCountUtil.safeRelease(result);
+            result.release();
           }
         }
       }
