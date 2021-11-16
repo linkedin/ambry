@@ -80,12 +80,12 @@ class SimpleOperationTracker implements OperationTracker {
   protected final int originatingDcNotFoundFailureThreshold;
   protected final int totalReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
+  protected final NonBlockingRouterMetrics routerMetrics;
   private final OpTrackerIterator otIterator;
   private final RouterOperation routerOperation;
   private final PartitionId partitionId;
   private final RouterConfig routerConfig;
   private final boolean crossColoEnabled;
-  protected final NonBlockingRouterMetrics routerMetrics;
   protected int inflightCount = 0;
   protected int diskReplicaSuccessCount = 0;
   protected int cloudReplicaSuccessCount = 0;
@@ -150,10 +150,7 @@ class SimpleOperationTracker implements OperationTracker {
     cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
     List<ReplicaId> eligibleReplicas;
     List<ReplicaId> offlineReplicas = new ArrayList<>();
-    originatingDcOfflineReplicaCount = getReplicasByState(partitionId, datacenterName,
-        EnumSet.of(ReplicaState.OFFLINE)).values().size();
-    totalOfflineReplicaCount = getReplicasByState(partitionId, null,
-        EnumSet.of(ReplicaState.OFFLINE)).values().size();
+    totalOfflineReplicaCount = getReplicasByState(partitionId, null, EnumSet.of(ReplicaState.OFFLINE)).values().size();
 
     switch (routerOperation) {
       case GetBlobOperation:
@@ -306,8 +303,8 @@ class SimpleOperationTracker implements OperationTracker {
     totalReplicaCount = replicaPool.size();
     cloudReplicasPresent = cloudReplicaInPoolOrFlightCount > 0;
     diskReplicasPresent = diskReplicaInPoolOrFlightCount > 0;
-    originatingDcOfflineReplicaCount = getReplicasByState(partitionId, datacenterName,
-        EnumSet.of(ReplicaState.OFFLINE)).values().size();
+    originatingDcOfflineReplicaCount =
+        getReplicasByState(partitionId, originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
@@ -335,6 +332,48 @@ class SimpleOperationTracker implements OperationTracker {
         "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}",
         routerOperation, diskReplicaSuccessTarget, diskReplicaParallelism, originatingDcNotFoundFailureThreshold,
         replicaPool);
+  }
+
+  /**
+   * Helper function to catch a potential race condition in
+   * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean, NonBlockingRouterMetrics)}.
+   *  @param partitionId The partition on which the operation is performed.
+   * @param examinedReplicas All replicas examined.
+   * @param replicaPool Replicas added to replicaPool.
+   * @param backupReplicas Replicas added to backupReplicas.
+   * @param downReplicas Replicas added to downReplicas.
+   * @param routerOperation The operation type associated with current operation tracker.
+   */
+  private static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
+      List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas,
+      RouterOperation routerOperation) {
+    StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
+        .append(" is less than success target. ")
+        .append("Router operation is ")
+        .append(routerOperation)
+        .append(". Partition is ")
+        .append(partitionId)
+        .append(", partition class is ")
+        .append(partitionId.getPartitionClass())
+        .append(" and associated resource is ")
+        .append(partitionId.getResourceName())
+        .append(". examinedReplicas: ");
+    for (ReplicaId replicaId : examinedReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    errMsg.append("replicaPool: ");
+    for (ReplicaId replicaId : replicaPool) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    errMsg.append("backupReplicas: ");
+    for (ReplicaId replicaId : backupReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    errMsg.append("downReplicas: ");
+    for (ReplicaId replicaId : downReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    return errMsg.toString();
   }
 
   /**
@@ -381,13 +420,13 @@ class SimpleOperationTracker implements OperationTracker {
           originatingDcOfflineReplicaCount);
       routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
     }
-    if(hasFailedOnCrossColoNotFound() && totalOfflineReplicaCount > 0) {
+    if (hasFailedOnCrossColoNotFound() && totalOfflineReplicaCount > 0) {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
               + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-              + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}",
-          routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-          diskReplicaSuccessTarget, totalOfflineReplicaCount);
+              + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}", routerOperation,
+          partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget,
+          totalOfflineReplicaCount);
       routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
     }
     return false;
@@ -398,7 +437,7 @@ class SimpleOperationTracker implements OperationTracker {
     if (routerOperation == RouterOperation.PutOperation) {
       return false;
     }
-    if (hasFailedOnOriginatingDcNotFound() && originatingDcNotFoundCount == 0) {
+    if (hasFailedOnOriginatingDcNotFound() && originatingDcOfflineReplicaCount == 0) {
       // If there are offline replicas, we say that the failure is due to offline replicas.
       logger.info(
           "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {}",
@@ -467,29 +506,6 @@ class SimpleOperationTracker implements OperationTracker {
   public Iterator<ReplicaId> getReplicaIterator() {
     replicaIterator = replicaPool.iterator();
     return otIterator;
-  }
-
-  private class OpTrackerIterator implements Iterator<ReplicaId> {
-    @Override
-    public boolean hasNext() {
-      return inflightCount < getCurrentParallelism() && replicaIterator.hasNext();
-    }
-
-    @Override
-    public void remove() {
-      replicaIterator.remove();
-      inFlightReplicaType = lastReturnedByIterator.getReplicaType();
-      inflightCount++;
-    }
-
-    @Override
-    public ReplicaId next() {
-      if (!hasNext()) {
-        throw new NoSuchElementException();
-      }
-      lastReturnedByIterator = replicaIterator.next();
-      return lastReturnedByIterator;
-    }
   }
 
   /**
@@ -633,45 +649,26 @@ class SimpleOperationTracker implements OperationTracker {
     return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaSuccessCount : diskReplicaSuccessCount;
   }
 
-  /**
-   * Helper function to catch a potential race condition in
-   * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean, NonBlockingRouterMetrics)}.
-   *  @param partitionId The partition on which the operation is performed.
-   * @param examinedReplicas All replicas examined.
-   * @param replicaPool Replicas added to replicaPool.
-   * @param backupReplicas Replicas added to backupReplicas.
-   * @param downReplicas Replicas added to downReplicas.
-   * @param routerOperation The operation type associated with current operation tracker.
-   */
-  private static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
-      List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas,
-      RouterOperation routerOperation) {
-    StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
-        .append(" is less than success target. ")
-        .append("Router operation is ")
-        .append(routerOperation)
-        .append(". Partition is ")
-        .append(partitionId)
-        .append(", partition class is ")
-        .append(partitionId.getPartitionClass())
-        .append(" and associated resource is ")
-        .append(partitionId.getResourceName())
-        .append(". examinedReplicas: ");
-    for (ReplicaId replicaId : examinedReplicas) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+  private class OpTrackerIterator implements Iterator<ReplicaId> {
+    @Override
+    public boolean hasNext() {
+      return inflightCount < getCurrentParallelism() && replicaIterator.hasNext();
     }
-    errMsg.append("replicaPool: ");
-    for (ReplicaId replicaId : replicaPool) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+
+    @Override
+    public void remove() {
+      replicaIterator.remove();
+      inFlightReplicaType = lastReturnedByIterator.getReplicaType();
+      inflightCount++;
     }
-    errMsg.append("backupReplicas: ");
-    for (ReplicaId replicaId : backupReplicas) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+
+    @Override
+    public ReplicaId next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      lastReturnedByIterator = replicaIterator.next();
+      return lastReturnedByIterator;
     }
-    errMsg.append("downReplicas: ");
-    for (ReplicaId replicaId : downReplicas) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
-    }
-    return errMsg.toString();
   }
 }
