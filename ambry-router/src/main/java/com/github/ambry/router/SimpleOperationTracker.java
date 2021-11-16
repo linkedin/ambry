@@ -335,48 +335,6 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * Helper function to catch a potential race condition in
-   * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean, NonBlockingRouterMetrics)}.
-   *  @param partitionId The partition on which the operation is performed.
-   * @param examinedReplicas All replicas examined.
-   * @param replicaPool Replicas added to replicaPool.
-   * @param backupReplicas Replicas added to backupReplicas.
-   * @param downReplicas Replicas added to downReplicas.
-   * @param routerOperation The operation type associated with current operation tracker.
-   */
-  private static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
-      List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas,
-      RouterOperation routerOperation) {
-    StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
-        .append(" is less than success target. ")
-        .append("Router operation is ")
-        .append(routerOperation)
-        .append(". Partition is ")
-        .append(partitionId)
-        .append(", partition class is ")
-        .append(partitionId.getPartitionClass())
-        .append(" and associated resource is ")
-        .append(partitionId.getResourceName())
-        .append(". examinedReplicas: ");
-    for (ReplicaId replicaId : examinedReplicas) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
-    }
-    errMsg.append("replicaPool: ");
-    for (ReplicaId replicaId : replicaPool) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
-    }
-    errMsg.append("backupReplicas: ");
-    for (ReplicaId replicaId : backupReplicas) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
-    }
-    errMsg.append("downReplicas: ");
-    for (ReplicaId replicaId : downReplicas) {
-      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
-    }
-    return errMsg.toString();
-  }
-
-  /**
    * The dynamic success target is introduced mainly for following use case:
    * In the intermediate state of "move replica", when decommission of old replicas is initiated(but hasn't transited to
    * INACTIVE yet), the PUT requests should be rejected on old replicas. For frontends, they are seeing both old and new
@@ -506,6 +464,29 @@ class SimpleOperationTracker implements OperationTracker {
   public Iterator<ReplicaId> getReplicaIterator() {
     replicaIterator = replicaPool.iterator();
     return otIterator;
+  }
+
+  private class OpTrackerIterator implements Iterator<ReplicaId> {
+    @Override
+    public boolean hasNext() {
+      return inflightCount < getCurrentParallelism() && replicaIterator.hasNext();
+    }
+
+    @Override
+    public void remove() {
+      replicaIterator.remove();
+      inFlightReplicaType = lastReturnedByIterator.getReplicaType();
+      inflightCount++;
+    }
+
+    @Override
+    public ReplicaId next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      }
+      lastReturnedByIterator = replicaIterator.next();
+      return lastReturnedByIterator;
+    }
   }
 
   /**
@@ -649,26 +630,45 @@ class SimpleOperationTracker implements OperationTracker {
     return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaSuccessCount : diskReplicaSuccessCount;
   }
 
-  private class OpTrackerIterator implements Iterator<ReplicaId> {
-    @Override
-    public boolean hasNext() {
-      return inflightCount < getCurrentParallelism() && replicaIterator.hasNext();
+  /**
+   * Helper function to catch a potential race condition in
+   * {@link SimpleOperationTracker#SimpleOperationTracker(RouterConfig, RouterOperation, PartitionId, String, boolean, NonBlockingRouterMetrics)}.
+   *  @param partitionId The partition on which the operation is performed.
+   * @param examinedReplicas All replicas examined.
+   * @param replicaPool Replicas added to replicaPool.
+   * @param backupReplicas Replicas added to backupReplicas.
+   * @param downReplicas Replicas added to downReplicas.
+   * @param routerOperation The operation type associated with current operation tracker.
+   */
+  private static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
+      List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas,
+      RouterOperation routerOperation) {
+    StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
+        .append(" is less than success target. ")
+        .append("Router operation is ")
+        .append(routerOperation)
+        .append(". Partition is ")
+        .append(partitionId)
+        .append(", partition class is ")
+        .append(partitionId.getPartitionClass())
+        .append(" and associated resource is ")
+        .append(partitionId.getResourceName())
+        .append(". examinedReplicas: ");
+    for (ReplicaId replicaId : examinedReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
     }
-
-    @Override
-    public void remove() {
-      replicaIterator.remove();
-      inFlightReplicaType = lastReturnedByIterator.getReplicaType();
-      inflightCount++;
+    errMsg.append("replicaPool: ");
+    for (ReplicaId replicaId : replicaPool) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
     }
-
-    @Override
-    public ReplicaId next() {
-      if (!hasNext()) {
-        throw new NoSuchElementException();
-      }
-      lastReturnedByIterator = replicaIterator.next();
-      return lastReturnedByIterator;
+    errMsg.append("backupReplicas: ");
+    for (ReplicaId replicaId : backupReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
     }
+    errMsg.append("downReplicas: ");
+    for (ReplicaId replicaId : downReplicas) {
+      errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
+    }
+    return errMsg.toString();
   }
 }
