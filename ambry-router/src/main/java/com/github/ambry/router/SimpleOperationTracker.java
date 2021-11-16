@@ -100,6 +100,8 @@ class SimpleOperationTracker implements OperationTracker {
   protected ReplicaType inFlightReplicaType;
   private Iterator<ReplicaId> replicaIterator;
   private String reassignedOriginDc = null;
+  private int originatingDcOfflineReplicaCount = 0;
+  private int totalOfflineReplicaCount = 0;
 
   /**
    * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
@@ -148,6 +150,11 @@ class SimpleOperationTracker implements OperationTracker {
     cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
     List<ReplicaId> eligibleReplicas;
     List<ReplicaId> offlineReplicas = new ArrayList<>();
+    originatingDcOfflineReplicaCount = getReplicasByState(partitionId, datacenterName,
+        EnumSet.of(ReplicaState.OFFLINE)).values().size();
+    totalOfflineReplicaCount = getReplicasByState(partitionId, null,
+        EnumSet.of(ReplicaState.OFFLINE)).values().size();
+
     switch (routerOperation) {
       case GetBlobOperation:
       case GetBlobInfoOperation:
@@ -299,6 +306,8 @@ class SimpleOperationTracker implements OperationTracker {
     totalReplicaCount = replicaPool.size();
     cloudReplicasPresent = cloudReplicaInPoolOrFlightCount > 0;
     diskReplicasPresent = diskReplicaInPoolOrFlightCount > 0;
+    originatingDcOfflineReplicaCount = getReplicasByState(partitionId, datacenterName,
+        EnumSet.of(ReplicaState.OFFLINE)).values().size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
@@ -364,18 +373,22 @@ class SimpleOperationTracker implements OperationTracker {
     }
     // We mark the failure as due to offline replicas when we know that we couldn't find the blob in eligible replicas,
     // and some replicas are offline (maybe due to deployment). The offline replicas can come back up in future and make the request successful.
-    if (diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget) {
-      String dcName = crossColoEnabled ? null:datacenterName;
-      int offlineReplicaCount = getReplicasByState(partitionId, dcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
-      if (offlineReplicaCount > 0) {
-        logger.info(
-            "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
-                + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-                + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}",
-            routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-            diskReplicaSuccessTarget, offlineReplicaCount);
-        return true;
-      }
+    if (hasFailedOnOriginatingDcNotFound() && originatingDcOfflineReplicaCount > 0) {
+      logger.info(
+          "Terminating {} on {} due to Not_Found failure on some originatingDc replicas and some originatingDc replicas"
+              + "being offline. Originating Not_Found count: {}, failure threshold: {}, originatingDcOfflineReplicaCount: {}",
+          routerOperation, partitionId, originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold,
+          originatingDcOfflineReplicaCount);
+      routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
+    }
+    if(hasFailedOnCrossColoNotFound() && totalOfflineReplicaCount > 0) {
+      logger.info(
+          "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
+              + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
+              + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}",
+          routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
+          diskReplicaSuccessTarget, totalOfflineReplicaCount);
+      routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
     }
     return false;
   }
@@ -385,8 +398,8 @@ class SimpleOperationTracker implements OperationTracker {
     if (routerOperation == RouterOperation.PutOperation) {
       return false;
     }
-    if (originatingDcNotFoundFailureThreshold > 0
-        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) {
+    if (hasFailedOnOriginatingDcNotFound() && originatingDcNotFoundCount == 0) {
+      // If there are offline replicas, we say that the failure is due to offline replicas.
       logger.info(
           "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {}",
           routerOperation, partitionId, originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold);
@@ -397,8 +410,8 @@ class SimpleOperationTracker implements OperationTracker {
     // Right now, this only applies for disk replica only partitions and may not be completely accurate if there are
     // failures responses other than not found.
     // TODO support cloud replicas in this condition, also account for failures other than not found
-    if (crossColoEnabled && !cloudReplicasPresent
-        && diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget) {
+    if (hasFailedOnCrossColoNotFound() && totalOfflineReplicaCount == 0) {
+      // If there are offline replicas, we say that the failure is due to offline replicas.
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count. DiskDownCount: {}, TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}",
           routerOperation, partitionId, diskDownCount, totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget);
@@ -477,6 +490,24 @@ class SimpleOperationTracker implements OperationTracker {
       lastReturnedByIterator = replicaIterator.next();
       return lastReturnedByIterator;
     }
+  }
+
+  /**
+   * Check if not found count in originating datacenter exceeds threshold.
+   * @return {@code true} if not found count in originating datacenter exceeds threshold, {@code false} otherwise.
+   */
+  private boolean hasFailedOnOriginatingDcNotFound() {
+    return originatingDcNotFoundFailureThreshold > 0
+        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold;
+  }
+
+  /**
+   * Check if its not possible to get enough successful responses due to not found count.
+   * @return {@code true} if its not possible to get enough successful responses due to not found count. {@code false} otherwise.
+   */
+  private boolean hasFailedOnCrossColoNotFound() {
+    return (crossColoEnabled && !cloudReplicasPresent
+        && diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget);
   }
 
   /**
