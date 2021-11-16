@@ -18,7 +18,6 @@ import com.github.ambry.server.EmptyRequest;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.util.ReferenceCountUtil;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -64,9 +63,6 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
         long responseFlushTime = System.currentTimeMillis() - sendStartTime;
         http2ServerMetrics.responseFlushTime.update(responseFlushTime);
         metrics.updateSendTime(responseFlushTime);
-        if (!future.isSuccess()) {
-          ReferenceCountUtil.safeRelease(payloadToSend);
-        }
       }
     };
     ctx.channel().writeAndFlush(payloadToSend).addListener(channelFutureListener);
