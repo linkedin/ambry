@@ -199,8 +199,15 @@ public class CloudRouterFactory implements RouterFactory {
     NetworkClientFactory cloudNetworkClientFactory =
         new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(), networkConfig,
             networkMetrics, time);
-    NetworkClientFactory diskNetworkClientFactory =
-        new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
+    NetworkClientFactory diskNetworkClientFactory = null;
+
+    if (routerConfig.routerEnableHttp2NetworkClient) {
+      diskNetworkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
+    } else {
+      diskNetworkClientFactory = new SocketNetworkClientFactory(networkMetrics, networkConfig, sslFactory,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
+    }
 
     Map<ReplicaType, NetworkClientFactory> childFactories = new EnumMap<>(ReplicaType.class);
     childFactories.put(ReplicaType.CLOUD_BACKED, cloudNetworkClientFactory);
