@@ -15,13 +15,11 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.HelixFactory;
-import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.NotificationContext;
@@ -29,8 +27,6 @@ import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
-
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**

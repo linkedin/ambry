@@ -57,7 +57,6 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
-import static org.apache.helix.model.InstanceConfig.InstanceConfigProperty.*;
 
 
 /**

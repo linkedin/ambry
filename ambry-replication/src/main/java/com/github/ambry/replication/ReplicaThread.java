@@ -1050,7 +1050,7 @@ public class ReplicaThread implements Runnable {
         Set<StoreKey> missingStoreKeys = exchangeMetadataResponse.getMissingStoreKeys();
         if (missingStoreKeys.size() > 0) {
           if (remoteNode instanceof CloudDataNode) {
-            logger.trace("Getting blobs from CloudDataNode: {}", missingStoreKeys);
+            logger.trace("Replicating blobs from CloudDataNode: {}", missingStoreKeys);
           }
           ArrayList<BlobId> keysToFetch = new ArrayList<BlobId>();
           for (StoreKey storeKey : missingStoreKeys) {
