@@ -127,9 +127,9 @@ class PersistentIndex {
   private final IndexPersistor persistor = new IndexPersistor();
   private final ScheduledFuture<?> persistorTask;
 
-  // ReadWriteLock to protect index values are always pointing to a valid log segments
+  // ReadWriteLock to make sure index values are always pointing to valid log segments.
   // In compaction's final steps, persistent index and log will update their internal maps to reflect the result of
-  // compactions. This might have race condition with getBlobReadInfo method
+  // compaction. This might have race condition with getBlobReadInfo method.
   // --------------------------------------------------------------------------------------
   // compaction thread                          | getBlobReadInfo thread
   // --------------------------------------------------------------------------------------
@@ -143,12 +143,14 @@ class PersistentIndex {
   //                                            | 3. IncreaseLogSegmentRefCount
   // -------------------------------------------------------------------------------------
   // If two threads are executing in the above given order, then the GetLogSegmentFromIndexValueFromLogMap would
-  // throw an NullPointerException since RemoveOldLogSegmentFromLogMap would remove it from the map.
-  // This ReadWriteLock would prevent that from happening.
+  // throw a NullPointerException since RemoveOldLogSegmentFromLogMap already removed it from the map.
+  //
+  // This ReadWriteLock would prevent this from happening.
   // 1. In getBlobReadInfo method, we use read lock to lock all three steps
   // 2. In compaction thread, we use write lock to lock step 3 (in method changeIndexSegments)
-  // If getBlobReadInfo happens before compaction's step 3, then compaction thread would block at acquiring
-  // the write lock, so getBlobReadInfo's step 2 would not happen after compaction's step6.
+  //
+  // If getBlobReadInfo happens before compaction's step 3, then compaction thread would be blocked at acquiring
+  // the write lock in step 3, so getBlobReadInfo's step 2 would not happen after compaction's step 6.
   // If getBlobReadInfo happens after compaction's step 3, then the IndexValue returned by findKey method would reflect
   // the result of the compaction already, it will not point to any old log segment.
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
