@@ -112,6 +112,8 @@ public class CloudConfig {
           + "    \"rebalancerClassName\": \"org.apache.helix.controller.rebalancer.DelayedAutoRebalancer\",\n"
           + "    \"rebalanceDelayInMins\": 20\n" + "  }\n" + "}";
 
+  public static final String VCR_HELIX_CONFIG_READY = "vcrHelixConfigReady";
+
   /**
    * True for VCR node, false for live serving node.
    */

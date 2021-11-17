@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.ClusterMapConfig;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +48,9 @@ public class MockVcrClusterSpectator implements VcrClusterSpectator {
       simpleFields.put("HELIX_ENABLED_TIMESTAMP", Long.toString(System.currentTimeMillis()));
       simpleFields.put("HELIX_HOST", cloudDataNode.getHostname());
       simpleFields.put("HELIX_PORT", Integer.toString(cloudDataNode.getPort()));
+      simpleFields.put(ClusterMapUtils.SSL_PORT_STR, Integer.toString(cloudDataNode.getPort() + 1));
+      simpleFields.put(ClusterMapUtils.HTTP2_PORT_STR, Integer.toString(cloudDataNode.getPort() + 2));
+      simpleFields.put(CloudConfig.VCR_HELIX_CONFIG_READY, "true");
       znRecord.setSimpleFields(simpleFields);
       instanceConfigList.add(new InstanceConfig(znRecord));
     }

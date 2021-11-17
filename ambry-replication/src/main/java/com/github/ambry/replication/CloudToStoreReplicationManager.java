@@ -57,6 +57,7 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.config.CloudConfig.*;
 
 
 /**
@@ -296,9 +297,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
       // create a new list of available vcr nodes.
       for (InstanceConfig instanceConfig : instanceConfigs) {
-        if (instanceConfig.getRecord()
-            .getBooleanField(InstanceConfig.InstanceConfigProperty.HELIX_ENABLED.toString(), false)) {
-          // only when HELIX_ENABLED, we take action on it.
+        if (instanceConfig.getRecord().getBooleanField(VCR_HELIX_CONFIG_READY, false)) {
+          // only when VCR_HELIX_CONFIG_READY, we take action on it.
           String instanceName = instanceConfig.getInstanceName();
           Port sslPort =
               getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
@@ -311,6 +311,9 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
           newVcrNodes.add(cloudDataNode);
           logger.info("Instance config change. VCR Node {} added. SslPort: {}, Http2Port: {}", cloudDataNode, sslPort,
               http2Port);
+        } else {
+          logger.info("Instance config change received, but VCR_HELIX_CONFIG_READY is false. Instance: {}:{}",
+              instanceConfig.getHostName(), instanceConfig.getPort());
         }
       }
 
