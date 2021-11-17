@@ -15,13 +15,11 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.HelixFactory;
-import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.NotificationContext;
@@ -29,8 +27,6 @@ import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
-
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
@@ -57,8 +53,6 @@ public class HelixVcrClusterSpectator implements VcrClusterSpectator {
 
   @Override
   public void spectate() throws Exception {
-    Map<String, DcZkInfo> dataCenterToZkAddress =
-        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
     HelixFactory helixFactory = new HelixFactory();
     String selfInstanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
@@ -68,17 +62,12 @@ public class HelixVcrClusterSpectator implements VcrClusterSpectator {
     // zk connection fails on both data centers, then things like replication between data centers might just stop.
     // For now, since we have only one fabric in cloud, and the spectator is being used for only cloud to store replication, this will work.
     // Once we add more fabrics, we should revisit this.
-    for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
-      // only handle vcr clusters for now
-      if (dcZkInfo.getReplicaType() == ReplicaType.CLOUD_BACKED) {
-        HelixManager helixManager =
-            helixFactory.getZkHelixManagerAndConnect(cloudConfig.vcrClusterName, selfInstanceName,
-                InstanceType.SPECTATOR, dcZkInfo.getZkConnectStrs().get(0));
+    HelixManager helixManager =
+        helixFactory.getZkHelixManagerAndConnect(cloudConfig.vcrClusterName, selfInstanceName, InstanceType.SPECTATOR,
+            cloudConfig.vcrClusterZkConnectString);
 
-        helixManager.addInstanceConfigChangeListener(this);
-        helixManager.addLiveInstanceChangeListener(this);
-      }
-    }
+    helixManager.addInstanceConfigChangeListener(this);
+    helixManager.addLiveInstanceChangeListener(this);
   }
 
   @Override

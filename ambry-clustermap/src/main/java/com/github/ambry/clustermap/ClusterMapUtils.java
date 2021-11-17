@@ -69,8 +69,8 @@ public class ClusterMapUtils {
   static final String REPLICAS_STR_SEPARATOR = ":";
   static final String REPLICAS_CAPACITY_STR = "replicaCapacityInBytes";
   static final String REPLICA_TYPE_STR = "replicaType";
-  static final String SSL_PORT_STR = "sslPort";
-  static final String HTTP2_PORT_STR = "http2Port";
+  public static final String SSL_PORT_STR = "sslPort";
+  public static final String HTTP2_PORT_STR = "http2Port";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";

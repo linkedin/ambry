@@ -16,6 +16,7 @@ package com.github.ambry.replication;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -1048,6 +1049,9 @@ public class ReplicaThread implements Runnable {
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         Set<StoreKey> missingStoreKeys = exchangeMetadataResponse.getMissingStoreKeys();
         if (missingStoreKeys.size() > 0) {
+          if (remoteNode instanceof CloudDataNode) {
+            logger.trace("Replicating blobs from CloudDataNode: {}", missingStoreKeys);
+          }
           ArrayList<BlobId> keysToFetch = new ArrayList<BlobId>();
           for (StoreKey storeKey : missingStoreKeys) {
             keysToFetch.add((BlobId) storeKey);
