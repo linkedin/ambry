@@ -46,6 +46,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -124,6 +126,32 @@ class PersistentIndex {
   private static final Logger logger = LoggerFactory.getLogger(PersistentIndex.class);
   private final IndexPersistor persistor = new IndexPersistor();
   private final ScheduledFuture<?> persistorTask;
+
+  // ReadWriteLock to protect index values are always pointing to a valid log segments
+  // In compaction's final steps, persistent index and log will update their internal maps to reflect the result of
+  // compactions. This might have race condition with getBlobReadInfo method
+  // --------------------------------------------------------------------------------------
+  // compaction thread                          | getBlobReadInfo thread
+  // --------------------------------------------------------------------------------------
+  // 1. RenameTempLogSegmentFilenames           | 1. FindKeyToReturnIndexValue
+  // 2. AddNewLogSegmentToLogMap                |
+  // 3. UpdateIndexMap                          |
+  // 4. WaitForLogSegmentRefCountToZero         |
+  // 5. RemoveIndexSegmentFiles                 |
+  // 6. RemoveOldLogSegmentFromLogMap           |
+  // 7. RemoveLogSegmentFiles                   | 2. GetLogSegmentFromIndexValueFromLogMap
+  //                                            | 3. IncreaseLogSegmentRefCount
+  // -------------------------------------------------------------------------------------
+  // If two threads are executing in the above given order, then the GetLogSegmentFromIndexValueFromLogMap would
+  // throw an NullPointerException since RemoveOldLogSegmentFromLogMap would remove it from the map.
+  // This ReadWriteLock would prevent that from happening.
+  // 1. In getBlobReadInfo method, we use read lock to lock all three steps
+  // 2. In compaction thread, we use write lock to lock step 3 (in method changeIndexSegments)
+  // If getBlobReadInfo happens before compaction's step 3, then compaction thread would block at acquiring
+  // the write lock, so getBlobReadInfo's step 2 would not happen after compaction's step6.
+  // If getBlobReadInfo happens after compaction's step 3, then the IndexValue returned by findKey method would reflect
+  // the result of the compaction already, it will not point to any old log segment.
+  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
   /**
    * Creates a new persistent index
@@ -467,35 +495,41 @@ class PersistentIndex {
    * @throws StoreException if an {@link IndexSegment} instance cannot be created for the provided files to add.
    */
   void changeIndexSegments(List<File> segmentFilesToAdd, Set<Offset> segmentsToRemove) throws StoreException {
-    Offset journalFirstOffset = journal.getFirstOffset();
+    rwLock.writeLock().lock();
+    try {
+      Offset journalFirstOffset = journal.getFirstOffset();
 
-    TreeMap<Offset, IndexSegment> segmentsToAdd = new TreeMap<>();
-    for (File indexSegmentFile : segmentFilesToAdd) {
-      IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal, time);
-      if (journalFirstOffset != null && indexSegment.getEndOffset().compareTo(journalFirstOffset) > 0) {
-        throw new IllegalArgumentException("One of the index segments has an end offset " + indexSegment.getEndOffset()
-            + " that is higher than the first offset in the journal " + journalFirstOffset);
+      TreeMap<Offset, IndexSegment> segmentsToAdd = new TreeMap<>();
+      for (File indexSegmentFile : segmentFilesToAdd) {
+        IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal, time);
+        if (journalFirstOffset != null && indexSegment.getEndOffset().compareTo(journalFirstOffset) > 0) {
+          throw new IllegalArgumentException(
+              "One of the index segments has an end offset " + indexSegment.getEndOffset()
+                  + " that is higher than the first offset in the journal " + journalFirstOffset);
+        }
+        segmentsToAdd.put(indexSegment.getStartOffset(), indexSegment);
       }
-      segmentsToAdd.put(indexSegment.getStartOffset(), indexSegment);
-    }
 
-    for (Offset offset : segmentsToRemove) {
-      IndexSegment segmentToRemove = validIndexSegments.get(offset);
-      if (journalFirstOffset != null && segmentToRemove.getEndOffset().compareTo(journalFirstOffset) >= 0) {
-        throw new IllegalArgumentException(
-            "End Offset of the one of the segments to remove [" + segmentToRemove.getFile() + "] is"
-                + " higher than the first offset in the journal");
+      for (Offset offset : segmentsToRemove) {
+        IndexSegment segmentToRemove = validIndexSegments.get(offset);
+        if (journalFirstOffset != null && segmentToRemove.getEndOffset().compareTo(journalFirstOffset) >= 0) {
+          throw new IllegalArgumentException(
+              "End Offset of the one of the segments to remove [" + segmentToRemove.getFile() + "] is"
+                  + " higher than the first offset in the journal");
+        }
       }
-    }
 
-    // first update the influx index segments reference
-    inFluxIndexSegments = new ConcurrentSkipListMap<>();
-    // now copy over all valid segments to the influx reference, remove ones that need removing and add the new ones.
-    inFluxIndexSegments.putAll(validIndexSegments);
-    inFluxIndexSegments.keySet().removeAll(segmentsToRemove);
-    inFluxIndexSegments.putAll(segmentsToAdd);
-    // change the reference (this is guaranteed to be atomic by java)
-    validIndexSegments = inFluxIndexSegments;
+      // first update the influx index segments reference
+      inFluxIndexSegments = new ConcurrentSkipListMap<>();
+      // now copy over all valid segments to the influx reference, remove ones that need removing and add the new ones.
+      inFluxIndexSegments.putAll(validIndexSegments);
+      inFluxIndexSegments.keySet().removeAll(segmentsToRemove);
+      inFluxIndexSegments.putAll(segmentsToAdd);
+      // change the reference (this is guaranteed to be atomic by java)
+      validIndexSegments = inFluxIndexSegments;
+    } finally {
+      rwLock.writeLock().unlock();
+    }
   }
 
   /**
@@ -1141,28 +1175,33 @@ class PersistentIndex {
    * @throws StoreException
    */
   BlobReadOptions getBlobReadInfo(StoreKey id, EnumSet<StoreGetOptions> getOptions) throws StoreException {
-    ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
-    IndexValue value = findKey(id);
-    BlobReadOptions readOptions;
-    if (value == null) {
-      throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
-    } else if (value.isDelete()) {
-      if (!getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
-        throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+    rwLock.readLock().lock();
+    try {
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
+      IndexValue value = findKey(id);
+      BlobReadOptions readOptions;
+      if (value == null) {
+        throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
+      } else if (value.isDelete()) {
+        if (!getOptions.contains(StoreGetOptions.Store_Include_Deleted)) {
+          throw new StoreException("Id " + id + " has been deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
+        } else {
+          readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
+        }
+      } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
+        throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
+      } else if (value.isUndelete()) {
+        readOptions = getUndeletedBlobReadOptions(value, id, indexSegments);
       } else {
-        readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
+        readOptions = new BlobReadOptions(log, value.getOffset(),
+            new MessageInfo(id, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
+                value.getExpiresAtMs(), journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(),
+                value.getOperationTimeInMs(), value.getLifeVersion()));
       }
-    } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
-      throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
-    } else if (value.isUndelete()) {
-      readOptions = getUndeletedBlobReadOptions(value, id, indexSegments);
-    } else {
-      readOptions = new BlobReadOptions(log, value.getOffset(),
-          new MessageInfo(id, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
-              value.getExpiresAtMs(), journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(),
-              value.getOperationTimeInMs(), value.getLifeVersion()));
+      return readOptions;
+    } finally {
+      rwLock.readLock().unlock();
     }
-    return readOptions;
   }
 
   /**
