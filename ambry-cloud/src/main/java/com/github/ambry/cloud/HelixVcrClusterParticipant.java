@@ -53,6 +53,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.config.CloudConfig.*;
 
 
 /**
@@ -194,8 +195,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     helixAdmin = manager.getClusterManagmentTool();
 
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(vcrClusterName, vcrInstanceName);
-    if (!instanceConfig.getRecord()
-        .getBooleanField(InstanceConfig.InstanceConfigProperty.HELIX_ENABLED.toString(), false)) {
+    if (!instanceConfig.getRecord().getBooleanField(VCR_HELIX_CONFIG_READY, false)) {
       if (cloudConfig.vcrSslPort != null) {
         instanceConfig.getRecord().setSimpleField(SSL_PORT_STR, Integer.toString(cloudConfig.vcrSslPort));
       }
@@ -203,10 +203,10 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
         instanceConfig.getRecord().setSimpleField(HTTP2_PORT_STR, Integer.toString(cloudConfig.vcrHttp2Port));
       }
       // Set HELIX_ENABLED to be true. Listeners take action only when this value is True.
-      instanceConfig.setInstanceEnabled(true);
-      logger.info("Set HELIX_ENABLE to true.");
+      instanceConfig.getRecord().setBooleanField(VCR_HELIX_CONFIG_READY, true);
+      logger.info("Set VCR_HELIX_CONFIG_READY to true.");
     } else {
-      logger.info("HELIX_ENABLE is true.");
+      logger.info("VCR_HELIX_CONFIG_READY is true.");
     }
     helixAdmin.setInstanceConfig(vcrClusterName, vcrInstanceName, instanceConfig);
     logger.info("Participated in HelixVcrCluster successfully.");
