@@ -775,7 +775,7 @@ class MockBoundedNettyByteBufReceive extends BoundedNettyByteBufReceive {
    * @param correlationId the correlation id associated with this object.
    */
   public MockBoundedNettyByteBufReceive(int correlationId) {
-    super(PooledByteBufAllocator.DEFAULT.directBuffer(16).writeInt(correlationId), 16);
+    super(PooledByteBufAllocator.DEFAULT.directBuffer(16).writeInt(correlationId), 16, 100 * 1024 * 1024);
   }
 }
 
