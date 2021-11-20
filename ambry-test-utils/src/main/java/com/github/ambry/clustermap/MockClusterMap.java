@@ -70,7 +70,6 @@ public class MockClusterMap implements ClusterMap {
   public String cloudDatacenterName;
   // allow this to be changed to support some tests
   private String localDatacenterName;
-  private final static String LOCAL_DC = "DC3";
 
   private final MockPartitionId specialPartition;
   private ClusterMapChangeListener clusterMapChangeListener = null;
@@ -88,14 +87,14 @@ public class MockClusterMap implements ClusterMap {
    * on the test machine.
    */
   public MockClusterMap() throws IOException {
-    this(false, true, 9, 3, 3, false, false, LOCAL_DC);
+    this(false, true, 9, 3, 3, false, false, null);
   }
 
   public MockClusterMap(boolean enableSSLPorts, boolean enableHttp2Ports, int numNodes, int numMountPointsPerNode,
       int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc)
       throws IOException {
     this(enableSSLPorts, enableHttp2Ports, numNodes, numMountPointsPerNode, numDefaultStoresPerMountPoint,
-        createOnlyDefaultPartitionClass, includeCloudDc, LOCAL_DC);
+        createOnlyDefaultPartitionClass, includeCloudDc, null);
   }
 
   /**
@@ -172,8 +171,12 @@ public class MockClusterMap implements ClusterMap {
       }
       dataNodes.add(dataNodeId);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
+      localDatacenterName = dcName;
     }
-    localDatacenterName = localDcName;
+    if (localDcName != null) {
+      // if caller specifies the local data center name, use the one specified.
+      localDatacenterName = localDcName;
+    }
     partitions = new HashMap<>();
 
     // create partitions

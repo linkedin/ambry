@@ -234,9 +234,11 @@ public class GetBlobOperationTest {
     mockSelectorState.set(MockSelectorState.Good);
     VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties(true, LOCAL_DC));
     routerConfig = new RouterConfig(vprops);
-    mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc);
+    mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc, LOCAL_DC);
     this.includeCloudDc =  includeCloudDc;
     localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    Assert.assertEquals("Local DC Name is same as the one we set.", LOCAL_DC, localDcName);
+
     blobIdFactory = new BlobIdFactory(mockClusterMap);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
@@ -401,7 +403,7 @@ public class GetBlobOperationTest {
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
     // test the case where the tracker type is bad
-    Properties properties = getDefaultNonBlockingRouterProperties(true);
+    Properties properties = getDefaultNonBlockingRouterProperties(true, localDcName);
     properties.setProperty("router.get.operation.tracker.type", "NonExistentTracker");
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
@@ -652,7 +654,7 @@ public class GetBlobOperationTest {
   @Test
   public void testTimeoutRequestUpdateHistogramByDefault() throws Exception {
     doPut();
-    VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties(false));
+    VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties(false, localDcName));
     RouterConfig routerConfig = new RouterConfig(vprops);
     GetBlobOperation op = createOperation(routerConfig, null);
     op.poll(requestRegistrationCallback);
@@ -734,9 +736,7 @@ public class GetBlobOperationTest {
 
     // Pick a remote DC as the new local DC.
     String newLocal = "DC1";
-    String oldLocal = localDcName;
-    Properties props = getDefaultNonBlockingRouterProperties(true);
-    props.setProperty("router.datacenter.name", newLocal);
+    Properties props = getDefaultNonBlockingRouterProperties(true, newLocal);
     props.setProperty("router.get.request.parallelism", "3");
     props.setProperty("router.operation.tracker.max.inflight.requests", "3");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
@@ -766,8 +766,7 @@ public class GetBlobOperationTest {
     // error code should be OperationTimedOut because it precedes BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
 
-    props = getDefaultNonBlockingRouterProperties(true);
-    props.setProperty("router.datacenter.name", oldLocal);
+    props = getDefaultNonBlockingRouterProperties(true, localDcName);
     props.setProperty("router.get.request.parallelism", "2");
     props.setProperty("router.operation.tracker.max.inflight.requests", "2");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
@@ -853,7 +852,7 @@ public class GetBlobOperationTest {
     doPut();
     List<MockServer> localDcServers = mockServerLayout.getMockServers()
         .stream()
-        .filter(s -> s.getDataCenter().equals(LOCAL_DC))
+        .filter(s -> s.getDataCenter().equals(localDcName))
         .collect(Collectors.toList());
     mockServerLayout.getMockServers().forEach(s -> {
       if (!localDcServers.contains(s)) {
@@ -878,7 +877,7 @@ public class GetBlobOperationTest {
   @Test
   public void testGetBlobFromNewAddedNode() throws Exception {
     // create 3 new nodes in mock clustermap and place new partitions on these nodes.
-    List<MockDataNodeId> newNodes = mockClusterMap.createNewDataNodes(3, LOCAL_DC);
+    List<MockDataNodeId> newNodes = mockClusterMap.createNewDataNodes(3, localDcName);
     // make all existing partitions READ_ONLY to force router to route PUT against new partitions
     mockClusterMap.getAllPartitionIds(null)
         .forEach(p -> ((MockPartitionId) p).setPartitionState(PartitionState.READ_ONLY));
@@ -1924,11 +1923,13 @@ public class GetBlobOperationTest {
    * Get the default {@link Properties} for the {@link NonBlockingRouter}.
    * @param excludeTimeout whether to exclude timed out request in Histogram.
    * @return the constructed {@link Properties}
+   * @param routerDataCenter the local data center
    */
-  private Properties getDefaultNonBlockingRouterProperties(boolean excludeTimeout) {
+  private Properties getDefaultNonBlockingRouterProperties(boolean excludeTimeout, String routerDataCenter) {
     Properties properties = new Properties();
+
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", LOCAL_DC);
+    properties.setProperty("router.datacenter.name", routerDataCenter);
     properties.setProperty("router.put.request.parallelism", Integer.toString(3));
     properties.setProperty("router.put.success.target", Integer.toString(2));
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxChunkSize));
@@ -1939,18 +1940,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     properties.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
     properties.setProperty("router.get.blob.operation.share.memory", "true");
-    return properties;
-  }
 
-  /**
-   * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
-   * the {@link NonBlockingRouter}.
-   * @return the created VerifiableProperties instance.
-   */
-  private Properties getDefaultNonBlockingRouterProperties(boolean excludeTimeout, String routerDataCenter) {
-    Properties properties = getDefaultNonBlockingRouterProperties(excludeTimeout);
-
-    properties.setProperty("router.datacenter.name", routerDataCenter);
     properties.setProperty("router.connection.checkout.timeout.ms", Integer.toString(CHECKOUT_TIMEOUT_MS));
     properties.setProperty("router.connections.local.dc.warm.up.percentage", Integer.toString(67));
     properties.setProperty("router.connections.remote.dc.warm.up.percentage", Integer.toString(34));
