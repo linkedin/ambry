@@ -1412,7 +1412,7 @@ class PutOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         PutRequest putRequest = createPutRequest();
-        RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId);
+        RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId, null);
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo.put(correlationId,
             new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));

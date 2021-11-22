@@ -809,7 +809,7 @@ public class ServerAdminTool implements Closeable {
     String hostname = dataNodeId.getHostname();
     Port port = dataNodeId.getPortToConnectTo();
     String identifier = hostname + ":" + port.getPort();
-    RequestInfo requestInfo = new RequestInfo(hostname, port, request, replicaId);
+    RequestInfo requestInfo = new RequestInfo(hostname, port, request, replicaId, null);
     List<RequestInfo> requestInfos = Collections.singletonList(requestInfo);
     ResponseInfo responseInfo = null;
     long startTimeMs = time.milliseconds();
