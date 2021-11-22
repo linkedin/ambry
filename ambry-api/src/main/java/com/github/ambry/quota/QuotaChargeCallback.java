@@ -40,7 +40,7 @@ public interface QuotaChargeCallback {
     RequestCostPolicy requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
     return new QuotaChargeCallback() {
       @Override
-      public void chargeQuota(long chunkSize) throws RouterException {
+      public void charge(long chunkSize) throws RouterException {
         try {
           Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
               .entrySet()
@@ -65,8 +65,18 @@ public interface QuotaChargeCallback {
       }
 
       @Override
-      public void chargeQuota() throws RouterException {
-        chargeQuota(quotaManager.getQuotaConfig().quotaAccountingUnit);
+      public void charge() throws RouterException {
+        charge(quotaManager.getQuotaConfig().quotaAccountingUnit);
+      }
+
+      @Override
+      public boolean check() {
+        return false;
+      }
+
+      @Override
+      public boolean quotaExceedAllowed() {
+        return false;
       }
     };
   }
@@ -76,12 +86,24 @@ public interface QuotaChargeCallback {
    * @param chunkSize of the chunk.
    * @throws RouterException In case request needs to be throttled.
    */
-  void chargeQuota(long chunkSize) throws RouterException;
+  void charge(long chunkSize) throws RouterException;
 
   /**
    * Callback method that can be used to charge quota usage for a request or part of a request. Call this method
    * when the quota charge doesn't depend on the chunk size.
    * @throws RouterException In case request needs to be throttled.
    */
-  void chargeQuota() throws RouterException;
+  void charge() throws RouterException;
+
+  /**
+   * Check if request should be throttled based on quota usage.
+   * @return {@code true} if request usage exceeds limit and request should be throttled. {@code false} otherwise.
+   */
+  boolean check();
+
+  /**
+   * Check if usage is allowed to exceed the quota limit.
+   * @return {@code true} if usage is allowed to exceed the quota limit. {@code false} otherwise.
+   */
+  boolean quotaExceedAllowed();
 }
