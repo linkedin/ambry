@@ -37,7 +37,6 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -56,7 +55,6 @@ import static org.mockito.Mockito.*;
 /**
  * Test for {@link HelixParticipant}
  */
-@Ignore
 @RunWith(Parameterized.class)
 public class HelixParticipantTest {
   private final MockHelixManagerFactory helixManagerFactory;
