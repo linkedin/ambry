@@ -40,12 +40,21 @@ public interface QuotaEnforcer {
       Map<QuotaName, Double> requestCostMap);
 
   /**
-   * Makes an {@link QuotaRecommendation} for the restRequest. This method doesn't know the
-   * request details and hence makes the recommendation based on current quota usage.
+   * Makes an {@link QuotaRecommendation} for the {@link QuotaResource} in restRequest. This method doesn't know the
+   * request cost details and hence makes the recommendation based on current quota usage.
    * @param restRequest {@link RestRequest} object.
    * @return QuotaRecommendation object with the recommendation.
    */
-  QuotaRecommendation recommend(RestRequest restRequest);
+  QuotaRecommendation getResourceRecommendation(RestRequest restRequest);
+
+  /**
+   * Makes an {@link QuotaRecommendation} based on the system usage and state. This method can be used to allow resource
+   * quota usage to exceed their quota limit if system has enough resources.
+   * This method doesn't know the request cost details and hence makes the recommendation based on current quota usage.
+   * @param restRequest {@link RestRequest} object.
+   * @return QuotaRecommendation object with the recommendation.
+   */
+  QuotaRecommendation getSystemRecommendation(RestRequest restRequest);
 
   /**
    * @return QuotaSource object of the enforcer.

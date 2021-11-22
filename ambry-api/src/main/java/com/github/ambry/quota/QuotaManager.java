@@ -32,12 +32,29 @@ public interface QuotaManager {
   void init() throws InstantiationException;
 
   /**
-   * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
+   * Computes the overall recommendation to throttle a request or not for all the types of request quotas supported.
    * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @return ThrottlingRecommendation object that captures the overall recommendation.
    */
   ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
+
+  /**
+   * Computes the recommendation to throttle a request or not based only on usage exceeding quota limit.
+   * This method does not charge the requestCost against the quota.
+   * @param restRequest {@link RestRequest} object.
+   * @return ThrottlingRecommendation object that captures the recommendation.
+   */
+  ThrottlingRecommendation getQuotaRecommendation(RestRequest restRequest);
+
+  /**
+   * Computes the recommendation to throttle a request or not based on system resources only. Note that this method
+   * doesn't look into quota and usage for recommendations.
+   * This method does not charge the requestCost against the quota.
+   * @param restRequest {@link RestRequest} object.
+   * @return ThrottlingRecommendation object that captures the overall recommendation.
+   */
+  ThrottlingRecommendation getSystemRecommendation(RestRequest restRequest);
 
   /**
    * Charges the requestCost against the quota for the specified restRequest and blobInfo.
@@ -55,17 +72,17 @@ public interface QuotaManager {
   QuotaConfig getQuotaConfig();
 
   /**
-   * Set {@link QuotaMode} for {@link QuotaManager}.
-   * @param mode The mode to set
-   */
-  void setQuotaMode(QuotaMode mode);
-
-  /**
    * Use this method to get the {@link QuotaMode} rather than {@link QuotaConfig#throttlingMode} since the {@link QuotaMode}
    * might be updated by {@link #setQuotaMode}.
    * @return the {@link QuotaMode}. By default, it will return the {@link QuotaMode} from {@link QuotaConfig}.
    */
   QuotaMode getQuotaMode();
+
+  /**
+   * Set {@link QuotaMode} for {@link QuotaManager}.
+   * @param mode The mode to set
+   */
+  void setQuotaMode(QuotaMode mode);
 
   /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.

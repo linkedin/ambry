@@ -105,7 +105,7 @@ public class AmbryQuotaManager implements QuotaManager {
     Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
     try {
       List<QuotaRecommendation> quotaRecommendations = requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.recommend(restRequest))
+          .map(quotaEnforcer -> quotaEnforcer.getResourceRecommendation(restRequest))
           .filter(Objects::nonNull)
           .collect(Collectors.toList());
       if (quotaRecommendations.size() == 0) {
@@ -119,6 +119,16 @@ public class AmbryQuotaManager implements QuotaManager {
       timer.stop();
     }
     return throttlingRecommendation;
+  }
+
+  @Override
+  public ThrottlingRecommendation getQuotaRecommendation(RestRequest restRequest) {
+    return null;
+  }
+
+  @Override
+  public ThrottlingRecommendation getSystemRecommendation(RestRequest restRequest) {
+    return null;
   }
 
   @Override

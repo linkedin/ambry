@@ -118,8 +118,8 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
     if (!requestCostMap.containsKey(QuotaName.STORAGE_IN_GB)) {
-      // No cost for the desired QuotaName, then just call recommend
-      return recommend(restRequest);
+      // No cost for the desired QuotaName, then just call getResourceRecommendation
+      return getResourceRecommendation(restRequest);
     }
 
     // The cost is number of bytes in GB. Convert it back to raw number.
@@ -129,7 +129,16 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation recommend(RestRequest restRequest) {
+  public QuotaRecommendation getResourceRecommendation(RestRequest restRequest) {
+    if (!RestUtils.isUploadRequest(restRequest)) {
+      return NO_QUOTA_VALUE_RECOMMENDATION;
+    }
+    Pair<Long, Long> pair = getQuotaAndUsage(restRequest);
+    return recommendBasedOnQuotaAndUsage(pair);
+  }
+
+  @Override
+  public QuotaRecommendation getSystemRecommendation(RestRequest restRequest) {
     if (!RestUtils.isUploadRequest(restRequest)) {
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
