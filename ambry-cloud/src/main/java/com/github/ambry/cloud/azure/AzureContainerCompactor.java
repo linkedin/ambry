@@ -80,7 +80,6 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
     this.queryLimit = azureCloudConfig.containerCompactionCosmosQueryLimit;
     this.containerDeletionQueryBatchSize = azureCloudConfig.cosmosContainerDeletionBatchSize;
-    this.latestContainerDeletionTimestamp = getLatestContainerDeletionTime();
     azureMetrics.trackLatestContainerDeletionTimestamp(this);
   }
 
