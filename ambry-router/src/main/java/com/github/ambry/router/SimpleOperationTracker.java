@@ -372,9 +372,8 @@ class SimpleOperationTracker implements OperationTracker {
     // To account for GET operation, the threshold should be  >= totalReplicaCount - (success target - 1)
     // Right now, this only applies for disk replica only partitions and may not be completely accurate if there are
     // failures responses other than not found.
-    // TODO support cloud replicas in this condition, also account for failures other than not found
-    if (crossColoEnabled && !cloudReplicasPresent
-        && diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget) {
+    if (crossColoEnabled
+        && (diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget)) {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count. DiskDownCount: {}, TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}",
           routerOperation, partitionId, diskDownCount, totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget);
