@@ -138,12 +138,9 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation getSystemRecommendation(RestRequest restRequest) {
-    if (!RestUtils.isUploadRequest(restRequest)) {
-      return NO_QUOTA_VALUE_RECOMMENDATION;
-    }
-    Pair<Long, Long> pair = getQuotaAndUsage(restRequest);
-    return recommendBasedOnQuotaAndUsage(pair);
+  public boolean isQuotaExceedAllowed(RestRequest restRequest) {
+    // Exceeding storage quota limit is not allowed.
+    return false;
   }
 
   /**

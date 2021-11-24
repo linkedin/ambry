@@ -32,29 +32,21 @@ public interface QuotaManager {
   void init() throws InstantiationException;
 
   /**
-   * Computes the overall recommendation to throttle a request or not for all the types of request quotas supported.
-   * This method does not charge the requestCost against the quota.
-   * @param restRequest {@link RestRequest} object.
-   * @return ThrottlingRecommendation object that captures the overall recommendation.
-   */
-  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
-
-  /**
    * Computes the recommendation to throttle a request or not based only on usage exceeding quota limit.
    * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @return ThrottlingRecommendation object that captures the recommendation.
    */
-  ThrottlingRecommendation getQuotaRecommendation(RestRequest restRequest);
+  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
 
   /**
    * Computes the recommendation to throttle a request or not based on system resources only. Note that this method
    * doesn't look into quota and usage for recommendations.
    * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
-   * @return ThrottlingRecommendation object that captures the overall recommendation.
+   * @return {@code true} if usage is allowed to exceed quota. {@code false} otherwise.
    */
-  ThrottlingRecommendation getSystemRecommendation(RestRequest restRequest);
+  boolean isQuotaExceedAllowed(RestRequest restRequest);
 
   /**
    * Charges the requestCost against the quota for the specified restRequest and blobInfo.

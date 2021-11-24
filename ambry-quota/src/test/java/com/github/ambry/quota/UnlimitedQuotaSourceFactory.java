@@ -18,21 +18,21 @@ import com.github.ambry.config.QuotaConfig;
 
 
 /**
- * Factory to create {@link DummyQuotaSource} for test.
+ * Implementation of {@link QuotaSourceFactory} that instantiates {@link UnlimitedQuotaSourceFactory}.
  */
-public class DummyQuotaSourceFactory implements QuotaSourceFactory {
+public class UnlimitedQuotaSourceFactory implements QuotaSourceFactory {
 
   /**
-   * Constructor for {@link DummyQuotaSourceFactory}.
+   * Constructor for {@link UnlimitedQuotaSourceFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    */
-  public DummyQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) {
+  public UnlimitedQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) {
 
   }
 
   @Override
   public QuotaSource getQuotaSource() {
-    return new DummyQuotaSource();
+    return new UnlimitedQuotaSource();
   }
 }

@@ -17,24 +17,18 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
+import java.io.IOException;
 
 
-/**
- * Implementation of {@link QuotaSourceFactory} that instantiates {@link UnlimitedQuotaSourceFactory}.
- */
-public class UnlimitedQuotaSourceFactory implements QuotaSourceFactory {
+public class JsonCUQuotaSourceFactory implements QuotaSourceFactory {
+  private final JsonCUQuotaSource quotaSource;
 
-  /**
-   * Constructor for {@link UnlimitedQuotaSourceFactory}.
-   * @param quotaConfig {@link QuotaConfig} object.
-   * @param accountService {@link AccountService} object.
-   */
-  public UnlimitedQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) {
-
+  public JsonCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
+    quotaSource = new JsonCUQuotaSource(quotaConfig, accountService);
   }
 
   @Override
-  public QuotaSource getQuotaSource() {
-    return new UnlimitedQuotaSource();
+  public QuotaSource getQuotaSource()  {
+    return quotaSource;
   }
 }

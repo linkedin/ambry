@@ -133,6 +133,7 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else {
         if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
+          // TODO Do we need this anymore? We aren't throttling on request arrival anymore.
           ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
               && quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {

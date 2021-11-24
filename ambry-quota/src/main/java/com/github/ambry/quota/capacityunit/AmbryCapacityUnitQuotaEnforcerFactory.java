@@ -21,7 +21,7 @@ import com.github.ambry.quota.QuotaEnforcerFactory;
 
 
 /**
- * Implementation of {@link QuotaEnforcerFactory} that instantiates {@link AmbryCapacityUnitQuotaEnforcer}.
+ * Implementation of {@link QuotaEnforcerFactory} that instantiates {@link AmbryCUQuotaEnforcer}.
  */
 public class AmbryCapacityUnitQuotaEnforcerFactory implements QuotaEnforcerFactory {
   private final QuotaEnforcer quotaEnforcer;
@@ -34,7 +34,7 @@ public class AmbryCapacityUnitQuotaEnforcerFactory implements QuotaEnforcerFacto
    */
   public AmbryCapacityUnitQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
       AccountStatsStore accountStatsStore) {
-    quotaEnforcer = new AmbryCapacityUnitQuotaEnforcer(quotaSource);
+    quotaEnforcer = new AmbryCUQuotaEnforcer(quotaSource, quotaConfig.maxFrontendCuUsageToAllowExceed);
   }
 
   @Override

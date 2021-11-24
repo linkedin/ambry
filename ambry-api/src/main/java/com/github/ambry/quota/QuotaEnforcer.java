@@ -48,16 +48,16 @@ public interface QuotaEnforcer {
   QuotaRecommendation getResourceRecommendation(RestRequest restRequest);
 
   /**
-   * Makes an {@link QuotaRecommendation} based on the system usage and state. This method can be used to allow resource
-   * quota usage to exceed their quota limit if system has enough resources.
+   * Makes an boolean recommendation whether usage is allowed to exceed quota, based on the system usage and state.
+   * This method can be used to allow resource quota usage to exceed their quota limit if system has enough resources.
    * This method doesn't know the request cost details and hence makes the recommendation based on current quota usage.
    * @param restRequest {@link RestRequest} object.
    * @return QuotaRecommendation object with the recommendation.
    */
-  QuotaRecommendation getSystemRecommendation(RestRequest restRequest);
+  boolean isQuotaExceedAllowed(RestRequest restRequest);
 
   /**
-   * @return QuotaSource object of the enforcer.
+   * @return QuotaSource object of the service.
    */
   QuotaSource getQuotaSource();
 

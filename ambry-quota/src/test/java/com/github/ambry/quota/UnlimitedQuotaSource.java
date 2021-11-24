@@ -11,14 +11,13 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota.capacityunit;
+package com.github.ambry.quota;
 
-import com.github.ambry.quota.Quota;
-import com.github.ambry.quota.QuotaName;
-import com.github.ambry.quota.QuotaResource;
-import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.rest.RestRequest;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 
@@ -36,6 +35,26 @@ public class UnlimitedQuotaSource implements QuotaSource {
   @Override
   public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
     quotaResourceList.addAll(quotaResources);
+  }
+
+  @Override
+  public boolean isReady() {
+    return true;
+  }
+
+  @Override
+  public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) {
+
+  }
+
+  @Override
+  public QuotaRecommendation checkResourceUsage(RestRequest restRequest) {
+    return null;
+  }
+
+  @Override
+  public QuotaRecommendation checkFrontendUsage(RestRequest restRequest) {
+    return null;
   }
 
   /**

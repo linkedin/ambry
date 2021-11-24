@@ -25,11 +25,14 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StorageQuotaConfig;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.rest.RestRequest;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
@@ -121,6 +124,26 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
   @Override
   public AccountService getAccountService() {
     return accountService;
+  }
+
+  @Override
+  public boolean isReady() {
+    return true;
+  }
+
+  @Override
+  public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) {
+    return;
+  }
+
+  @Override
+  public QuotaRecommendation checkResourceUsage(RestRequest restRequest) {
+    return null;
+  }
+
+  @Override
+  public QuotaRecommendation checkFrontendUsage(RestRequest restRequest) {
+    return null;
   }
 
   /**

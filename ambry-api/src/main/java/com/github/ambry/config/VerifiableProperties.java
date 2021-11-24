@@ -146,6 +146,16 @@ public class VerifiableProperties {
     }
   }
 
+  public Float getFloatInRange(String name, Float defaultVal, Float start, Float end) {
+    Float v = containsKey(name) ? Float.valueOf(Float.parseFloat(getProperty(name))) : defaultVal;
+    if (v >= start && v <= end) {
+      return v;
+    } else {
+      throw new IllegalArgumentException(
+          name + " has value " + v + " which is not in range " + start + "-" + end + ".");
+    }
+  }
+
   /**
    * Read a required long property value or throw an exception if no such property is found
    */

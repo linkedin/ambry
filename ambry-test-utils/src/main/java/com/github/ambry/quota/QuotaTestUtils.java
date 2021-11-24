@@ -72,6 +72,11 @@ public class QuotaTestUtils {
       }
 
       @Override
+      public boolean isQuotaExceedAllowed(RestRequest restRequest) {
+        return false;
+      }
+
+      @Override
       public QuotaConfig getQuotaConfig() {
         return new QuotaConfig(new VerifiableProperties(new Properties()));
       }
