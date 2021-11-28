@@ -85,4 +85,11 @@ public class QuotaUtils {
         return false;
     }
   }
+
+  /**
+   * @return QuotaName of the quota associated with {@link RestRequest}.
+   */
+  public static QuotaName getQuotaName(RestRequest restRequest) {
+    return isReadRequest(restRequest) ? QuotaName.READ_CAPACITY_UNIT : QuotaName.WRITE_CAPACITY_UNIT;
+  }
 }

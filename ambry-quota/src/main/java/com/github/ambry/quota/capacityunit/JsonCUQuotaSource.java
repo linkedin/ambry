@@ -31,10 +31,10 @@ import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.storage.JSONStringStorageQuotaSource;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -42,9 +42,13 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import org.codehaus.jackson.annotate.JsonIgnore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class JsonCUQuotaSource implements QuotaSource {
+  private static final Logger logger = LoggerFactory.getLogger(JsonCUQuotaSource.class);
+
   private static final long THROTTLE_RETRY_AFTER_MS = 1;
   private static final long NO_THROTTLE_RETRY_AFTER_MS = -1;
   private static final int NO_THROTTLE_HTTP_STATUS = 200;
@@ -54,10 +58,10 @@ public class JsonCUQuotaSource implements QuotaSource {
       EnumSet.of(QuotaName.READ_CAPACITY_UNIT, QuotaName.WRITE_CAPACITY_UNIT);
   private static final EnumSet<QuotaResourceType> SUPPORTED_QUOTA_RESOURCE_TYPES =
       EnumSet.of(QuotaResourceType.ACCOUNT, QuotaResourceType.CONTAINER);
+  protected final CUQuota feUsage;
+  protected final CUQuota feQuota;
   private final Map<String, CUQuota> cuQuota;
   private final Map<String, CUQuota> cuUsage;
-  private final CUQuota feUsage;
-  private final CUQuota feQuota;
 
   /**
    * Constructor to create a {@link JSONStringStorageQuotaSource}.
@@ -137,8 +141,19 @@ public class JsonCUQuotaSource implements QuotaSource {
 
   @Override
   public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) {
-    String resourceId = getQuotaResourceId(restRequest);
-    if (isReadRequest(restRequest) && requestCostMap.containsKey(QuotaName.READ_CAPACITY_UNIT)) {
+    String resourceId;
+    try {
+      resourceId = QuotaUtils.getQuotaResourceId(restRequest).getResourceId();
+    } catch (RestServiceException rEx) {
+      logger.error(
+          "Cannot charge request because could not create resourceId for request for blob {} due to exception {}",
+          blobInfo.getBlobProperties().toString(), rEx.toString());
+      return;
+    }
+    if (!cuQuota.containsKey(resourceId)) {
+      return;
+    }
+    if (QuotaUtils.isReadRequest(restRequest) && requestCostMap.containsKey(QuotaName.READ_CAPACITY_UNIT)) {
       cuUsage.get(resourceId).rcu += requestCostMap.get(QuotaName.READ_CAPACITY_UNIT);
       feUsage.rcu += requestCostMap.get(QuotaName.READ_CAPACITY_UNIT);
     } else if (requestCostMap.containsKey(QuotaName.WRITE_CAPACITY_UNIT)) {
@@ -149,11 +164,18 @@ public class JsonCUQuotaSource implements QuotaSource {
 
   @Override
   public QuotaRecommendation checkResourceUsage(RestRequest restRequest) {
-    String resourceId = getQuotaResourceId(restRequest);
+    String resourceId;
+    try {
+      resourceId = QuotaUtils.getQuotaResourceId(restRequest).getResourceId();
+    } catch (RestServiceException rEx) {
+      logger.error("Cannot check resource usage because could not create resourceId due to exception {}",
+          rEx.toString());
+      return null;
+    }
     if (!cuQuota.containsKey(resourceId)) {
       return null;
     }
-    QuotaName quotaName = getQuotaName(restRequest);
+    QuotaName quotaName = QuotaUtils.getQuotaName(restRequest);
     long limit = cuQuota.get(resourceId).getQuotaValue(quotaName);
     long usage = cuUsage.get(resourceId).getQuotaValue(quotaName);
     return buildQuotaRecommendation(limit, usage, quotaName);
@@ -161,7 +183,7 @@ public class JsonCUQuotaSource implements QuotaSource {
 
   @Override
   public QuotaRecommendation checkFrontendUsage(RestRequest restRequest) {
-    QuotaName quotaName = getQuotaName(restRequest);
+    QuotaName quotaName = QuotaUtils.getQuotaName(restRequest);
     return buildQuotaRecommendation(feQuota.getQuotaValue(quotaName), feUsage.getQuotaValue(quotaName), quotaName);
   }
 
@@ -174,32 +196,8 @@ public class JsonCUQuotaSource implements QuotaSource {
     return cuQuota;
   }
 
-  private boolean isReadRequest(RestRequest restRequest) {
-    switch (restRequest.getRestMethod()) {
-      case GET:
-      case OPTIONS:
-      case HEAD:
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  private String getQuotaResourceId(RestRequest restRequest) {
-    Account account;
-    Container container;
-    try {
-      account = RestUtils.getAccountFromArgs(restRequest.getArgs());
-      container = RestUtils.getContainerFromArgs(restRequest.getArgs());
-    } catch (RestServiceException rEx) {
-      throw new IllegalArgumentException("Account or Container details not found in rest request", rEx);
-    }
-    return String.valueOf(
-        (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) ? account.getId() : container.getId());
-  }
-
-  private QuotaName getQuotaName(RestRequest restRequest) {
-    return isReadRequest(restRequest) ? QuotaName.READ_CAPACITY_UNIT : QuotaName.WRITE_CAPACITY_UNIT;
+  public Map<String, CUQuota> getAllQuotaUsage() {
+    return cuUsage;
   }
 
   private QuotaRecommendation buildQuotaRecommendation(long limit, long usage, QuotaName quotaName) {
@@ -209,7 +207,7 @@ public class JsonCUQuotaSource implements QuotaSource {
         shouldThrottle ? THROTTLE_RETRY_AFTER_MS : NO_THROTTLE_RETRY_AFTER_MS);
   }
 
-  static class CUQuota {
+  public static class CUQuota {
     static final String RCU_FIELD_NAME = "rcu";
     static final String WCU_FIELD_NAME = "wcu";
 
