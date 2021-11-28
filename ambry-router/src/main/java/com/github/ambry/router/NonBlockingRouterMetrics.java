@@ -672,7 +672,7 @@ public class NonBlockingRouterMetrics {
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
         (Gauge<Integer>) currentBackgroundOperationsCount::get);
     metricRegistry.register(
-        MetricRegistry.name(NonBlockingRouter.BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
+        MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
         (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
   }
 
