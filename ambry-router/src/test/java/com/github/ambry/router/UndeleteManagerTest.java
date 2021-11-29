@@ -121,7 +121,7 @@ public class UndeleteManagerTest {
           server.send(
               new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
                   id, putBlobProperties, ByteBuffer.wrap(new byte[0]), Unpooled.wrappedBuffer(PUT_CONTENT),
-                  PUT_CONTENT.length, BlobType.DataBlob, null)).release();
+                  PUT_CONTENT.length, BlobType.DataBlob, null), true).release();
         }
       }
     }
@@ -375,7 +375,7 @@ public class UndeleteManagerTest {
         DeleteRequest deleteRequest =
             new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
                 id, time.milliseconds());
-        server.send(deleteRequest).release();
+        server.send(deleteRequest, true).release();
         deleteRequest.release();
       }
     }

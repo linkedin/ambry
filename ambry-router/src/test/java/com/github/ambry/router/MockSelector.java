@@ -120,7 +120,7 @@ class MockSelector extends Selector {
           this.sends.remove(send);
         } else {
           MockServer server = connIdToServer.get(send.getConnectionId());
-          BoundedNettyByteBufReceive receive = server.send(send.getPayload());
+          BoundedNettyByteBufReceive receive = server.send(send.getPayload(), true);
           if (receive != null) {
             receives.add(new NetworkReceive(send.getConnectionId(), receive, time));
           }

@@ -300,7 +300,7 @@ public class GetBlobOperationTest {
               blobContent.retainedDuplicate(), blobContent.readableBytes(), blobType,
               blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
       // Make sure we release the BoundedNettyByteBufReceive.
-      server.send(request).release();
+      server.send(request, true).release();
       request.release();
     }
     blobContent.release();

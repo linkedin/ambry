@@ -254,7 +254,7 @@ public class NonBlockingRouterTestBase {
             new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, id,
                 putBlobProperties, ByteBuffer.wrap(putUserMetadata), Unpooled.wrappedBuffer(putContent),
                 putContent.length, BlobType.DataBlob, null);
-        server.send(putRequest).release();
+        server.send(putRequest, true).release();
         putRequest.release();
       }
     }
@@ -293,7 +293,7 @@ public class NonBlockingRouterTestBase {
             new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, id,
                 putBlobProperties, ByteBuffer.wrap(putUserMetadata), Unpooled.wrappedBuffer(serializedContent),
                 serializedContent.remaining(), BlobType.MetadataBlob, null);
-        server.send(putRequest).release();
+        server.send(putRequest, true).release();
         putRequest.release();
       }
     }
@@ -312,7 +312,7 @@ public class NonBlockingRouterTestBase {
         DeleteRequest deleteRequest =
             new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
                 id, mockTime.milliseconds());
-        server.send(deleteRequest).release();
+        server.send(deleteRequest, true).release();
         deleteRequest.release();
       }
     }
@@ -331,7 +331,7 @@ public class NonBlockingRouterTestBase {
         UndeleteRequest undeleteRequest =
             new UndeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
                 id, mockTime.milliseconds());
-        server.send(undeleteRequest).release();
+        server.send(undeleteRequest, true).release();
         undeleteRequest.release();
       }
     }

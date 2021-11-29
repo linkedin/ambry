@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.store.StoreKey;
 import java.util.List;
@@ -60,5 +61,17 @@ class RouterCallback {
       backgroundDeleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceIdSuffix));
     }
   }
+
+  /**
+   * Schedule the deletes of ids in the given list.
+   * @param idsToDelete the list of blob ids that need to be deleted.
+   * @param serviceIdSuffix the suffix to append to the service ID when deleting these blobs.
+   */
+  void scheduleDeletesForBlobIds(List<BlobId> idsToDelete, String serviceIdSuffix) {
+    for (BlobId blobId : idsToDelete) {
+      backgroundDeleteRequests.add(new BackgroundDeleteRequest(blobId, serviceIdSuffix));
+    }
+  }
+
 }
 

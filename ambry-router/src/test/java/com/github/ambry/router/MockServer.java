@@ -86,10 +86,11 @@ class MockServer {
    * Take in a request in the form of {@link Send} and return a response in the form of a
    * {@link BoundedNettyByteBufReceive}.
    * @param send the request.
+   * @param consumeRequest indicates whether or not server should consume the request.*
    * @return the response.
    * @throws IOException if there was an error in interpreting the request.
    */
-  public BoundedNettyByteBufReceive send(Send send) throws IOException {
+  public BoundedNettyByteBufReceive send(Send send, boolean consumeRequest) throws IOException {
     if (!shouldRespond) {
       return null;
     }
@@ -100,7 +101,7 @@ class MockServer {
     requestCounts.computeIfAbsent(type, k -> new LongAdder()).increment();
     switch (type) {
       case PutRequest:
-        response = makePutResponse((PutRequest) send, serverError);
+        response = makePutResponse((PutRequest) send, serverError, consumeRequest);
         break;
       case GetRequest:
         response = makeGetResponse((GetRequest) send, serverError);
@@ -132,15 +133,19 @@ class MockServer {
    * encountered.
    * @param putRequest the {@link PutRequest} for which the response is being constructed.
    * @param putError the {@link ServerErrorCode} that was encountered.
+   * @param consumeRequest indicates whether or not server should consume the request.
    * @return the created {@link PutResponse}
    * @throws IOException if there was an error constructing the response.
    */
-  PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError) throws IOException {
-    if (putError == ServerErrorCode.No_Error) {
-      updateBlobMap(putRequest);
-    } else {
-      // we have to read the put request out so that the blob in put request can be released.
-      new StoredBlob(putRequest, clusterMap);
+  PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError, boolean consumeRequest)
+      throws IOException {
+    if (consumeRequest) {
+      if (putError == ServerErrorCode.No_Error) {
+        updateBlobMap(putRequest);
+      } else {
+        // we have to read the put request out so that the blob in put request can be released.
+        new StoredBlob(putRequest, clusterMap);
+      }
     }
     return new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), putError);
   }

@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -40,6 +41,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -134,7 +136,7 @@ public class PutOperationTest {
     //    PutChunk.
 
     // 1.
-    ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
+    ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0), true);
     PutResponse putResponse =
         responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
             : null;
@@ -156,7 +158,7 @@ public class PutOperationTest {
 
     // succeed all the other requests.
     for (int i = 3; i < requestInfos.size(); i++) {
-      responseInfo = getResponseInfo(requestInfos.get(i));
+      responseInfo = getResponseInfo(requestInfos.get(i), true);
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfo.content())) : null;
       op.handleResponse(responseInfo, putResponse);
@@ -187,7 +189,7 @@ public class PutOperationTest {
     // the next poll will free this buffer. We cannot actually verify it via the tests directly, as this is very
     // internal to the chunk (though this can be verified via coverage).
     for (int i = 0; i < requestInfos.size(); i++) {
-      responseInfo = getResponseInfo(requestInfos.get(i));
+      responseInfo = getResponseInfo(requestInfos.get(i), true);
       putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfo.content())) : null;
       op.handleResponse(responseInfo, putResponse);
@@ -200,7 +202,7 @@ public class PutOperationTest {
     Assert.assertEquals(1 * requestParallelism, requestInfos.size());
     Assert.assertFalse("Operation should not be complete yet", op.isOperationComplete());
     // once the metadata request succeeds, it should complete the operation.
-    responseInfo = getResponseInfo(requestInfos.get(0));
+    responseInfo = getResponseInfo(requestInfos.get(0), true);
     putResponse =
         responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
             : null;
@@ -271,7 +273,7 @@ public class PutOperationTest {
     op.poll(requestRegistrationCallback);
     // make 1st request of first chunk encounter Temporarily_Disabled
     mockServer.setServerErrorForAllRequests(ServerErrorCode.Temporarily_Disabled);
-    ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
+    ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0), true);
     PutResponse putResponse =
         responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
             : null;
@@ -283,7 +285,7 @@ public class PutOperationTest {
     Assert.assertEquals("Disabled count should be 0", 0, operationTracker.getFailedCount());
     // make 2nd request of first chunk encounter Replica_Unavailable
     mockServer.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
-    responseInfo = getResponseInfo(requestInfos.get(1));
+    responseInfo = getResponseInfo(requestInfos.get(1), true);
     putResponse =
         responseInfo.getError() == null ? PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()))
             : null;
@@ -296,6 +298,92 @@ public class PutOperationTest {
     // Release all the other requests
     requestInfos.forEach(info -> info.getRequest().release());
   }
+
+  /**
+   * Test PUT operation that handles ServerErrorCode = Temporarily_Disabled and Replica_Unavailable
+   * @throws Exception
+   */
+  @Test
+  public void testSlippedPutsWithServerErrors() throws Exception {
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    properties.setProperty("router.put.success.target", Integer.toString(2));
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+
+    // int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
+    int numChunks = 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+            null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // fill chunks would end up filling the maximum number of PutChunks.
+    op.fillChunks();
+
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+
+    List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
+
+    // Set up server errors such that put fails on 2 out 3 nodes, hence creating a slipped put on the succeeding node.
+    // Second attempts on all node succeed.
+    List<ServerErrorCode> serverErrorList = new ArrayList<>();
+    // Success on the first host, slipped put
+    serverErrorList.add(ServerErrorCode.No_Error);
+    // Fail on the second host
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    // Fail on the third host
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    // Success on the second attempts on all hosts
+    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.No_Error);
+
+    mockServer.setServerErrors(serverErrorList);
+
+    // Send all requests.
+    for (int i = 0; i < requestInfos.size(); i++) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfos.get(i), false);
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      op.handleResponse(responseInfo, putResponse);
+      responseInfo.release();
+    }
+
+    // fill chunks again.
+    op.fillChunks();
+
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+
+    // Send all requests again.
+    for (int i = 0; i < requestInfos.size(); i++) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfos.get(i), true);
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
+      responseInfo.release();
+    }
+    Assert.assertEquals("Number of slipped puts should be 1", 1, op.getSlippedPutBlobIds().size());
+  }
+
 
   /**
    * Test the Errors {@link RouterErrorCode} received by Put Operation. The operation exception is set
@@ -389,11 +477,12 @@ public class PutOperationTest {
   /**
    * Get the {@link ResponseInfo} for the given {@link RequestInfo} using the {@link MockServer}
    * @param requestInfo the {@link RequestInfo} for which the response is to be returned.
+   * @param consumeRequest indicates whether or not server should consume the request.
    * @return the {@link ResponseInfo} the response for the request.
    * @throws IOException if there is an error sending the request.
    */
-  private ResponseInfo getResponseInfo(RequestInfo requestInfo) throws IOException {
-    NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
+  private ResponseInfo getResponseInfo(RequestInfo requestInfo, boolean consumeRequest) throws IOException {
+    NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest(), consumeRequest), time);
     return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().content());
   }
 }
