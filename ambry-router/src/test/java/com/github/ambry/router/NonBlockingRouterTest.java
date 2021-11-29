@@ -716,6 +716,87 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test that even when a composite blob put succeeds, the slipped put data chunks are deleted.
+   */
+  @Test
+  public void testSuccessfulPutDataChunkDelete() throws Exception {
+    // This test is somehow probabilistic. Since it is not possible to devise a mocking to enforce the occurrence of
+    // slipped puts given we cannot control the order of the hosts requests are sent and not all requests are sent when
+    // put requests are guaranteed to fail/succeed. So, we are setting the number of chunks and max attempts high enough
+    // to guarantee that slipped puts would eventually happen and operation would succeed.
+    maxPutChunkSize = PUT_CONTENT_SIZE / 8;
+    final int NUM_MAX_ATTEMPTS = 100;
+    Properties props = getNonBlockingRouterProperties("DC1");
+    props.setProperty("router.max.slipped.put.attempts", Integer.toString(NUM_MAX_ATTEMPTS));
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    MockTime mockTime = new MockTime();
+    MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+    // Since this test wants to ensure that successfully put data chunks are deleted when the overall put operation
+    // succeeds but some chunks succeed only after a retry, it uses a notification system to track the deletions.
+    final CountDownLatch deletesDoneLatch = new CountDownLatch(1);
+    final Map<String, String> blobsThatAreDeleted = new HashMap<>();
+    LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
+        blobsThatAreDeleted.put(blobId, serviceId);
+        deletesDoneLatch.countDown();
+      }
+    };
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
+        new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
+        cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+
+    setOperationParams();
+
+    // In each DC, set up the servers such that one node always succeeds and the other nodes return an unknown_error and
+    // no_error alternately. This will make it with a very high probability that there will at least be a time that a
+    // put will succeed on a node but will fail on the other two.
+    List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
+    List<ServerErrorCode> serverErrorList = new ArrayList<>();
+    for (int i = 0; i < NUM_MAX_ATTEMPTS; i++) {
+      serverErrorList.add(ServerErrorCode.Unknown_Error);
+      serverErrorList.add(ServerErrorCode.No_Error);
+    }
+    Set<String> healthyNodeDC = new HashSet<>();
+    for (DataNodeId dataNodeId : dataNodeIds) {
+      MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
+      if (healthyNodeDC.contains(dataNodeId.getDatacenterName())) {
+        server.setServerErrors(serverErrorList);
+      } else {
+        server.resetServerErrors();
+      }
+      healthyNodeDC.add(dataNodeId.getDatacenterName());
+    }
+
+    // Submit the put operation and wait for it to succeed.
+    String blobId = router.putBlob(
+        putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+
+    // Now, wait until at least one delete happens within AWAIT_TIMEOUT_MS.
+    Assert.assertTrue("Some blobs should have been deleted within " + AWAIT_TIMEOUT_MS,
+        deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    // Wait for the rest of the deletes to finish.
+    long waitStart = SystemTime.getInstance().milliseconds();
+    while (router.getBackgroundOperationsCount() != 0
+        && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
+      Thread.sleep(1000);
+    }
+    for (Map.Entry<String, String> blobIdAndServiceId : blobsThatAreDeleted.entrySet()) {
+      Assert.assertNotSame("We should not be deleting the valid blob by mistake",
+          blobId, blobIdAndServiceId.getKey());
+      Assert.assertEquals("Unexpected service ID for deleted blob",
+          BackgroundDeleteRequest.SERVICE_ID_PREFIX + putBlobProperties.getServiceId(), blobIdAndServiceId.getValue());
+    }
+
+    router.close();
+    assertClosed();
+  }
+
+
+  /**
    * Test that if a composite blob is deleted, the data chunks are eventually deleted. Also check the service IDs used
    * for delete operations.
    */
