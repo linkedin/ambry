@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -40,6 +41,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -296,6 +298,80 @@ public class PutOperationTest {
     // Release all the other requests
     requestInfos.forEach(info -> info.getRequest().release());
   }
+
+  /**
+   * Test PUT operation that handles ServerErrorCode = Temporarily_Disabled and Replica_Unavailable
+   * @throws Exception
+   */
+  @Test
+  public void testSlippedPutsWithServerErrors() throws Exception {
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    properties.setProperty("router.put.success.target", Integer.toString(2));
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+
+    // int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
+    int numChunks = 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+            null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // fill chunks would end up filling the maximum number of PutChunks.
+    op.fillChunks();
+
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+
+    List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
+
+    // For every DC, split the servers into two buckets such that the servers in the first bucket would succeed whereas
+    // those in the second bucket return an error for the first send issued, but later ones succeed. With only 3 nodes,
+    // we expect partitions to distribute to the nodes uniformly, i.e. requests should be uniformly distributed to the
+    // servers.
+    List<ServerErrorCode> slippedServerErrorList = new ArrayList<>();
+    slippedServerErrorList.add(ServerErrorCode.Unknown_Error);
+    slippedServerErrorList.add(ServerErrorCode.No_Error);
+    List<ServerErrorCode> successServerErrorList = new ArrayList<>();
+    successServerErrorList.add(ServerErrorCode.No_Error);
+    successServerErrorList.add(ServerErrorCode.No_Error);
+
+    MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+    HashSet<String> visited = new HashSet<>();
+    for (DataNodeId dataNodeId : dataNodeIds) {
+      MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
+      if (!visited.contains(dataNodeId.getDatacenterName())) {
+        visited.add(dataNodeId.getDatacenterName());
+        server.setServerErrors(successServerErrorList);
+        continue;
+      }
+      server.setServerErrors(slippedServerErrorList);
+    }
+    for (int i = 0; i < requestInfos.size(); i++) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfos.get(i));
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
+      responseInfo.release();
+    }
+    Assert.assertEquals("Number of slipped puts should be 1", 1, op.getSlippedPutBlobIds().size());
+  }
+
 
   /**
    * Test the Errors {@link RouterErrorCode} received by Put Operation. The operation exception is set

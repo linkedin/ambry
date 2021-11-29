@@ -284,6 +284,9 @@ class PutManager {
     for (Integer correlationId : op.getInFlightCorrelationIds()) {
       correlationIdToPutOperation.remove(correlationId);
     }
+    // Regardless of the result of the operation, clean up the blobs that may have been put as the result of slipped
+    // puts.
+    routerCallback.scheduleDeletesForBlobIds(op.getSlippedPutBlobIds(), op.getServiceId());
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 

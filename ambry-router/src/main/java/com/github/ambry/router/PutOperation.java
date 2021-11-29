@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -155,6 +156,8 @@ class PutOperation {
   private long waitTimeForCurrentChunkAvailabilityMs;
   // The time spent by a chunk for data to be available in the channel.
   private long waitTimeForChannelDataAvailabilityMs;
+  // list of slipped blob ids generated during the put operation.
+  private List<BlobId> slippedPutBlobIds = new LinkedList<>();
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -538,6 +541,7 @@ class PutOperation {
     } else {
       routerMetrics.putChunkOperationLatencyMs.update(operationLatencyMs, TimeUnit.MILLISECONDS);
     }
+    accumulateSlippedPutBlobIds(chunk.getSlippedPutBlobIds());
     chunk.clear();
   }
 
@@ -640,6 +644,12 @@ class PutOperation {
   List<PutChunk> getPutChunks() {
     return new ArrayList<>(putChunks);
   }
+
+  private void accumulateSlippedPutBlobIds(List<BlobId> slippedPutBlobIdsForChunk) {
+    slippedPutBlobIds.addAll(slippedPutBlobIdsForChunk);
+  }
+
+  List<BlobId> getSlippedPutBlobIds() { return slippedPutBlobIds; }
 
   /**
    * Called whenever the channel has data but no free or building chunk is available to be filled.
@@ -981,6 +991,8 @@ class PutOperation {
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
+    // list of slipped blob ids generated during the put of this chunk.
+    private List<BlobId> slippedPutBlobIds = new LinkedList<>();
 
     /**
      * Construct a PutChunk
@@ -1008,6 +1020,7 @@ class PutOperation {
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
+      slippedPutBlobIds.clear();
     }
 
     /**
@@ -1304,6 +1317,7 @@ class PutOperation {
       if (operationTracker.isDone()) {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
+          slippedPutBlobIds.add(chunkBlobId);
           if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts) {
             logger.trace("Attempt to put chunk with id: {} failed, attempting slipped put ", chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
@@ -1572,6 +1586,8 @@ class PutOperation {
       setChunkException(new RouterException("Could not complete operation, server returned: " + error,
           RouterErrorCode.AmbryUnavailable));
     }
+
+    private List<BlobId> getSlippedPutBlobIds() { return slippedPutBlobIds; }
 
     /**
      * A class that holds information about requests sent out by this PutChunk.
