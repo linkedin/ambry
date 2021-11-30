@@ -248,7 +248,8 @@ class FrontendRestRequestService implements RestRequestService {
       } else {
         SubResource subResource = requestPath.getSubResource();
         GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,
-            getGetOption(restRequest, frontendConfig.defaultRouterGetOption), requestPath.getBlobSegmentIdx());
+            getGetOption(restRequest, frontendConfig.defaultRouterGetOption), restRequest,
+            requestPath.getBlobSegmentIdx());
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subResource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -780,8 +781,8 @@ class FrontendRestRequestService implements RestRequestService {
           headCallback.markStartTime();
           router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
               .getOption(getOption)
-              .build(), headCallback,
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
+              .restRequest(restRequest)
+              .build(), headCallback, QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
           break;
         case DELETE:
           deleteCallback.markStartTime();

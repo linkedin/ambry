@@ -300,7 +300,7 @@ class PostBlobHandler {
      */
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
       PutBlobOptionsBuilder builder =
-          new PutBlobOptionsBuilder().chunkUpload(RestUtils.isChunkUpload(restRequest.getArgs()));
+          new PutBlobOptionsBuilder().chunkUpload(RestUtils.isChunkUpload(restRequest.getArgs())).restRequest(restRequest);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);

@@ -621,13 +621,14 @@ public class RestUtils {
    *             arguments to values.
    * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
    * @param getOption the {@link GetOption} required.
+   * @param restRequest the {@link RestRequest} that initiate this get operation, null if no rest request is available.
    * @param blobSegmentIdx index of blob segment one wishes to GET, {@link GetBlobOptions#NO_BLOB_SEGMENT_IDX_SPECIFIED}
    *                       if not used
    * @return a populated {@link GetBlobOptions} object.
    * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
    */
   public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource,
-      GetOption getOption, int blobSegmentIdx) throws RestServiceException {
+      GetOption getOption, RestRequest restRequest, int blobSegmentIdx) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
     if (subResource != null && !subResource.equals(SubResource.Segment) && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.",
@@ -641,6 +642,7 @@ public class RestUtils {
         .blobSegment(blobSegmentIdx)
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
         .resolveRangeOnEmptyBlob(resolveRangeOnEmptyBlob)
+        .restRequest(restRequest)
         .build();
   }
 

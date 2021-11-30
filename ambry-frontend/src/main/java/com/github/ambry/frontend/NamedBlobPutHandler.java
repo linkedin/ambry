@@ -337,7 +337,7 @@ public class NamedBlobPutHandler {
      * @return the {@link PutBlobOptions} to use, parsed from the request.
      */
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
-      PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(false);
+      PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(false).restRequest(restRequest);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);
