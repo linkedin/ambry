@@ -388,7 +388,6 @@ public class TtlUpdateManagerTest {
         assertNotNull("RequestInfo is null", requestInfo);
         if (!referenceRequestInfos.contains(requestInfo)) {
           if (ignoreUnrecognizedRequests) {
-            responseInfo.release();
             continue;
           }
           throw new IllegalStateException("Received response for unrecognized request");
@@ -402,7 +401,6 @@ public class TtlUpdateManagerTest {
         switch (type) {
           case TtlUpdateRequest:
             manager.handleResponse(responseInfo);
-            responseInfo.release();
             break;
           default:
             throw new IllegalStateException("Unrecognized request type: " + type);
@@ -411,6 +409,7 @@ public class TtlUpdateManagerTest {
       if (advanceTime) {
         time.sleep(ADVANCE_TIME_INCREMENT_MS);
       }
+      responseInfoList.forEach(ResponseInfo::release);
       requestInfoList.clear();
     }
   }
