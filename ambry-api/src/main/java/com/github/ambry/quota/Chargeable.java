@@ -14,7 +14,7 @@
 package com.github.ambry.quota;
 
 /**
- * A {@link Chargeable} is a operation that can be charged against quota.
+ * A {@link Chargeable} is an operation that can be charged against quota.
  */
 public interface Chargeable {
 
@@ -26,7 +26,7 @@ public interface Chargeable {
   boolean checkAndCharge();
 
   /**
-   * Check if its allowed for usage to exceed quota.
+   * Check if usage allowed to exceed quota.
    *
    * @return {@code true} if usage is allowed to exceed quota. {@code false} otherwise.
    */
