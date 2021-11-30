@@ -35,6 +35,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -51,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
@@ -86,6 +88,7 @@ public class TtlUpdateManagerTest {
   private final AccountService accountService = new InMemAccountService(true, false);
   private final QuotaChargeCallback quotaChargeCallback =
       QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   /**
    * Sets up all required components including a blob.
@@ -115,6 +118,14 @@ public class TtlUpdateManagerTest {
             routerConfig, metrics, time);
     networkClient = networkClientFactory.getNetworkClient();
   }
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() { nettyByteBufLeakHelper.afterTest(); }
 
   /**
    * Closes the router and ttl manager and does some post verification.
@@ -398,6 +409,7 @@ public class TtlUpdateManagerTest {
       if (advanceTime) {
         time.sleep(ADVANCE_TIME_INCREMENT_MS);
       }
+      responseInfoList.forEach(ResponseInfo::release);
       requestInfoList.clear();
     }
   }
