@@ -219,7 +219,7 @@ public class CompositeNetworkClientTest {
    */
   private RequestInfo getRequestInfo(ReplicaType replicaType) {
     return new RequestInfo("a", new Port(1, PortType.SSL), new MockSend(nextCorrelationId++),
-        new MockReplicaId(replicaType));
+        new MockReplicaId(replicaType), null);
   }
 
   private static class Mocks {

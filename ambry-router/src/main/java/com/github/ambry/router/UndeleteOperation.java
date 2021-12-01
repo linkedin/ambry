@@ -141,7 +141,7 @@ public class UndeleteOperation {
       UndeleteRequest undeleteRequest = createUndeleteRequest();
       undeleteRequestInfos.put(undeleteRequest.getCorrelationId(),
           new UndeleteRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, undeleteRequest, replica);
+      RequestInfo requestInfo = new RequestInfo(hostname, port, undeleteRequest, replica, null);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {

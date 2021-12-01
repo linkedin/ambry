@@ -145,7 +145,7 @@ class TtlUpdateOperation {
       TtlUpdateRequest ttlUpdateRequest = createTtlUpdateRequest();
       ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(),
           new TtlUpdateRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica);
+      RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica, null);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {

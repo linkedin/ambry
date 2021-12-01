@@ -14,6 +14,8 @@
 package com.github.ambry.network;
 
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.quota.Chargeable;
+import com.github.ambry.quota.QuotaResource;
 
 
 /**
@@ -25,6 +27,7 @@ public class RequestInfo {
   private final Port port;
   private final SendWithCorrelationId request;
   private final ReplicaId replicaId;
+  private final Chargeable chargeable;
   private long streamSendTime = -1;
   private long streamHeaderFrameReceiveTime = -1;
   public int responseFramesCount = 0;
@@ -34,13 +37,15 @@ public class RequestInfo {
    * @param host the host to which the data is meant for
    * @param port the port on the host to which the data is meant for
    * @param request the data to be sent.
-   * @param replicaId the {@link ReplicaId} associated with this request
+   * @param replicaId the {@link ReplicaId} associated with this request.
+   * @param chargeable the {@link Chargeable} associated with this request.
    */
-  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId) {
+  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId, Chargeable chargeable) {
     this.host = host;
     this.port = port;
     this.request = request;
     this.replicaId = replicaId;
+    this.chargeable = chargeable;
   }
 
   /**
@@ -62,6 +67,13 @@ public class RequestInfo {
    */
   public SendWithCorrelationId getRequest() {
     return request;
+  }
+
+  /**
+   * @return the {@link Chargeable} associated with this request.
+   */
+  public Chargeable getChargeable() {
+    return chargeable;
   }
 
   /**
