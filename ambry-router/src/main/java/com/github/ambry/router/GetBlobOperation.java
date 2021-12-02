@@ -853,11 +853,11 @@ class GetBlobOperation extends GetOperation {
         if (state != ChunkState.Complete && quotaChargeCallback != null && chunkException == null) {
           try {
             if (chunkSize != -1) {
-              quotaChargeCallback.chargeQuota(chunkSize);
+              quotaChargeCallback.charge(chunkSize);
             } else {
               if (this instanceof FirstGetChunk && ((FirstGetChunk) this).blobType == BlobType.DataBlob
                   && blobInfo != null) {
-                quotaChargeCallback.chargeQuota(blobInfo.getBlobProperties().getBlobSize());
+                quotaChargeCallback.charge(blobInfo.getBlobProperties().getBlobSize());
               }
               // other cases mean that either this was a metadata blob, or there was an error.
             }

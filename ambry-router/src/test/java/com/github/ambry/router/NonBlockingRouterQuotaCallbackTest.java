@@ -20,7 +20,6 @@ import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
@@ -119,14 +118,24 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       // then the requests go through even in case of exception.
       QuotaChargeCallback quotaChargeCallback = new QuotaChargeCallback() {
         @Override
-        public void chargeQuota(long chunkSize) throws RouterException {
+        public void charge(long chunkSize) throws RouterException {
           listenerCalledCount.addAndGet(chunkSize);
           throw new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests);
         }
 
         @Override
-        public void chargeQuota() throws RouterException {
-          chargeQuota(quotaAccountingSize);
+        public void charge() throws RouterException {
+          charge(quotaAccountingSize);
+        }
+
+        @Override
+        public boolean check() {
+          return false;
+        }
+
+        @Override
+        public boolean quotaExceedAllowed() {
+          return false;
         }
       };
 

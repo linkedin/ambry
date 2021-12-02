@@ -445,7 +445,7 @@ class GetBlobInfoOperation extends GetOperation {
     if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
       if (quotaChargeCallback != null) {
         try {
-          quotaChargeCallback.chargeQuota();
+          quotaChargeCallback.charge();
         } catch (RouterException routerException) {
           // No exception should be thrown when doing quota charge for blobinfo operation.
           logger.trace("Unexpected exception {} thrown on handling quota event for {}", routerException, blobId);

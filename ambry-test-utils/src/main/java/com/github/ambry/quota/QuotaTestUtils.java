@@ -95,11 +95,21 @@ public class QuotaTestUtils {
   public static QuotaChargeCallback createDummyQuotaChargeEventListener() {
     return new QuotaChargeCallback() {
       @Override
-      public void chargeQuota(long chunkSize) throws RouterException {
+      public void charge(long chunkSize) throws RouterException {
       }
 
       @Override
-      public void chargeQuota() throws RouterException {
+      public void charge() throws RouterException {
+      }
+
+      @Override
+      public boolean check() {
+        return false;
+      }
+
+      @Override
+      public boolean quotaExceedAllowed() {
+        return false;
       }
     };
   }

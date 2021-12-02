@@ -103,13 +103,23 @@ public class ConcurrencyTestTool {
   private static final Random random = new Random();
   private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = new QuotaChargeCallback() {
     @Override
-    public void chargeQuota(long chunkSize) {
+    public void charge(long chunkSize) {
 
     }
 
     @Override
-    public void chargeQuota() {
+    public void charge() {
 
+    }
+
+    @Override
+    public boolean check() {
+      return false;
+    }
+
+    @Override
+    public boolean quotaExceedAllowed() {
+      return false;
     }
   };
 
