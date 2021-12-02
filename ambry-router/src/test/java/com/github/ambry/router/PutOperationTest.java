@@ -338,7 +338,7 @@ public class PutOperationTest {
     op.poll(requestRegistrationCallback);
 
     List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
-
+    
     // Set up server errors such that put fails on 2 out 3 nodes, hence creating a slipped put on the succeeding node.
     // Second attempts on all node succeed.
     List<ServerErrorCode> serverErrorList = new ArrayList<>();
