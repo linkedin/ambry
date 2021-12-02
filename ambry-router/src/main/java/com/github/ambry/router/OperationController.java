@@ -80,6 +80,18 @@ public class OperationController implements Runnable {
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
    * @param accountService the {@link AccountService} to use.
+   * @param networkClientFactory the {@link NetworkClientFactory} used by the {@link OperationController} to create
+   *                             instances of {@link NetworkClient}.
+   * @param clusterMap the cluster map for the cluster.
+   * @param routerConfig the configs for the router.
+   * @param responseHandler {@link ResponseHandler} object.
+   * @param notificationSystem the notification system to use to notify about blob creations and deletions.
+   * @param routerMetrics the metrics for the router.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time the time instance.
+   * @param nonBlockingRouter {@link NonBlockingRouter} object.
    * @throws IOException if the network components could not be created.
    */
   OperationController(String suffix, String defaultPartitionClass, AccountService accountService,
@@ -320,6 +332,14 @@ public class OperationController implements Runnable {
       routerMetrics.skippedGetBlobCount.inc();
       helper.getDoOperation().accept(Collections.singletonList(blobIdStr));
     }
+  }
+
+  protected List<BackgroundDeleteRequest> getBackGroundDeleteRequests() {
+    return backgroundDeleteRequests;
+  }
+
+  protected void clearBackGroundDeleteRequests() {
+    backgroundDeleteRequests.clear();
   }
 
   /**

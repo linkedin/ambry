@@ -19,11 +19,12 @@ package com.github.ambry.quota;
 public interface Chargeable {
 
   /**
-   * Check if the usage is within quota for the quota resource of this operation.
+   * Atomically check if the usage is within quota for the quota resource of this operation, and if yes, charge for quota in that case.
+   * If the usage exceeds quota, then no charge should happen.
    *
    * @return {@code true} if usage is within quota. {@code false} otherwise.
    */
-  boolean check();
+  boolean checkAndCharge();
 
   /**
    * Charge the request cost for this operation against quota of the quota resource of this operation.
