@@ -202,7 +202,7 @@ class AmbrySecurityService implements SecurityService {
         responseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         switch (restMethod) {
           case HEAD:
-            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None,
+            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None, restRequest,
                 NO_BLOB_SEGMENT_IDX_SPECIFIED);
             responseChannel.setStatus(options.getRange() == null ? ResponseStatus.Ok : ResponseStatus.PartialContent);
             responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
@@ -211,7 +211,7 @@ class AmbrySecurityService implements SecurityService {
             break;
           case GET:
             if (!requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
-              options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None,
+              options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None, restRequest,
                   NO_BLOB_SEGMENT_IDX_SPECIFIED);
               responseChannel.setStatus(ResponseStatus.Ok);
               RestUtils.SubResource subResource = RestUtils.getRequestPath(restRequest).getSubResource();

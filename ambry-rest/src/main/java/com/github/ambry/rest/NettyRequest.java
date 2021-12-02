@@ -604,6 +604,7 @@ public class NettyRequest implements RestRequest {
     @Override
     public void onCompletion(Long result, Exception exception) {
       if (httpContent != null) {
+        httpContent.touch("Release at channel " + channel.toString());
         httpContent.release();
       }
       callbackWrapper.updateBytesRead(result);

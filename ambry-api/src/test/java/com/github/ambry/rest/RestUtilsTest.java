@@ -1178,7 +1178,7 @@ public class RestUtilsTest {
       boolean shouldSucceed) throws RestServiceException {
     if (shouldSucceed) {
       GetBlobOptions options =
-          RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+          RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
       assertEquals("Unexpected range for args=" + args + " and subResource=" + subResource, expectedRange,
           options.getRange());
       assertEquals("Unexpected operation type for args=" + args + " and subResource=" + subResource, expectedOpType,
@@ -1189,7 +1189,7 @@ public class RestUtilsTest {
           expectedResolveRangeOnEmptyBlob, options.resolveRangeOnEmptyBlob());
     } else {
       try {
-        RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+        RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
         fail("buildGetBlobOptions should not have succeeded with args=" + args + "and subResource=" + subResource);
       } catch (RestServiceException expected) {
         assertEquals("Unexpected error code.", RestServiceErrorCode.InvalidArgs, expected.getErrorCode());
