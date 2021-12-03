@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
+import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.batch.BlobBatchClient;
@@ -46,10 +47,11 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
    * @param blobBatchClient {@link BlobBatchClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
   public ConnectionStringBasedStorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
-      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
+    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
   }
 
   @Override
@@ -60,6 +62,16 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
         .retryOptions(retryOptions)
         .configuration(configuration)
         .buildClient();
+  }
+
+  @Override
+  protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
+    return new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
+        .buildAsyncClient();
   }
 
   /**
