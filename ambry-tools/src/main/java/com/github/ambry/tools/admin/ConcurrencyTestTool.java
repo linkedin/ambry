@@ -25,6 +25,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -120,6 +122,11 @@ public class ConcurrencyTestTool {
     @Override
     public boolean quotaExceedAllowed() {
       return false;
+    }
+
+    @Override
+    public QuotaResource getQuotaResource() {
+      return null;
     }
   };
 

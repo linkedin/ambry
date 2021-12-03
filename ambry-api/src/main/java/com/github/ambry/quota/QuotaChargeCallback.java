@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import java.util.Map;
@@ -78,6 +79,11 @@ public interface QuotaChargeCallback {
       public boolean quotaExceedAllowed() {
         return false;
       }
+
+      @Override
+      public QuotaResource getQuotaResource() throws RestServiceException {
+        return QuotaUtils.getQuotaResourceId(restRequest);
+      }
     };
   }
 
@@ -106,4 +112,10 @@ public interface QuotaChargeCallback {
    * @return {@code true} if usage is allowed to exceed the quota limit. {@code false} otherwise.
    */
   boolean quotaExceedAllowed();
+
+  /**
+   * @return QuotaResource object.
+   * @throws RestServiceException in case of any errors.
+   */
+  QuotaResource getQuotaResource() throws RestServiceException;
 }

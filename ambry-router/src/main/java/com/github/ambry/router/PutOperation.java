@@ -37,9 +37,12 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -956,7 +959,7 @@ class PutOperation {
    * handles a chunk of data and takes it to completion, and once done, moves on to handle more chunks of data. This
    * why there is a reference to the "current chunk" in the comments.
    */
-  class PutChunk {
+  class PutChunk implements Chargeable {
     // the position of the current chunk in the overall blob.
     private int chunkIndex;
     // the blobId of the current chunk.
@@ -999,6 +1002,8 @@ class PutOperation {
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
+    // whether the quota is already charged for this chunk.
+    private boolean isCharged;
 
     /**
      * Construct a PutChunk
@@ -1026,6 +1031,7 @@ class PutOperation {
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
+      isCharged = false;
     }
 
     /**
@@ -1107,6 +1113,54 @@ class PutOperation {
      */
     OperationTracker getOperationTrackerInUse() {
       return operationTracker;
+    }
+
+    @Override
+    public boolean check() {
+      if (quotaChargeCallback == null || isCharged) {
+        return true;
+      }
+
+      return quotaChargeCallback.check();
+    }
+
+    @Override
+    public boolean charge() {
+      if (quotaChargeCallback == null || isCharged) {
+        return true;
+      }
+      try {
+        quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
+        isCharged = true;
+      } catch (RouterException rEx) {
+        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob %s due to %s ", blobId.toString(),
+            rEx.toString()));
+      }
+      return isCharged;
+    }
+
+    @Override
+    public boolean quotaExceedAllowed() {
+      if(quotaChargeCallback == null) {
+        return true;
+      }
+      return quotaChargeCallback.quotaExceedAllowed();
+    }
+
+    @Override
+    public QuotaResource getQuotaResource() {
+      if(quotaChargeCallback == null) {
+        return null;
+      }
+      try {
+        return quotaChargeCallback.getQuotaResource();
+      } catch (RestServiceException rEx) {
+        logger.error(
+            String.format("Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
+                blobId.toString(), rEx.toString()));
+      }
+      // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
+      return null;
     }
 
     /**
