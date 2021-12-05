@@ -82,7 +82,7 @@ public class OperationController implements Runnable {
    * @param accountService the {@link AccountService} to use.
    * @throws IOException if the network components could not be created.
    */
-  OperationController(String suffix, String defaultPartitionClass, AccountService accountService,
+  public OperationController(String suffix, String defaultPartitionClass, AccountService accountService,
       NetworkClientFactory networkClientFactory, ClusterMap clusterMap, RouterConfig routerConfig,
       ResponseHandler responseHandler, NotificationSystem notificationSystem, NonBlockingRouterMetrics routerMetrics,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,

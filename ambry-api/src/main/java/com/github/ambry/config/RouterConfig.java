@@ -108,6 +108,7 @@ public class RouterConfig {
   public static final String ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS =
       "router.background.deleter.max.concurrent.operations";
   public static final String ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32 = "router.put.request.use.java.native.crc32";
+  public static final String OPERATION_CONTROLLER = "router.operation.controller";
 
   /**
    * Number of independent scaling units for the router.
@@ -527,6 +528,13 @@ public class RouterConfig {
   public final boolean routerPutRequestUseJavaNativeCrc32;
 
   /**
+   * Name of the operation controller class to use.
+   */
+  @Config(OPERATION_CONTROLLER)
+  @Default("com.github.ambry.router.OperationController")
+  public final String operationController;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -640,5 +648,7 @@ public class RouterConfig {
             Integer.MAX_VALUE);
     routerPutRequestUseJavaNativeCrc32 =
         verifiableProperties.getBoolean(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32, false);
+    operationController =
+        verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
   }
 }

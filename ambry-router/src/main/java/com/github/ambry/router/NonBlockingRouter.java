@@ -78,11 +78,13 @@ class NonBlockingRouter implements Router {
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
    * @throws IOException if the OperationController could not be successfully created.
+   * @throws ReflectiveOperationException if the OperationController could not be successfully created.
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      AccountService accountService, Time time, String defaultPartitionClass) throws IOException {
+      AccountService accountService, Time time, String defaultPartitionClass)
+      throws IOException, ReflectiveOperationException {
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     this.kms = kms;
@@ -91,9 +93,9 @@ class NonBlockingRouter implements Router {
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
       ocList.add(
-          new OperationController(Integer.toString(i), defaultPartitionClass, accountService, networkClientFactory,
-              clusterMap, routerConfig, responseHandler, notificationSystem, routerMetrics, kms, cryptoService,
-              cryptoJobHandler, time, this));
+          Utils.getObj(routerConfig.operationController, Integer.toString(i), defaultPartitionClass, accountService,
+              networkClientFactory, clusterMap, routerConfig, responseHandler, notificationSystem, routerMetrics, kms,
+              cryptoService, cryptoJobHandler, time, this));
     }
     backgroundDeleter =
         new BackgroundDeleter(accountService, networkClientFactory, clusterMap, routerConfig, responseHandler,
