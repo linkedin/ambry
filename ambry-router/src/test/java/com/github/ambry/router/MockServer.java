@@ -86,6 +86,7 @@ class MockServer {
    * Take in a request in the form of {@link Send} and return a response in the form of a
    * {@link BoundedNettyByteBufReceive}.
    * @param send the request.
+   * @return the response.
    * @throws IOException if there was an error in interpreting the request.
    */
   public BoundedNettyByteBufReceive send(Send send) throws IOException {
@@ -134,15 +135,13 @@ class MockServer {
    * @return the created {@link PutResponse}
    * @throws IOException if there was an error constructing the response.
    */
-  PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError)
-      throws IOException {
+  PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError) throws IOException {
     if (putError == ServerErrorCode.No_Error) {
       updateBlobMap(putRequest);
     } else {
       // we have to read the put request out so that the blob in put request can be released.
       new StoredBlob(putRequest, clusterMap);
     }
-
     return new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), putError);
   }
 
