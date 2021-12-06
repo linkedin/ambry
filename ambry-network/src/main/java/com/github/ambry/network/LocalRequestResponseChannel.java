@@ -125,6 +125,7 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
     payload.writeTo(new ByteBufferChannel(ByteBuffer.wrap(SIZE_BYTE_ARRAY)));
     WritableByteChannel byteChannel = Channels.newChannel(new ByteBufOutputStream(buffer));
     payload.writeTo(byteChannel);
+    payload.release();
     return buffer;
   }
 

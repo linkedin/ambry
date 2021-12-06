@@ -22,6 +22,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
@@ -70,6 +72,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   private final Set<CosmosContainerDeletionEntry> deprecatedContainers = new HashSet<>();
   private final ClusterMap clusterMap;
 
+  // Used in error simulation.
+  private final Map<String, StoreErrorCodes> errorCodeForBlobs = new HashMap<>();
+  private StoreErrorCodes hardError = null;
+  private LinkedList<StoreErrorCodes> serverErrors = new LinkedList<StoreErrorCodes>();
+
   /**
    * Instantiate {@link LatchBasedInMemoryCloudDestination}.
    * Use this constructor for tests where type of azure replication feed doesn't matter.
@@ -102,7 +109,14 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
-      InputStream blobInputStream) {
+      InputStream blobInputStream) throws CloudStorageException {
+    StoreErrorCodes serverError =
+        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    if (serverError != null) {
+      throw new CloudStorageException("uploadBlob simulated error",
+          new StoreException("uploadBlob simulated error", serverError));
+    }
+
     if (map.containsKey(blobId)) {
       return false;
     }
@@ -134,6 +148,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
+    StoreErrorCodes serverError =
+        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    if (serverError != null) {
+      throw new CloudStorageException("downloadBlob simulated error for blobid :" + blobId,
+          new StoreException("downloadBlob simulated error for blobid :" + blobId, serverError));
+    }
+
     try {
       if (!map.containsKey(blobId)) {
         throw new CloudStorageException("Blob with blobId " + blobId.getID() + " does not exist.");
@@ -149,7 +170,14 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
 
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVerion,
-      CloudUpdateValidator cloudUpdateValidator) {
+      CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
+    StoreErrorCodes serverError =
+        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    if (serverError != null) {
+      throw new CloudStorageException("deleteBlob simulated error",
+          new StoreException("deleteBlob simulated error", serverError));
+    }
+
     if (!map.containsKey(blobId)) {
       return false;
     }
@@ -163,6 +191,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
+    StoreErrorCodes serverError =
+        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    if (serverError != null) {
+      throw new CloudStorageException("updateBlobExpiration simulated error",
+          new StoreException("updateBlobExpiration simulated error", serverError));
+    }
+
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setExpirationTime(expirationTime);
       map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
@@ -175,6 +210,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
+    StoreErrorCodes serverError =
+        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    if (serverError != null) {
+      throw new CloudStorageException("undeleteBlob simulated error",
+          new StoreException("undeleteBlob simulated error", serverError));
+    }
+
     if (map.containsKey(blobId)) {
       map.get(blobId).getFirst().setLifeVersion(lifeVersion);
       map.get(blobId).getFirst().setDeletionTime(Utils.Infinite_Time);
@@ -189,7 +231,14 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) {
+  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException  {
+    StoreErrorCodes serverError =
+        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    if (serverError != null) {
+      throw new CloudStorageException("getBlobMetadata simulated error",
+          new StoreException("getBlobMetadata simulated error", serverError));
+    }
+
     Map<String, CloudBlobMetadata> result = new HashMap<>();
     for (BlobId blobId : blobIds) {
       if (map.containsKey(blobId)) {
@@ -210,6 +259,28 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
         throw new IllegalArgumentException(
             String.format("Unknown azure replication feed type: %s", azureReplicationFeedType));
     }
+  }
+
+  @Override
+  public void setServerErrors(List<StoreErrorCodes> serverErrors) {
+    this.serverErrors.clear();
+    this.serverErrors.addAll(serverErrors);
+  }
+
+  @Override
+  public void setServerErrorForAllRequests(StoreErrorCodes serverError) {
+    this.hardError = serverError;
+  }
+
+  @Override
+  public void resetServerErrors() {
+    this.serverErrors.clear();
+    this.hardError = null;
+  }
+
+  @Override
+  public void setErrorCodeForBlob(String blobId, StoreErrorCodes errorCode) {
+    // not supported yet
   }
 
   @Override

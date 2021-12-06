@@ -34,6 +34,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Utils;
 import com.microsoft.azure.cosmosdb.Document;
@@ -289,6 +290,19 @@ class AzureCloudDestination implements CloudDestination {
     }
     return metadataList.stream().collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity(), (x, y) -> x));
   }
+
+  // don't support error simulation
+  @Override
+  public void setServerErrors(List<StoreErrorCodes> serverErrors) {}
+
+  @Override
+  public void setServerErrorForAllRequests(StoreErrorCodes serverError) {}
+
+  @Override
+  public void resetServerErrors() {}
+
+  @Override
+  public void setErrorCodeForBlob(String blobId, StoreErrorCodes errorCode) {}
 
   @Override
   public void close() throws IOException {

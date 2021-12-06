@@ -16,6 +16,8 @@ package com.github.ambry.cloud;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.server.ServerErrorCode;
 import java.io.Closeable;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -150,4 +152,41 @@ public interface CloudDestination extends Closeable {
    * @return {@link CloudContainerCompactor} object that would do container compaction for cloud.
    */
   CloudContainerCompactor getContainerCompactor();
+
+  /**
+   * To be consistent with MockServer. We need the following four error injection APIs.
+   * Different from MockServer, we use {@link StoreErrorCodes} instead of {@link ServerErrorCode} as the error code.
+   */
+
+  /**
+   * Set the error for each request from this point onwards that affects subsequent requests sent to this node
+   * (until/unless the next set or reset error method is invoked).
+   * Each request from the list is used exactly once and in order. So, if the list contains {No_Error, Unknown_Error,
+   * Disk_Error}, then the first, second and third requests would receive No_Error,
+   * Unknown_Error and Disk_Error respectively. Once the errors are exhausted, the default No_Error is assumed for
+   * all further requests until the next call to this method.
+   * @param serverErrors the list of errors that affects subsequent PutRequests.
+   */
+  void setServerErrors(List<StoreErrorCodes> serverErrors);
+
+  /**
+   * Set the error to be set in the responses for all requests from this point onwards (until/unless another set or
+   * reset method for errors is invoked).
+   * @param serverError the error to set from this point onwards.
+   */
+  void setServerErrorForAllRequests(StoreErrorCodes serverError);
+
+  /**
+   * Clear the error for subsequent requests. That is all responses from this point onwards will be successful
+   * until/unless another set error method is invoked.
+   */
+  void resetServerErrors();
+
+  /**
+   * Sets up this {@link CloudDestination} such that it returns the given {@code errorCode} for the given {@code blobId} for
+   * get, ttl update and delete (not put).
+   * @param blobId the blob id for which the error code must apply
+   * @param errorCode the error code to apply
+   */
+  void setErrorCodeForBlob(String blobId, StoreErrorCodes errorCode);
 }
