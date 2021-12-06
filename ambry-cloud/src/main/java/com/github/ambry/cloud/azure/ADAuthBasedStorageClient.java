@@ -101,8 +101,7 @@ public class ADAuthBasedStorageClient extends StorageClient {
     if (accessTokenRef == null) {
       // This means the object is not initialized yet, because this method was called from base class's constructor.
       accessTokenRef = new AtomicReference<>(accessToken);
-      tokenRefreshScheduler =
-          Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
+      tokenRefreshScheduler = Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
       scheduledFutureRef = new AtomicReference<>(null);
     } else {
       accessTokenRef.set(accessToken);
@@ -141,7 +140,8 @@ public class ADAuthBasedStorageClient extends StorageClient {
    */
   private IAuthenticationResult getAccessTokenByClientCredentialGrant(AzureCloudConfig azureCloudConfig)
       throws MalformedURLException, InterruptedException, ExecutionException {
-    //TODO should proxy be specified while building token?
+    // If a proxy is required, properties must either be set at the jvm level,
+    // or ClientSecretCredentialStorageClient should be used
     ConfidentialClientApplication app = ConfidentialClientApplication.builder(azureCloudConfig.azureStorageClientId,
         ClientCredentialFactory.createFromSecret(azureCloudConfig.azureStorageSecret))
         .authority(azureCloudConfig.azureStorageAuthority)

@@ -27,6 +27,8 @@ ext {
     azureCosmosDbVersion = "2.6.3"
     azureMsal4jVersion="1.7.1"
     azureMsalClientCredentialVersion="1.0.0"
+    azureIdentityVersion= "1.3.6"
+    azureSecurityKeyvaultSecretsVersion="4.2.2"
     conscryptVersion = "2.2.1"
     jimFsVersion = "1.1"
     mysqlConnectorVersion = "8.0.21"
