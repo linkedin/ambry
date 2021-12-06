@@ -22,6 +22,7 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -40,6 +41,8 @@ import org.slf4j.LoggerFactory;
  */
 public class QuotaAwareOperationController extends OperationController {
   private static final Logger logger = LoggerFactory.getLogger(QuotaAwareOperationController.class);
+  // QuotaResource instance to use cases where OperationController gets null QuotaResource.
+  private static final QuotaResource UNKNOWN_QUOTA_RESOURCE = new QuotaResource("UNKNOWN", QuotaResourceType.ACCOUNT);
   private final Map<QuotaResource, LinkedList<RequestInfo>> requestQueue = new HashMap<>();
   private final NonBlockingRouter nonBlockingRouter;
   private final NonBlockingRouterMetrics routerMetrics;
@@ -112,8 +115,12 @@ public class QuotaAwareOperationController extends OperationController {
    */
   private void addToRequestQueue(List<RequestInfo> requestInfos) {
     for (RequestInfo requestInfo : requestInfos) {
-      requestQueue.putIfAbsent(requestInfo.getChargeable().getQuotaResource(), new LinkedList<>());
-      requestQueue.get(requestInfo.getChargeable().getQuotaResource()).add(requestInfo);
+      QuotaResource quotaResource = requestInfo.getChargeable().getQuotaResource();
+      if (quotaResource == null) {
+        quotaResource = UNKNOWN_QUOTA_RESOURCE;
+      }
+      requestQueue.putIfAbsent(quotaResource, new LinkedList<>());
+      requestQueue.get(quotaResource).add(requestInfo);
     }
   }
 
@@ -154,6 +161,13 @@ public class QuotaAwareOperationController extends OperationController {
    */
   private void drainQuotaCompliantRequests(List<RequestInfo> requestsToSend) {
     for (QuotaResource quotaResource : requestQueue.keySet()) {
+      if (quotaResource.equals(UNKNOWN_QUOTA_RESOURCE)) {
+        // If there are requests for which QuotaResource couldn't be found, this is most likely a bug.
+        // As a temporary hack, we will consider all those requests to be quota compliant.
+        requestsToSend.addAll(requestQueue.get(UNKNOWN_QUOTA_RESOURCE));
+        requestQueue.remove(UNKNOWN_QUOTA_RESOURCE);
+        continue;
+      }
       while (!requestQueue.get(quotaResource).isEmpty()) {
         RequestInfo requestInfo = requestQueue.get(quotaResource).getFirst();
         if (requestInfo.getChargeable().check()) {
@@ -168,5 +182,12 @@ public class QuotaAwareOperationController extends OperationController {
         requestQueue.remove(quotaResource);
       }
     }
+  }
+
+  /**
+   * @return the request queue of the OperationController. To be mainly for tests.
+   */
+  Map<QuotaResource, LinkedList<RequestInfo>> getRequestQueue() {
+    return requestQueue;
   }
 }

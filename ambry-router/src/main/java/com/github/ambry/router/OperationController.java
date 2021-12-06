@@ -334,10 +334,16 @@ public class OperationController implements Runnable {
     }
   }
 
+  /**
+   * @return List of {@link BackgroundDeleteRequest}s.
+   */
   protected List<BackgroundDeleteRequest> getBackGroundDeleteRequests() {
     return backgroundDeleteRequests;
   }
 
+  /**
+   * clear the {@link BackgroundDeleteRequest}s.
+   */
   protected void clearBackGroundDeleteRequests() {
     backgroundDeleteRequests.clear();
   }
