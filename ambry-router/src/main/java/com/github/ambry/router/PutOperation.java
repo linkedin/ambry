@@ -53,6 +53,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -998,6 +999,8 @@ class PutOperation {
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
+    // list of slipped blob ids generated during the put of this chunk.
+    private List<BlobId> slippedPutBlobIds = new LinkedList<>();
 
     /**
      * Construct a PutChunk
@@ -1025,6 +1028,7 @@ class PutOperation {
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
+      slippedPutBlobIds.clear();
     }
 
     /**
@@ -1590,6 +1594,8 @@ class PutOperation {
       setChunkException(new RouterException("Could not complete operation, server returned: " + error,
           RouterErrorCode.AmbryUnavailable));
     }
+
+    private List<BlobId> getSlippedPutBlobIds() { return slippedPutBlobIds; }
 
     /**
      * A class that holds information about requests sent out by this PutChunk.
