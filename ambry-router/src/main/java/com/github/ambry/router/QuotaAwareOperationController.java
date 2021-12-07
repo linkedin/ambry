@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  */
 public class QuotaAwareOperationController extends OperationController {
   private static final Logger logger = LoggerFactory.getLogger(QuotaAwareOperationController.class);
-  // QuotaResource instance to use cases where OperationController gets null QuotaResource.
+  // QuotaResource instance to use for cases where OperationController gets null QuotaResource.
   private static final QuotaResource UNKNOWN_QUOTA_RESOURCE = new QuotaResource("UNKNOWN", QuotaResourceType.ACCOUNT);
   private final Map<QuotaResource, LinkedList<RequestInfo>> requestQueue = new HashMap<>();
   private final NonBlockingRouter nonBlockingRouter;
@@ -94,7 +94,7 @@ public class QuotaAwareOperationController extends OperationController {
   }
 
   /**
-   * Poll for new requests from each of the operation managers, and initiate backgroud deletes.
+   * Poll for new requests from each of the operation managers, and initiate background deletes.
    * @param requestsToSend a list of {@link RequestInfo} that will contain the new requests to be sent out.
    * @param requestsToDrop a list of correlation IDs that will contain the IDs for requests that the network layer
    *                       should drop.
@@ -110,7 +110,7 @@ public class QuotaAwareOperationController extends OperationController {
   }
 
   /**
-   * Add the specified {@link List} of {@link RequestInfo}s to the reqeust queue.
+   * Add the specified {@link List} of {@link RequestInfo}s to the request queue.
    * @param requestInfos {@link List} of {@link RequestInfo} objects.
    */
   private void addToRequestQueue(List<RequestInfo> requestInfos) {
@@ -129,37 +129,32 @@ public class QuotaAwareOperationController extends OperationController {
    * @param requestsToSend a list of {@link RequestInfo} that will contain the requests to be sent out.
    */
   private void drainRequestQueue(List<RequestInfo> requestsToSend) {
-    drainQuotaCompliantRequests(requestsToSend);
+    handlequotaCompliantRequests(requestsToSend);
 
     List<QuotaResource> quotaResources = new ArrayList<>(requestQueue.keySet());
     Collections.shuffle(quotaResources);
-    boolean done = false;
     while (!requestQueue.isEmpty()) {
       for (QuotaResource quotaResource : quotaResources) {
         RequestInfo requestInfo = requestQueue.get(quotaResource).getFirst();
-        if (requestInfo.getChargeable().quotaExceedAllowed()) {
-          requestInfo.getChargeable().charge();
-          requestsToSend.add(requestInfo);
-          requestQueue.get(quotaResource).removeFirst();
-          if (requestQueue.get(quotaResource).isEmpty()) {
-            requestQueue.remove(quotaResource);
-          }
-        } else {
-          done = true;
-          break;
+        if (!requestInfo.getChargeable().quotaExceedAllowed()) {
+          // If quota exceeded requests aren't allowed, then there is nothing more to do.
+          return;
         }
-      }
-      if (done) {
-        break;
+        requestInfo.getChargeable().charge();
+        requestsToSend.add(requestInfo);
+        requestQueue.get(quotaResource).removeFirst();
+        if (requestQueue.get(quotaResource).isEmpty()) {
+          requestQueue.remove(quotaResource);
+        }
       }
     }
   }
 
   /**
-   * Drain the request queue based on resource quota only and update the requests to be send to {@code requestsToSend}.
+   * Drain the request queue based on resource quota only and update the requests to be sent to {@code requestsToSend}.
    * @param requestsToSend a list of {@link RequestInfo} that will contain the requests to be sent out.
    */
-  private void drainQuotaCompliantRequests(List<RequestInfo> requestsToSend) {
+  private void handlequotaCompliantRequests(List<RequestInfo> requestsToSend) {
     for (QuotaResource quotaResource : requestQueue.keySet()) {
       if (quotaResource.equals(UNKNOWN_QUOTA_RESOURCE)) {
         // If there are requests for which QuotaResource couldn't be found, this is most likely a bug.
