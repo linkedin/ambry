@@ -41,11 +41,13 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -53,6 +55,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.After;
+import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -263,6 +267,79 @@ public class IndexTest {
     // try to get BlobReadOption for a non existent key
     MockId nonExistentId = state.getUniqueId();
     verifyBlobReadOptions(nonExistentId, EnumSet.allOf(StoreGetOptions.class), StoreErrorCodes.ID_Not_Found);
+  }
+
+  /**
+   * Test to change index segments when getting blob read info. Changing index segments is simulating compaction.
+   * @throws Exception
+   */
+  @Test
+  public void getBlobReadInfoTestWithChangingIndexSegments() throws Exception {
+    Assume.assumeTrue(isLogSegmented);
+    Assume.assumeTrue(persistentIndexVersion >= PersistentIndex.VERSION_3);
+    // First get key that are in second log segment
+    LogSegment firstLogSegment = state.log.getFirstSegment();
+    LogSegment secondLogSegment = state.log.getNextSegment(firstLogSegment);
+
+    MockId mockId = null;
+    Iterator<MockId> iter = state.liveKeys.iterator();
+    while (iter.hasNext()) {
+      MockId potentialId = iter.next();
+      // Make sure this is a key that point to a put value in second log segment
+      IndexValue value = state.getExpectedValue(potentialId, false);
+      if (value != null && value.isPut() && value.getOffset().getName().equals(secondLogSegment.getName())) {
+        mockId = potentialId;
+        break;
+      }
+    }
+    if (mockId == null) {
+      Assert.fail("Failed to get a put value's mock id in second log segment");
+    }
+
+    // Now we know we this id's value is point to second log segment, we will drop all the index segments for second
+    // log segment.
+    Set<Offset> segmentsToDrop = new HashSet<>();
+    for (Offset indexOffset : state.index.getIndexSegments().keySet()) {
+      if (indexOffset.getName().equals(secondLogSegment.getName())) {
+        segmentsToDrop.add(indexOffset);
+      }
+    }
+
+    ExecutorService service = Utils.newScheduler(2, false);
+    final MockId finalMockId = mockId;
+    final CountDownLatch latch = new CountDownLatch(1);
+    // Add a callback method to block getBlobReadInfo method so the changeIndexSegments can be invoked.
+    state.index.setGetBlobReadInfoTestCallback(() -> {
+      latch.countDown();
+      try {
+        // sleep for 3 second to simulate gc pause
+        Thread.sleep(3000);
+      } catch (Exception e) {
+      }
+    });
+    Future<BlobReadOptions> future = service.submit(() -> {
+      BlobReadOptions options = state.index.getBlobReadInfo(finalMockId, EnumSet.noneOf(StoreGetOptions.class));
+      Assert.assertEquals(1, secondLogSegment.refCount());
+      options.close();
+      Assert.assertEquals(0, secondLogSegment.refCount());
+      return options;
+    });
+    service.submit((Callable) () -> {
+      latch.await();
+      state.index.changeIndexSegments(Collections.emptyList(), segmentsToDrop);
+      state.log.dropSegment(secondLogSegment.getName(), true);
+      return null;
+    });
+
+    try {
+      // We are not expecting any exception
+      future.get();
+    } catch (Exception e) {
+      Assert.fail("We are not expecting any exception" + e.toString());
+    } finally {
+      service.shutdown();
+    }
+    state.reloadIndex(true, false);
   }
 
   /**

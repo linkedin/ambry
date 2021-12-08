@@ -155,6 +155,8 @@ class PersistentIndex {
   // the result of the compaction already, it will not point to any old log segment.
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
+  private Runnable getBlobReadInfoTestCallback = null;
+
   /**
    * Creates a new persistent index
    * @param datadir The directory to use to store the index files
@@ -1195,6 +1197,10 @@ class PersistentIndex {
       } else if (value.isUndelete()) {
         readOptions = getUndeletedBlobReadOptions(value, id, indexSegments);
       } else {
+        // This is only for test
+        if (getBlobReadInfoTestCallback != null) {
+          getBlobReadInfoTestCallback.run();
+        }
         readOptions = new BlobReadOptions(log, value.getOffset(),
             new MessageInfo(id, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
                 value.getExpiresAtMs(), journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(),
@@ -2280,6 +2286,15 @@ class PersistentIndex {
       metrics.resetKeyFoundInCurrentIndex.inc();
     }
     return newToken;
+  }
+
+  /**
+   * This is only for test. Setting a getBlobReadInfo callback.
+   * @param getBlobReadInfoTestCallback The callback to invoke when calling getBlobReadInfo method. It will be invoked
+   *                                    right before we convert a PutValue into a BlobReadInfo.
+   */
+  void setGetBlobReadInfoTestCallback(Runnable getBlobReadInfoTestCallback) {
+    this.getBlobReadInfoTestCallback = getBlobReadInfoTestCallback;
   }
 
   /**
