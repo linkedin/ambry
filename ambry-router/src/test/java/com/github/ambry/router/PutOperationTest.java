@@ -298,6 +298,100 @@ public class PutOperationTest {
   }
 
   /**
+   * Test PUT operation that handles ServerErrorCode = Temporarily_Disabled and Replica_Unavailable
+   * @throws Exception
+   */
+  @Test
+  public void testSlippedPutsWithServerErrors() throws Exception {
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    // Expect at least two successes so that you can create slipped puts.
+    properties.setProperty("router.put.success.target", Integer.toString(2));
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+
+    int numChunks = 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+            null, new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // fill chunks would end up filling the maximum number of PutChunks.
+    op.fillChunks();
+    Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
+        mockNetworkClient.getAndClearWokenUpStatus());
+
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+
+    // Set up server errors such that put fails on 2 out 3 nodes, hence creating a slipped put on the succeeding node.
+    // Second attempts on all node succeed.
+    List<ServerErrorCode> serverErrorList = new ArrayList<>();
+    // Success on the first host, slipped put
+    serverErrorList.add(ServerErrorCode.No_Error);
+    // Fail on the second host
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    // Fail on the third host
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+
+    // Success on the second attempts on all hosts
+    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.No_Error);
+
+    mockServer.setServerErrors(serverErrorList);
+
+    // Send all requests.
+    for (int i = 0; i < requestInfos.size(); i++) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfos.get(i));
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
+      responseInfo.release();
+    }
+    Assert.assertEquals("Number of slipped puts should be 1", 1, op.getSlippedPutBlobIds().size());
+
+    // fill chunks again.
+    op.fillChunks();
+
+    requestInfos.clear();
+
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+
+    // Send all requests again.
+    for (int i = 0; i < requestInfos.size(); i++) {
+      ResponseInfo responseInfo = getResponseInfo(requestInfos.get(i));
+      PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      op.handleResponse(responseInfo, putResponse);
+      requestInfos.get(i).getRequest().release();
+      responseInfo.release();
+    }
+    Assert.assertEquals("Number of slipped puts should be 1", 1, op.getSlippedPutBlobIds().size());
+    PutOperation.PutChunk putChunk = op.getPutChunks().get(0);
+
+    // Make sure the chunk blob id which has been put successfully is not part of the slipped puts.
+    Assert.assertFalse(op.getSlippedPutBlobIds().contains(putChunk.chunkBlobId));
+  }
+
+
+  /**
    * Test the Errors {@link RouterErrorCode} received by Put Operation. The operation exception is set
    * based on the priority of these errors.
    * @throws Exception

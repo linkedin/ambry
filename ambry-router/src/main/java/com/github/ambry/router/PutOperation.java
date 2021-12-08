@@ -54,6 +54,7 @@ import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
@@ -158,6 +159,8 @@ class PutOperation {
   private long waitTimeForCurrentChunkAvailabilityMs;
   // The time spent by a chunk for data to be available in the channel.
   private long waitTimeForChannelDataAvailabilityMs;
+  // The set of slipped blob ids generated during the put operation.
+  private Set<BlobId> slippedPutBlobIds = new HashSet<>();
 
   // Variables to keep track of netty chunks
   private final RestRequest restRequest;
@@ -661,6 +664,20 @@ class PutOperation {
   List<PutChunk> getPutChunks() {
     return new ArrayList<>(putChunks);
   }
+
+  /**
+   * Appends the given slipped chunk blob id onto the {@code slippedPutBlobIds}.
+   * @param chunkBlobId The slipped chunk blob id.
+   */
+  synchronized private void appendSlippedPutBlobId(BlobId chunkBlobId) {
+    slippedPutBlobIds.add(chunkBlobId);
+  }
+
+  /**
+   *
+   * @return the set of slipped chunk blob ids.
+   */
+  Set<BlobId> getSlippedPutBlobIds() { return slippedPutBlobIds; }
 
   /**
    * Called whenever the channel has data but no free or building chunk is available to be filled.
@@ -1333,6 +1350,7 @@ class PutOperation {
       if (operationTracker.isDone()) {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
+          appendSlippedPutBlobId(chunkBlobId);
           if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts) {
             logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
                 chunkBlobId);

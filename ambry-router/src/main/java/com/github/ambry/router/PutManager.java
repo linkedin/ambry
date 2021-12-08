@@ -29,6 +29,7 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import com.google.common.collect.Lists;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -284,6 +285,9 @@ class PutManager {
     for (Integer correlationId : op.getInFlightCorrelationIds()) {
       correlationIdToPutOperation.remove(correlationId);
     }
+    // Regardless of the result of the operation, clean up the blobs that may have been put as the result of slipped
+    // puts.
+    routerCallback.scheduleDeletes(Lists.newArrayList(op.getSlippedPutBlobIds()), op.getServiceId());
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
