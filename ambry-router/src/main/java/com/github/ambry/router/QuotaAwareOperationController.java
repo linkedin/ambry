@@ -21,6 +21,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.Time;
@@ -43,7 +44,8 @@ public class QuotaAwareOperationController extends OperationController {
   private static final Logger logger = LoggerFactory.getLogger(QuotaAwareOperationController.class);
   // QuotaResource instance to use for cases where OperationController gets null QuotaResource.
   private static final QuotaResource UNKNOWN_QUOTA_RESOURCE = new QuotaResource("UNKNOWN", QuotaResourceType.ACCOUNT);
-  private final Map<QuotaResource, LinkedList<RequestInfo>> requestQueue = new HashMap<>();
+  private final Map<QuotaResource, LinkedList<RequestInfo>> readRequestQueue = new HashMap<>();
+  private final Map<QuotaResource, LinkedList<RequestInfo>> writeRequestQueue = new HashMap<>();
 
   /**
    * Constructor for {@link QuotaAwareOperationController} class.
@@ -115,8 +117,8 @@ public class QuotaAwareOperationController extends OperationController {
       if (quotaResource == null) {
         quotaResource = UNKNOWN_QUOTA_RESOURCE;
       }
-      requestQueue.putIfAbsent(quotaResource, new LinkedList<>());
-      requestQueue.get(quotaResource).add(requestInfo);
+      getRequestQueue(requestInfo.getChargeable().getQuotaMethod()).putIfAbsent(quotaResource, new LinkedList<>());
+      getRequestQueue(requestInfo.getChargeable().getQuotaMethod()).get(quotaResource).add(requestInfo);
     }
   }
 
@@ -125,8 +127,19 @@ public class QuotaAwareOperationController extends OperationController {
    * @param requestsToSend a list of {@link RequestInfo} that will contain the requests to be sent out.
    */
   private void drainRequestQueue(List<RequestInfo> requestsToSend) {
-    handlequotaCompliantRequests(requestsToSend);
+    for (QuotaMethod quotaMethod : QuotaMethod.values()) {
+      pollQuotaCompliantRequests(requestsToSend, getRequestQueue(quotaMethod));
+      pollQuotaExceedAllowedRequestsIfAny(requestsToSend, getRequestQueue(quotaMethod));
+    }
+  }
 
+  /**
+   * Poll for out of quota requests that are allowed to exceed quota.
+   * @param requestsToSend {@link List} of {@link RequestInfo} to be sent.
+   * @param requestQueue {@link Map} of {@link QuotaResource} to {@link List} of {@link RequestInfo} from which the requests to be sent will be polled.
+   */
+  private void pollQuotaExceedAllowedRequestsIfAny(List<RequestInfo> requestsToSend,
+      Map<QuotaResource, LinkedList<RequestInfo>> requestQueue) {
     List<QuotaResource> quotaResources = new ArrayList<>(requestQueue.keySet());
     Collections.shuffle(quotaResources);
     while (!requestQueue.isEmpty()) {
@@ -149,8 +162,10 @@ public class QuotaAwareOperationController extends OperationController {
   /**
    * Drain the request queue based on resource quota only and update the requests to be sent to {@code requestsToSend}.
    * @param requestsToSend a list of {@link RequestInfo} that will contain the requests to be sent out.
+   * @param requestQueue {@link Map} of {@link QuotaResource} to {@link List} of {@link RequestInfo} from which the requests to be sent will be polled.
    */
-  private void handlequotaCompliantRequests(List<RequestInfo> requestsToSend) {
+  private void pollQuotaCompliantRequests(List<RequestInfo> requestsToSend,
+      Map<QuotaResource, LinkedList<RequestInfo>> requestQueue) {
     for (QuotaResource quotaResource : requestQueue.keySet()) {
       if (quotaResource.equals(UNKNOWN_QUOTA_RESOURCE)) {
         // If there are requests for which QuotaResource couldn't be found, this is most likely a bug.
@@ -176,9 +191,10 @@ public class QuotaAwareOperationController extends OperationController {
   }
 
   /**
-   * @return the request queue of the OperationController. To be mainly for tests.
+   * @param quotaMethod {@link QuotaMethod} of the requested request queue.
+   * @return the request queue of the OperationController corresponding to quotaMethod.
    */
-  Map<QuotaResource, LinkedList<RequestInfo>> getRequestQueue() {
-    return requestQueue;
+  Map<QuotaResource, LinkedList<RequestInfo>> getRequestQueue(QuotaMethod quotaMethod) {
+    return quotaMethod == QuotaMethod.READ ? readRequestQueue : writeRequestQueue;
   }
 }
