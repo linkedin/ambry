@@ -13,11 +13,9 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.store.StoreKey;
 import java.util.List;
-import java.util.Set;
 
 
 /**

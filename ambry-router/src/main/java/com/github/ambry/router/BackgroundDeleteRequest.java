@@ -14,7 +14,6 @@
 
 package com.github.ambry.router;
 
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.StoreKey;
 
 
