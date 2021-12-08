@@ -44,8 +44,6 @@ public class QuotaAwareOperationController extends OperationController {
   // QuotaResource instance to use for cases where OperationController gets null QuotaResource.
   private static final QuotaResource UNKNOWN_QUOTA_RESOURCE = new QuotaResource("UNKNOWN", QuotaResourceType.ACCOUNT);
   private final Map<QuotaResource, LinkedList<RequestInfo>> requestQueue = new HashMap<>();
-  private final NonBlockingRouter nonBlockingRouter;
-  private final NonBlockingRouterMetrics routerMetrics;
 
   /**
    * Constructor for {@link QuotaAwareOperationController} class.
@@ -76,8 +74,6 @@ public class QuotaAwareOperationController extends OperationController {
     super(suffix, defaultPartitionClass, accountService, networkClientFactory, clusterMap, routerConfig,
         responseHandler, notificationSystem, routerMetrics, kms, cryptoService, cryptoJobHandler, time,
         nonBlockingRouter);
-    this.nonBlockingRouter = nonBlockingRouter;
-    this.routerMetrics = routerMetrics;
   }
 
   @Override

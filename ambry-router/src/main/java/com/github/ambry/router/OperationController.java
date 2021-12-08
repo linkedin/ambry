@@ -65,13 +65,14 @@ public class OperationController implements Runnable {
   final TtlUpdateManager ttlUpdateManager;
   final UndeleteManager undeleteManager;
   private final NetworkClient networkClient;
-  private final NonBlockingRouterMetrics routerMetrics;
   private final ResponseHandler responseHandler;
-  private final NonBlockingRouter nonBlockingRouter;
   private final RouterConfig routerConfig;
   private final Thread requestResponseHandlerThread;
   private final CountDownLatch shutDownLatch = new CountDownLatch(1);
   private final List<BackgroundDeleteRequest> backgroundDeleteRequests = new ArrayList<>();
+
+  protected final NonBlockingRouterMetrics routerMetrics;
+  protected final NonBlockingRouter nonBlockingRouter;
 
   /**
    * Constructs an OperationController
