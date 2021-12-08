@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * {@link Chargeable} implementation for cases (UNDELETE, DELETE, UPDATE_TTL) where quota is charged just once for entire operation.
+ * {@link Chargeable} implementation for cases (Undelete, Delete, UpdateTtl, GetBlobInfo) where quota is charged just once for entire operation.
  */
 public class OperationQuotaCharger implements Chargeable {
   private static final Logger LOGGER = LoggerFactory.getLogger(OperationQuotaCharger.class);
@@ -48,7 +48,7 @@ public class OperationQuotaCharger implements Chargeable {
 
   @Override
   public boolean check() {
-    if(quotaChargeCallback == null || isCharged) {
+    if (quotaChargeCallback == null || isCharged) {
       return true;
     }
     return quotaChargeCallback.check();
@@ -56,7 +56,7 @@ public class OperationQuotaCharger implements Chargeable {
 
   @Override
   public boolean charge() {
-    if(quotaChargeCallback == null || isCharged) {
+    if (quotaChargeCallback == null || isCharged) {
       return true;
     }
     try {
@@ -71,7 +71,7 @@ public class OperationQuotaCharger implements Chargeable {
 
   @Override
   public boolean quotaExceedAllowed() {
-    if(quotaChargeCallback == null) {
+    if (quotaChargeCallback == null) {
       return true;
     }
     return quotaChargeCallback.quotaExceedAllowed();
@@ -79,7 +79,7 @@ public class OperationQuotaCharger implements Chargeable {
 
   @Override
   public QuotaResource getQuotaResource() {
-    if(quotaChargeCallback == null) {
+    if (quotaChargeCallback == null) {
       return null;
     }
     try {
