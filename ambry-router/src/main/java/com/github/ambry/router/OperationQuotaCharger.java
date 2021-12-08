@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * {@link Chargeable} implementation for cases where quota is charged just once for entire operation.
+ * {@link Chargeable} implementation for cases (UNDELETE, DELETE, UPDATE_TTL) where quota is charged just once for entire operation.
  */
 public class OperationQuotaCharger implements Chargeable {
   private static final Logger LOGGER = LoggerFactory.getLogger(OperationQuotaCharger.class);
