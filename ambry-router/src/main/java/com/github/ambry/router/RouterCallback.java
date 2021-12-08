@@ -63,16 +63,5 @@ class RouterCallback {
     }
   }
 
-  /**
-   * Schedule the deletes of ids in the given list.
-   * @param idsToDelete the set of blob ids that need to be deleted.
-   * @param serviceIdSuffix the suffix to append to the service ID when deleting these blobs.
-   */
-  void scheduleDeletesForBlobIds(Set<BlobId> idsToDelete, String serviceIdSuffix) {
-    for (BlobId blobId : idsToDelete) {
-      backgroundDeleteRequests.add(new BackgroundDeleteRequest(blobId, serviceIdSuffix));
-    }
-  }
-
 }
 

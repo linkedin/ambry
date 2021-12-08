@@ -25,7 +25,6 @@ class BackgroundDeleteRequest {
   static final String SERVICE_ID_PREFIX = "ambry-background-delete-";
   private final StoreKey storeKey;
   private final String serviceId;
-  private final BlobId blobId;
 
   /**
    * @param storeKey The {@link StoreKey} to delete.
@@ -35,25 +34,13 @@ class BackgroundDeleteRequest {
   BackgroundDeleteRequest(StoreKey storeKey, String serviceIdSuffix) {
     this.serviceId = SERVICE_ID_PREFIX + serviceIdSuffix;
     this.storeKey = storeKey;
-    this.blobId = null;
-  }
-
-  /**
-   * @param blobId The {@link BlobId} to delete.
-   * @param serviceIdSuffix The suffix to attach to the delete service ID. This can be used to convey information about
-   *                        the the delete requester.
-   */
-  BackgroundDeleteRequest(BlobId blobId, String serviceIdSuffix) {
-    this.serviceId = SERVICE_ID_PREFIX + serviceIdSuffix;
-    this.storeKey = null;
-    this.blobId = blobId;
   }
 
   /**
    * @return The blob ID string to delete.
    */
   public String getBlobId() {
-    return storeKey != null ? storeKey.getID() : blobId.getID();
+    return storeKey.getID();
   }
 
   /**
