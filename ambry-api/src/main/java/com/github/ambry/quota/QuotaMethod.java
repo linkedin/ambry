@@ -14,15 +14,15 @@
 package com.github.ambry.quota;
 
 /**
- * Denotes the type of method of quota.
+ * Denotes the type of request for quota tracking purposes.
  */
 public enum QuotaMethod {
   /**
-   * This denotes quota for read requests (e.g, Get, GetBlobInfo etc).
+   * This denotes read requests for quota purposes (e.g, Get, GetBlobInfo etc).
    */
   READ,
   /**
-   * This denotes quota for write requests (e.g, PUT, POST, DELETE, TTLUPDATE etc).
+   * This denotes write requests for quota purposes (e.g, PUT, POST, DELETE, TTLUPDATE etc).
    */
   WRITE
 }
