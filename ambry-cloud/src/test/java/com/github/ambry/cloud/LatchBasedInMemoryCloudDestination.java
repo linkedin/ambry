@@ -171,7 +171,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVerion,
+  public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
       CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
     StoreErrorCodes serverError =
         hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
@@ -185,11 +185,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
     // The lifeVersion from message info is -1 when the undelete method is invoked by frontend request, we have to
     // get the legit lifeVersion before we can write undelete record to log segment.
-    if (!MessageInfo.hasLifeVersion(lifeVerion)) {
-      lifeVerion = map.get(blobId).getFirst().getLifeVersion();
+    if (!MessageInfo.hasLifeVersion(lifeVersion)) {
+      lifeVersion = map.get(blobId).getFirst().getLifeVersion();
     }
     map.get(blobId).getFirst().setDeletionTime(deletionTime);
-    map.get(blobId).getFirst().setLifeVersion(lifeVerion);
+    map.get(blobId).getFirst().setLifeVersion(lifeVersion);
     map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
     changeFeed.add(blobId);
     return true;
