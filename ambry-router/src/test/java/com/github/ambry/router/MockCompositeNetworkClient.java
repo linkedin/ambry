@@ -27,9 +27,6 @@ import java.util.Set;
  * tests and how many responses are received by the client.
  */
 class MockCompositeNetworkClient implements NetworkClient {
-  private boolean wokenUp = false;
-  private int responseCount = 0;
-  private int processedResponseCount = 0;
   NetworkClient compNetworkClient;
 
   /**
@@ -45,7 +42,6 @@ class MockCompositeNetworkClient implements NetworkClient {
   @Override
   public void wakeup() {
     compNetworkClient.wakeup();
-    wokenUp = true;
   }
 
   /**
@@ -55,9 +51,7 @@ class MockCompositeNetworkClient implements NetworkClient {
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
-    processedResponseCount = responseCount;
     List<ResponseInfo> responseInfoList = compNetworkClient.sendAndPoll(requestsToSend, requestsToDrop, pollTimeoutMs);
-    responseCount += responseInfoList.size();
     return responseInfoList;
   }
 
@@ -79,33 +73,6 @@ class MockCompositeNetworkClient implements NetworkClient {
   @Override
   public void close() {
     compNetworkClient.close();
-  }
-
-  /**
-   * This returns the wokenUp status of this object and clears the status.
-   * @return true if this MockNetworkClient was woken up since the last call to this method.
-   */
-  boolean getAndClearWokenUpStatus() {
-    boolean ret = wokenUp;
-    wokenUp = false;
-    return ret;
-  }
-
-  /**
-   * Get the number of responses received by the client before the current
-   * {@link CompositeNetworkClient#sendAndPoll(List, Set, int)} call.
-   * @return the number of processed responses.
-   */
-  int getProcessedResponseCount() {
-    return processedResponseCount;
-  }
-
-  /**
-   * Reset the processed response count to zero
-   */
-  void resetProcessedResponseCount() {
-    responseCount = 0;
-    processedResponseCount = 0;
   }
 }
 

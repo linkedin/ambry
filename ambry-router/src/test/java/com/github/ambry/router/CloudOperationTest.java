@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -124,7 +124,6 @@ public class CloudOperationTest {
   private final BlobIdFactory blobIdFactory;
   private final NonBlockingRouterMetrics routerMetrics;
   private final MockServerLayout mockServerLayout;
-  private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
   private final ResponseHandler responseHandler;
   private final NonBlockingRouter router;
   private final MockCompositeNetworkClient mockNetworkClient;
@@ -135,13 +134,13 @@ public class CloudOperationTest {
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
   // Mock servers include disk backed "mockServers" and cloud backed "cloudDestination"
-  private CloudDestination cloudDestination;
-  private Collection<MockServer> mockServers;
+  private final CloudDestination cloudDestination;
+  private final Collection<MockServer> mockServers;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
 
-  private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeEventListener();
 
@@ -178,6 +177,8 @@ public class CloudOperationTest {
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
   public CloudOperationTest(final String operationTrackerType, final boolean testEncryption) throws Exception {
+    final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
+
     this.operationTrackerType = operationTrackerType;
     this.testEncryption = testEncryption;
     // Defaults. Tests may override these and do new puts as appropriate.
@@ -242,14 +243,13 @@ public class CloudOperationTest {
    */
   private BlobId doPut(BlobProperties blobProperties, byte[] userMetadata, byte[] putContent) throws Exception {
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-    // TODO fix null quota charge event listener
+
     String blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     return RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
   }
 
   /**
    * Do a put directly to the mock servers. This allows for blobs with malformed properties to be constructed.
-   * @param blobType the {@link BlobType} for the blob to upload.
    * @param blobProperties the {@link BlobProperties} for the blob.
    * @param userMetadata user meta data of the blob.
    * @param blobContent the raw content for the blob to upload (i.e. this can be serialized composite blob metadata or
@@ -257,13 +257,12 @@ public class CloudOperationTest {
    * @return the blob id
    * @throws Exception
    */
-  private BlobId doDirectPut(BlobType blobType, BlobProperties blobProperties, byte[] userMetadata, ByteBuf blobContent) throws Exception {
+  private BlobId doDirectPut(BlobProperties blobProperties, byte[] userMetadata, ByteBuf blobContent) throws Exception {
     List<PartitionId> writablePartitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     PartitionId partitionId = writablePartitionIds.get(random.nextInt(writablePartitionIds.size()));
     BlobId blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         mockClusterMap.getLocalDatacenterId(), blobProperties.getAccountId(), blobProperties.getContainerId(),
-        partitionId, blobProperties.isEncrypted(),
-        blobType == BlobType.MetadataBlob ? BlobId.BlobDataType.METADATA : BlobId.BlobDataType.DATACHUNK);
+        partitionId, blobProperties.isEncrypted(), BlobId.BlobDataType.DATACHUNK);
     Iterator<MockServer> servers = partitionId.getReplicaIds()
         .stream()
         .map(ReplicaId::getDataNodeId)
@@ -275,22 +274,20 @@ public class CloudOperationTest {
     if (blobProperties.isEncrypted()) {
       FutureResult<EncryptJob.EncryptJobResult> futureResult = new FutureResult<>();
       cryptoJobHandler.submitJob(new EncryptJob(blobProperties.getAccountId(), blobProperties.getContainerId(),
-          blobType == BlobType.MetadataBlob ? null : blobContent.retainedDuplicate(), userMetadataBuf.duplicate(),
+          blobContent.retainedDuplicate(), userMetadataBuf.duplicate(),
           kms.getRandomKey(), cryptoService, kms, null, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
           futureResult::done));
       EncryptJob.EncryptJobResult result = futureResult.get(5, TimeUnit.SECONDS);
       blobEncryptionKey = result.getEncryptedKey();
-      if (blobType != BlobType.MetadataBlob) {
-        blobContent.release();
-        blobContent = result.getEncryptedBlobContent();
-      }
+      blobContent.release();
+      blobContent = result.getEncryptedBlobContent();
       userMetadataBuf = result.getEncryptedUserMetadata();
     }
     while (servers.hasNext()) {
       MockServer server = servers.next();
       PutRequest request =
           new PutRequest(random.nextInt(), "clientId", blobId, blobProperties, userMetadataBuf.duplicate(),
-              blobContent.retainedDuplicate(), blobContent.readableBytes(), blobType,
+              blobContent.retainedDuplicate(), blobContent.readableBytes(), BlobType.DataBlob,
               blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
       // Make sure we release the BoundedNettyByteBufReceive.
       server.send(request).release();
@@ -300,7 +297,7 @@ public class CloudOperationTest {
     // send to Cloud destinations.
     PutRequest request =
         new PutRequest(random.nextInt(), "clientId", blobId, blobProperties, userMetadataBuf.duplicate(),
-            blobContent.retainedDuplicate(), blobContent.readableBytes(), blobType,
+            blobContent.retainedDuplicate(), blobContent.readableBytes(), BlobType.DataBlob,
             blobEncryptionKey == null ? null : blobEncryptionKey.duplicate());
     // Get the cloud replica.
     ReplicaId replica = partitionId.getReplicaIds().get(0);
@@ -372,10 +369,6 @@ public class CloudOperationTest {
    * Construct GetBlob operations with appropriate callbacks, then poll those operations until they complete,
    * and ensure that the whole blob data is read out and the contents match.
    * @param blobId id of the blob to get
-   * @param getChunksBeforeRead {@code true} if all chunks should be cached by the router before reading from the
-   *                            stream.
-   * @param initiateReadBeforeChunkGet Whether readInto() should be initiated immediately before data chunks are
-   *                                   fetched by the router to simulate chunk arrival delay.
    * @param expectedLifeVersion the expected lifeVersion from get operation.
    * @param expectedBlobSize the expected blob size
    * @param expectedBlobProperties  the expected {@link BlobProperties} for the blob.
@@ -384,7 +377,7 @@ public class CloudOperationTest {
    * @param options options of the get blob operation
    * @throws Exception
    */
-  private void getBlobAndAssertSuccess(final BlobId blobId, final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet,
+  private void getBlobAndAssertSuccess(final BlobId blobId,
       final short expectedLifeVersion, final int expectedBlobSize, final BlobProperties expectedBlobProperties,
       final byte[] expectedUserMetadata, final byte[] expectPutContent, final GetBlobOptionsInternal options)
       throws Exception {
@@ -392,8 +385,6 @@ public class CloudOperationTest {
     final AtomicReference<Throwable> readCompleteThrowable = new AtomicReference<>(null);
     final AtomicLong readCompleteResult = new AtomicLong(0);
     final AtomicReference<Exception> operationException = new AtomicReference<>(null);
-    final int numChunks = ((expectedBlobSize + maxChunkSize - 1) / maxChunkSize) + (expectedBlobSize > maxChunkSize ? 1 : 0);
-    mockNetworkClient.resetProcessedResponseCount();
     Callback<GetBlobResultInternal> callback = (result, exception) -> {
       if (exception != null) {
         operationException.set(exception);
@@ -425,11 +416,7 @@ public class CloudOperationTest {
                 Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
                     expectedBlobSize, blobInfo.getBlobProperties().getBlobSize());
                 Assert.assertArrayEquals("User metadata must be the same", expectedUserMetadata, blobInfo.getUserMetadata());
-                // Jing TODO:
-                // AmbryRequests.handlePutRequest MessageInfo set MessageInfo.LIFE_VERSION_FROM_FRONTEND to -1.
-                // When getBlob, Ambry will return blob with lifeVersion=0.
-                // But Azure returns blob with lifeVersion=-1. What's the expected behavior? Disable it temporarily for discussion.
-                //Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
+                Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
               }
               break;
             case Data:
@@ -450,20 +437,9 @@ public class CloudOperationTest {
 
         if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
           final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
-          final Future<Long> preSetReadIntoFuture =
-              initiateReadBeforeChunkGet ? result.getBlobResult.getBlobDataChannel()
-                  .readInto(asyncWritableChannel, null) : null;
           Utils.newThread(() -> {
-            if (getChunksBeforeRead) {
-              // wait for all chunks (data + metadata) to be received
-              while (mockNetworkClient.getProcessedResponseCount()
-                  < numChunks * routerConfig.routerGetRequestParallelism) {
-                Thread.yield();
-              }
-            }
-            Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
-                : result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, null);
-            assertBlobReadSuccess(blobId, options.getBlobOptions, readIntoFuture, asyncWritableChannel,
+            Future<Long> readIntoFuture = result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, null);
+            assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
                 result.getBlobResult.getBlobDataChannel(), readCompleteLatch, readCompleteResult,
                 readCompleteThrowable, expectedBlobSize, expectPutContent);
           }, false).start();
@@ -501,7 +477,6 @@ public class CloudOperationTest {
    * Assert that the operation is complete and successful. Note that the future completion and callback invocation
    * happens outside of the GetOperation, so those are not checked here. But at this point, the operation result should
    * be ready.
-   * @param blobId id of the blob
    * @param options The {@link GetBlobOptions} for the operation to check.
    * @param readIntoFuture The future associated with the read on the {@link ReadableStreamChannel} result of the
    *                       operation.
@@ -514,12 +489,12 @@ public class CloudOperationTest {
    * @param blobSize size of the blob
    * @param putContent expected content of the blob
    */
-  private void assertBlobReadSuccess(BlobId blobId, GetBlobOptions options, Future<Long> readIntoFuture,
+  private void assertBlobReadSuccess(GetBlobOptions options, Future<Long> readIntoFuture,
       ByteBufferAsyncWritableChannel asyncWritableChannel, ReadableStreamChannel readableStreamChannel,
       CountDownLatch readCompleteLatch, AtomicLong readCompleteResult,
       AtomicReference<Throwable> readCompleteThrowable, final int blobSize, final byte[] putContent) {
     try {
-      ByteBuffer putContentBuf = null;
+      ByteBuffer putContentBuf;
       Assert.assertTrue("Not intended to test raw mode.", options == null || !options.isRawMode());
 
       // If a range is set, compare the result against the specified byte range.
@@ -531,8 +506,6 @@ public class CloudOperationTest {
       }
 
       long written;
-      Assert.assertTrue("ReadyForPollCallback should have been invoked as readInto() was called",
-          mockNetworkClient.getAndClearWokenUpStatus());
       // Compare byte by byte.
       final int bytesToRead = putContentBuf.remaining();
       int readBytes = 0;
@@ -546,8 +519,6 @@ public class CloudOperationTest {
           readBytes++;
         }
         asyncWritableChannel.resolveOldestChunk(null);
-        Assert.assertTrue("ReadyForPollCallback should have been invoked as writable channel callback was called",
-            mockNetworkClient.getAndClearWokenUpStatus());
       } while (readBytes < bytesToRead);
       written = readIntoFuture.get();
       Assert.assertEquals("the returned length in the future should be the length of data written", (long) readBytes,
@@ -611,8 +582,7 @@ public class CloudOperationTest {
     }
 
     GetBlobOptionsInternal options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
-    getBlobAndAssertSuccess(blobId, false, false, (short)0, blobSize, blobProperties,
-        userMetadata, putContent, options);
+    getBlobAndAssertSuccess(blobId, (short)0, blobSize, blobProperties, userMetadata, putContent, options);
   }
 
   /**
@@ -628,7 +598,7 @@ public class CloudOperationTest {
     while (!futureResult.isDone()) {
       manager.poll(requestInfoList, requestsToDrop);
       referenceRequestInfos.addAll(requestInfoList);
-      List<ResponseInfo> responseInfoList = new ArrayList<>();
+      List<ResponseInfo> responseInfoList;
       try {
         responseInfoList = mockNetworkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
       } catch (RuntimeException | Error e) {
@@ -799,13 +769,14 @@ public class CloudOperationTest {
     random.nextBytes(putContent);
     ByteBuf putContentBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(blobSize);
     putContentBuf.writeBytes(putContent);
-    BlobId blobId = doDirectPut(BlobType.DataBlob, blobProperties, userMetadata, putContentBuf.retainedDuplicate());
+    BlobId blobId = doDirectPut(blobProperties, userMetadata, putContentBuf.retainedDuplicate());
     putContentBuf.release();
 
     // Confirm we can get the blob from the local dc.
     GetBlobOptionsInternal options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
-    getBlobAndAssertSuccess(blobId, false, false, (short)0, blobSize, blobProperties, userMetadata, putContent, options);
+    getBlobAndAssertSuccess(blobId, (short)0, blobSize, blobProperties, userMetadata, putContent, options);
 
+    // Jing TODO Error Injection?
     // Local DC will fail with different errors but cloud will return the blob data.
     // MockServer simulation has no effect on cloud nodes.
     ArrayList<MockServer> mockServersArray = new ArrayList<>(mockServers);
@@ -819,7 +790,7 @@ public class CloudOperationTest {
       ServerErrorCode code = serverErrors.get(random.nextInt(serverErrors.size()));
       mockServer.setServerErrorForAllRequests(code);
     }
-    getBlobAndAssertSuccess(blobId, false, false, (short)0, blobSize, blobProperties, userMetadata, putContent, options);
+    getBlobAndAssertSuccess(blobId, (short)0, blobSize, blobProperties, userMetadata, putContent, options);
   }
 
   @Test
@@ -836,7 +807,7 @@ public class CloudOperationTest {
     ByteBuf putContentBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(blobSize);
     putContentBuf.writeBytes(putContent);
 
-    BlobId blobId = doDirectPut(BlobType.DataBlob, blobProperties, userMetadata, putContentBuf.retainedDuplicate());
+    BlobId blobId = doDirectPut(blobProperties, userMetadata, putContentBuf.retainedDuplicate());
     blobIds.add(blobId.getID());
     putContentBuf.release();
 
