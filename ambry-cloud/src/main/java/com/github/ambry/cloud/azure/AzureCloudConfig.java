@@ -216,14 +216,16 @@ public class AzureCloudConfig {
   public final String azureIdentitySecret;
 
   /**
-   * Azure AAD identity client secret. For use with {@code ClientSecretCredential} auth.
+   * Azure AAD identity proxy host. This is a separate config from other services since there are cases where a proxy
+   * is required only for AAD (since AAD doesn't support private endpoints).
+   * For use with {@code ClientSecretCredential} auth.
    */
   @Config(AZURE_IDENTITY_PROXY_HOST)
   @Default("")
   public final String azureIdentityProxyHost;
 
   /**
-   * Azure AAD identity client secret. For use with {@code ClientSecretCredential} auth.
+   * Azure AAD identity proxy port. For use with {@code ClientSecretCredential} auth.
    */
   @Config(AZURE_IDENTITY_PROXY_PORT)
   @Default("3128")
