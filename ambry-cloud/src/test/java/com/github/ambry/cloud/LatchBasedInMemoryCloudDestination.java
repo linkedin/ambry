@@ -225,8 +225,10 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
 
     if (map.containsKey(blobId)) {
-      lifeVersion = map.get(blobId).getFirst().getLifeVersion();
-      lifeVersion++;
+      if (!MessageInfo.hasLifeVersion((lifeVersion))) {
+        lifeVersion = map.get(blobId).getFirst().getLifeVersion();
+        lifeVersion++;
+      }
       map.get(blobId).getFirst().setLifeVersion(lifeVersion);
       map.get(blobId).getFirst().setDeletionTime(Utils.Infinite_Time);
       map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
