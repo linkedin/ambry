@@ -43,4 +43,9 @@ public interface Chargeable {
    * @return the {@link QuotaResource} whose operation is being charged.
    */
   QuotaResource getQuotaResource();
+
+  /**
+   * @return the {@link QuotaMethod} of the request for which quota is being charged.
+   */
+  QuotaMethod getQuotaMethod();
 }
