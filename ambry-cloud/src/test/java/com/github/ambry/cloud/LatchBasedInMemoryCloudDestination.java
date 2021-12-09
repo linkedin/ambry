@@ -25,6 +25,7 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
@@ -182,6 +183,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     if (!map.containsKey(blobId)) {
       return false;
     }
+    // The lifeVersion from message info is -1 when the undelete method is invoked by frontend request, we have to
+    // get the legit lifeVersion before we can write undelete record to log segment.
+    if (!MessageInfo.hasLifeVersion(lifeVerion)) {
+      lifeVerion = map.get(blobId).getFirst().getLifeVersion();
+    }
     map.get(blobId).getFirst().setDeletionTime(deletionTime);
     map.get(blobId).getFirst().setLifeVersion(lifeVerion);
     map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());
@@ -219,6 +225,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     }
 
     if (map.containsKey(blobId)) {
+      lifeVersion = map.get(blobId).getFirst().getLifeVersion();
+      lifeVersion++;
       map.get(blobId).getFirst().setLifeVersion(lifeVersion);
       map.get(blobId).getFirst().setDeletionTime(Utils.Infinite_Time);
       map.get(blobId).getFirst().setLastUpdateTime(System.currentTimeMillis());

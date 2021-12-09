@@ -90,13 +90,6 @@ public class MockClusterMap implements ClusterMap {
     this(false, true, 9, 3, 3, false, false, null);
   }
 
-  public MockClusterMap(boolean enableSSLPorts, boolean enableHttp2Ports, int numNodes, int numMountPointsPerNode,
-      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc)
-      throws IOException {
-    this(enableSSLPorts, enableHttp2Ports, numNodes, numMountPointsPerNode, numDefaultStoresPerMountPoint,
-        createOnlyDefaultPartitionClass, includeCloudDc, null);
-  }
-
   /**
    * Creates and returns a mock cluster map.
    * <p>

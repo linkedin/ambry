@@ -71,6 +71,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 
+/**
+ * Class to test the error simulation in {@link LatchBasedInMemoryCloudDestination}.
+ */
 public class InMemoryCloudDestinationErrorSimulationTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final String LOCAL_DC = "DC3";
@@ -81,7 +84,6 @@ public class InMemoryCloudDestinationErrorSimulationTest {
   private final LocalNetworkClient mockNetworkClient;
   private final LatchBasedInMemoryCloudDestination cloudDestination;
 
-  // Certain tests recreate the routerConfig with different properties.
   private final RouterConfig routerConfig;
 
   // The partition id, replica, host name, port which is used in the test.
@@ -101,7 +103,8 @@ public class InMemoryCloudDestinationErrorSimulationTest {
   public void after() { nettyByteBufLeakHelper.afterTest(); }
 
   /**
-   * Instantiate a router.
+   * Initialize parameters common to all tests.
+   * @throws Exception
    */
   public InMemoryCloudDestinationErrorSimulationTest() throws Exception {
     final MockTime time = new MockTime();
@@ -160,7 +163,9 @@ public class InMemoryCloudDestinationErrorSimulationTest {
   }
 
   /**
-   * Do a put directly to the mock servers. This allows for blobs with malformed properties to be constructed.
+   * Do a put directly to the cloud mock servers.
+   * @param partitionId partition id
+   * @param expectedCode expected response error code
    * @return the blob id
    * @throws Exception
    */
@@ -200,10 +205,20 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     return blobId;
   }
 
+  /**
+   * Do a put directly to the cloud mock servers.
+   * @param partitionId partition id
+   * @return the blob id
+   * @throws Exception
+   */
   private BlobId doPut(PartitionId partitionId) throws Exception {
     return doPut(partitionId, ServerErrorCode.No_Error);
   }
 
+  /**
+   * test error simulation for PutRequest
+   * @throws Exception
+   */
   @Test
   public void testPutRequestErrorSimulation() throws Exception {
     // inject error for cloud colo.
@@ -212,6 +227,10 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     BlobId blobId = doPut(partitionId, ServerErrorCode.IO_Error);
   }
 
+  /**
+   * test error simulation for GetBlobRequest
+   * @throws Exception
+   */
   @Test
   public void testGetBlobErrorSimulation() throws Exception {
     BlobId blobId = doPut(partitionId);
@@ -227,7 +246,9 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
     GetResponse response = responseInfo.getError() == null ? GetResponse.readFrom(
         new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+    PartitionResponseInfo partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
     Assert.assertEquals("GetRequest should succeed.", response.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals("GetRequest partitionResponseInfo should succeed.", partitionResponseInfo.getErrorCode(), ServerErrorCode.No_Error);
     response.release();
 
     // inject error for cloud colo.
@@ -238,12 +259,16 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     responseInfo = sendAndWaitForResponses(requestInfo);
     response = responseInfo.getError() == null ? GetResponse.readFrom(
         new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
-    PartitionResponseInfo partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
+    partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
     Assert.assertEquals("GetRequest responseInfo should have no error.", response.getError(), ServerErrorCode.No_Error);
     Assert.assertEquals("GetRequest partitionResponseInfo should be Blob_Not_Found", partitionResponseInfo.getErrorCode(), ServerErrorCode.Blob_Not_Found);
     response.release();
   }
 
+  /**
+   * test error simulation for GetBlobInfoRequest
+   * @throws Exception
+   */
   @Test
   public void testGetBlobInfoErrorSimulation() throws Exception {
     BlobId blobId = doPut(partitionId);
@@ -259,7 +284,9 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
     GetResponse response = responseInfo.getError() == null ? GetResponse.readFrom(
         new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+    PartitionResponseInfo partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
     Assert.assertEquals("GetBlobInfo should succeed.", response.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals("GetBlobInfo partitionResponseInfo should succeed.", partitionResponseInfo.getErrorCode(), ServerErrorCode.No_Error);
     response.release();
 
     // inject error for cloud colo.
@@ -270,12 +297,16 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     responseInfo = sendAndWaitForResponses(requestInfo);
     response = responseInfo.getError() == null ? GetResponse.readFrom(
         new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
-    PartitionResponseInfo partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
+    partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
     Assert.assertEquals("GetBlobInfo responseInfo should have no error.", response.getError(), ServerErrorCode.No_Error);
     Assert.assertEquals("GetBlobInfo partitionResponseInfo should be Blob_Not_Found", partitionResponseInfo.getErrorCode(), ServerErrorCode.Blob_Not_Found);
     response.release();
   }
 
+  /**
+   * test error simulation for TtlUpdateRequest
+   * @throws Exception
+   */
   @Test
   public void testTtlUpdateErrorSimulation() throws Exception {
     BlobId blobId = doPut(partitionId);
@@ -302,6 +333,10 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     response.release();
   }
 
+  /**
+   * test error simulation for DeleteRequest
+   * @throws Exception
+   */
   @Test
   public void testDeleteBlobErrorSimulation() throws Exception {
     BlobId blobId = doPut(partitionId);
@@ -328,7 +363,10 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     response.release();
   }
 
-
+  /**
+   * test error simulation for UndeleteRequest
+   * @throws Exception
+   */
   @Test
   public void testUndeleteBlobErrorSimulation() throws Exception {
     BlobId blobId = doPut(partitionId);
@@ -343,8 +381,6 @@ public class InMemoryCloudDestinationErrorSimulationTest {
       Assert.assertEquals("DeleteRequest should succeed.", response.getError(), ServerErrorCode.No_Error);
     }
 
-    // Jing TODO: LatchBasedInMemoryCloudDestination blob lifeVersion == INVALID_LIFE_VERSION, why?
-    /*
     UndeleteRequest request = new UndeleteRequest(1234, "clientId", blobId, SystemTime.getInstance().milliseconds());
     RequestInfo requestInfo = new RequestInfo(hostname, port, request, replica, null);
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
@@ -363,7 +399,6 @@ public class InMemoryCloudDestinationErrorSimulationTest {
         new NettyByteBufDataInputStream(responseInfo.content())) : null;
     Assert.assertEquals("UndeleteRequest should return Unknown_Error.", response.getError(), ServerErrorCode.Unknown_Error);
     response.release();
-    */
   }
 
 

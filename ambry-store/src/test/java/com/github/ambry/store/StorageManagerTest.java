@@ -96,7 +96,7 @@ public class StorageManagerTest {
    */
   @Before
   public void initializeCluster() throws IOException {
-    clusterMap = new MockClusterMap(false, true, 1, 3, 3, false, false);
+    clusterMap = new MockClusterMap(false, true, 1, 3, 3, false, false, null);
     metricRegistry = clusterMap.getMetricRegistry();
     generateConfigs(false, false);
   }

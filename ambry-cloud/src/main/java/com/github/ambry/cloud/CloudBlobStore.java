@@ -290,10 +290,12 @@ class CloudBlobStore implements Store {
         long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
         uploaded = uploadWithRetries(blobId, messageBuf, bufferLen, blobMetadata);
       } else {
-        // Upload blob as is
+        // PutRequest lifeVersion from frontend is -1. Should set to 0. (0 is the starting life version number for any data).
+        // Put from replication or recovery should use liferVersion as it's.
+        short lifeVersion = messageInfo.hasLifeVersion(messageInfo.getLifeVersion()) ? messageInfo.getLifeVersion() : (short) 0;
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-                messageInfo.getSize(), encryptionOrigin, messageInfo.getLifeVersion());
+                messageInfo.getSize(), encryptionOrigin, lifeVersion);
         uploaded = uploadWithRetries(blobId, messageBuf, size, blobMetadata);
       }
       addToCache(blobId.getID(), (short) 0, BlobState.CREATED);

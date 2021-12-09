@@ -72,7 +72,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
     if (mockClusterMap == null) {
       mockClusterMap =
           new MockClusterMap(enableSslPorts, enableHttp2Ports, numNodes, numMountPointsPerNode, numStoresPerMountPoint,
-              false, false);
+              false, false, null);
     }
     return mockClusterMap;
   }

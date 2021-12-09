@@ -125,7 +125,7 @@ public class NonBlockingRouterTestBase {
     this.metadataContentVersion = metadataContentVersion;
     this.includeCloudDc = includeCloudDc;
     mockTime = new MockTime();
-    mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc);
+    mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc, null);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());

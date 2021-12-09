@@ -258,6 +258,8 @@ class AzureCloudDestination implements CloudDestination {
   public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
     Map<String, Object> updateFields = new HashMap<>();
+    // TODO Should handle frontend life version = MessageInfo.LIFE_VERSION_FROM_FRONTEND
+    // Need increase lifeVersion based on blob current life version.
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
     UpdateResponse updateResponse = updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
