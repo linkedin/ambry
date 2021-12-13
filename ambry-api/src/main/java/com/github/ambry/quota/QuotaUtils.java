@@ -13,14 +13,10 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 

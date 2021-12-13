@@ -38,10 +38,12 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
-import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+<<<<<<< HEAD
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
+=======
+>>>>>>> 5894ab33d... Revert "[BANDWIDTH_THROTTLING] Chargeable implementation. (#2011)"
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
@@ -583,7 +585,7 @@ class GetBlobOperation extends GetOperation {
    * to retrieve one data chunk at a time. Once the associated chunk is successfully retrieved, this object can be
    * reinitialized and used to retrieve a subsequent chunk.
    */
-  private class GetChunk implements Chargeable {
+  private class GetChunk {
     // map of correlation id to the request metadata for every request issued for this operation.
     protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
@@ -615,8 +617,6 @@ class GetBlobOperation extends GetOperation {
     private long chunkSize;
     // whether the operation on the current chunk has completed.
     private boolean chunkCompleted;
-    // whether the quota is already charged for this chunk.
-    private boolean isCharged;
 
     /**
      * Construct a GetChunk
@@ -671,7 +671,6 @@ class GetBlobOperation extends GetOperation {
       decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
       correlationIdToGetRequestInfo.clear();
       state = ChunkState.Free;
-      isCharged = false;
     }
 
     /**
@@ -733,6 +732,7 @@ class GetBlobOperation extends GetOperation {
       }
     }
 
+<<<<<<< HEAD
     @Override
     public boolean check() {
       if (quotaChargeCallback == null || isCharged) {
@@ -785,6 +785,8 @@ class GetBlobOperation extends GetOperation {
       return quotaChargeCallback.getQuotaMethod();
     }
 
+=======
+>>>>>>> 5894ab33d... Revert "[BANDWIDTH_THROTTLING] Chargeable implementation. (#2011)"
     /**
      * Maybe process callbacks if applicable. This is a no-op for blobs that do not need any async processing.
      * As of now, decryption is the only async processing that could happen if applicable.
@@ -875,7 +877,7 @@ class GetBlobOperation extends GetOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
-        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, this);
+        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, null);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
         correlationIdToGetChunk.put(correlationId, this);

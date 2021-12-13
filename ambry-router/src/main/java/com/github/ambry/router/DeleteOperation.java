@@ -68,8 +68,6 @@ class DeleteOperation {
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
-  // Quota charger for this operation.
-  private final OperationQuotaCharger operationQuotaCharger;
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
 
@@ -104,7 +102,6 @@ class DeleteOperation {
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.DeleteOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics);
-    operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName());
   }
 
   /**
@@ -131,7 +128,7 @@ class DeleteOperation {
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       DeleteRequest deleteRequest = createDeleteRequest();
       deleteRequestInfos.put(deleteRequest.getCorrelationId(), new DeleteRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest, replica, null);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
