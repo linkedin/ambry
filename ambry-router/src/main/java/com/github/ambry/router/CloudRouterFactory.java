@@ -166,7 +166,7 @@ public class CloudRouterFactory implements RouterFactory {
    * @return the constructed {@link RequestHandlerPool}.
    * @throws Exception if the construction fails.
    */
-  static RequestHandlerPool getRequestHandlerPool(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+  static public RequestHandlerPool getRequestHandlerPool(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       CloudDestination cloudDestination, CloudConfig cloudConfig) throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     // TODO: move properties into maybe routerConfig, frontendConfig

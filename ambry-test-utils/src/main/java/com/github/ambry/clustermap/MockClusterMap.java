@@ -67,7 +67,7 @@ public class MockClusterMap implements ClusterMap {
   private int currentPlainTextPort = PLAIN_TEXT_PORT_START_NUMBER;
   private int currentSSLPort = SSL_PORT_START_NUMBER;
   private int currentHttp2Port = HTTP2_PORT_START_NUMBER;
-
+  public String cloudDatacenterName;
   // allow this to be changed to support some tests
   private String localDatacenterName;
 
@@ -87,7 +87,7 @@ public class MockClusterMap implements ClusterMap {
    * on the test machine.
    */
   public MockClusterMap() throws IOException {
-    this(false, true, 9, 3, 3, false, false);
+    this(false, true, 9, 3, 3, false, false, null);
   }
 
   /**
@@ -122,9 +122,10 @@ public class MockClusterMap implements ClusterMap {
    * @param includeCloudDc {@code true} to make DC1 a "cloud" DC: one with a single {@link ReplicaType#CLOUD_BACKED}
    *                       replica for each partition in the cluster map. The virtual datanode created for the cloud DC
    *                       does not count against {@code numNodes}.
+   * @param localDcName name of the local data center
    */
   public MockClusterMap(boolean enableSSLPorts, boolean enableHttp2Ports, int numNodes, int numMountPointsPerNode,
-      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc)
+      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc, String localDcName)
       throws IOException {
     this.enableSSLPorts = enableSSLPorts;
     this.enableHttp2Ports = enableHttp2Ports;
@@ -141,9 +142,9 @@ public class MockClusterMap implements ClusterMap {
       MockDataNodeId virtualNode = createDataNode(getListOfPorts(DataNodeId.UNKNOWN_PORT, null, null), dcName, 0);
       dataNodes.add(virtualNode);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(virtualNode);
-      cloudDc = dcName;
+      cloudDatacenterName = dcName;
     } else {
-      cloudDc = null;
+      cloudDatacenterName = null;
     }
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
@@ -165,6 +166,10 @@ public class MockClusterMap implements ClusterMap {
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
       localDatacenterName = dcName;
     }
+    if (localDcName != null) {
+      // if caller specifies the local data center name, use the one specified.
+      localDatacenterName = localDcName;
+    }
     partitions = new HashMap<>();
 
     // create partitions
@@ -181,7 +186,7 @@ public class MockClusterMap implements ClusterMap {
       // 2 everywhere else
       List<MockDataNodeId> nodeIds = new ArrayList<>();
       dcToDataNodes.forEach((dc, mockDataNodeIds) -> {
-        if (!dc.equals(cloudDc)) {
+        if (!dc.equals(cloudDatacenterName)) {
           nodeIds.addAll(mockDataNodeIds.subList(0, localDatacenterName.equals(dc) ? 3 : 2));
         }
       });
@@ -348,7 +353,15 @@ public class MockClusterMap implements ClusterMap {
    * @return new {@link PartitionId}
    */
   public PartitionId createNewPartition(List<MockDataNodeId> dataNodes) {
-    int mountPathIndexToUse = (new Random()).nextInt(this.dataNodes.get(0).getMountPaths().size());
+    int mountPathSize;
+    if (cloudDatacenterName == null) {
+      mountPathSize = this.dataNodes.get(0).getMountPaths().size();
+    } else {
+      // the get(0) is cloud DC which doesn't have mount path. So we use get(1) DC.
+      mountPathSize = this.dataNodes.get(1).getMountPaths().size();
+    }
+
+    int mountPathIndexToUse = (new Random()).nextInt(mountPathSize);
     return createNewPartition(dataNodes, mountPathIndexToUse);
   }
 
