@@ -83,7 +83,7 @@ jobs:
 
       - name: Set up MySQL
         run: |
-          sudo /etc/init.d/mysql start
+          sudo systemctl start mysql.service
           mysql -e 'CREATE DATABASE AccountMetadata;' -uroot -proot
           mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;' -uroot -proot
           mysql -e 'CREATE DATABASE ambry_container_storage_stats;' -uroot -proot
