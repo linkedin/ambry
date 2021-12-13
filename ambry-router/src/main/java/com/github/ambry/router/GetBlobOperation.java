@@ -38,9 +38,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
-import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
@@ -582,7 +580,7 @@ class GetBlobOperation extends GetOperation {
    * to retrieve one data chunk at a time. Once the associated chunk is successfully retrieved, this object can be
    * reinitialized and used to retrieve a subsequent chunk.
    */
-  private class GetChunk implements Chargeable {
+  private class GetChunk {
     // map of correlation id to the request metadata for every request issued for this operation.
     protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
@@ -614,8 +612,6 @@ class GetBlobOperation extends GetOperation {
     private long chunkSize;
     // whether the operation on the current chunk has completed.
     private boolean chunkCompleted;
-    // whether the quota is already charged for this chunk.
-    private boolean isCharged;
 
     /**
      * Construct a GetChunk
@@ -670,7 +666,6 @@ class GetBlobOperation extends GetOperation {
       decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
       correlationIdToGetRequestInfo.clear();
       state = ChunkState.Free;
-      isCharged = false;
     }
 
     /**
@@ -730,53 +725,6 @@ class GetBlobOperation extends GetOperation {
       if (!isComplete()) {
         fetchRequests(requestRegistrationCallback);
       }
-    }
-
-    @Override
-    public boolean check() {
-      if (quotaChargeCallback == null || isCharged) {
-        return true;
-      }
-      return quotaChargeCallback.check();
-    }
-
-    @Override
-    public boolean charge() {
-      if (quotaChargeCallback == null || isCharged) {
-        return true;
-      }
-      try {
-        quotaChargeCallback.charge(chunkSize);
-        isCharged = true;
-      } catch (RouterException rEx) {
-        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob %s due to %s ", blobId.toString(),
-            rEx.toString()));
-      }
-      return isCharged;
-    }
-
-    @Override
-    public boolean quotaExceedAllowed() {
-      if(quotaChargeCallback == null) {
-        return true;
-      }
-      return quotaChargeCallback.quotaExceedAllowed();
-    }
-
-    @Override
-    public QuotaResource getQuotaResource() {
-      if(quotaChargeCallback == null) {
-        return null;
-      }
-      try {
-        return quotaChargeCallback.getQuotaResource();
-      } catch (RestServiceException rEx) {
-        logger.error(
-            String.format("Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-                blobId.toString(), rEx.toString()));
-      }
-      // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
-      return null;
     }
 
     /**
@@ -869,7 +817,7 @@ class GetBlobOperation extends GetOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
-        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, this);
+        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, null);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
         correlationIdToGetChunk.put(correlationId, this);

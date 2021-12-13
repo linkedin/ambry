@@ -24,10 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
-import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.QuotaResource;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -66,8 +63,6 @@ class TtlUpdateOperation {
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
-  // Quota charger for this operation.
-  private final OperationQuotaCharger operationQuotaCharger;
 
   /**
    * Instantiates a {@link TtlUpdateOperation}.
@@ -121,7 +116,6 @@ class TtlUpdateOperation {
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics);
     this.quotaChargeCallback = quotaChargeCallback;
-    this.operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName());
   }
 
   /**
@@ -151,7 +145,7 @@ class TtlUpdateOperation {
       TtlUpdateRequest ttlUpdateRequest = createTtlUpdateRequest();
       ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(),
           new TtlUpdateRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica, null);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {

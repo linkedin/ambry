@@ -28,7 +28,6 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
-import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.ThrottlePolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
@@ -137,11 +136,6 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
         @Override
         public boolean quotaExceedAllowed() {
           return false;
-        }
-
-        @Override
-        public QuotaResource getQuotaResource() {
-          return null;
         }
       };
 

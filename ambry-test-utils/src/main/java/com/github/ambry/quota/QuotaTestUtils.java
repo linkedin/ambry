@@ -17,7 +17,6 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.RouterException;
 import java.util.Map;
 import java.util.Properties;
@@ -111,11 +110,6 @@ public class QuotaTestUtils {
       @Override
       public boolean quotaExceedAllowed() {
         return false;
-      }
-
-      @Override
-      public QuotaResource getQuotaResource() throws RestServiceException {
-        return null;
       }
     };
   }

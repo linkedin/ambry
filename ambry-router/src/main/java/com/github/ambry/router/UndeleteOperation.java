@@ -59,8 +59,6 @@ public class UndeleteOperation {
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
-  // Quota charger for this operation.
-  private final OperationQuotaCharger operationQuotaCharger;
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
   private static final Logger LOGGER = LoggerFactory.getLogger(UndeleteOperation.class);
@@ -114,7 +112,6 @@ public class UndeleteOperation {
     this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
         clusterMap.getDatacenterName(blobId.getDatacenterId()), routerMetrics);
     this.quotaChargeCallback = quotaChargeCallback;
-    operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName());
   }
 
   /**
@@ -144,7 +141,7 @@ public class UndeleteOperation {
       UndeleteRequest undeleteRequest = createUndeleteRequest();
       undeleteRequestInfos.put(undeleteRequest.getCorrelationId(),
           new UndeleteRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo = new RequestInfo(hostname, port, undeleteRequest, replica, null);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
