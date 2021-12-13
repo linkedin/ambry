@@ -72,10 +72,10 @@ public class JsonCUQuotaSource implements QuotaSource {
   public JsonCUQuotaSource(QuotaConfig config, AccountService accountService) throws IOException {
     Map<String, CUQuota> quota = new HashMap<>();
     ObjectMapper objectMapper = new ObjectMapper();
-    feQuota = objectMapper.readValue(config.frontendBandwidthCapacityInJson, CUQuota.class);
-    if (config.cuQuotaInJson != null && !config.cuQuotaInJson.trim().isEmpty()) {
+    feQuota = objectMapper.readValue(config.frontendCUCapacityInJson, CUQuota.class);
+    if (config.resourceCUQuotaInJson != null && !config.resourceCUQuotaInJson.trim().isEmpty()) {
       Map<String, MapOrQuota> tempQuotas =
-          objectMapper.readValue(config.cuQuotaInJson, new TypeReference<Map<String, MapOrQuota>>() {
+          objectMapper.readValue(config.resourceCUQuotaInJson, new TypeReference<Map<String, MapOrQuota>>() {
           });
       for (Map.Entry<String, MapOrQuota> entry : tempQuotas.entrySet()) {
         Account account = accountService.getAccountById(Short.parseShort(entry.getKey()));

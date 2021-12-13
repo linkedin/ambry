@@ -47,8 +47,8 @@ public class JsonCUQuotaSourceTest {
   @Test
   public void testCreation() throws IOException, AccountServiceException {
     Properties properties = new Properties();
-    properties.setProperty(QuotaConfig.CU_QUOTA_IN_JSON, DEFAULT_CU_QUOTA_IN_JSON);
-    properties.setProperty(QuotaConfig.FRONTEND_BANDWIDTH_CAPACITY_IN_JSON, DEFAULT_FRONTEND_CAPACITY_JSON);
+    properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON, DEFAULT_CU_QUOTA_IN_JSON);
+    properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON, DEFAULT_FRONTEND_CAPACITY_JSON);
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     QuotaSource quotaSource = createTestJsonCUQuotaSource(quotaConfig);
     quotaSource.isReady();
@@ -59,7 +59,7 @@ public class JsonCUQuotaSourceTest {
     InMemAccountService accountService = new InMemAccountService(false, false);
     ObjectMapper objectMapper = new ObjectMapper();
     Map<String, JsonCUQuotaSource.MapOrQuota> tempQuotas =
-        objectMapper.readValue(quotaConfig.cuQuotaInJson, new TypeReference<Map<String, JsonCUQuotaSource.MapOrQuota>>() {
+        objectMapper.readValue(quotaConfig.resourceCUQuotaInJson, new TypeReference<Map<String, JsonCUQuotaSource.MapOrQuota>>() {
         });
     for(String s : tempQuotas.keySet()) {
       accountService.updateAccounts(Collections.singletonList(createAccountForQuota(tempQuotas.get(s), s)));

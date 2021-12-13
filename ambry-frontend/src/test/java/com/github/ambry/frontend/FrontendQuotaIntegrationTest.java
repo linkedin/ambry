@@ -61,8 +61,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -121,10 +119,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     Properties properties = buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
     properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
     properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, String.valueOf(isRequestQuotaEnabled));
-    properties.setProperty(QuotaConfig.FRONTEND_BANDWIDTH_CAPACITY_IN_JSON, "{\n" + "  \"rcu\": 1024,\n"
+    properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON, "{\n" + "  \"rcu\": 1024,\n"
         + "  \"wcu\": 1024\n" + "}");
     long quotaValue = throttleRequest ? DEFAULT_REJECT_QUOTA : DEFAULT_ACCEPT_QUOTA;
-    properties.setProperty(QuotaConfig.CU_QUOTA_IN_JSON,
+    properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON,
         String.format("{\n" + "  \"%s\": {\n" + "    \"rcu\": %d,\n" + "    \"wcu\": %d\n" + "  }\n" + "}", accountId, quotaValue, quotaValue));
     return new VerifiableProperties(properties);
   }

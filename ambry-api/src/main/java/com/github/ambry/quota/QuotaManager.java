@@ -32,7 +32,7 @@ public interface QuotaManager {
   void init() throws InstantiationException;
 
   /**
-   * Computes the recommendation to throttle a request or not based only on usage exceeding quota limit.
+   * Computes the recommendation to throttle a request or not based only on usage exceeding quota.
    * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @return ThrottlingRecommendation object that captures the recommendation.
@@ -40,7 +40,7 @@ public interface QuotaManager {
   ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
 
   /**
-   * Computes the recommendation to throttle a request or not based on system resources only. Note that this method
+   * Computes the recommendation to throQuotattle a request or not based on system resources only. Note that this method
    * doesn't look into quota and usage for recommendations.
    * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.

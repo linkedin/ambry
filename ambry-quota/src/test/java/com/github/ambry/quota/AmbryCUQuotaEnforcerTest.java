@@ -53,10 +53,10 @@ public class AmbryCUQuotaEnforcerTest {
   public void setup() throws IOException {
     ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
     Properties properties = new Properties();
-    properties.setProperty(QuotaConfig.CU_QUOTA_IN_JSON,
+    properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON,
         String.format("{\n" + "  \"%s\": {\n" + "    \"wcu\": %d,\n" + "    \"rcu\": %d\n" + "  }\n" + "}",
             String.valueOf(ACCOUNT.getId()), WCU, RCU));
-    properties.setProperty(QuotaConfig.FRONTEND_BANDWIDTH_CAPACITY_IN_JSON,
+    properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON,
         String.format("{\n" + "  \"wcu\": %d,\n" + "  \"rcu\": %d\n" + "}", FE_WCU, FE_RCU));
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     QUOTA_SOURCE = new ExceptionQuotaSource(quotaConfig, ACCOUNT_SERVICE);
