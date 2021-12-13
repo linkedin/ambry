@@ -60,4 +60,29 @@ public class QuotaUtils {
       return QuotaResource.fromContainerId(account.getId(), container.getId());
     }
   }
+
+  /**
+   * Create {@link QuotaResource} for the specified {@link RestRequest}.
+   *
+   * @param restRequest {@link RestRequest} object.
+   * @return QuotaResource extracted from headers of {@link RestRequest}.
+   * @throws RestServiceException if appropriate headers aren't found in the {@link RestRequest}.
+   */
+  public static QuotaMethod getQuotaMethod(RestRequest restRequest) {
+    return isReadRequest(restRequest) ? QuotaMethod.READ : QuotaMethod.WRITE;
+  }
+
+  /**
+   * @return {@code true} if the request is a read request. {@code false} otherwise.
+   */
+  private static boolean isReadRequest(RestRequest restRequest) {
+    switch (restRequest.getRestMethod()) {
+      case GET:
+      case OPTIONS:
+      case HEAD:
+        return true;
+      default:
+        return false;
+    }
+  }
 }

@@ -36,6 +36,7 @@ import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
@@ -413,6 +414,11 @@ public class PutManagerTest {
 
           @Override
           public QuotaResource getQuotaResource() throws RestServiceException {
+            return null;
+          }
+
+          @Override
+          public QuotaMethod getQuotaMethod() {
             return null;
           }
         });

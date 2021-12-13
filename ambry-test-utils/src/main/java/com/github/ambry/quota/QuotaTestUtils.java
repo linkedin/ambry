@@ -117,6 +117,11 @@ public class QuotaTestUtils {
       public QuotaResource getQuotaResource() throws RestServiceException {
         return null;
       }
+
+      @Override
+      public QuotaMethod getQuotaMethod() {
+        return null;
+      }
     };
   }
 }
