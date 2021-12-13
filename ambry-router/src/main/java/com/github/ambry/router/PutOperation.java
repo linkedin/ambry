@@ -37,14 +37,15 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
-<<<<<<< HEAD
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
-=======
->>>>>>> 5894ab33d... Revert "[BANDWIDTH_THROTTLING] Chargeable implementation. (#2011)"
+import com.github.ambry.quota.QuotaMethod;
+import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -981,7 +982,7 @@ class PutOperation {
    * handles a chunk of data and takes it to completion, and once done, moves on to handle more chunks of data. This
    * why there is a reference to the "current chunk" in the comments.
    */
-  class PutChunk {
+  class PutChunk implements Chargeable {
     // the position of the current chunk in the overall blob.
     private int chunkIndex;
     // the blobId of the current chunk.
@@ -1024,6 +1025,8 @@ class PutOperation {
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
+    // whether the quota is already charged for this chunk.
+    private boolean isCharged;
 
     /**
      * Construct a PutChunk
@@ -1051,6 +1054,7 @@ class PutOperation {
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
+      isCharged = false;
     }
 
     /**
