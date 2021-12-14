@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.RestServiceException;
 import org.slf4j.Logger;
@@ -91,5 +92,10 @@ public class OperationQuotaCharger implements Chargeable {
     }
     // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
     return null;
+  }
+
+  @Override
+  public QuotaMethod getQuotaMethod() {
+    return quotaChargeCallback.getQuotaMethod();
   }
 }

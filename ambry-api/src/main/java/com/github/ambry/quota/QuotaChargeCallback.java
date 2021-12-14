@@ -84,6 +84,11 @@ public interface QuotaChargeCallback {
       public QuotaResource getQuotaResource() throws RestServiceException {
         return QuotaUtils.getQuotaResourceId(restRequest);
       }
+
+      @Override
+      public QuotaMethod getQuotaMethod() {
+        return QuotaUtils.getQuotaMethod(restRequest);
+      }
     };
   }
 
@@ -118,4 +123,9 @@ public interface QuotaChargeCallback {
    * @throws RestServiceException in case of any errors.
    */
   QuotaResource getQuotaResource() throws RestServiceException;
+
+  /**
+   * @return QuotaMethod object.
+   */
+  QuotaMethod getQuotaMethod();
 }

@@ -40,6 +40,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -777,6 +778,11 @@ class GetBlobOperation extends GetOperation {
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;
+    }
+
+    @Override
+    public QuotaMethod getQuotaMethod() {
+      return quotaChargeCallback.getQuotaMethod();
     }
 
     /**

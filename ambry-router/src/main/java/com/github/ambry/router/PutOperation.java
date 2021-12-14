@@ -39,6 +39,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
@@ -1182,6 +1183,11 @@ class PutOperation {
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;
+    }
+
+    @Override
+    public QuotaMethod getQuotaMethod() {
+      return quotaChargeCallback.getQuotaMethod();
     }
 
     /**
