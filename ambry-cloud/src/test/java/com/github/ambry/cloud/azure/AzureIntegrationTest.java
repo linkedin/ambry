@@ -82,7 +82,7 @@ public class AzureIntegrationTest {
   private byte dataCenterId = 66;
   private short accountId = 101;
   private short containerId = 5;
-  private long testPartition = 666;
+  private long testPartition = Integer.MAX_VALUE;
   // one day retention
   private int retentionPeriodDays = 1;
   private String propFileName = "azure-test.properties";
@@ -97,7 +97,8 @@ public class AzureIntegrationTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{ADAuthBasedStorageClient.class.getCanonicalName()},
-        {ConnectionStringBasedStorageClient.class.getCanonicalName()}});
+        {ConnectionStringBasedStorageClient.class.getCanonicalName()},
+        {ClientSecretCredentialStorageClient.class.getCanonicalName()}});
   }
 
   /**
@@ -194,8 +195,7 @@ public class AzureIntegrationTest {
     }
     CloudBlobMetadata metadata =
         getBlobMetadataWithRetry(Collections.singletonList(blobId), partitionId.toPathString(), cloudRequestAgent,
-            azureDest).
-            get(blobId.getID());
+            azureDest).get(blobId.getID());
     assertEquals(expirationTime, metadata.getExpirationTime());
 
     // delete blob
