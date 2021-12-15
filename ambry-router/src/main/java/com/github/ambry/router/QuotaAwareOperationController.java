@@ -145,11 +145,11 @@ public class QuotaAwareOperationController extends OperationController {
     while (!requestQueue.isEmpty()) {
       for (QuotaResource quotaResource : quotaResources) {
         RequestInfo requestInfo = requestQueue.get(quotaResource).getFirst();
-        if (!requestInfo.getChargeable().quotaExceedAllowed()) {
+        if (!requestInfo.getChargeable().chargeIfQuotaExceedAllowed()) {
           // If quota exceeded requests aren't allowed, then there is nothing more to do.
           return;
         }
-        requestInfo.getChargeable().charge();
+        requestInfo.getChargeable().checkAndCharge();
         requestsToSend.add(requestInfo);
         requestQueue.get(quotaResource).removeFirst();
         if (requestQueue.get(quotaResource).isEmpty()) {
@@ -179,7 +179,7 @@ public class QuotaAwareOperationController extends OperationController {
         if (requestInfo.getChargeable().check()) {
           requestsToSend.add(requestInfo);
           requestQueue.get(quotaResource).removeFirst();
-          requestInfo.getChargeable().charge();
+          requestInfo.getChargeable().checkAndCharge();
         } else {
           break;
         }

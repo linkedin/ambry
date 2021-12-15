@@ -26,18 +26,18 @@ public interface Chargeable {
   boolean check();
 
   /**
-   * Charge the request cost for this operation against quota of the quota resource of this operation.
+   * Charge the request cost for this operation against quota of the quota resource of this operation if usage is within quota.
    *
    * @return {@code true} if quota was charged. {@code false} otherwise.
    */
-  boolean charge();
+  boolean checkAndCharge();
 
   /**
-   * Check if usage allowed to exceed quota.
+   * Charge the request cost for this operation against quota of the quota resource of this operation if usage is allowed to exceed quota.
    *
-   * @return {@code true} if usage is allowed to exceed quota. {@code false} otherwise.
+   * @return {@code true} if quota was charged. {@code false} otherwise.
    */
-  boolean quotaExceedAllowed();
+  boolean chargeIfQuotaExceedAllowed();
 
   /**
    * @return the {@link QuotaResource} whose operation is being charged.

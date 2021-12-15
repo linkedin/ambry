@@ -36,7 +36,7 @@ public class OperationQuotaCharger implements Chargeable {
   /**
    * Constructor for {@link OperationQuotaCharger}.
    *
-   * @param quotaChargeCallback {@link QuotaChargeCallback} object to charge and check quotas.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} object to chargeIfUsageWithinQuota and check quotas.
    * @param blobId {@link BlobId} of the blob for which quota will be charged.
    * @param operationName Name of the operation.
    */
@@ -56,26 +56,33 @@ public class OperationQuotaCharger implements Chargeable {
   }
 
   @Override
-  public boolean charge() {
+  public boolean checkAndCharge() {
     if (quotaChargeCallback == null || isCharged) {
       return true;
     }
     try {
-      quotaChargeCallback.charge();
-      isCharged = true;
-    } catch (RouterException rEx) {
+      isCharged = quotaChargeCallback.checkAndCharge();
+    } catch (Exception ex) {
       LOGGER.warn(String.format("Quota charging failed in %s for blob %s due to %s ", operationName, blobId.toString(),
-          rEx.toString()));
+          ex.toString()));
     }
     return isCharged;
   }
 
   @Override
-  public boolean quotaExceedAllowed() {
+  public boolean chargeIfQuotaExceedAllowed() {
     if (quotaChargeCallback == null) {
       return true;
     }
-    return quotaChargeCallback.quotaExceedAllowed();
+    try {
+      isCharged = quotaChargeCallback.chargeIfQuotaExceedAllowed();
+    } catch (Exception ex) {
+      LOGGER.warn(String.format("Quota charging failed in %s for blob %s due to %s ", operationName, blobId.toString(),
+          ex.toString()));
+      // In case of exception we don't set isCharged but let the request go through.
+      return true;
+    }
+    return isCharged;
   }
 
   @Override

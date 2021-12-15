@@ -15,8 +15,6 @@ package com.github.ambry.quota;
 
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.router.RouterErrorCode;
-import com.github.ambry.router.RouterException;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -24,7 +22,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Callback for charging request cost against quota. Used by {@link QuotaEnforcer}s to charge quota for a request.
+ * Callback for charging request cost against quota. Used by {@link QuotaEnforcer}s to chargeIfUsageWithinQuota quota for a request.
  */
 public interface QuotaChargeCallback {
   Logger logger = LoggerFactory.getLogger(QuotaChargeCallback.class);
@@ -33,41 +31,27 @@ public interface QuotaChargeCallback {
    * Build {@link QuotaChargeCallback} to handle quota compliance of requests.
    * @param restRequest {@link RestRequest} for which quota is being charged.
    * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
-   * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
    * @return QuotaChargeCallback object.
    */
-  static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
-      boolean shouldThrottle) {
+  static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager) {
     RequestCostPolicy requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
     return new QuotaChargeCallback() {
       @Override
-      public void charge(long chunkSize) throws RouterException {
-        try {
-          Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
-              .entrySet()
-              .stream()
-              .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
-          ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, null, requestCost);
-          if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle() && shouldThrottle) {
-            if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING
-                && quotaManager.getQuotaConfig().throttleInProgressRequests) {
-              throw new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests);
-            } else {
-              logger.debug("Quota exceeded for an in progress request.");
-            }
-          }
-        } catch (Exception ex) {
-          if (ex instanceof RouterException && ((RouterException) ex).getErrorCode()
-              .equals(RouterErrorCode.TooManyRequests)) {
-            throw ex;
-          }
-          logger.error("Unexpected exception while charging quota.", ex);
+      public boolean checkAndCharge(long chunkSize) throws RestServiceException {
+        Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
+        boolean charged = quotaManager.chargeIfUsageWithinQuota(restRequest, null, requestCost);
+        if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
+          return charged;
         }
+        return true;
       }
 
       @Override
-      public void charge() throws RouterException {
-        charge(quotaManager.getQuotaConfig().quotaAccountingUnit);
+      public boolean checkAndCharge() throws RestServiceException {
+        return checkAndCharge(quotaManager.getQuotaConfig().quotaAccountingUnit);
       }
 
       @Override
@@ -76,8 +60,21 @@ public interface QuotaChargeCallback {
       }
 
       @Override
-      public boolean quotaExceedAllowed() {
-        return false;
+      public boolean chargeIfQuotaExceedAllowed(long chunkSize) throws RestServiceException {
+        Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
+            .entrySet()
+            .stream()
+            .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
+        boolean charged = quotaManager.chargeIfQuotaExceedAllowed(restRequest, null, requestCost);
+        if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
+          return charged;
+        }
+        return true;
+      }
+
+      @Override
+      public boolean chargeIfQuotaExceedAllowed() throws RestServiceException {
+        return chargeIfQuotaExceedAllowed(quotaManager.getQuotaConfig().quotaAccountingUnit);
       }
 
       @Override
@@ -93,18 +90,20 @@ public interface QuotaChargeCallback {
   }
 
   /**
-   * Callback method that can be used to charge quota usage for a request or part of a request.
+   * Callback method that can be used to checkAndCharge against quota is usage is within quota.
    * @param chunkSize of the chunk.
-   * @throws RouterException In case request needs to be throttled.
+   * @return {@code true} if usage is within quota and checkAndCharge succeeded. {@code false} otherwise.
+   * @throws RestServiceException in case of any exception.
    */
-  void charge(long chunkSize) throws RouterException;
+  boolean checkAndCharge(long chunkSize) throws RestServiceException;
 
   /**
-   * Callback method that can be used to charge quota usage for a request or part of a request. Call this method
-   * when the quota charge doesn't depend on the chunk size.
-   * @throws RouterException In case request needs to be throttled.
+   * Callback method that can be used to checkAndCharge against quota is usage is within quota. Call this method
+   * when the quota checkAndCharge doesn't depend on the chunk size.
+   * @return {@code true} if usage is within quota and checkAndCharge succeeded. {@code false} otherwise.
+   * @throws RestServiceException in case of any exception.
    */
-  void charge() throws RouterException;
+  boolean checkAndCharge() throws RestServiceException;
 
   /**
    * Check if request should be throttled based on quota usage.
@@ -115,8 +114,16 @@ public interface QuotaChargeCallback {
   /**
    * Check if usage is allowed to exceed the quota limit.
    * @return {@code true} if usage is allowed to exceed the quota limit. {@code false} otherwise.
+   * @throws RestServiceException in case of any exception.
    */
-  boolean quotaExceedAllowed();
+  boolean chargeIfQuotaExceedAllowed() throws RestServiceException;
+
+  /**
+   * Check if usage is allowed to exceed the quota limit.
+   * @return {@code true} if usage is allowed to exceed the quota limit. {@code false} otherwise.
+   * @throws RestServiceException in case of any exception.
+   */
+  boolean chargeIfQuotaExceedAllowed(long chunkSize) throws RestServiceException;
 
   /**
    * @return QuotaResource object.

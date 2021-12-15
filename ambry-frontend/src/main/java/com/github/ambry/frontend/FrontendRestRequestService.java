@@ -754,7 +754,7 @@ class FrontendRestRequestService implements RestRequestService {
           if (subResource == null) {
             getCallback.markStartTime();
             router.getBlob(convertedId, getCallback.options, getCallback,
-                QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+                QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager));
           } else {
             switch (subResource) {
               case BlobInfo:
@@ -762,7 +762,7 @@ class FrontendRestRequestService implements RestRequestService {
               case Segment:
                 getCallback.markStartTime();
                 router.getBlob(convertedId, getCallback.options, getCallback,
-                    QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+                    QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager));
                 break;
               case Replicas:
                 response = getReplicasHandler.getReplicas(convertedId, restResponseChannel);
@@ -782,12 +782,12 @@ class FrontendRestRequestService implements RestRequestService {
           router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
               .getOption(getOption)
               .restRequest(restRequest)
-              .build(), headCallback, QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
+              .build(), headCallback, QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager));
           break;
         case DELETE:
           deleteCallback.markStartTime();
           router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback,
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager));
           break;
         default:
           throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);

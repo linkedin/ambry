@@ -90,7 +90,7 @@ class PostBlobHandler {
    * @param frontendConfig the {@link FrontendConfig} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterName the name of the storage cluster that the router communicates with
-   * @param quotaManager {@link QuotaManager} instance to charge against quota for each chunk.
+   * @param quotaManager {@link QuotaManager} instance to chargeIfUsageWithinQuota against quota for each chunk.
    */
   PostBlobHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
       Router router, AccountAndContainerInjector accountAndContainerInjector, Time time, FrontendConfig frontendConfig,
@@ -185,7 +185,7 @@ class PostBlobHandler {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -202,7 +202,7 @@ class PostBlobHandler {
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER,
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager)), uri, LOGGER,
           finalCallback);
     }
 

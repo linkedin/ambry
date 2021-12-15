@@ -272,10 +272,10 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    * Add given {@code usage} to the current storage usage of account/container carried in {@code restRequest} even
    * if the result exceeds quota for the target account/container. If there is no account and container found in
    * {@code restRequest}, then this is a no-op. If there is no quota found for the account/container, then this is
-   * a no-op. A {@link Pair} whose first element is quota and second element is the storage usage after charge.
+   * a no-op. A {@link Pair} whose first element is quota and second element is the storage usage after chargeIfUsageWithinQuota.
    * @param restRequest the {@link RestRequest} that carries account and container in the header.
-   * @param usage the usage to charge
-   * @return A {@link Pair} whose first element is quota and second element is the storage usage after charge.
+   * @param usage the usage to chargeIfUsageWithinQuota
+   * @return A {@link Pair} whose first element is quota and second element is the storage usage after chargeIfUsageWithinQuota.
    */
   Pair<Long, Long> charge(RestRequest restRequest, long usage) {
     long quotaValue = -1L;
@@ -299,7 +299,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
         usageAfterCharge = existingUsage.addAndGet(usage);
       }
     } catch (Exception e) {
-      logger.error("Failed to charge for RestRequest {}", restRequest, e);
+      logger.error("Failed to chargeIfUsageWithinQuota for RestRequest {}", restRequest, e);
     }
     return new Pair<>(quotaValue, usageAfterCharge);
   }

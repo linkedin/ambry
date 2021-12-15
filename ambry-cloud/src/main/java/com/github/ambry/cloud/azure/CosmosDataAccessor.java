@@ -285,7 +285,7 @@ public class CosmosDataAccessor {
         deleteCount += responseDoc.getInt(PROPERTY_DELETED);
       }
       if (requestCharge >= requestChargeThreshold) {
-        logger.info("Bulk delete partition {} request charge {} for {} records", partitionPath, requestCharge,
+        logger.info("Bulk delete partition {} request chargeIfUsageWithinQuota {} for {} records", partitionPath, requestCharge,
             deleteCount);
       }
       return deleteCount;
@@ -418,7 +418,7 @@ public class CosmosDataAccessor {
         response.getResults().iterator().forEachRemaining(doc -> deadBlobsList.add(createMetadataFromDocument(doc)));
       }
       if (requestCharge >= requestChargeThreshold) {
-        logger.info("Dead blobs query partition {} endTime {} request charge {} for {} records", partitionPath,
+        logger.info("Dead blobs query partition {} endTime {} request chargeIfUsageWithinQuota {} for {} records", partitionPath,
             new Date(endTime), requestCharge, deadBlobsList.size());
       }
       return deadBlobsList;
@@ -464,7 +464,7 @@ public class CosmosDataAccessor {
       }
       if (requestCharge >= requestChargeThreshold) {
         logger.info(
-            "Deleted container blobs query partition {} containerId {} accountId {} request charge {} for {} records",
+            "Deleted container blobs query partition {} containerId {} accountId {} request chargeIfUsageWithinQuota {} for {} records",
             partitionPath, containerId, accountId, requestCharge, containerBlobsList.size());
       }
       return containerBlobsList;
@@ -530,7 +530,7 @@ public class CosmosDataAccessor {
         response.getResults().iterator().forEachRemaining(doc -> metadataList.add(createMetadataFromDocument(doc)));
       }
       if (requestCharge >= requestChargeThreshold) {
-        logger.info("Query partition {} request charge {} for {} records", partitionPath, requestCharge,
+        logger.info("Query partition {} request chargeIfUsageWithinQuota {} for {} records", partitionPath, requestCharge,
             metadataList.size());
       }
       return metadataList;

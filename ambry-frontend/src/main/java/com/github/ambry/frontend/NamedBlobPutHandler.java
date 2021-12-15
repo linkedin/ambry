@@ -190,7 +190,7 @@ public class NamedBlobPutHandler {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -220,7 +220,7 @@ public class NamedBlobPutHandler {
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true)), uri, LOGGER,
+              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager)), uri, LOGGER,
           finalCallback);
     }
 
@@ -252,7 +252,7 @@ public class NamedBlobPutHandler {
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                  QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+                  QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager)), this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,

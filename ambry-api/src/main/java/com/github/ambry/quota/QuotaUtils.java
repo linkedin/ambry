@@ -75,7 +75,7 @@ public class QuotaUtils {
   /**
    * @return {@code true} if the request is a read request. {@code false} otherwise.
    */
-  private static boolean isReadRequest(RestRequest restRequest) {
+  public static boolean isReadRequest(RestRequest restRequest) {
     switch (restRequest.getRestMethod()) {
       case GET:
       case OPTIONS:

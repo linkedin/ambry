@@ -146,7 +146,7 @@ public class JsonCUQuotaSource implements QuotaSource {
       resourceId = QuotaUtils.getQuotaResourceId(restRequest).getResourceId();
     } catch (RestServiceException rEx) {
       logger.error(
-          "Cannot charge request because could not create resourceId for request for blob {} due to exception {}",
+          "Cannot chargeIfUsageWithinQuota request because could not create resourceId for request for blob {} due to exception {}",
           blobInfo.getBlobProperties().toString(), rEx.toString());
       return;
     }

@@ -97,6 +97,10 @@ import org.slf4j.LoggerFactory;
  * chunk successfully completes the operation.
  */
 class PutOperation {
+  private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
+  // the list of PutChunks that will be used to hold chunks that are sent out. A PutChunk will only hold one chunk at
+  // any time, but will be reused as and when the operation on the chunk is complete.
+  final ConcurrentLinkedQueue<PutChunk> putChunks;
   // Operation arguments.
   private final RouterConfig routerConfig;
   private final NonBlockingRouterMetrics routerMetrics;
@@ -119,15 +123,25 @@ class PutOperation {
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
   private final Time time;
-  private BlobProperties finalBlobProperties;
-  private boolean isEncryptionEnabled;
   private final QuotaChargeCallback quotaChargeCallback;
 
   // Parameters associated with the state.
-
-  // the list of PutChunks that will be used to hold chunks that are sent out. A PutChunk will only hold one chunk at
-  // any time, but will be reused as and when the operation on the chunk is complete.
-  final ConcurrentLinkedQueue<PutChunk> putChunks;
+  // the metadata chunk for this operation. There will always be a metadata chunk that tracks the data chunks.
+  // However, if the operation completes and results in only one data chunk, then the metadata chunk will not be sent
+  // out.
+  private final MetadataPutChunk metadataPutChunk;
+  // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
+  // failure.
+  private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
+  // To find the PutChunk to hand over the response quickly.
+  private final Map<Integer, PutChunk> correlationIdToPutChunk = new HashMap<Integer, PutChunk>();
+  // The time at which the operation was submitted.
+  private final long submissionTimeMs;
+  // Variables to keep track of netty chunks
+  private final RestRequest restRequest;
+  private final String loggingContext;
+  private BlobProperties finalBlobProperties;
+  private final boolean isEncryptionEnabled;
   // the total size of the object (the overall blob). This will be initialized to -1 indicating that the value is
   // not yet determined. Once the chunk filling is complete, this will have the actual size of the data read
   // from the channel.
@@ -142,21 +156,10 @@ class PutOperation {
   private ByteBuf channelReadBuf;
   // indicates whether chunk filling is complete and successful.
   private volatile boolean chunkFillingCompletedSuccessfully = false;
-  // the metadata chunk for this operation. There will always be a metadata chunk that tracks the data chunks.
-  // However, if the operation completes and results in only one data chunk, then the metadata chunk will not be sent
-  // out.
-  private final MetadataPutChunk metadataPutChunk;
   // denotes whether the operation is complete.
   private volatile boolean operationCompleted = false;
   // the blob id of the overall blob. This will be set if and when the operation is successful.
   private BlobId blobId;
-  // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
-  // failure.
-  private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
-  // To find the PutChunk to hand over the response quickly.
-  private final Map<Integer, PutChunk> correlationIdToPutChunk = new HashMap<Integer, PutChunk>();
-  // The time at which the operation was submitted.
-  private final long submissionTimeMs;
   // The point in time at which the most recent wait for free chunk availability started.
   private long startTimeForChunkAvailabilityWaitMs;
   // The point in time at which the most recent wait for channel data availability started.
@@ -166,13 +169,68 @@ class PutOperation {
   // The time spent by a chunk for data to be available in the channel.
   private long waitTimeForChannelDataAvailabilityMs;
   // The set of slipped blob ids generated during the put operation.
-  private Set<BlobId> slippedPutBlobIds = new HashSet<>();
+  private final Set<BlobId> slippedPutBlobIds = new HashSet<>();
 
-  // Variables to keep track of netty chunks
-  private final RestRequest restRequest;
-  private final String loggingContext;
-
-  private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
+  /**
+   * Construct a PutOperation with the given parameters. This private constructor is used for both blob uploads and
+   * post-upload stitching.
+   * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap the {@link ClusterMap} of the cluster
+   * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
+   * @param accountService the {@link AccountService} used for account/container id and name mapping.
+   * @param userMetadata the userMetadata associated with the put operation.
+   * @param channel the {@link ReadableStreamChannel} containing the blob data, or null for stitch requests.
+   * @param chunksToStitch the list of chunks to stitch together, or null for data upload put operations.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
+   * @param futureResult the future that will contain the result of the operation.
+   * @param callback the callback that is to be called when the operation completes.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
+   * @param writableChannelEventListener a callback to be called on certain chunk filler channel events.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time the Time instance to use.
+   * @param blobProperties the BlobProperties associated with the put operation.
+   * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
+   * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   */
+  private PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
+      ReadableStreamChannel channel, List<ChunkInfo> chunksToStitch, PutBlobOptions options,
+      FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
+      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
+    submissionTimeMs = time.milliseconds();
+    this.routerConfig = routerConfig;
+    this.routerMetrics = routerMetrics;
+    this.clusterMap = clusterMap;
+    this.notificationSystem = notificationSystem;
+    this.accountService = accountService;
+    this.passedInBlobProperties = blobProperties;
+    this.userMetadata = userMetadata;
+    this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
+    this.channel = channel;
+    this.options = options;
+    this.chunksToStitch = chunksToStitch;
+    this.futureResult = futureResult;
+    this.callback = callback;
+    this.routerCallback = routerCallback;
+    this.kms = kms;
+    this.cryptoService = cryptoService;
+    this.cryptoJobHandler = cryptoJobHandler;
+    this.time = time;
+    this.quotaChargeCallback = quotaChargeCallback;
+    bytesFilledSoFar = 0;
+    chunkCounter = -1;
+    putChunks = new ConcurrentLinkedQueue<>();
+    metadataPutChunk = new MetadataPutChunk();
+    chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
+    isEncryptionEnabled = passedInBlobProperties.isEncrypted();
+    restRequest = options.getRestRequest();
+    loggingContext = makeLoggingContext();
+  }
 
   /**
    * Construct a PutOperation with the given parameters. For any operation, based on the max chunk size for puts,
@@ -247,67 +305,6 @@ class PutOperation {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         null, chunksToStitch, PutBlobOptions.DEFAULT, futureResult, callback, routerCallback, null, kms, cryptoService,
         cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
-  }
-
-  /**
-   * Construct a PutOperation with the given parameters. This private constructor is used for both blob uploads and
-   * post-upload stitching.
-   * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
-   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param clusterMap the {@link ClusterMap} of the cluster
-   * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
-   * @param accountService the {@link AccountService} used for account/container id and name mapping.
-   * @param userMetadata the userMetadata associated with the put operation.
-   * @param channel the {@link ReadableStreamChannel} containing the blob data, or null for stitch requests.
-   * @param chunksToStitch the list of chunks to stitch together, or null for data upload put operations.
-   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
-   * @param futureResult the future that will contain the result of the operation.
-   * @param callback the callback that is to be called when the operation completes.
-   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
-   * @param writableChannelEventListener a callback to be called on certain chunk filler channel events.
-   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
-   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param time the Time instance to use.
-   * @param blobProperties the BlobProperties associated with the put operation.
-   * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
-   * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
-   */
-  private PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
-      ReadableStreamChannel channel, List<ChunkInfo> chunksToStitch, PutBlobOptions options,
-      FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
-      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
-    submissionTimeMs = time.milliseconds();
-    this.routerConfig = routerConfig;
-    this.routerMetrics = routerMetrics;
-    this.clusterMap = clusterMap;
-    this.notificationSystem = notificationSystem;
-    this.accountService = accountService;
-    this.passedInBlobProperties = blobProperties;
-    this.userMetadata = userMetadata;
-    this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
-    this.channel = channel;
-    this.options = options;
-    this.chunksToStitch = chunksToStitch;
-    this.futureResult = futureResult;
-    this.callback = callback;
-    this.routerCallback = routerCallback;
-    this.kms = kms;
-    this.cryptoService = cryptoService;
-    this.cryptoJobHandler = cryptoJobHandler;
-    this.time = time;
-    this.quotaChargeCallback = quotaChargeCallback;
-    bytesFilledSoFar = 0;
-    chunkCounter = -1;
-    putChunks = new ConcurrentLinkedQueue<>();
-    metadataPutChunk = new MetadataPutChunk();
-    chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
-    isEncryptionEnabled = passedInBlobProperties.isEncrypted();
-    restRequest = options.getRestRequest();
-    loggingContext = makeLoggingContext();
   }
 
   /**
@@ -683,7 +680,9 @@ class PutOperation {
    *
    * @return the set of slipped chunk blob ids.
    */
-  Set<BlobId> getSlippedPutBlobIds() { return slippedPutBlobIds; }
+  Set<BlobId> getSlippedPutBlobIds() {
+    return slippedPutBlobIds;
+  }
 
   /**
    * Called whenever the channel has data but no free or building chunk is available to be filled.
@@ -977,22 +976,82 @@ class PutOperation {
   }
 
   /**
+   * Return a string message that will be used as a context for logging;
+   * @return
+   */
+  private String makeLoggingContext() {
+    if (restRequest == null || restRequest.getRestRequestContext() == null) {
+      return "";
+    }
+    String channelStr =
+        ((NettyRequest.NettyRequestContext) restRequest.getRestRequestContext()).getChannel().toString();
+    StringBuilder sb = new StringBuilder();
+    sb.append('[');
+    sb.append(channelStr);
+    if (isEncryptionEnabled) {
+      sb.append(", Encrypted");
+    }
+    return sb.append("]").toString();
+  }
+
+  /**
+   * Different states of a PutChunk.
+   */
+  enum ChunkState {
+    /**
+     * The Chunk is free and can be filled with data.
+     */
+    Free,
+    /**
+     * The Chunk is being built. It may have some data but is not yet ready to be sent.
+     */
+    Building,
+    /**
+     * The Chunk is being encrypted.
+     */
+    Encrypting,
+    /**
+     * The Chunk is ready to be sent out.
+     */
+    Ready,
+    /**
+     * The Chunk is complete.
+     */
+    Complete,
+  }
+
+  /**
    * PutChunk is responsible for storing chunks to be put, managing their state and completing the operation on the
    * chunks. A PutChunk object is not really associated with one single chunk of data. Instead, it acts a holder that
    * handles a chunk of data and takes it to completion, and once done, moves on to handle more chunks of data. This
    * why there is a reference to the "current chunk" in the comments.
    */
   class PutChunk implements Chargeable {
-    // the position of the current chunk in the overall blob.
-    private int chunkIndex;
+    // metrics tracker to track encrypt jobs
+    private final CryptoJobMetricsTracker encryptJobMetricsTracker =
+        new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics);
+    // map of correlation id to the request metadata for every request issued for the current chunk.
+    private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
+    // list of buffers that were once associated with this chunk and are not yet freed.
+    private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
     // the blobId of the current chunk.
     protected BlobId chunkBlobId;
     // the size of raw chunk (prior encryption if applicable)
     protected long chunkBlobSize;
-    // the BlobProperties to associate with this chunk.
-    private BlobProperties chunkBlobProperties;
     // the userMetadata associated with the blob
     protected byte[] chunkUserMetadata;
+    // the state of the current chunk.
+    protected volatile ChunkState state;
+    // the ByteBuffer that has the data for the current chunk.
+    protected volatile ByteBuf buf;
+    // the ByteBuffer that has the encryptedPerBlobKey (encrypted using containerKey). Could be null if encryption is not required.
+    protected ByteBuffer encryptedPerBlobKey;
+    // the OperationTracker used to track the status of requests for the current chunk.
+    protected OperationTracker operationTracker;
+    // the position of the current chunk in the overall blob.
+    private int chunkIndex;
+    // the BlobProperties to associate with this chunk.
+    private BlobProperties chunkBlobProperties;
     // the most recent time at which this chunk became Free.
     private long chunkFreeAtMs;
     // the time at which the chunk filling was complete
@@ -1004,27 +1063,12 @@ class PutOperation {
     // The exception encountered while putting the current chunk. Not all errors are irrecoverable. An error may or
     // may not get overridden by a subsequent error, and this variable is meant to store the most relevant error.
     private RouterException chunkException;
-    // the state of the current chunk.
-    protected volatile ChunkState state;
-    // the ByteBuffer that has the data for the current chunk.
-    protected volatile ByteBuf buf;
-    // the ByteBuffer that has the encryptedPerBlobKey (encrypted using containerKey). Could be null if encryption is not required.
-    protected ByteBuffer encryptedPerBlobKey;
-    // the OperationTracker used to track the status of requests for the current chunk.
-    protected OperationTracker operationTracker;
     // the number of times a put was attempted for the current chunk.
     private int failedAttempts;
     // the partitionId chosen for the current chunk.
     private PartitionId partitionId;
-    // metrics tracker to track encrypt jobs
-    private final CryptoJobMetricsTracker encryptJobMetricsTracker =
-        new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics);
     // the list of partitions already attempted for this chunk.
-    private List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
-    // map of correlation id to the request metadata for every request issued for the current chunk.
-    private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
-    // list of buffers that were once associated with this chunk and are not yet freed.
-    private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
+    private final List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // whether the quota is already charged for this chunk.
     private boolean isCharged;
 
@@ -1105,6 +1149,16 @@ class PutOperation {
     }
 
     /**
+     * Possibly set the exception for this chunk using the given exception. Calling this method with an exception does
+     * not necessarily result in that being set as the chunkException. The idea is to set the most relevant exception
+     * in case of errors.
+     * @param exception the exception that may be set as the chunkException.
+     */
+    private void setChunkException(RouterException exception) {
+      chunkException = exception;
+    }
+
+    /**
      * @return true if this PutChunk is free so a chunk of the overall blob can be filled in.
      */
     boolean isFree() {
@@ -1144,44 +1198,50 @@ class PutOperation {
       if (quotaChargeCallback == null || isCharged) {
         return true;
       }
-
       return quotaChargeCallback.check();
     }
 
     @Override
-    public boolean charge() {
+    public boolean checkAndCharge() {
       if (quotaChargeCallback == null || isCharged) {
         return true;
       }
       try {
-        quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
-        isCharged = true;
-      } catch (RouterException rEx) {
-        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob %s due to %s ", blobId.toString(),
-            rEx.toString()));
+        isCharged = quotaChargeCallback.checkAndCharge(chunkBlobProperties.getBlobSize());
+      } catch (Exception ex) {
+        logger.warn("Could not charge quota due to {}", ex.toString());
+        // In case of exception we don't set isCharged but let the request go through.
+        return true;
       }
       return isCharged;
     }
 
     @Override
-    public boolean quotaExceedAllowed() {
-      if(quotaChargeCallback == null) {
+    public boolean chargeIfQuotaExceedAllowed() {
+      if (quotaChargeCallback == null) {
         return true;
       }
-      return quotaChargeCallback.quotaExceedAllowed();
+      try {
+        isCharged = quotaChargeCallback.chargeIfQuotaExceedAllowed();
+      } catch (Exception ex) {
+        logger.warn("Could not charge quota due to {}", ex.toString());
+        // In case of exception we don't set isCharged but let the request go through.
+        return true;
+      }
+      return isCharged;
     }
 
     @Override
     public QuotaResource getQuotaResource() {
-      if(quotaChargeCallback == null) {
+      if (quotaChargeCallback == null) {
         return null;
       }
       try {
         return quotaChargeCallback.getQuotaResource();
       } catch (RestServiceException rEx) {
-        logger.error(
-            String.format("Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-                blobId.toString(), rEx.toString()));
+        logger.error(String.format(
+            "Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
+            blobId.toString(), rEx.toString()));
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;
@@ -1431,15 +1491,6 @@ class PutOperation {
         }
       }
       if (done) {
-        // the chunk is complete now. We can charge against quota for the chunk if its not a metadata chunk.
-        if (quotaChargeCallback != null && !(this instanceof MetadataPutChunk) && chunkException == null) {
-          try {
-            quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
-          } catch (RouterException rEx) {
-            // For now we only log for quota charge exceptions for in progress requests.
-            logger.info("{}: Exception {} while handling quota charge event", loggingContext, rEx.toString());
-          }
-        }
         state = ChunkState.Complete;
       }
     }
@@ -1662,16 +1713,6 @@ class PutOperation {
     }
 
     /**
-     * Possibly set the exception for this chunk using the given exception. Calling this method with an exception does
-     * not necessarily result in that being set as the chunkException. The idea is to set the most relevant exception
-     * in case of errors.
-     * @param exception the exception that may be set as the chunkException.
-     */
-    private void setChunkException(RouterException exception) {
-      chunkException = exception;
-    }
-
-    /**
      * Process an error received from the server. The idea is to convert from the ServerErrorCode to a RouterErrorCode.
      * @param error the ServerErrorCode received from a response to a request.
      */
@@ -1859,51 +1900,6 @@ class PutOperation {
           buf.readableBytes(), BlobType.MetadataBlob,
           encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
-  }
-
-  /**
-   * Return a string message that will be used as a context for logging;
-   * @return
-   */
-  private String makeLoggingContext() {
-    if (restRequest == null || restRequest.getRestRequestContext() == null) {
-      return "";
-    }
-    String channelStr =
-        ((NettyRequest.NettyRequestContext) restRequest.getRestRequestContext()).getChannel().toString();
-    StringBuilder sb = new StringBuilder();
-    sb.append('[');
-    sb.append(channelStr);
-    if (isEncryptionEnabled) {
-      sb.append(", Encrypted");
-    }
-    return sb.append("]").toString();
-  }
-
-  /**
-   * Different states of a PutChunk.
-   */
-  enum ChunkState {
-    /**
-     * The Chunk is free and can be filled with data.
-     */
-    Free,
-    /**
-     * The Chunk is being built. It may have some data but is not yet ready to be sent.
-     */
-    Building,
-    /**
-     * The Chunk is being encrypted.
-     */
-    Encrypting,
-    /**
-     * The Chunk is ready to be sent out.
-     */
-    Ready,
-    /**
-     * The Chunk is complete.
-     */
-    Complete,
   }
 }
 

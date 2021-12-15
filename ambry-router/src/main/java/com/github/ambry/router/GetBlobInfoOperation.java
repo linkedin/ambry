@@ -59,7 +59,7 @@ class GetBlobInfoOperation extends GetOperation {
   private final OperationTracker operationTracker;
   // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
   private final ProgressTracker progressTracker;
-  // listener for events that should charge towards quota (like chunk download)
+  // listener for events that should chargeIfUsageWithinQuota towards quota (like chunk download)
   private final QuotaChargeCallback quotaChargeCallback;
   // Quota charger for this operation.
   private final OperationQuotaCharger operationQuotaCharger;
@@ -448,9 +448,9 @@ class GetBlobInfoOperation extends GetOperation {
     if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
       if (quotaChargeCallback != null) {
         try {
-          quotaChargeCallback.charge();
+          quotaChargeCallback.checkAndCharge();
         } catch (RouterException routerException) {
-          // No exception should be thrown when doing quota charge for blobinfo operation.
+          // No exception should be thrown when doing quota chargeIfUsageWithinQuota for blobinfo operation.
           logger.trace("Unexpected exception {} thrown on handling quota event for {}", routerException, blobId);
         }
       }

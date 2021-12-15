@@ -57,7 +57,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
         return null;
       }
       if (requestCostMap.size() == 0) {
-        logger.warn("Empty cost map provided for {} request for blob {}. Nothing to charge",
+        logger.warn("Empty cost map provided for {} request for blob {}. Nothing to chargeIfUsageWithinQuota",
             (restRequest == null ? "null" : restRequest.getRestMethod().name()),
             (blobInfo == null ? "null" : blobInfo.getBlobProperties()));
       }
@@ -81,7 +81,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
     return runWithNoException(() -> {
       QuotaRecommendation feQuotaRecommendation = quotaSource.checkFrontendUsage(restRequest);
       return feQuotaRecommendation.getQuotaUsagePercentage() < maxFrontendCuUsageToAllowExceed;
-    }, restRequest, "isQuotaExceedAllowed", true);
+    }, restRequest, "chargeIfQuotaExceedAllowed", true);
   }
 
   @Override

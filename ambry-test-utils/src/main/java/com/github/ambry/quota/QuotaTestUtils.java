@@ -18,7 +18,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.router.RouterException;
 import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
@@ -66,13 +65,14 @@ public class QuotaTestUtils {
       }
 
       @Override
-      public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+      public boolean chargeIfUsageWithinQuota(RestRequest restRequest, BlobInfo blobInfo,
           Map<QuotaName, Double> requestCostMap) {
-        return null;
+        return true;
       }
 
       @Override
-      public boolean isQuotaExceedAllowed(RestRequest restRequest) {
+      public boolean chargeIfQuotaExceedAllowed(RestRequest restRequest, BlobInfo blobInfo,
+          Map<QuotaName, Double> requestCostMap) {
         return false;
       }
 
@@ -82,13 +82,13 @@ public class QuotaTestUtils {
       }
 
       @Override
-      public void setQuotaMode(QuotaMode mode) {
-
+      public QuotaMode getQuotaMode() {
+        return null;
       }
 
       @Override
-      public QuotaMode getQuotaMode() {
-        return null;
+      public void setQuotaMode(QuotaMode mode) {
+
       }
 
       @Override
@@ -101,21 +101,28 @@ public class QuotaTestUtils {
   public static QuotaChargeCallback createDummyQuotaChargeEventListener() {
     return new QuotaChargeCallback() {
       @Override
-      public void charge(long chunkSize) throws RouterException {
+      public boolean checkAndCharge(long chunkSize) {
+        return true;
       }
 
       @Override
-      public void charge() throws RouterException {
+      public boolean checkAndCharge() {
+        return true;
       }
 
       @Override
       public boolean check() {
-        return false;
+        return true;
       }
 
       @Override
-      public boolean quotaExceedAllowed() {
-        return false;
+      public boolean chargeIfQuotaExceedAllowed() {
+        return true;
+      }
+
+      @Override
+      public boolean chargeIfQuotaExceedAllowed(long chunkSize) {
+        return true;
       }
 
       @Override

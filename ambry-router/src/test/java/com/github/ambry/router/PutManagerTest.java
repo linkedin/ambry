@@ -395,11 +395,11 @@ public class PutManagerTest {
           throw new RuntimeException("Throwing an exception in the user callback");
         }, new QuotaChargeCallback() {
           @Override
-          public void charge(long chunkSize) {
+          public boolean checkAndCharge(long chunkSize) {
           }
 
           @Override
-          public void charge() {
+          public boolean checkAndCharge() {
           }
 
           @Override
@@ -408,7 +408,7 @@ public class PutManagerTest {
           }
 
           @Override
-          public boolean quotaExceedAllowed() {
+          public boolean chargeIfQuotaExceedAllowed() {
             return false;
           }
 
