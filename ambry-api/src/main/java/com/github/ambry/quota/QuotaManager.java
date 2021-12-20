@@ -37,8 +37,9 @@ public interface QuotaManager {
    * This method does not chargeIfUsageWithinQuota the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @return ThrottlingRecommendation object that captures the recommendation.
+   * @throws QuotaException in case of any exception.
    */
-  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
+  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) throws QuotaException;
 
   /**
    * Charges the requestCost against the quota for the QuotaResource in the specified restRequest and blobInfo if quota
@@ -49,10 +50,10 @@ public interface QuotaManager {
    *                                 determined by enforcers.
    * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
    * @return {@code true} if usage is allowed to exceed quota. {@code false} otherwise.
-   * @throws RestServiceException in case of any exception.
+   * @throws QuotaException in case of any exception.
    */
   boolean chargeIfQuotaExceedAllowed(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap)
-      throws RestServiceException;
+      throws QuotaException;
 
   /**
    * Charges the requestCost against the quota for the QuotaResource in the specified restRequest and blobInfo if usage
@@ -62,10 +63,10 @@ public interface QuotaManager {
    *                                 determined by enforcers.
    * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
    * @return {@code true} if the usage is within quota. {@code false} otherwise.
-   * @throws RestServiceException in case of any exception.
+   * @throws QuotaException in case of any exception.
    */
   boolean chargeIfUsageWithinQuota(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap)
-      throws RestServiceException;
+      throws QuotaException;
 
   /**
    * @return QuotaConfig object.

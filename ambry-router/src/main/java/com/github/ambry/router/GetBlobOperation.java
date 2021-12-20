@@ -40,6 +40,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaMethod;
@@ -740,7 +741,22 @@ class GetBlobOperation extends GetOperation {
       if (quotaChargeCallback == null || isCharged) {
         return true;
       }
-      return quotaChargeCallback.check();
+      try {
+        return quotaChargeCallback.check();
+      } catch (QuotaException quotaException) {
+        logger.warn("Could not check quota during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            quotaException.toString());
+        if (!quotaException.isRetryable()) {
+          // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+          // We will return success to let the request go through.
+          isCharged = true;
+        }
+      } catch (Exception ex) {
+        logger.warn("Could not check quota during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            ex.toString());
+        // In case of exception we don't set isCharged but let the request go through.
+      }
+      return true;
     }
 
     @Override
@@ -750,8 +766,17 @@ class GetBlobOperation extends GetOperation {
       }
       try {
         isCharged = quotaChargeCallback.checkAndCharge(chunkSize);
+      } catch (QuotaException quotaException) {
+        logger.warn("Could not charge quota during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            quotaException.toString());
+        if (!quotaException.isRetryable()) {
+          // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+          // We will return success to let the request go through.
+          isCharged = true;
+        }
       } catch (Exception ex) {
-        logger.warn("Could not charge quota due to {}", ex.toString());
+        logger.warn("Could not charge quota during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            ex.toString());
         // In case of exception we don't set isCharged but let the request go through.
         return true;
       }
@@ -765,8 +790,17 @@ class GetBlobOperation extends GetOperation {
       }
       try {
         isCharged = quotaChargeCallback.chargeIfQuotaExceedAllowed(chunkSize);
+      } catch (QuotaException quotaException) {
+        logger.warn("Could not charge quota during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            quotaException.toString());
+        if (!quotaException.isRetryable()) {
+          // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+          // We will return success to let the request go through.
+          isCharged = true;
+        }
       } catch (Exception ex) {
-        logger.warn("Could not charge quota due to {}", ex.toString());
+        logger.warn("Could not charge quota during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            ex.toString());
         // In case of exception we don't set isCharged but let the request go through.
         return true;
       }
@@ -780,10 +814,17 @@ class GetBlobOperation extends GetOperation {
       }
       try {
         return quotaChargeCallback.getQuotaResource();
-      } catch (RestServiceException rEx) {
-        logger.error(
-            String.format("Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-                blobId.toString(), rEx.toString()));
+      } catch (QuotaException quotaException) {
+        logger.warn("Could not get quota resource during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            quotaException.toString());
+        if (!quotaException.isRetryable()) {
+          // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+          // We will return success to let the request go through.
+          isCharged = true;
+        }
+      } catch (Exception ex) {
+        logger.warn("Could not get quota resource during GetBlobOperation for the chunk {} due to {}.", blobId.toString(),
+            ex.toString());
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;

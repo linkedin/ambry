@@ -37,7 +37,7 @@ public interface QuotaChargeCallback {
     RequestCostPolicy requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
     return new QuotaChargeCallback() {
       @Override
-      public boolean checkAndCharge(long chunkSize) throws RestServiceException {
+      public boolean checkAndCharge(long chunkSize) throws QuotaException {
         Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
             .entrySet()
             .stream()
@@ -50,7 +50,7 @@ public interface QuotaChargeCallback {
       }
 
       @Override
-      public boolean checkAndCharge() throws RestServiceException {
+      public boolean checkAndCharge() throws QuotaException {
         return checkAndCharge(quotaManager.getQuotaConfig().quotaAccountingUnit);
       }
 
@@ -60,7 +60,7 @@ public interface QuotaChargeCallback {
       }
 
       @Override
-      public boolean chargeIfQuotaExceedAllowed(long chunkSize) throws RestServiceException {
+      public boolean chargeIfQuotaExceedAllowed(long chunkSize) throws QuotaException {
         Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
             .entrySet()
             .stream()
@@ -73,13 +73,13 @@ public interface QuotaChargeCallback {
       }
 
       @Override
-      public boolean chargeIfQuotaExceedAllowed() throws RestServiceException {
+      public boolean chargeIfQuotaExceedAllowed() throws QuotaException {
         return chargeIfQuotaExceedAllowed(quotaManager.getQuotaConfig().quotaAccountingUnit);
       }
 
       @Override
-      public QuotaResource getQuotaResource() throws RestServiceException {
-        return QuotaUtils.getQuotaResourceId(restRequest);
+      public QuotaResource getQuotaResource() throws QuotaException {
+        return QuotaUtils.getQuotaResource(restRequest);
       }
 
       @Override
@@ -93,43 +93,44 @@ public interface QuotaChargeCallback {
    * Callback method that can be used to checkAndCharge against quota is usage is within quota.
    * @param chunkSize of the chunk.
    * @return {@code true} if usage is within quota and checkAndCharge succeeded. {@code false} otherwise.
-   * @throws RestServiceException in case of any exception.
+   * @throws QuotaException in case of any exception.
    */
-  boolean checkAndCharge(long chunkSize) throws RestServiceException;
+  boolean checkAndCharge(long chunkSize) throws QuotaException;
 
   /**
    * Callback method that can be used to checkAndCharge against quota is usage is within quota. Call this method
    * when the quota checkAndCharge doesn't depend on the chunk size.
    * @return {@code true} if usage is within quota and checkAndCharge succeeded. {@code false} otherwise.
-   * @throws RestServiceException in case of any exception.
+   * @throws QuotaException in case of any exception.
    */
-  boolean checkAndCharge() throws RestServiceException;
+  boolean checkAndCharge() throws QuotaException;
 
   /**
    * Check if request should be throttled based on quota usage.
    * @return {@code true} if request usage exceeds limit and request should be throttled. {@code false} otherwise.
+   * @throws QuotaException in case of any exception.
    */
-  boolean check();
+  boolean check() throws QuotaException;
 
   /**
    * Check if usage is allowed to exceed the quota limit.
    * @return {@code true} if usage is allowed to exceed the quota limit. {@code false} otherwise.
-   * @throws RestServiceException in case of any exception.
+   * @throws QuotaException in case of any exception.
    */
-  boolean chargeIfQuotaExceedAllowed() throws RestServiceException;
+  boolean chargeIfQuotaExceedAllowed() throws QuotaException;
 
   /**
    * Check if usage is allowed to exceed the quota limit.
    * @return {@code true} if usage is allowed to exceed the quota limit. {@code false} otherwise.
-   * @throws RestServiceException in case of any exception.
+   * @throws QuotaException in case of any exception.
    */
-  boolean chargeIfQuotaExceedAllowed(long chunkSize) throws RestServiceException;
+  boolean chargeIfQuotaExceedAllowed(long chunkSize) throws QuotaException;
 
   /**
    * @return QuotaResource object.
-   * @throws RestServiceException in case of any errors.
+   * @throws QuotaException in case of any errors.
    */
-  QuotaResource getQuotaResource() throws RestServiceException;
+  QuotaResource getQuotaResource() throws QuotaException;
 
   /**
    * @return QuotaMethod object.

@@ -37,27 +37,23 @@ public interface QuotaEnforcer {
    * @return QuotaRecommendation object with the recommendation.
    */
   QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap);
+      Map<QuotaName, Double> requestCostMap) throws QuotaException;
 
   /**
-   * Makes an {@link QuotaRecommendation} for the {@link QuotaResource} in restRequest. This method doesn't know the
-   * request cost details and hence makes the recommendation based on current quota usage.
+   * Makes an {@link QuotaRecommendation} for the restRequest. This method doesn't know the
+   * request details and hence makes the recommendation based on current quota usage.
    * @param restRequest {@link RestRequest} object.
    * @return QuotaRecommendation object with the recommendation.
    */
-  QuotaRecommendation getResourceRecommendation(RestRequest restRequest);
+  QuotaRecommendation recommend(RestRequest restRequest) throws QuotaException;
 
   /**
-   * Makes a boolean recommendation whether usage is allowed to exceed quota, based on the system usage and state.
-   * This method can be used to allow resource quota usage to exceed their quota limit if system has enough resources.
-   * This method doesn't know the request cost details and hence makes the recommendation based on current quota usage.
-   * @param restRequest {@link RestRequest} object.
-   * @return QuotaRecommendation object with the recommendation.
+   * @return {@code true} if quota exceed is allowed. {@code false} otherwise.
    */
-  boolean isQuotaExceedAllowed(RestRequest restRequest);
+  boolean isQuotaExceedAllowed(RestRequest restRequest) throws QuotaException;
 
   /**
-   * @return QuotaSource object of the service.
+   * @return QuotaSource object of the enforcer.
    */
   QuotaSource getQuotaSource();
 

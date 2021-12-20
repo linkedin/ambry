@@ -24,6 +24,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,7 +34,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -101,17 +101,20 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) {
+  public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) throws QuotaException {
     if (quotaEnforcers.isEmpty()) {
       return null;
     }
     ThrottlingRecommendation throttlingRecommendation;
     Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
     try {
-      List<QuotaRecommendation> quotaRecommendations = quotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.getResourceRecommendation(restRequest))
-          .filter(Objects::nonNull)
-          .collect(Collectors.toList());
+      List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
+      for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
+        QuotaRecommendation quotaRecommendation = quotaEnforcer.recommend(restRequest);
+        if (quotaRecommendation != null) {
+          quotaRecommendations.add(quotaRecommendation);
+        }
+      }
       if (quotaRecommendations.size() == 0) {
         quotaMetrics.quotaNotEnforcedCount.inc();
       }
@@ -127,46 +130,51 @@ public class AmbryQuotaManager implements QuotaManager {
 
   @Override
   public boolean chargeIfQuotaExceedAllowed(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap) throws RestServiceException {
+      Map<QuotaName, Double> requestCostMap) throws QuotaException {
     if (quotaEnforcers.isEmpty()) {
       // No enforcers means nothing is being enforced.
       return true;
     }
-    boolean exceedAllowed = true;
+    boolean isAnyExceedAllowed = false;
     // TODO This synchronization block needs performance check as it has the potential to make OperationControllers synchronized.
     synchronized (this) {
       Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
       try {
-        if (quotaEnforcers.parallelStream()
-            .anyMatch(quotaEnforcer -> !quotaEnforcer.isQuotaExceedAllowed(restRequest)
-                && quotaEnforcer.getResourceRecommendation(restRequest).shouldThrottle())) {
-          exceedAllowed = false;
+        for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
+          boolean quotaExceedAllowed = quotaEnforcer.isQuotaExceedAllowed(restRequest);
+          if (!quotaExceedAllowed && quotaEnforcer.recommend(restRequest).shouldThrottle()) {
+            // If the resource should be throttled on a quota for which exceed is not allowed, then quota exceed cannot be allowed for the request.
+            return false;
+          }
+          if (quotaExceedAllowed) {
+            isAnyExceedAllowed = true;
+          }
         }
-        if (exceedAllowed) {
+        if (isAnyExceedAllowed) {
           quotaMetrics.quotaExceedAllowedCount.inc();
           charge(restRequest, blobInfo, requestCostMap);
         }
+        return isAnyExceedAllowed;
       } finally {
         timer.stop();
       }
     }
-    return exceedAllowed;
   }
 
   @Override
   public boolean chargeIfUsageWithinQuota(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap) throws RestServiceException {
-    QuotaResource quotaResource;
-    try {
-      quotaResource = QuotaUtils.getQuotaResourceId(restRequest);
-    } catch (RestServiceException rEx) {
-      logger.error("Could not get quota resource for blob %s during checkAndCharge attempt. No charging will be done.");
-      // If there is error in quota processing we treat it as usage within quota.
-      throw rEx;
-    }
+      Map<QuotaName, Double> requestCostMap) throws QuotaException {
     if (quotaEnforcers.isEmpty()) {
       // If there are no enforcers that means quota is not enforced, which is treated as usage within quota.
       return true;
+    }
+    QuotaResource quotaResource;
+    try {
+      quotaResource = QuotaUtils.getQuotaResource(restRequest);
+    } catch (QuotaException qEx) {
+      logger.error("Could not get quota resource for blob %s during checkAndCharge attempt. No charging will be done.");
+      // If there is error in quota processing we treat it as usage within quota.
+      throw qEx;
     }
     ThrottlingRecommendation throttlingRecommendation;
     synchronized (quotaResourceMonitorProvider.getQuotaResourceMonitor(quotaResource)) {
@@ -229,12 +237,16 @@ public class AmbryQuotaManager implements QuotaManager {
 
   /**
    * Charge the specified {@code requestCostMap} for the {@link RestRequest} for the blob with specified {@link BlobInfo}.
+   * @param restRequest {@link RestRequest} for which usage should be charged.
+   * @param blobInfo The {@link BlobInfo} of the blob in the restRequest.
+   * @param requestCostMap {@link Map} of {@link QuotaName} to usage to be charged.
+   * @throws QuotaException in case of any exception.
    */
-  private void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) {
-    quotaEnforcers.stream()
-        .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
-        .filter(Objects::nonNull)
-        .collect(Collectors.toList());
+  private void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap)
+      throws QuotaException {
+    for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
+      quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap);
+    }
   }
 
   /**

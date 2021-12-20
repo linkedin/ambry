@@ -16,9 +16,9 @@ package com.github.ambry.router;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
-import com.github.ambry.rest.RestServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,7 +52,19 @@ public class OperationQuotaCharger implements Chargeable {
     if (quotaChargeCallback == null || isCharged) {
       return true;
     }
-    return quotaChargeCallback.check();
+    try {
+      return quotaChargeCallback.check();
+    } catch (QuotaException quotaException) {
+      LOGGER.error("Could not check for the chunk {} due to {}.", blobId.toString(), quotaException.toString());
+      if (!quotaException.isRetryable()) {
+        // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+        // We will return success to let the request go through.
+        isCharged = true;
+      }
+    } catch (Exception ex) {
+      LOGGER.warn("Could not check for the chunk {} due to {}.", blobId.toString(), ex.toString());
+    }
+    return true;
   }
 
   @Override
@@ -62,9 +74,15 @@ public class OperationQuotaCharger implements Chargeable {
     }
     try {
       isCharged = quotaChargeCallback.checkAndCharge();
+    } catch (QuotaException quotaException) {
+      LOGGER.error("Could not charge for the chunk {} due to {}.", blobId.toString(), quotaException.toString());
+      if (!quotaException.isRetryable()) {
+        // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+        // We will return success to let the request go through.
+        isCharged = true;
+      }
     } catch (Exception ex) {
-      LOGGER.warn(String.format("Quota charging failed in %s for blob %s due to %s ", operationName, blobId.toString(),
-          ex.toString()));
+      LOGGER.warn("Could not charge for the chunk {} due to {}.", blobId.toString(), ex.toString());
     }
     return isCharged;
   }
@@ -76,11 +94,15 @@ public class OperationQuotaCharger implements Chargeable {
     }
     try {
       isCharged = quotaChargeCallback.chargeIfQuotaExceedAllowed();
+    } catch (QuotaException quotaException) {
+      LOGGER.error("Could charge for the chunk {} due to {}.", blobId.toString(), quotaException.toString());
+      if (!quotaException.isRetryable()) {
+        // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+        // We will return success to let the request go through.
+        isCharged = true;
+      }
     } catch (Exception ex) {
-      LOGGER.warn(String.format("Quota charging failed in %s for blob %s due to %s ", operationName, blobId.toString(),
-          ex.toString()));
-      // In case of exception we don't set isCharged but let the request go through.
-      return true;
+      LOGGER.warn("Could not charge for the chunk {} due to {}.", blobId.toString(), ex.toString());
     }
     return isCharged;
   }
@@ -92,10 +114,17 @@ public class OperationQuotaCharger implements Chargeable {
     }
     try {
       return quotaChargeCallback.getQuotaResource();
-    } catch (RestServiceException rEx) {
-      LOGGER.error(String.format(
-          "Could create QuotaResource object during %s operation for the chunk %s due to %s. This should never happen.",
-          operationName, blobId.toString(), rEx.toString()));
+    } catch (QuotaException quotaException) {
+      LOGGER.error("Could not create QuotaResource object for the chunk {} due to {}. This should never happen.",
+          blobId.toString(), quotaException.toString());
+      if (!quotaException.isRetryable()) {
+        // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+        // We will return success to let the request go through.
+        isCharged = true;
+      }
+    } catch (Exception ex) {
+      LOGGER.warn("Could create QuotaResource object for the chunk {} due to {}. This should never happen.",
+          blobId.toString(), ex.toString());
     }
     // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
     return null;

@@ -25,6 +25,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaMode;
@@ -320,7 +321,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
 
     @Override
     public boolean chargeIfUsageWithinQuota(RestRequest restRequest, BlobInfo blobInfo,
-        Map<QuotaName, Double> requestCostMap) throws RestServiceException {
+        Map<QuotaName, Double> requestCostMap) throws QuotaException {
       boolean charged = super.chargeIfUsageWithinQuota(restRequest, blobInfo, requestCostMap);
       if (charged) {
         chargeCalledCount.incrementAndGet();

@@ -26,15 +26,15 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.Quota;
+import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaName;
-import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.storage.JSONStringStorageQuotaSource;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -49,11 +49,6 @@ import org.slf4j.LoggerFactory;
 public class JsonCUQuotaSource implements QuotaSource {
   private static final Logger logger = LoggerFactory.getLogger(JsonCUQuotaSource.class);
 
-  private static final long THROTTLE_RETRY_AFTER_MS = 1;
-  private static final long NO_THROTTLE_RETRY_AFTER_MS = -1;
-  private static final int NO_THROTTLE_HTTP_STATUS = 200;
-  private static final int THROTTLE_HTTP_STATUS = 429;
-
   private static final EnumSet<QuotaName> SUPPORTED_QUOTA_NAMES =
       EnumSet.of(QuotaName.READ_CAPACITY_UNIT, QuotaName.WRITE_CAPACITY_UNIT);
   private static final EnumSet<QuotaResourceType> SUPPORTED_QUOTA_RESOURCE_TYPES =
@@ -62,6 +57,7 @@ public class JsonCUQuotaSource implements QuotaSource {
   protected final CUQuota feQuota;
   private final Map<String, CUQuota> cuQuota;
   private final Map<String, CUQuota> cuUsage;
+  private final float maxFrontendCuUsageToAllowExceed;
 
   /**
    * Constructor to create a {@link JSONStringStorageQuotaSource}.
@@ -106,22 +102,36 @@ public class JsonCUQuotaSource implements QuotaSource {
     }
     this.cuQuota = quota;
     this.cuUsage = new HashMap<>();
+    this.maxFrontendCuUsageToAllowExceed = config.maxFrontendCuUsageToAllowExceed;
     cuQuota.keySet().forEach(key -> cuUsage.put(key, new CUQuota(0, 0)));
     feUsage = new CUQuota(0, 0);
   }
 
   @Override
   public Quota<Long> getQuota(QuotaResource quotaResource, QuotaName quotaName) {
-    if (!SUPPORTED_QUOTA_NAMES.contains(quotaName)) {
-      return null;
-    }
-    if (!SUPPORTED_QUOTA_RESOURCE_TYPES.contains(quotaResource.getQuotaResourceType())) {
-      throw new IllegalArgumentException("Unsupported quota resource type: " + quotaResource.getQuotaResourceType());
-    }
+    checkSupported(quotaName, quotaResource);
 
     String resourceId = quotaResource.getResourceId();
     if (cuQuota.containsKey(resourceId)) {
       return new Quota<>(quotaName, cuQuota.get(resourceId).getQuotaValue(quotaName), quotaResource);
+    }
+    return null;
+  }
+
+  @Override
+  public boolean isQuotaExceedAllowed(QuotaMethod quotaMethod) {
+    if(quotaMethod == QuotaMethod.READ) {
+      return ((feUsage.getRcu() * 100) / feQuota.getRcu()) < maxFrontendCuUsageToAllowExceed;
+    } else {
+      return ((feUsage.getWcu() * 100) / feQuota.getWcu()) < maxFrontendCuUsageToAllowExceed;
+    }
+  }
+
+  public Quota<Long> getUsage(QuotaResource quotaResource, QuotaName quotaName) {
+    checkSupported(quotaName, quotaResource);
+    String resourceId = quotaResource.getResourceId();
+    if (cuUsage.containsKey(resourceId)) {
+      return new Quota<>(quotaName, cuUsage.get(resourceId).getQuotaValue(quotaName), quotaResource);
     }
     return null;
   }
@@ -134,21 +144,15 @@ public class JsonCUQuotaSource implements QuotaSource {
     });
   }
 
-  @Override
-  public boolean isReady() {
-    return true;
-  }
-
-  @Override
-  public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) {
+  public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) throws QuotaException {
     String resourceId;
     try {
-      resourceId = QuotaUtils.getQuotaResourceId(restRequest).getResourceId();
-    } catch (RestServiceException rEx) {
+      resourceId = QuotaUtils.getQuotaResource(restRequest).getResourceId();
+    } catch (QuotaException qEx) {
       logger.error(
           "Cannot chargeIfUsageWithinQuota request because could not create resourceId for request for blob {} due to exception {}",
-          blobInfo.getBlobProperties().toString(), rEx.toString());
-      return;
+          blobInfo.getBlobProperties().toString(), qEx.toString());
+      throw qEx;
     }
     if (!cuQuota.containsKey(resourceId)) {
       return;
@@ -160,31 +164,6 @@ public class JsonCUQuotaSource implements QuotaSource {
       cuUsage.get(resourceId).wcu += requestCostMap.get(QuotaName.WRITE_CAPACITY_UNIT);
       feUsage.wcu += requestCostMap.get(QuotaName.WRITE_CAPACITY_UNIT);
     }
-  }
-
-  @Override
-  public QuotaRecommendation checkResourceUsage(RestRequest restRequest) {
-    String resourceId;
-    try {
-      resourceId = QuotaUtils.getQuotaResourceId(restRequest).getResourceId();
-    } catch (RestServiceException rEx) {
-      logger.error("Cannot check resource usage because could not create resourceId due to exception {}",
-          rEx.toString());
-      return null;
-    }
-    if (!cuQuota.containsKey(resourceId)) {
-      return null;
-    }
-    QuotaName quotaName = QuotaUtils.getQuotaName(restRequest);
-    long limit = cuQuota.get(resourceId).getQuotaValue(quotaName);
-    long usage = cuUsage.get(resourceId).getQuotaValue(quotaName);
-    return buildQuotaRecommendation(limit, usage, quotaName);
-  }
-
-  @Override
-  public QuotaRecommendation checkFrontendUsage(RestRequest restRequest) {
-    QuotaName quotaName = QuotaUtils.getQuotaName(restRequest);
-    return buildQuotaRecommendation(feQuota.getQuotaValue(quotaName), feUsage.getQuotaValue(quotaName), quotaName);
   }
 
   public void updateNewQuota(QuotaResource quotaResource, long rcu, long wcu) {
@@ -200,11 +179,13 @@ public class JsonCUQuotaSource implements QuotaSource {
     return cuUsage;
   }
 
-  private QuotaRecommendation buildQuotaRecommendation(long limit, long usage, QuotaName quotaName) {
-    boolean shouldThrottle = (usage >= limit);
-    return new QuotaRecommendation(shouldThrottle, (usage * 100) / (float) limit, quotaName,
-        shouldThrottle ? THROTTLE_HTTP_STATUS : NO_THROTTLE_HTTP_STATUS,
-        shouldThrottle ? THROTTLE_RETRY_AFTER_MS : NO_THROTTLE_RETRY_AFTER_MS);
+  private void checkSupported(QuotaName quotaName, QuotaResource quotaResource) {
+    if (!SUPPORTED_QUOTA_NAMES.contains(quotaName)) {
+      throw new IllegalArgumentException("Unsupported quota name: " + quotaName.name());
+    }
+    if (!SUPPORTED_QUOTA_RESOURCE_TYPES.contains(quotaResource.getQuotaResourceType())) {
+      throw new IllegalArgumentException("Unsupported quota resource type: " + quotaResource.getQuotaResourceType());
+    }
   }
 
   public static class CUQuota {

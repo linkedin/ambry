@@ -27,6 +27,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.Quota;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
@@ -127,23 +128,9 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
   }
 
   @Override
-  public boolean isReady() {
-    return true;
-  }
-
-  @Override
-  public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) {
-    return;
-  }
-
-  @Override
-  public QuotaRecommendation checkResourceUsage(RestRequest restRequest) {
-    return null;
-  }
-
-  @Override
-  public QuotaRecommendation checkFrontendUsage(RestRequest restRequest) {
-    return null;
+  public boolean isQuotaExceedAllowed(QuotaMethod quotaMethod) {
+    // quota exceed is never allowed for storage quota.
+    return false;
   }
 
   /**

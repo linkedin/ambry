@@ -39,13 +39,13 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -140,8 +140,10 @@ class PutOperation {
   // Variables to keep track of netty chunks
   private final RestRequest restRequest;
   private final String loggingContext;
-  private BlobProperties finalBlobProperties;
   private final boolean isEncryptionEnabled;
+  // The set of slipped blob ids generated during the put operation.
+  private final Set<BlobId> slippedPutBlobIds = new HashSet<>();
+  private BlobProperties finalBlobProperties;
   // the total size of the object (the overall blob). This will be initialized to -1 indicating that the value is
   // not yet determined. Once the chunk filling is complete, this will have the actual size of the data read
   // from the channel.
@@ -168,8 +170,6 @@ class PutOperation {
   private long waitTimeForCurrentChunkAvailabilityMs;
   // The time spent by a chunk for data to be available in the channel.
   private long waitTimeForChannelDataAvailabilityMs;
-  // The set of slipped blob ids generated during the put operation.
-  private final Set<BlobId> slippedPutBlobIds = new HashSet<>();
 
   /**
    * Construct a PutOperation with the given parameters. This private constructor is used for both blob uploads and
@@ -1034,6 +1034,8 @@ class PutOperation {
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
+    // the list of partitions already attempted for this chunk.
+    private final List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // the blobId of the current chunk.
     protected BlobId chunkBlobId;
     // the size of raw chunk (prior encryption if applicable)
@@ -1067,8 +1069,6 @@ class PutOperation {
     private int failedAttempts;
     // the partitionId chosen for the current chunk.
     private PartitionId partitionId;
-    // the list of partitions already attempted for this chunk.
-    private final List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // whether the quota is already charged for this chunk.
     private boolean isCharged;
 
@@ -1198,7 +1198,12 @@ class PutOperation {
       if (quotaChargeCallback == null || isCharged) {
         return true;
       }
-      return quotaChargeCallback.check();
+      try {
+        return quotaChargeCallback.check();
+      } catch (Exception exception) {
+        // If there an exception while checking quota, we let the request go through.
+        return true;
+      }
     }
 
     @Override
@@ -1208,8 +1213,17 @@ class PutOperation {
       }
       try {
         isCharged = quotaChargeCallback.checkAndCharge(chunkBlobProperties.getBlobSize());
+      } catch (QuotaException quotaException) {
+        logger.warn("Could not charge quota during PutOperation for the chunk {} due to {}.", blobId.toString(),
+            quotaException.toString());
+        if (!quotaException.isRetryable()) {
+          // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+          // We will return success to let the request go through.
+          isCharged = true;
+        }
       } catch (Exception ex) {
-        logger.warn("Could not charge quota due to {}", ex.toString());
+        logger.warn("Could not charge quota during PutOperation for the chunk {} due to {}.", blobId.toString(),
+            ex.toString());
         // In case of exception we don't set isCharged but let the request go through.
         return true;
       }
@@ -1223,8 +1237,17 @@ class PutOperation {
       }
       try {
         isCharged = quotaChargeCallback.chargeIfQuotaExceedAllowed();
+      } catch (QuotaException quotaException) {
+        logger.warn("Could not charge quota during PutOperation for the chunk {} due to {}.", blobId.toString(),
+            quotaException.toString());
+        if (!quotaException.isRetryable()) {
+          // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+          // We will return success to let the request go through.
+          isCharged = true;
+        }
       } catch (Exception ex) {
-        logger.warn("Could not charge quota due to {}", ex.toString());
+        logger.warn("Could not charge quota during PutOperation for the chunk {} due to {}.", blobId.toString(),
+            ex.toString());
         // In case of exception we don't set isCharged but let the request go through.
         return true;
       }
@@ -1238,10 +1261,19 @@ class PutOperation {
       }
       try {
         return quotaChargeCallback.getQuotaResource();
-      } catch (RestServiceException rEx) {
-        logger.error(String.format(
-            "Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-            blobId.toString(), rEx.toString()));
+      } catch (QuotaException quotaException) {
+        logger.error(
+            "Could create QuotaResource object during PutOperation for the chunk {} due to {}. This should never happen.",
+            blobId.toString(), quotaException.toString());
+        if (!quotaException.isRetryable()) {
+          // If the exception is not retryable, then we set isCharged to true to avoid attempting to charge again.
+          // We will return success to let the request go through.
+          isCharged = true;
+        }
+      } catch (Exception ex) {
+        logger.warn(
+            "Could create QuotaResource object during PutOperation for the chunk {} due to {}. This should never happen.",
+            blobId.toString(), ex.toString());
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;

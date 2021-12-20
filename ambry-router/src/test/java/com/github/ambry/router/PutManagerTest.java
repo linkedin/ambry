@@ -396,24 +396,31 @@ public class PutManagerTest {
         }, new QuotaChargeCallback() {
           @Override
           public boolean checkAndCharge(long chunkSize) {
+            return true;
           }
 
           @Override
           public boolean checkAndCharge() {
+            return true;
           }
 
           @Override
           public boolean check() {
-            return false;
+            return true;
+          }
+
+          @Override
+          public boolean chargeIfQuotaExceedAllowed(long chunkSize) {
+            return true;
           }
 
           @Override
           public boolean chargeIfQuotaExceedAllowed() {
-            return false;
+            return true;
           }
 
           @Override
-          public QuotaResource getQuotaResource() throws RestServiceException {
+          public QuotaResource getQuotaResource() {
             return null;
           }
 
