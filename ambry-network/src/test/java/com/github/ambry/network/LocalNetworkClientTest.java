@@ -130,7 +130,7 @@ public class LocalNetworkClientTest {
    */
   private RequestInfo getRequestInfo() {
     return new RequestInfo("a", new Port(1, PortType.SSL), new MockSend(nextCorrelationId++),
-        new MockReplicaId(ReplicaType.CLOUD_BACKED));
+        new MockReplicaId(ReplicaType.CLOUD_BACKED), null);
   }
 
   private void resetMocks() {

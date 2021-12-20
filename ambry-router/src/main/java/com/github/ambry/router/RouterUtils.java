@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
 /**
  * This is a utility class used by Router.
  */
-class RouterUtils {
+public class RouterUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(RouterUtils.class);
 
@@ -273,7 +273,7 @@ class RouterUtils {
    * @param sentResponse {@link Response} object constructed at sender side.
    * @return {@link Response} object constructed at receiver side.
    */
-  private static Response mapToReceivedResponse(Response sentResponse) {
+  public static Response mapToReceivedResponse(Response sentResponse) {
     Response receivedResponse;
     if (sentResponse instanceof GetResponse) {
       GetResponse getResponse = (GetResponse) sentResponse;
