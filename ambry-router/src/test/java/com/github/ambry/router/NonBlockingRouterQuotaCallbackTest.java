@@ -32,9 +32,11 @@ import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.ThrottlePolicy;
+import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
+import com.sun.org.apache.xpath.internal.operations.Quo;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -116,18 +118,18 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       assertExpectedThreadCounts(2, 1);
       AtomicLong listenerCalledCount = new AtomicLong(0);
       int expectedChargeCallbackCount = 0;
-      // create a quota chargeIfUsageWithinQuota listener that increments an atomic counter everytime its called.
+      // create a quota charge listener that increments an atomic counter everytime its called.
       // Also tests that in case quota if charged in tracking mode with throttleInProgress config set to false
       // then the requests go through even in case of exception.
       QuotaChargeCallback quotaChargeCallback = new QuotaChargeCallback() {
         @Override
-        public boolean checkAndCharge(long chunkSize) {
+        public boolean checkAndCharge(long chunkSize) throws QuotaException {
           listenerCalledCount.addAndGet(chunkSize);
-          return false;
+          throw new QuotaException("exception during check and charge", new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests), false);
         }
 
         @Override
-        public boolean checkAndCharge() {
+        public boolean checkAndCharge() throws QuotaException {
           return checkAndCharge(quotaAccountingSize);
         }
 
@@ -259,7 +261,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
   }
 
   /**
-   * Test default {@link QuotaChargeCallback} doesn't chargeIfUsageWithinQuota anything and doesn't error out when throttling is disabled.
+   * Test default {@link QuotaChargeCallback} doesn't charge anything and doesn't error out when throttling is disabled.
    */
   @Test
   public void testRouterWithDefaultQuotaCallback() throws Exception {
@@ -271,7 +273,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       QuotaManager quotaManager =
           new ChargeTesterQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), accountService, null,
               new MetricRegistry(), listenerCalledCount);
-      QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager);
+      QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager, true);
 
       int blobSize = 3000;
       setOperationParams(blobSize, TTL_SECS);
@@ -320,13 +322,13 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     }
 
     @Override
-    public boolean chargeIfUsageWithinQuota(RestRequest restRequest, BlobInfo blobInfo,
-        Map<QuotaName, Double> requestCostMap) throws QuotaException {
-      boolean charged = super.chargeIfUsageWithinQuota(restRequest, blobInfo, requestCostMap);
-      if (charged) {
+    public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+        Map<QuotaName, Double> requestCostMap) {
+      ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest, blobInfo, requestCostMap);
+      if (throttlingRecommendation != null) {
         chargeCalledCount.incrementAndGet();
       }
-      return charged;
+      return throttlingRecommendation;
     }
   }
 }

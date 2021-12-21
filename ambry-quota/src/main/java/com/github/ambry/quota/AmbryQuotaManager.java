@@ -22,7 +22,6 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -101,30 +100,54 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) throws QuotaException {
+  public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) {
     if (quotaEnforcers.isEmpty()) {
       return null;
     }
-    ThrottlingRecommendation throttlingRecommendation;
+    ThrottlingRecommendation throttlingRecommendation = null;
     Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
+    List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
     try {
-      List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
       for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
         QuotaRecommendation quotaRecommendation = quotaEnforcer.recommend(restRequest);
         if (quotaRecommendation != null) {
           quotaRecommendations.add(quotaRecommendation);
         }
       }
-      if (quotaRecommendations.size() == 0) {
-        quotaMetrics.quotaNotEnforcedCount.inc();
-      }
-      throttlingRecommendation = throttlePolicy.recommend(quotaRecommendations);
-      if (throttlingRecommendation.shouldThrottle()) {
-        quotaMetrics.quotaExceededCount.inc();
-      }
-    } finally {
-      timer.stop();
+    } catch (QuotaException quotaException) {
+      logger.warn("Failed during getThrottleRecommendation with exception {}", quotaException.getMessage());
     }
+    if (quotaRecommendations.size() == 0) {
+      quotaMetrics.quotaNotEnforcedCount.inc();
+    }
+    throttlingRecommendation = throttlePolicy.recommend(quotaRecommendations);
+    if (throttlingRecommendation.shouldThrottle()) {
+      quotaMetrics.quotaExceededCount.inc();
+    }
+    timer.stop();
+    return throttlingRecommendation;
+  }
+
+  @Override
+  public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+      Map<QuotaName, Double> requestCostMap) {
+    if (quotaEnforcers.isEmpty()) {
+      return null;
+    }
+    ThrottlingRecommendation throttlingRecommendation;
+    Timer.Context timer = quotaMetrics.quotaChargeTime.time();
+    List<QuotaRecommendation> recommendations = new ArrayList<>();
+    try {
+      for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
+        if (quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap) != null) {
+          recommendations.add(quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap));
+        }
+      }
+    } catch (QuotaException quotaException) {
+      logger.warn("Failed during charge due to exception {}", quotaException);
+    }
+    throttlingRecommendation = throttlePolicy.recommend(recommendations);
+    timer.stop();
     return throttlingRecommendation;
   }
 
@@ -152,7 +175,7 @@ public class AmbryQuotaManager implements QuotaManager {
         }
         if (isAnyExceedAllowed) {
           quotaMetrics.quotaExceedAllowedCount.inc();
-          charge(restRequest, blobInfo, requestCostMap);
+          chargeQuotaUsage(restRequest, blobInfo, requestCostMap);
         }
         return isAnyExceedAllowed;
       } finally {
@@ -184,7 +207,7 @@ public class AmbryQuotaManager implements QuotaManager {
         if (throttlingRecommendation.shouldThrottle()) {
           return false;
         }
-        charge(restRequest, blobInfo, requestCostMap);
+        chargeQuotaUsage(restRequest, blobInfo, requestCostMap);
       } finally {
         timer.stop();
       }
@@ -242,7 +265,7 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param requestCostMap {@link Map} of {@link QuotaName} to usage to be charged.
    * @throws QuotaException in case of any exception.
    */
-  private void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap)
+  private void chargeQuotaUsage(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap)
       throws QuotaException {
     for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
       quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap);

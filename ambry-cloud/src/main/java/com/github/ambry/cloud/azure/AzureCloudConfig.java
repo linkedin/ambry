@@ -44,7 +44,7 @@ public class AzureCloudConfig {
   public static final String AZURE_IDENTITY_PROXY_PORT = "azure.identity.proxy.port";
   public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
   public static final String COSMOS_CONTAINER_DELETION_BATCH_SIZE = "cosmos.container.deletion.batch.size";
-  public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.chargeIfUsageWithinQuota.threshold";
+  public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
   public static final String COSMOS_CONTINUATION_TOKEN_LIMIT_KB = "cosmos.continuation.token.limit.kb";
   public static final String AZURE_PURGE_BATCH_SIZE = "azure.purge.batch.size";
   public static final String COSMOS_PURGE_BATCH_SIZE = "cosmos.purge.batch.size";
@@ -149,7 +149,7 @@ public class AzureCloudConfig {
   public final int cosmosContinuationTokenLimitKb;
 
   /**
-   * The Cosmos request chargeIfUsageWithinQuota threshold to log.
+   * The Cosmos request charge threshold to log.
    */
   @Config(COSMOS_REQUEST_CHARGE_THRESHOLD)
   public final int cosmosRequestChargeThreshold;

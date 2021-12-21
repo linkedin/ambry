@@ -21,7 +21,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
@@ -29,7 +28,6 @@ import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.RequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.quota.UserQuotaRequestCostPolicy;
-import com.github.ambry.quota.capacityunit.JsonCUQuotaSource;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -49,8 +47,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.router.GetBlobOptions.*;
@@ -61,7 +57,6 @@ import static com.github.ambry.router.GetBlobOptions.*;
  * sets the respective headers on response.
  */
 class AmbrySecurityService implements SecurityService {
-  private static final Logger logger = LoggerFactory.getLogger(AmbrySecurityService.class);
   static final Set<String> OPERATIONS = Collections.unmodifiableSet(
       Utils.getStaticFieldValuesAsStrings(Operations.class)
           .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
@@ -137,6 +132,15 @@ class AmbrySecurityService implements SecurityService {
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else {
+        if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
+          ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
+          if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
+              && quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
+            Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
+            throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests, true, true,
+                quotaHeaderMap);
+          }
+        }
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
           accountAndContainerNamePreconditionCheck(restRequest);
         } else if (restRequest.getRestMethod() == RestMethod.GET) {
@@ -164,16 +168,12 @@ class AmbrySecurityService implements SecurityService {
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
     setRequestCostHeader(requestCost, responseChannel);
     if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
-      try {
-        ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
-        if (throttlingRecommendation != null) {
-          RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)
-              .entrySet()
-              .stream()
-              .forEach(headerEntry -> responseChannel.setHeader(headerEntry.getKey(), headerEntry.getValue()));
-        }
-      } catch (QuotaException quotaException) {
-        logger.error("Could not create quota response headers due to {}", quotaException.getMessage());
+      ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
+      if (throttlingRecommendation != null) {
+        RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)
+            .entrySet()
+            .stream()
+            .forEach(headerEntry -> responseChannel.setHeader(headerEntry.getKey(), headerEntry.getValue()));
       }
     }
   }

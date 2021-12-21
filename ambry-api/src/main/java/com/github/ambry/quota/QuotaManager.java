@@ -16,7 +16,6 @@ package com.github.ambry.quota;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import java.util.Map;
 
 
@@ -34,17 +33,30 @@ public interface QuotaManager {
 
   /**
    * Computes the recommendation to throttle a request or not based only on usage exceeding quota.
-   * This method does not chargeIfUsageWithinQuota the requestCost against the quota.
+   * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @return ThrottlingRecommendation object that captures the recommendation.
-   * @throws QuotaException in case of any exception.
    */
-  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) throws QuotaException;
+  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
 
   /**
-   * Charges the requestCost against the quota for the QuotaResource in the specified restRequest and blobInfo if quota
+   * Charges the requestCost against the quota for the specified restRequest and blobInfo.
+   * Atomically charges the requestCost against the quota for the QuotaResource in the specified restRequest and blobInfo if quota
    * exceed is allowed.
-   * This method does not chargeIfUsageWithinQuota the requestCost against the quota.
+   * This method does not charge the requestCost against the quota.
+   * @param restRequest {@link RestRequest} object.
+   * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
+   *                                 determined by enforcers.
+   * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
+   * @return ThrottlingRecommendation object that captures the overall recommendation.
+   * @return {@code true} if usage is allowed to exceed quota. {@code false} otherwise.
+   */
+  ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap);
+
+  /**
+   * Atomically charges the requestCost against the quota for the QuotaResource in the specified restRequest and blobInfo if quota
+   * exceed is allowed.
+   * This method does not charge the requestCost against the quota.
    * @param restRequest {@link RestRequest} object.
    * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
    *                                 determined by enforcers.
@@ -56,7 +68,7 @@ public interface QuotaManager {
       throws QuotaException;
 
   /**
-   * Charges the requestCost against the quota for the QuotaResource in the specified restRequest and blobInfo if usage
+   * Atomically charges the requestCost against the quota for the QuotaResource in the specified restRequest and blobInfo if usage
    * is within quota.
    * @param restRequest {@link RestRequest} object.
    * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be

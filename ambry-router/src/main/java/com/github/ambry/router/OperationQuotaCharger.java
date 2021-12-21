@@ -36,7 +36,7 @@ public class OperationQuotaCharger implements Chargeable {
   /**
    * Constructor for {@link OperationQuotaCharger}.
    *
-   * @param quotaChargeCallback {@link QuotaChargeCallback} object to chargeIfUsageWithinQuota and check quotas.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} object to charge and check quotas.
    * @param blobId {@link BlobId} of the blob for which quota will be charged.
    * @param operationName Name of the operation.
    */

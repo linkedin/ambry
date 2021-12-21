@@ -69,6 +69,12 @@ public class QuotaTestUtils {
       }
 
       @Override
+      public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
+          Map<QuotaName, Double> requestCostMap) {
+        return null;
+      }
+
+      @Override
       public boolean chargeIfUsageWithinQuota(RestRequest restRequest, BlobInfo blobInfo,
           Map<QuotaName, Double> requestCostMap) {
         return true;
