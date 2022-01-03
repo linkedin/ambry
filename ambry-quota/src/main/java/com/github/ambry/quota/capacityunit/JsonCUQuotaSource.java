@@ -53,6 +53,8 @@ public class JsonCUQuotaSource implements QuotaSource {
       EnumSet.of(QuotaName.READ_CAPACITY_UNIT, QuotaName.WRITE_CAPACITY_UNIT);
   private static final EnumSet<QuotaResourceType> SUPPORTED_QUOTA_RESOURCE_TYPES =
       EnumSet.of(QuotaResourceType.ACCOUNT, QuotaResourceType.CONTAINER);
+  private static final long DEFAULT_RCU_FOR_NEW_RESOURCE = 0;
+  private static final long DEFAULT_WCU_FOR_NEW_RESOURCE = 0;
   protected final CUQuota feUsage;
   protected final CUQuota feQuota;
   private final Map<String, CUQuota> cuQuota;
@@ -74,7 +76,7 @@ public class JsonCUQuotaSource implements QuotaSource {
           objectMapper.readValue(config.resourceCUQuotaInJson, new TypeReference<Map<String, MapOrQuota>>() {
           });
       for (Map.Entry<String, MapOrQuota> entry : tempQuotas.entrySet()) {
-        Account account = accountService.getAccountById(Short.parseShort(entry.getKey()));
+        final Account account = accountService.getAccountById(Short.parseShort(entry.getKey()));
         if (account == null) {
           throw new IllegalStateException("No account id " + entry.getKey() + " is found in the account service");
         }
@@ -120,7 +122,7 @@ public class JsonCUQuotaSource implements QuotaSource {
 
   @Override
   public boolean isQuotaExceedAllowed(QuotaMethod quotaMethod) {
-    if(quotaMethod == QuotaMethod.READ) {
+    if (quotaMethod == QuotaMethod.READ) {
       return ((feUsage.getRcu() * 100) / feQuota.getRcu()) < maxFrontendCuUsageToAllowExceed;
     } else {
       return ((feUsage.getWcu() * 100) / feQuota.getWcu()) < maxFrontendCuUsageToAllowExceed;
@@ -139,12 +141,14 @@ public class JsonCUQuotaSource implements QuotaSource {
   @Override
   public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
     quotaResources.forEach(quotaResource -> {
-      cuQuota.put(quotaResource.getResourceId(), new CUQuota(0, 0));
-      cuUsage.put(quotaResource.getResourceId(), new CUQuota(0, 0));
+      cuQuota.putIfAbsent(quotaResource.getResourceId(),
+          new CUQuota(DEFAULT_RCU_FOR_NEW_RESOURCE, DEFAULT_WCU_FOR_NEW_RESOURCE));
+      cuUsage.putIfAbsent(quotaResource.getResourceId(), new CUQuota(0, 0));
     });
   }
 
-  public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap) throws QuotaException {
+  public void charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap)
+      throws QuotaException {
     String resourceId;
     try {
       resourceId = QuotaUtils.getQuotaResource(restRequest).getResourceId();
@@ -164,11 +168,6 @@ public class JsonCUQuotaSource implements QuotaSource {
       cuUsage.get(resourceId).wcu += requestCostMap.get(QuotaName.WRITE_CAPACITY_UNIT);
       feUsage.wcu += requestCostMap.get(QuotaName.WRITE_CAPACITY_UNIT);
     }
-  }
-
-  public void updateNewQuota(QuotaResource quotaResource, long rcu, long wcu) {
-    cuQuota.put(quotaResource.getResourceId(), new CUQuota(rcu, wcu));
-    cuUsage.put(quotaResource.getResourceId(), new CUQuota(0, 0));
   }
 
   public Map<String, CUQuota> getAllQuota() {

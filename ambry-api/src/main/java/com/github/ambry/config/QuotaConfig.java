@@ -100,6 +100,9 @@ public class QuotaConfig {
   @Config(QUOTA_ACCOUNTING_UNIT)
   public long quotaAccountingUnit;
 
+  /**
+   * Threshold of CU usage percentage of frontend to allow requests to exceed quota.
+   */
   @Config(MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED)
   public float maxFrontendCuUsageToAllowExceed;
 
