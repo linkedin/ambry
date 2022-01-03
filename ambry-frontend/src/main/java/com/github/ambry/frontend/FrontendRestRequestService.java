@@ -868,7 +868,7 @@ class FrontendRestRequestService implements RestRequestService {
      * @param restRequest the {@link RestRequest} for whose response this is a callback.
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
-     * @param options the {@link GetBlobOptions} associated with the {@link Router's getBlob(String, GetBlobOptions, Callback)} call.
+     * @param options the {@link GetBlobOptions} associated with the {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
      */
     GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, SubResource subResource,
         GetBlobOptions options) {
