@@ -461,6 +461,7 @@ class PutOperation {
    */
   private void releaseResource() {
     for (PutChunk chunk : putChunks) {
+      logger.debug("{}: Chunk {} state: {}", loggingContext, chunk.getChunkIndex(), chunk.getState());
       // Only release the chunk in ready or complete mode. Filler thread will release the chunk in building mode
       // and the encryption thread will release the chunk in encrypting mode.
       if (chunk.isReady() || chunk.isComplete()) {
@@ -612,6 +613,7 @@ class PutOperation {
         }
       }
       if (chunkFillingCompletedSuccessfully) {
+        logger.debug("{}: chunk filling completed, now try to send out the last chunk", loggingContext);
         // If the blob size is less then 4MB or the last chunk size is less than 4MB, than this lastChunk will be
         // the chunk above.
         PutChunk lastChunk = getBuildingChunk();
@@ -631,18 +633,14 @@ class PutOperation {
         }
       }
       if (operationCompleted) {
-        PutChunk lastChunk = getBuildingChunk();
-        if (lastChunk != null) {
-          logger.info("{}: Clear unfinished chunk since operation is completed", loggingContext);
-          // call release blob content, not clear, since clear should only be used in the main thread.
-          lastChunk.releaseBlobContent();
-        }
-        // Go over the put chunk list and release ready and complete chunks. This is because the multi-threading.
+        logger.debug("{}: Operation terminated, now try to clean up chunks", loggingContext);
+        // Go over the put chunk list and release building, ready and complete chunks. This is because the multi-threading.
         // We have callback in chunk.readInto to release all the ready and complete chunks but that's in different
         // thread. There might a chance when callback runs, the last chunk is still building and then change to complete.
         for (PutChunk chunk : putChunks) {
-          if (chunk.isReady() || chunk.isComplete()) {
-            logger.info("{}: Clear unfinished chunk(in complete) since operation is completed", loggingContext);
+          if (chunk.isBuilding() || chunk.isReady() || chunk.isComplete()) {
+            logger.info("{}: Clear unfinished chunk {} {} since operation is completed", loggingContext,
+                chunk.getChunkIndex(), chunk.getState());
             chunk.releaseBlobContent();
           }
         }
@@ -681,7 +679,9 @@ class PutOperation {
    *
    * @return the set of slipped chunk blob ids.
    */
-  Set<BlobId> getSlippedPutBlobIds() { return slippedPutBlobIds; }
+  Set<BlobId> getSlippedPutBlobIds() {
+    return slippedPutBlobIds;
+  }
 
   /**
    * Called whenever the channel has data but no free or building chunk is available to be filled.
@@ -1163,7 +1163,7 @@ class PutOperation {
 
     @Override
     public boolean quotaExceedAllowed() {
-      if(quotaChargeCallback == null) {
+      if (quotaChargeCallback == null) {
         return true;
       }
       return quotaChargeCallback.quotaExceedAllowed();
@@ -1171,15 +1171,15 @@ class PutOperation {
 
     @Override
     public QuotaResource getQuotaResource() {
-      if(quotaChargeCallback == null) {
+      if (quotaChargeCallback == null) {
         return null;
       }
       try {
         return quotaChargeCallback.getQuotaResource();
       } catch (RestServiceException rEx) {
-        logger.error(
-            String.format("Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-                blobId.toString(), rEx.toString()));
+        logger.error(String.format(
+            "Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
+            blobId.toString(), rEx.toString()));
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;
