@@ -20,7 +20,6 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.RequestOrResponse;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -104,8 +103,7 @@ public class Http2NetworkClient implements NetworkClient {
     for (RequestInfo requestInfo : requestsToSend) {
       long streamInitiateTime = System.currentTimeMillis();
 
-      RequestOrResponse request = (RequestOrResponse) (requestInfo.getRequest());
-      long waitingTime = streamInitiateTime - request.requestCreateTime;
+      long waitingTime = streamInitiateTime - requestInfo.getRequestCreateTime();
       http2ClientMetrics.requestToNetworkClientLatencyMs.update(waitingTime);
 
       this.pools.get(InetSocketAddress.createUnresolved(requestInfo.getHost(), requestInfo.getPort().getPort()))

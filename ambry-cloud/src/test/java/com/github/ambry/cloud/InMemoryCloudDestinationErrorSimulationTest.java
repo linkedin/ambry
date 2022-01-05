@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -40,6 +39,7 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.DeleteRequest;
@@ -50,12 +50,12 @@ import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.router.CloudRouterFactory;
+import com.github.ambry.router.RouterUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -100,7 +100,9 @@ public class InMemoryCloudDestinationErrorSimulationTest {
   }
 
   @After
-  public void after() { nettyByteBufLeakHelper.afterTest(); }
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   /**
    * Initialize parameters common to all tests.
@@ -128,10 +130,11 @@ public class InMemoryCloudDestinationErrorSimulationTest {
 
     LocalNetworkClientFactory cloudClientFactory =
         new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
-        new NetworkConfig(vprops), new NetworkMetrics(new MetricRegistry()), time);
+            new NetworkConfig(vprops), new NetworkMetrics(new MetricRegistry()), time);
     mockNetworkClient = cloudClientFactory.getNetworkClient();
 
-    List<PartitionId> writablePartitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    List<PartitionId> writablePartitionIds =
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     partitionId = writablePartitionIds.get(random.nextInt(writablePartitionIds.size()));
     // Get the cloud replica.
     replica = partitionId.getReplicaIds().get(0);
@@ -173,8 +176,9 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     int blobSize = 4096;
     // direct put DataBlob
     BlobType blobType = BlobType.DataBlob;
-    BlobProperties blobProperties = new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random), false, null, null, null);
+    BlobProperties blobProperties =
+        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(random), Utils.getRandomShort(random), false, null, null, null);
     byte[] userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     byte[] putContent = new byte[blobSize];
@@ -197,7 +201,8 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     RequestInfo requestInfo = new RequestInfo(hostname, port, request, replica, null);
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
     Assert.assertEquals("doPut should succeed.", responseInfo.getError(), null);
-    PutResponse response = PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()));
+    //PutResponse response = PutResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content()));
+    PutResponse response = (PutResponse) RouterUtils.mapToReceivedResponse((PutResponse) responseInfo.getResponse());
     Assert.assertEquals("The PutResponse is not expected.", expectedCode, response.getError());
     request.release();
     blobContent.release();
@@ -244,25 +249,27 @@ public class InMemoryCloudDestinationErrorSimulationTest {
         new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
     RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replica, null);
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
-    GetResponse response = responseInfo.getError() == null ? GetResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+    GetResponse response = responseInfo.getError() == null ? (GetResponse) RouterUtils.mapToReceivedResponse(
+        (Response) responseInfo.getResponse()) : null;
+
     PartitionResponseInfo partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
     Assert.assertEquals("GetRequest should succeed.", response.getError(), ServerErrorCode.No_Error);
-    Assert.assertEquals("GetRequest partitionResponseInfo should succeed.", partitionResponseInfo.getErrorCode(), ServerErrorCode.No_Error);
-    response.release();
+    Assert.assertEquals("GetRequest partitionResponseInfo should succeed.", partitionResponseInfo.getErrorCode(),
+        ServerErrorCode.No_Error);
+    responseInfo.release();
 
     // inject error for cloud colo.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.ID_Not_Found);
-    getRequest =
-        new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+    getRequest = new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
     requestInfo = new RequestInfo(hostname, port, getRequest, replica, null);
     responseInfo = sendAndWaitForResponses(requestInfo);
-    response = responseInfo.getError() == null ? GetResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+    response = responseInfo.getError() == null ? (GetResponse) RouterUtils.mapToReceivedResponse(
+        (Response) responseInfo.getResponse()) : null;
     partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
     Assert.assertEquals("GetRequest responseInfo should have no error.", response.getError(), ServerErrorCode.No_Error);
-    Assert.assertEquals("GetRequest partitionResponseInfo should be Blob_Not_Found", partitionResponseInfo.getErrorCode(), ServerErrorCode.Blob_Not_Found);
-    response.release();
+    Assert.assertEquals("GetRequest partitionResponseInfo should be Blob_Not_Found",
+        partitionResponseInfo.getErrorCode(), ServerErrorCode.Blob_Not_Found);
+    responseInfo.release();
   }
 
   /**
@@ -282,12 +289,13 @@ public class InMemoryCloudDestinationErrorSimulationTest {
         new GetRequest(1234, "clientId", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOption.None);
     RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replica, null);
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
-    GetResponse response = responseInfo.getError() == null ? GetResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+    GetResponse response = responseInfo.getError() == null ? (GetResponse) RouterUtils.mapToReceivedResponse(
+        (Response) responseInfo.getResponse()) : null;
     PartitionResponseInfo partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
     Assert.assertEquals("GetBlobInfo should succeed.", response.getError(), ServerErrorCode.No_Error);
-    Assert.assertEquals("GetBlobInfo partitionResponseInfo should succeed.", partitionResponseInfo.getErrorCode(), ServerErrorCode.No_Error);
-    response.release();
+    Assert.assertEquals("GetBlobInfo partitionResponseInfo should succeed.", partitionResponseInfo.getErrorCode(),
+        ServerErrorCode.No_Error);
+    responseInfo.release();
 
     // inject error for cloud colo.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.ID_Not_Found);
@@ -295,12 +303,14 @@ public class InMemoryCloudDestinationErrorSimulationTest {
         new GetRequest(1234, "clientId", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOption.None);
     requestInfo = new RequestInfo(hostname, port, getRequest, replica, null);
     responseInfo = sendAndWaitForResponses(requestInfo);
-    response = responseInfo.getError() == null ? GetResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+    response = responseInfo.getError() == null ? (GetResponse) RouterUtils.mapToReceivedResponse(
+        (Response) responseInfo.getResponse()) : null;
     partitionResponseInfo = response.getPartitionResponseInfoList().get(0);
-    Assert.assertEquals("GetBlobInfo responseInfo should have no error.", response.getError(), ServerErrorCode.No_Error);
-    Assert.assertEquals("GetBlobInfo partitionResponseInfo should be Blob_Not_Found", partitionResponseInfo.getErrorCode(), ServerErrorCode.Blob_Not_Found);
-    response.release();
+    Assert.assertEquals("GetBlobInfo responseInfo should have no error.", response.getError(),
+        ServerErrorCode.No_Error);
+    Assert.assertEquals("GetBlobInfo partitionResponseInfo should be Blob_Not_Found",
+        partitionResponseInfo.getErrorCode(), ServerErrorCode.Blob_Not_Found);
+    responseInfo.release();
   }
 
   /**
@@ -311,24 +321,25 @@ public class InMemoryCloudDestinationErrorSimulationTest {
   public void testTtlUpdateErrorSimulation() throws Exception {
     BlobId blobId = doPut(partitionId);
 
-    TtlUpdateRequest ttlUpdateRequest = new TtlUpdateRequest(1234, "clientId", blobId, Utils.Infinite_Time,
-        SystemTime.getInstance().milliseconds());
+    TtlUpdateRequest ttlUpdateRequest =
+        new TtlUpdateRequest(1234, "clientId", blobId, Utils.Infinite_Time, SystemTime.getInstance().milliseconds());
     RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica, null);
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
-    TtlUpdateResponse response = responseInfo.getError() == null ? TtlUpdateResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content())) : null;
+    TtlUpdateResponse response =
+        responseInfo.getError() == null ? (TtlUpdateResponse) RouterUtils.mapToReceivedResponse(
+            (Response) responseInfo.getResponse()) : null;
     Assert.assertEquals("TtlUpdate should succeed.", response.getError(), ServerErrorCode.No_Error);
     response.release();
 
     // inject error for cloud colo.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.TTL_Expired);
 
-    ttlUpdateRequest = new TtlUpdateRequest(1234, "clientId", blobId, Utils.Infinite_Time,
-        SystemTime.getInstance().milliseconds());
+    ttlUpdateRequest =
+        new TtlUpdateRequest(1234, "clientId", blobId, Utils.Infinite_Time, SystemTime.getInstance().milliseconds());
     requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica, null);
     responseInfo = sendAndWaitForResponses(requestInfo);
-    response = responseInfo.getError() == null ? TtlUpdateResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content())) : null;
+    response = responseInfo.getError() == null ? ((TtlUpdateResponse) RouterUtils.mapToReceivedResponse(
+        (Response) responseInfo.getResponse())) : null;
     Assert.assertEquals("TtlUpdate should return Blob_Expired.", response.getError(), ServerErrorCode.Blob_Expired);
     response.release();
   }
@@ -341,24 +352,22 @@ public class InMemoryCloudDestinationErrorSimulationTest {
   public void testDeleteBlobErrorSimulation() throws Exception {
     BlobId blobId = doPut(partitionId);
 
-    DeleteRequest request = new DeleteRequest(1234, "clientId", blobId,
-        SystemTime.getInstance().milliseconds());
+    DeleteRequest request = new DeleteRequest(1234, "clientId", blobId, SystemTime.getInstance().milliseconds());
 
     RequestInfo requestInfo = new RequestInfo(hostname, port, request, replica, null);
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
-    DeleteResponse response = responseInfo.getError() == null ? DeleteResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content())) : null;
+    DeleteResponse response = responseInfo.getError() == null ? ((DeleteResponse) RouterUtils.mapToReceivedResponse(
+        (Response) responseInfo.getResponse())) : null;
     Assert.assertEquals("DeleteBlob should succeed.", response.getError(), ServerErrorCode.No_Error);
 
     // inject error for cloud colo.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.Unknown_Error);
 
-    request = new DeleteRequest(1234, "clientId", blobId,
-        SystemTime.getInstance().milliseconds());
+    request = new DeleteRequest(1234, "clientId", blobId, SystemTime.getInstance().milliseconds());
     requestInfo = new RequestInfo(hostname, port, request, replica, null);
     responseInfo = sendAndWaitForResponses(requestInfo);
-    response = responseInfo.getError() == null ? DeleteResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content())) : null;
+    response = responseInfo.getError() == null ? ((DeleteResponse) RouterUtils.mapToReceivedResponse(
+        (Response) responseInfo.getResponse())) : null;
     Assert.assertEquals("DeleteBlob should return Unknown_Error.", response.getError(), ServerErrorCode.Unknown_Error);
     response.release();
   }
@@ -377,15 +386,16 @@ public class InMemoryCloudDestinationErrorSimulationTest {
 
       RequestInfo requestInfo = new RequestInfo(hostname, port, request, replica, null);
       ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
-      DeleteResponse response = responseInfo.getError() == null ? DeleteResponse.readFrom(new NettyByteBufDataInputStream(responseInfo.content())) : null;
+      DeleteResponse response = responseInfo.getError() == null ? (DeleteResponse) RouterUtils.mapToReceivedResponse(
+          (Response) responseInfo.getResponse()) : null;
       Assert.assertEquals("DeleteRequest should succeed.", response.getError(), ServerErrorCode.No_Error);
     }
 
     UndeleteRequest request = new UndeleteRequest(1234, "clientId", blobId, SystemTime.getInstance().milliseconds());
     RequestInfo requestInfo = new RequestInfo(hostname, port, request, replica, null);
     ResponseInfo responseInfo = sendAndWaitForResponses(requestInfo);
-    UndeleteResponse response = responseInfo.getError() == null ? UndeleteResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content())) : null;
+    UndeleteResponse response = responseInfo.getError() == null ? (UndeleteResponse) RouterUtils.mapToReceivedResponse(
+        (UndeleteResponse) responseInfo.getResponse()) : null;
     Assert.assertEquals("UndeleteRequest should succeed.", response.getError(), ServerErrorCode.No_Error);
     response.release();
 
@@ -395,12 +405,12 @@ public class InMemoryCloudDestinationErrorSimulationTest {
     request = new UndeleteRequest(1234, "clientId", blobId, SystemTime.getInstance().milliseconds());
     requestInfo = new RequestInfo(hostname, port, request, replica, null);
     responseInfo = sendAndWaitForResponses(requestInfo);
-    response = responseInfo.getError() == null ? UndeleteResponse.readFrom(
-        new NettyByteBufDataInputStream(responseInfo.content())) : null;
-    Assert.assertEquals("UndeleteRequest should return Unknown_Error.", response.getError(), ServerErrorCode.Unknown_Error);
+    response = responseInfo.getError() == null ? (UndeleteResponse) RouterUtils.mapToReceivedResponse(
+        (UndeleteResponse) responseInfo.getResponse()) : null;
+    Assert.assertEquals("UndeleteRequest should return Unknown_Error.", response.getError(),
+        ServerErrorCode.Unknown_Error);
     response.release();
   }
-
 
   /**
    * Get the default {@link Properties}.
@@ -437,7 +447,8 @@ public class InMemoryCloudDestinationErrorSimulationTest {
         LatchBasedInMemoryCloudDestinationFactory.class.getName());
     properties.setProperty(CloudConfig.VCR_MIN_TTL_DAYS, "0");
 
-    properties.setProperty("kms.default.container.key", "B374A26A71490437AA024E4FADD5B497FDFF1A8EA6FF12F6FB65AF2720B59CCF");
+    properties.setProperty("kms.default.container.key",
+        "B374A26A71490437AA024E4FADD5B497FDFF1A8EA6FF12F6FB65AF2720B59CCF");
     return properties;
   }
 }

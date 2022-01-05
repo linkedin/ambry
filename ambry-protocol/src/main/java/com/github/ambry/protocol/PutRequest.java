@@ -121,7 +121,6 @@ public class PutRequest extends RequestOrResponse {
     this.blobEncryptionKey = blobEncryptionKey;
     this.blob = materializedBlob;
     this.crc = crc32Impl;
-    this.crcByteBuf = PooledByteBufAllocator.DEFAULT.ioBuffer(CRC_SIZE_IN_BYTES);
     this.blobStream = null;
     this.crcValue = null;
   }
@@ -139,7 +138,7 @@ public class PutRequest extends RequestOrResponse {
    * @param blobStream the {@link InputStream} containing the data associated with the blob.
    * @param crc the crc associated with this request.
    */
-  private PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
+  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
       ByteBuffer userMetadata, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey, InputStream blobStream,
       Long crc) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
@@ -223,6 +222,7 @@ public class PutRequest extends RequestOrResponse {
       // change it back to 0 since we are going to write it to the channel later.
       bb.position(0);
     }
+    crcByteBuf = PooledByteBufAllocator.DEFAULT.ioBuffer(CRC_SIZE_IN_BYTES);
     crcByteBuf.writeLong(crc.getValue());
 
     // Now construct the real bufferToSend, which should be a composite ByteBuf.
@@ -362,6 +362,14 @@ public class PutRequest extends RequestOrResponse {
    */
   public ByteBuffer getBlobEncryptionKey() {
     return blobEncryptionKey;
+  }
+
+  /**
+   * @return the buffer carrying blob content in this request at the ambry-frontend. This could be {@code null} if the
+   * blob is serialized and sent out.
+   */
+  public ByteBuf getBlob() {
+    return blob;
   }
 
   /**

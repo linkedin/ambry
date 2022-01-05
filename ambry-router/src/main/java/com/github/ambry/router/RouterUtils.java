@@ -22,15 +22,20 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.network.LocalNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -43,7 +48,7 @@ import org.slf4j.LoggerFactory;
 /**
  * This is a utility class used by Router.
  */
-class RouterUtils {
+public class RouterUtils {
 
   private static final Logger logger = LoggerFactory.getLogger(RouterUtils.class);
 
@@ -195,6 +200,7 @@ class RouterUtils {
    * @param errorExtractor extract the {@link ServerErrorCode} to send to {@link ResponseHandler#onEvent}.
    * @return the extracted {@link Response} if there is one; null otherwise.
    */
+  @SuppressWarnings("unchecked")
   static <R extends Response> R extractResponseAndNotifyResponseHandler(ResponseHandler responseHandler,
       NonBlockingRouterMetrics routerMetrics, ResponseInfo responseInfo, Deserializer<R> deserializer,
       Function<R, ServerErrorCode> errorExtractor) {
@@ -203,8 +209,16 @@ class RouterUtils {
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {
-        DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
-        response = deserializer.readFrom(dis);
+        if (responseInfo.getResponse() != null) {
+          // If this responseInfo already has the deserialized java object, we can reference it directly. This is
+          // applicable when we are receiving responses from Azure APIs in frontend. The responses from Azure are
+          // handled in {@code AmbryRequest} class methods using a thread pool running with in the frontend. These
+          // responses are then sent using local queues in {@code LocalRequestResponseChannel}.
+          response = (R) mapToReceivedResponse((Response) responseInfo.getResponse());
+        } else {
+          DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
+          response = deserializer.readFrom(dis);
+        }
         responseHandler.onEvent(replicaId, errorExtractor.apply(response));
       } catch (Exception e) {
         // Ignore. There is no value in notifying the response handler.
@@ -244,5 +258,31 @@ class RouterUtils {
      * @throws IOException on deserialization errors.
      */
     T readFrom(DataInputStream stream) throws IOException;
+  }
+
+  /**
+   * This method is applicable when we are processing responses received from Azure APIs in Frontend via {@link LocalNetworkClient}.
+   * The responses received from Azure are constructed as java objects such as {@link GetResponse}, {@link PutResponse} in
+   * {@link com.github.ambry.protocol.AmbryRequests} class methods from {@link com.github.ambry.protocol.RequestHandler}
+   * threads running within the Frontend itself. The content in these responses is available as buffer but we access it
+   * as stream in the Frontend router. Hence, we create new Response objects by having a stream enclose the buffer.
+   *
+   * At the moment, only {@link GetResponse} carries content and needs to be constructed again as below. Other responses
+   * like {@link PutResponse}, {@link DeleteResponse}, etc which don't carry any content don't need to be reconstructed
+   * and can be referenced as they are.
+   * @param sentResponse {@link Response} object constructed at sender side.
+   * @return {@link Response} object constructed at receiver side.
+   */
+  public static Response mapToReceivedResponse(Response sentResponse) {
+    Response receivedResponse;
+    if (sentResponse instanceof GetResponse) {
+      GetResponse getResponse = (GetResponse) sentResponse;
+      receivedResponse = new GetResponse(getResponse.getCorrelationId(), getResponse.getClientId(),
+          getResponse.getPartitionResponseInfoList(), new ByteBufInputStream(getResponse.getDataToSend().content()),
+          getResponse.getError());
+    } else {
+      receivedResponse = sentResponse;
+    }
+    return receivedResponse;
   }
 }

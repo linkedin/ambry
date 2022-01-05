@@ -16,8 +16,6 @@ package com.github.ambry.network;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.network.LocalRequestResponseChannel.LocalChannelRequest;
 import com.github.ambry.utils.Time;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufInputStream;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -76,16 +74,17 @@ public class LocalNetworkClient implements NetworkClient {
     // TODO: do anything with requestsToDrop?
     // The AmbryRequest sessions run in a thread pool, and each thread knows when the response is back so we can poll it
     long startTime = time.milliseconds();
-    try {
-      for (RequestInfo requestInfo : requestInfos) {
-        // TODO: inefficient to serialize request before sending, better to convert Send to an InputStream
-        // that handles the header skipping.
-        ByteBuf buffer = LocalRequestResponseChannel.byteBufFromPayload(requestInfo.getRequest());
-        channel.sendRequest(new LocalChannelRequest(requestInfo, processorId, new ByteBufInputStream(buffer)));
+    for (RequestInfo requestInfo : requestInfos) {
+      // Request is sent and received as it is without serializing to stream since they are handled in same process via
+      // local queues.
+      try {
+        channel.sendRequest(new LocalChannelRequest(requestInfo, processorId));
+      } catch (Exception e) {
+        logger.error("Received an unexpected error during sendAndPoll(): ", e);
+        // release related bytebuf
+        requestInfo.getRequest().release();
+        networkMetrics.networkClientException.inc();
       }
-    } catch (Exception e) {
-      logger.error("Received an unexpected error during sendAndPoll(): ", e);
-      networkMetrics.networkClientException.inc();
     }
 
     List<ResponseInfo> responses = channel.receiveResponses(processorId, pollTimeoutMs);
@@ -111,5 +110,19 @@ public class LocalNetworkClient implements NetworkClient {
   @Override
   public void wakeup() {
     channel.wakeup(processorId);
+  }
+
+  /**
+   * @return processorId. Only used in tests.
+   */
+  int getProcessorId() {
+    return processorId;
+  }
+
+  /**
+   * @return true if this instance is closed. Only used in tests.
+   */
+  boolean isClosed() {
+    return closed;
   }
 }

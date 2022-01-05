@@ -29,7 +29,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 
@@ -86,6 +85,10 @@ public class GetResponse extends Response {
 
   public InputStream getInputStream() {
     return stream;
+  }
+
+  public Send getDataToSend() {
+    return toSend;
   }
 
   public List<PartitionResponseInfo> getPartitionResponseInfoList() {

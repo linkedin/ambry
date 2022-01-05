@@ -32,6 +32,7 @@ import com.github.ambry.messageformat.MessageFormatMetrics;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.network.LocalRequestResponseChannel.LocalChannelRequest;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
@@ -58,6 +59,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -110,46 +112,74 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleRequests(NetworkRequest request) throws InterruptedException {
+  public void handleRequests(NetworkRequest networkRequest) throws InterruptedException {
     try {
-      DataInputStream stream = new DataInputStream(request.getInputStream());
-      RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
+      RequestOrResponseType type;
+      if (networkRequest instanceof LocalChannelRequest) {
+        RequestOrResponse request =
+            (RequestOrResponse) ((LocalChannelRequest) networkRequest).getRequestInfo().getRequest();
+        type = request.type;
+      } else {
+        DataInputStream stream = new DataInputStream(networkRequest.getInputStream());
+        type = RequestOrResponseType.values()[stream.readShort()];
+      }
       switch (type) {
         case PutRequest:
-          handlePutRequest(request);
+          handlePutRequest(networkRequest);
           break;
         case GetRequest:
-          handleGetRequest(request);
+          handleGetRequest(networkRequest);
           break;
         case DeleteRequest:
-          handleDeleteRequest(request);
+          handleDeleteRequest(networkRequest);
           break;
         case TtlUpdateRequest:
-          handleTtlUpdateRequest(request);
+          handleTtlUpdateRequest(networkRequest);
           break;
         case ReplicaMetadataRequest:
-          handleReplicaMetadataRequest(request);
+          handleReplicaMetadataRequest(networkRequest);
           break;
         case AdminRequest:
-          handleAdminRequest(request);
+          handleAdminRequest(networkRequest);
           break;
         case UndeleteRequest:
-          handleUndeleteRequest(request);
+          handleUndeleteRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
     } catch (Exception e) {
-      logger.error("Error while handling request {} closing connection", request, e);
-      requestResponseChannel.closeConnection(request);
+      logger.error("Error while handling request {} closing connection", networkRequest, e);
+      requestResponseChannel.closeConnection(networkRequest);
     }
   }
 
   @Override
   public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
-    InputStream is = request.getInputStream();
-    DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
-    PutRequest receivedRequest = PutRequest.readFrom(dis, clusterMap);
+    PutRequest receivedRequest;
+    if (request instanceof LocalChannelRequest) {
+
+      // This is a case where handlePutRequest is called when frontends are writing to Azure. In this case, this method
+      // is called by request handler threads running within the frontend router itself. So, the request can be directly
+      // referenced as java objects without any need for deserialization.
+      PutRequest sentRequest = (PutRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
+
+      // However, we will create a new PutRequest object to represent the received Put request since the blob content
+      // 'buffer' in PutRequest is accessed as 'stream' while writing to Store. Also, crc value for this request
+      // would be null since it is only calculated (on the fly) when sending the request to network. It might be okay to
+      // use null crc here since the scenario for which we are using crc (i.e. possibility of collisions due to fast
+      // replication) as described in this PR https://github.com/linkedin/ambry/pull/549 might not be applicable when
+      // frontends are talking to Azure.
+      receivedRequest =
+          new PutRequest(sentRequest.getCorrelationId(), sentRequest.getClientId(), sentRequest.getBlobId(),
+              sentRequest.getBlobProperties(), sentRequest.getUsermetadata(), sentRequest.getBlobSize(),
+              sentRequest.getBlobType(), sentRequest.getBlobEncryptionKey(),
+              new ByteBufInputStream(sentRequest.getBlob()), null);
+    } else {
+      InputStream is = request.getInputStream();
+      DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
+      receivedRequest = PutRequest.readFrom(dis, clusterMap);
+    }
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -219,7 +249,15 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handleGetRequest(NetworkRequest request) throws IOException, InterruptedException {
-    GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    GetRequest getRequest;
+    if (request instanceof LocalChannelRequest) {
+      // This is a case where handleGetRequest is called when frontends are reading from Azure. In this case, this method
+      // is called by request handler threads running within the frontend router itself. So, the request can be directly
+      // referenced as java objects without any need for deserialization.
+      getRequest = (GetRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
+    } else {
+      getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    }
     Histogram responseQueueTime = null;
     Histogram responseSendTime = null;
     Histogram responseTotalTime = null;
@@ -390,7 +428,15 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
-    DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    DeleteRequest deleteRequest;
+    if (request instanceof LocalChannelRequest) {
+      // This is a case where handleDeleteRequest is called when frontends are talking to Azure. In this case, this method
+      // is called by request handler threads running within the frontend router itself. So, the request can be directly
+      // referenced as java objects without any need for deserialization.
+      deleteRequest = (DeleteRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
+    } else {
+      deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    }
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.deleteBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -460,8 +506,15 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
-    TtlUpdateRequest updateRequest =
-        TtlUpdateRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    TtlUpdateRequest updateRequest;
+    if (request instanceof LocalChannelRequest) {
+      // This is a case where handleTtlUpdateRequest is called when frontends are talking to Azure. In this case, this method
+      // is called by request handler threads running within the frontend router itself. So, the request can be directly
+      // referenced as java objects without any need for deserialization.
+      updateRequest = (TtlUpdateRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
+    } else {
+      updateRequest = TtlUpdateRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    }
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.updateBlobTtlRequestQueueTimeInMs.update(requestQueueTime);
@@ -653,8 +706,15 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handleUndeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
-    UndeleteRequest undeleteRequest =
-        UndeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    UndeleteRequest undeleteRequest;
+    if (request instanceof LocalChannelRequest) {
+      // This is a case where handleUndeleteRequest is called when frontends are talking to Azure. In this case, this method
+      // is called by request handler threads running within the frontend router itself. So, the request can be directly
+      // referenced as java objects without any need for deserialization.
+      undeleteRequest = (UndeleteRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
+    } else {
+      undeleteRequest = UndeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    }
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.undeleteBlobRequestQueueTimeInMs.update(requestQueueTime);

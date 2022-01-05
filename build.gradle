@@ -241,8 +241,7 @@ project(':ambry-network') {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
-                project(':ambry-clustermap'),
-                project(':ambry-protocol')
+                project(':ambry-clustermap')
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile "io.netty:netty-transport-native-epoll:$nettyVersion"
@@ -356,7 +355,8 @@ project(':ambry-protocol') {
                 project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
                 project(':ambry-utils'),
-                project(':ambry-commons')
+                project(':ambry-commons'),
+                project(':ambry-network')
         testCompile project(':ambry-test-utils')
     }
 }

@@ -127,10 +127,8 @@ public class CloudOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{
-      {SimpleOperationTracker.class.getSimpleName()},
-      {AdaptiveOperationTracker.class.getSimpleName()}
-    });
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName()},
+        {AdaptiveOperationTracker.class.getSimpleName()}});
   }
 
   @Before
@@ -173,24 +171,26 @@ public class CloudOperationTest {
     CloudDestinationFactory cloudDestinationFactory =
         Utils.getObj(cloudConfig.cloudDestinationFactoryClass, vprops, mockClusterMap.getMetricRegistry(),
             mockClusterMap);
-    cloudDestination = (LatchBasedInMemoryCloudDestination)cloudDestinationFactory.getCloudDestination();
+    cloudDestination = (LatchBasedInMemoryCloudDestination) cloudDestinationFactory.getCloudDestination();
     RequestHandlerPool requestHandlerPool =
         CloudRouterFactory.getRequestHandlerPool(vprops, mockClusterMap, cloudDestination, cloudConfig);
 
     Map<ReplicaType, NetworkClientFactory> childFactories = new EnumMap<>(ReplicaType.class);
     // requestHandlerPool and its thread pool handle the cloud blob operations.
-    LocalNetworkClientFactory cloudClientFactory = new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
-        new NetworkConfig(vprops), new NetworkMetrics(routerMetrics.getMetricRegistry()), time);
+    LocalNetworkClientFactory cloudClientFactory =
+        new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),
+            new NetworkConfig(vprops), new NetworkMetrics(routerMetrics.getMetricRegistry()), time);
     childFactories.put(ReplicaType.CLOUD_BACKED, cloudClientFactory);
 
-    MockNetworkClientFactory diskClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-        CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
+    MockNetworkClientFactory diskClientFactory =
+        new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     childFactories.put(ReplicaType.DISK_BACKED, diskClientFactory);
 
     NetworkClientFactory networkClientFactory = new CompositeNetworkClientFactory(childFactories);
-    router = new NonBlockingRouter(routerConfig, routerMetrics,
-        networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, null, null, null,
-        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    router = new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
+        mockClusterMap, null, null, null, new InMemAccountService(false, true), time,
+        MockClusterMap.DEFAULT_PARTITION_CLASS);
 
     NetworkClient compNetworkClient = networkClientFactory.getNetworkClient();
     mockNetworkClient = new MockCompositeNetworkClient(compNetworkClient);
@@ -207,7 +207,8 @@ public class CloudOperationTest {
    * @throws Exception Any unexpected exception
    */
   private BlobId doDirectPut(BlobProperties blobProperties, byte[] userMetadata, ByteBuf blobContent) throws Exception {
-    List<PartitionId> writablePartitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    List<PartitionId> writablePartitionIds =
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     PartitionId partitionId = writablePartitionIds.get(random.nextInt(writablePartitionIds.size()));
     BlobId blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         mockClusterMap.getLocalDatacenterId(), blobProperties.getAccountId(), blobProperties.getContainerId(),
@@ -256,8 +257,9 @@ public class CloudOperationTest {
   private String doDirectPut() throws Exception {
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
     int blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
-    BlobProperties blobProperties = new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random), false, null, null, null);
+    BlobProperties blobProperties =
+        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(random), Utils.getRandomShort(random), false, null, null, null);
     byte[] userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     byte[] putContent = new byte[blobSize];
@@ -300,10 +302,9 @@ public class CloudOperationTest {
    * @param options options of the get blob operation
    * @throws Exception Any unexpected exception
    */
-  private void getBlobAndAssertSuccess(final BlobId blobId,
-      final short expectedLifeVersion, final int expectedBlobSize, final BlobProperties expectedBlobProperties,
-      final byte[] expectedUserMetadata, final byte[] expectPutContent, final GetBlobOptionsInternal options)
-      throws Exception {
+  private void getBlobAndAssertSuccess(final BlobId blobId, final short expectedLifeVersion, final int expectedBlobSize,
+      final BlobProperties expectedBlobProperties, final byte[] expectedUserMetadata, final byte[] expectPutContent,
+      final GetBlobOptionsInternal options) throws Exception {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     final AtomicLong readCompleteResult = new AtomicLong(0);
     // callback to compare the data
@@ -319,7 +320,8 @@ public class CloudOperationTest {
                 RouterTestHelpers.arePersistedFieldsEquivalent(expectedBlobProperties, blobInfo.getBlobProperties()));
             Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
                 expectedBlobSize, blobInfo.getBlobProperties().getBlobSize());
-            Assert.assertArrayEquals("User metadata must be the same", expectedUserMetadata, blobInfo.getUserMetadata());
+            Assert.assertArrayEquals("User metadata must be the same", expectedUserMetadata,
+                blobInfo.getUserMetadata());
             Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
             break;
           case Data:
@@ -329,8 +331,8 @@ public class CloudOperationTest {
             blobInfo = result.getBlobResult.getBlobInfo();
             Assert.assertTrue("Blob properties must be the same",
                 RouterTestHelpers.arePersistedFieldsEquivalent(expectedBlobProperties, blobInfo.getBlobProperties()));
-            Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", expectedBlobSize,
-                blobInfo.getBlobProperties().getBlobSize());
+            Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
+                expectedBlobSize, blobInfo.getBlobProperties().getBlobSize());
             Assert.assertNull("Unexpected blob data in operation result", result.getBlobResult.getBlobDataChannel());
             Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
         }
@@ -343,7 +345,8 @@ public class CloudOperationTest {
         Utils.newThread(() -> {
           Future<Long> readIntoFuture = result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, null);
           assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
-              result.getBlobResult.getBlobDataChannel(), readCompleteLatch, readCompleteResult, expectedBlobSize, expectPutContent);
+              result.getBlobResult.getBlobDataChannel(), readCompleteLatch, readCompleteResult, expectedBlobSize,
+              expectPutContent);
         }, false).start();
       } else {
         readCompleteLatch.countDown();
@@ -365,8 +368,15 @@ public class CloudOperationTest {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
       for (ResponseInfo responseInfo : responses) {
-        DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(dis, mockClusterMap) : null;
+        GetResponse getResponse =
+            RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
+                stream -> GetResponse.readFrom(stream, mockClusterMap), response -> {
+                  ServerErrorCode serverError = response.getError();
+                  if (serverError == ServerErrorCode.No_Error) {
+                    serverError = response.getPartitionResponseInfoList().get(0).getErrorCode();
+                  }
+                  return serverError;
+                });
         op.handleResponse(responseInfo, getResponse);
         responseInfo.release();
       }
@@ -406,8 +416,7 @@ public class CloudOperationTest {
    */
   private void assertBlobReadSuccess(GetBlobOptions options, Future<Long> readIntoFuture,
       ByteBufferAsyncWritableChannel asyncWritableChannel, ReadableStreamChannel readableStreamChannel,
-      CountDownLatch readCompleteLatch, AtomicLong readCompleteResult,
-      final int blobSize, final byte[] putContent) {
+      CountDownLatch readCompleteLatch, AtomicLong readCompleteResult, final int blobSize, final byte[] putContent) {
     try {
       ByteBuffer putContentBuf;
       Assert.assertTrue("Not intended to test raw mode.", options == null || !options.isRawMode());
@@ -436,8 +445,7 @@ public class CloudOperationTest {
         asyncWritableChannel.resolveOldestChunk(null);
       } while (readBytes < bytesToRead);
       written = readIntoFuture.get();
-      Assert.assertEquals("the returned length in the future should be the length of data written", readBytes,
-          written);
+      Assert.assertEquals("the returned length in the future should be the length of data written", readBytes, written);
       Assert.assertNull("There should be no more data in the channel", asyncWritableChannel.getNextChunk(0));
       readableStreamChannel.close();
       readCompleteResult.set(written);
@@ -458,10 +466,8 @@ public class CloudOperationTest {
     String blobId = doDirectPut();
 
     // All other DCs except LOCAL_DC will return Blob_Not_Found
-    List<MockServer> localDcServers = mockServers
-        .stream()
-        .filter(s -> s.getDataCenter().equals(LOCAL_DC))
-        .collect(Collectors.toList());
+    List<MockServer> localDcServers =
+        mockServers.stream().filter(s -> s.getDataCenter().equals(LOCAL_DC)).collect(Collectors.toList());
     mockServers.forEach(s -> {
       if (!localDcServers.contains(s)) {
         s.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
@@ -497,8 +503,9 @@ public class CloudOperationTest {
   public void testGetBlobFailoverToAzureAndCheckData() throws Exception {
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
     int blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
-    BlobProperties blobProperties = new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-       Utils.getRandomShort(random), Utils.getRandomShort(random), false, null, null, null);
+    BlobProperties blobProperties =
+        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(random), Utils.getRandomShort(random), false, null, null, null);
     byte[] userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     byte[] putContent = new byte[blobSize];
@@ -509,8 +516,9 @@ public class CloudOperationTest {
     putContentBuf.release();
 
     // Confirm we can get the blob from the local dc.
-    GetBlobOptionsInternal options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
-    getBlobAndAssertSuccess(blobId, (short)0, blobSize, blobProperties, userMetadata, putContent, options);
+    GetBlobOptionsInternal options =
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
+    getBlobAndAssertSuccess(blobId, (short) 0, blobSize, blobProperties, userMetadata, putContent, options);
 
     // Local DC will fail with different errors but cloud will return the blob data.
     ArrayList<MockServer> mockServersArray = new ArrayList<>(mockServers);
@@ -525,7 +533,7 @@ public class CloudOperationTest {
       mockServer.setServerErrorForAllRequests(code);
     }
     // cloud DC will return the data
-    getBlobAndAssertSuccess(blobId, (short)0, blobSize, blobProperties, userMetadata, putContent, options);
+    getBlobAndAssertSuccess(blobId, (short) 0, blobSize, blobProperties, userMetadata, putContent, options);
   }
 
   /**
@@ -533,7 +541,7 @@ public class CloudOperationTest {
    * Test both cases that cloud colo succeeds or fails.
    */
   @Test
-  public void testTtlUpdateFailoverToAzure()  throws Exception {
+  public void testTtlUpdateFailoverToAzure() throws Exception {
     String blobId = doDirectPut();
 
     // configure all the disk backed server will return failure
@@ -550,8 +558,7 @@ public class CloudOperationTest {
       Throwable t = e.getCause();
       assertTrue("Cause should be RouterException", t instanceof RouterException);
       // ServerErrorCode.Blob_Expired will be transferred to RouterErrorCode.BlobExpired
-      assertSame("ErrorCode mismatch",
-          ((RouterException) t).getErrorCode(), RouterErrorCode.BlobExpired);
+      assertSame("ErrorCode mismatch", ((RouterException) t).getErrorCode(), RouterErrorCode.BlobExpired);
     }
   }
 
@@ -576,8 +583,8 @@ public class CloudOperationTest {
       Throwable t = e.getCause();
       assertTrue("Cause should be RouterException", t instanceof RouterException);
       // ServerErrorCode.Data_Corrupt will be transferred to RouterErrorCode.UnexpectedInternalError
-      assertTrue("ErrorCode mismatch",
-          ((RouterException) t).getErrorCode() == RouterErrorCode.BlobDoesNotExist || ((RouterException) t).getErrorCode() == RouterErrorCode.UnexpectedInternalError);
+      assertTrue("ErrorCode mismatch", ((RouterException) t).getErrorCode() == RouterErrorCode.BlobDoesNotExist
+          || ((RouterException) t).getErrorCode() == RouterErrorCode.UnexpectedInternalError);
     }
   }
 
@@ -591,19 +598,21 @@ public class CloudOperationTest {
 
     mockServers.forEach(s -> s.setServerErrorForAllRequests(ServerErrorCode.Data_Corrupt));
     // although all disk colo will fail, cloud colo will return it successfully.
-    router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()).get();
+    router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
+        .get();
 
     // inject error for cloud colo as well.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.ID_Not_Found);
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
+          .get();
       fail("Expecting exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();
       assertTrue("Cause should be RouterException", t instanceof RouterException);
       // ServerErrorCode.Data_Corrupt will be transferred to RouterErrorCode.UnexpectedInternalError
-      assertTrue("ErrorCode mismatch",
-          ((RouterException) t).getErrorCode() == RouterErrorCode.BlobDoesNotExist || ((RouterException) t).getErrorCode() == RouterErrorCode.UnexpectedInternalError);
+      assertTrue("ErrorCode mismatch", ((RouterException) t).getErrorCode() == RouterErrorCode.BlobDoesNotExist
+          || ((RouterException) t).getErrorCode() == RouterErrorCode.UnexpectedInternalError);
     }
   }
 
@@ -628,8 +637,7 @@ public class CloudOperationTest {
       Throwable t = e.getCause();
       assertTrue("Cause should be RouterException", t instanceof RouterException);
       // ServerErrorCode.IO_Error or StoreErrorCodes.Unknown_Error will be transferred to RouterErrorCode.UnexpectedInternalError
-      assertSame("ErrorCode mismatch",
-          ((RouterException) t).getErrorCode(), RouterErrorCode.UnexpectedInternalError);
+      assertSame("ErrorCode mismatch", ((RouterException) t).getErrorCode(), RouterErrorCode.UnexpectedInternalError);
     }
   }
 
@@ -668,7 +676,8 @@ public class CloudOperationTest {
         LatchBasedInMemoryCloudDestinationFactory.class.getName());
     properties.setProperty(CloudConfig.VCR_MIN_TTL_DAYS, "0");
 
-    properties.setProperty("kms.default.container.key", "B374A26A71490437AA024E4FADD5B497FDFF1A8EA6FF12F6FB65AF2720B59CCF");
+    properties.setProperty("kms.default.container.key",
+        "B374A26A71490437AA024E4FADD5B497FDFF1A8EA6FF12F6FB65AF2720B59CCF");
     return properties;
   }
 }
