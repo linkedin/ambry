@@ -613,7 +613,6 @@ class PutOperation {
         }
       }
       if (chunkFillingCompletedSuccessfully) {
-        logger.debug("{}: chunk filling completed, now try to send out the last chunk", loggingContext);
         // If the blob size is less then 4MB or the last chunk size is less than 4MB, than this lastChunk will be
         // the chunk above.
         PutChunk lastChunk = getBuildingChunk();
