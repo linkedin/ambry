@@ -53,6 +53,7 @@ public class ContainerBuilder {
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
+  private String accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -79,6 +80,7 @@ public class ContainerBuilder {
     securePathRequired = origin.isSecurePathRequired();
     overrideAccountAcl = origin.isAccountAclOverridden();
     namedBlobMode = origin.getNamedBlobMode();
+    accessControlAllowOrigin = origin.getAccessControlAllowOrigin();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
     lastModifiedTime = origin.getLastModifiedTime();
@@ -280,6 +282,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Set the Access-Control-Allow-Origin header field name for this container.
+   * @param accessControlAllowOrigin
+   * @return
+   */
+  public ContainerBuilder setAccessControlAllowOrigin(String accessControlAllowOrigin) {
+    this.accessControlAllowOrigin = accessControlAllowOrigin;
+    return this;
+  }
+
+  /**
    * Sets the created/modified time of the {@link Container}
    * @param lastModifiedTime epoch time in milliseconds.
    * @return This builder.
@@ -312,7 +324,7 @@ public class ContainerBuilder {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
-        parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime, lastModifiedTime,
-        snapshotVersion);
+        parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime,
+        lastModifiedTime, snapshotVersion, accessControlAllowOrigin);
   }
 }
