@@ -81,7 +81,8 @@ public class AzureBlobDataAccessorTest {
     blobId = AzureTestUtils.generateBlobId();
     AzureTestUtils.setConfigProperties(configProps);
     azureMetrics = new AzureMetrics(new MetricRegistry());
-    dataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBatchClient, clusterName, azureMetrics);
+    dataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBatchClient, clusterName, azureMetrics,
+        new AzureCloudConfig(new VerifiableProperties(configProps)));
   }
 
   /**
@@ -277,7 +278,8 @@ public class AzureBlobDataAccessorTest {
     AzureCloudConfig azureConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     AzureBlobLayoutStrategy blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName, azureConfig);
     ADAuthBasedStorageClient adAuthBasedStorageClient =
-        spy(new ADAuthBasedStorageClient(mockServiceClient, mockBatchClient, azureMetrics, blobLayoutStrategy));
+        spy(new ADAuthBasedStorageClient(mockServiceClient, mockBatchClient, azureMetrics, blobLayoutStrategy,
+            new AzureCloudConfig(new VerifiableProperties(configProps))));
     BlobStorageException mockBlobStorageException = mock(BlobStorageException.class);
     when(mockBlockBlobClient.downloadWithResponse(null, null, null, null, false, null, Context.NONE)).thenThrow(
         mockBlobStorageException).thenReturn(null);

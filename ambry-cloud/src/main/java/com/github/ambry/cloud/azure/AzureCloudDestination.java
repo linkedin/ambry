@@ -131,14 +131,15 @@ class AzureCloudDestination implements CloudDestination {
       ClusterMap clusterMap, boolean isVcr, Properties configProps) throws CloudStorageException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
-    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
+    this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
+    this.azureBlobDataAccessor =
+        new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics, azureCloudConfig);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
         new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, cosmosDeletedContainerCollectionLink,
             vcrMetrics, azureMetrics);
-    this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =

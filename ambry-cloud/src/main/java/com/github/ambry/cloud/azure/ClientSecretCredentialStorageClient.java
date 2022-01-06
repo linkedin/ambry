@@ -16,14 +16,13 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
 import com.azure.identity.ClientSecretCredential;
+import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.github.ambry.config.CloudConfig;
-import java.net.MalformedURLException;
-import java.util.concurrent.ExecutionException;
 
 
 /**
@@ -50,10 +49,11 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
    * @param blobBatchClient {@link BlobBatchClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
   public ClientSecretCredentialStorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
-      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
+    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
   }
 
   /**
@@ -62,9 +62,6 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
    * @param retryOptions {@link RequestRetryOptions} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @return BlobServiceClient object.
-   * @throws MalformedURLException
-   * @throws InterruptedException
-   * @throws ExecutionException
    */
   @Override
   protected BlobServiceClient buildBlobServiceClient(HttpClient httpClient, Configuration configuration,
@@ -75,6 +72,25 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
         .retryOptions(retryOptions)
         .configuration(configuration)
         .buildClient();
+  }
+
+  /**
+   * Build {@link BlobServiceAsyncClient}.
+   * @param httpClient {@link HttpClient} object.
+   * @param configuration {@link Configuration} object.
+   * @param retryOptions {@link RequestRetryOptions} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @return {@link BlobServiceAsyncClient} object.
+   */
+  @Override
+  protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
+    return new BlobServiceClientBuilder().credential(AzureUtils.getClientSecretCredential(azureCloudConfig))
+        .endpoint(azureCloudConfig.azureStorageEndpoint)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
+        .buildAsyncClient();
   }
 
   @Override
