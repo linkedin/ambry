@@ -13,8 +13,8 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import java.util.Map;
@@ -30,13 +30,30 @@ public interface QuotaChargeCallback {
   Logger logger = LoggerFactory.getLogger(QuotaChargeCallback.class);
 
   /**
-   * Build {@link QuotaChargeCallback} to handle quota compliance of requests.
+   * Build the appropriate implementation {@link QuotaChargeCallback} object based on the specified arguments and quota config.
    * @param restRequest {@link RestRequest} for which quota is being charged.
    * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
    * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
    * @return QuotaChargeCallback object.
    */
-  static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager, boolean shouldThrottle) {
+  static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
+      boolean shouldThrottle) {
+    if (quotaManager.getQuotaConfig().chargeQuotaPreProcess) {
+      return buildPreProcessQuotaChargeCallback(restRequest, quotaManager);
+    } else {
+      return buildPostProcessQuotaChargeCallback(restRequest, quotaManager, shouldThrottle);
+    }
+  }
+
+  /**
+   * Build {@link QuotaChargeCallback} to handle quota compliance of requests. Use this object if the quota accounting
+   * and checks are done after the request chunks are processed.
+   * @param restRequest {@link RestRequest} for which quota is being charged.
+   * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
+   * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
+   * @return QuotaChargeCallback object.
+   */
+  static QuotaChargeCallback buildPostProcessQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager, boolean shouldThrottle) {
     RequestCostPolicy requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
     return new QuotaChargeCallback() {
       @Override
@@ -94,16 +111,22 @@ public interface QuotaChargeCallback {
       public QuotaMethod getQuotaMethod() {
         return QuotaUtils.getQuotaMethod(restRequest);
       }
+
+      @Override
+      public QuotaConfig getQuotaConfig() {
+        return quotaManager.getQuotaConfig();
+      }
     };
   }
 
   /**
-   * Build {@link QuotaChargeCallback} to handle quota compliance of requests. This will be used for charging quota in the OperationController.
+   * Build {@link QuotaChargeCallback} to handle quota compliance of requests.
+   * This will be used for charging quota in the OperationController before the request chunks are processed.
    * @param restRequest {@link RestRequest} for which quota is being charged.
    * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
    * @return QuotaChargeCallback object.
    */
-  static QuotaChargeCallback buildOperationControllerQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager) {
+  static QuotaChargeCallback buildPreProcessQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager) {
     RequestCostPolicy requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
     return new QuotaChargeCallback() {
       @Override
@@ -116,6 +139,7 @@ public interface QuotaChargeCallback {
         if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
           return charged;
         }
+        // if the quota mode is tracking, then we true irrespective of quota manager's return value.
         return true;
       }
 
@@ -139,6 +163,7 @@ public interface QuotaChargeCallback {
         if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
           return charged;
         }
+        // if the quota mode is tracking, then we true irrespective of quota manager's return value.
         return true;
       }
 
@@ -155,6 +180,11 @@ public interface QuotaChargeCallback {
       @Override
       public QuotaMethod getQuotaMethod() {
         return QuotaUtils.getQuotaMethod(restRequest);
+      }
+
+      @Override
+      public QuotaConfig getQuotaConfig() {
+        return quotaManager.getQuotaConfig();
       }
     };
   }
@@ -206,4 +236,9 @@ public interface QuotaChargeCallback {
    * @return QuotaMethod object.
    */
   QuotaMethod getQuotaMethod();
+
+  /**
+   * @return QuotaConfig object.
+   */
+  QuotaConfig getQuotaConfig();
 }

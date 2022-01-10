@@ -157,6 +157,11 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
         public QuotaMethod getQuotaMethod() {
           return null;
         }
+
+        @Override
+        public QuotaConfig getQuotaConfig() {
+          return null;
+        }
       };
 
       // test for a composite blob.

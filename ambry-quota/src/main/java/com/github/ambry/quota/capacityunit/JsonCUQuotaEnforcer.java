@@ -109,7 +109,7 @@ public class JsonCUQuotaEnforcer implements QuotaEnforcer {
 
   private QuotaRecommendation buildQuotaRecommendation(long limit, long usage, QuotaName quotaName) {
     boolean shouldThrottle = (usage >= limit);
-    return new QuotaRecommendation(shouldThrottle, (usage * 100) / (float) limit, quotaName,
+    return new QuotaRecommendation(shouldThrottle, (limit == 0) ? 100 : ((usage * 100) / (float) limit), quotaName,
         shouldThrottle ? THROTTLE_HTTP_STATUS : NO_THROTTLE_HTTP_STATUS,
         shouldThrottle ? THROTTLE_RETRY_AFTER_MS : NO_THROTTLE_RETRY_AFTER_MS);
   }

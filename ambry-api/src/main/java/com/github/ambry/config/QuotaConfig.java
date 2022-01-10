@@ -36,6 +36,7 @@ public class QuotaConfig {
   public static final String MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED = QUOTA_CONFIG_PREFIX + "max.frontend.cu.usage.to.allow.exceed";
   public static final String RESOURCE_CU_QUOTA_IN_JSON = QUOTA_CONFIG_PREFIX + "resource.cu.quota.in.json";
   public static final String FRONTEND_CU_CAPACITY_IN_JSON = QUOTA_CONFIG_PREFIX + "frontend.cu.capacity.in.json";
+  public static final String CHARGE_QUOTA_PRE_PROCESS = QUOTA_CONFIG_PREFIX + "charge.quota.pre.process";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
@@ -43,6 +44,7 @@ public class QuotaConfig {
   public static final float DEFAULT_MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED = 80.0f;
   public static final String DEFAULT_CU_QUOTA_IN_JSON = "{}";
   public static final String DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON = "{}";
+  public static final boolean DEFAULT_CHARGE_QUOTA_PRE_PROCESS = false;
   public StorageQuotaConfig storageQuotaConfig;
 
 
@@ -150,6 +152,10 @@ public class QuotaConfig {
   @Default("{}")
   public final String frontendCUCapacityInJson;
 
+  @Config(CHARGE_QUOTA_PRE_PROCESS)
+  @Default("false")
+  public final boolean chargeQuotaPreProcess;
+
   /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
@@ -168,6 +174,7 @@ public class QuotaConfig {
     maxFrontendCuUsageToAllowExceed = verifiableProperties.getFloatInRange(MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED, DEFAULT_MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED, 0.0f, 100.0f);
     resourceCUQuotaInJson = verifiableProperties.getString(RESOURCE_CU_QUOTA_IN_JSON, DEFAULT_CU_QUOTA_IN_JSON);
     frontendCUCapacityInJson = verifiableProperties.getString(FRONTEND_CU_CAPACITY_IN_JSON, DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON);
+    chargeQuotaPreProcess = verifiableProperties.getBoolean(CHARGE_QUOTA_PRE_PROCESS, false);
   }
 
   /**

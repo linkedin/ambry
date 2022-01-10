@@ -1165,9 +1165,10 @@ class PutOperation {
           // We will return success to let the request go through.
           isCharged = true;
         }
+        return true;
       } catch (Exception ex) {
-        logger.warn("Could not charge quota during PutOperation for the chunk {} due to {}.", blobId.toString(),
-            ex.toString());
+        logger.warn("Could not charge quota during PutOperation {} due to {}.",
+            (blobId == null) ? "" : "for the chunk {}" + blobId.toString(), ex.toString());
         // In case of exception we don't set isCharged but let the request go through.
         return true;
       }
@@ -1189,6 +1190,7 @@ class PutOperation {
           // We will return success to let the request go through.
           isCharged = true;
         }
+        return true;
       } catch (Exception ex) {
         logger.warn("Could not charge quota during PutOperation for the chunk {} due to {}.", blobId.toString(),
             ex.toString());

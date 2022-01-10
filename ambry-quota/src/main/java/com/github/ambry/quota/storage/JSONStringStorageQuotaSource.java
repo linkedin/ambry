@@ -118,7 +118,7 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
   }
 
   @Override
-  public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
+  public void updateNewQuotaResources(Collection<Account> quotaResources) {
     // no-op
   }
 

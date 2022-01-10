@@ -281,7 +281,7 @@ public class JsonCUQuotaEnforcerTest {
     }
 
     @Override
-    public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
+    public void updateNewQuotaResources(Collection<Account> quotaResources) {
       super.updateNewQuotaResources(quotaResources);
     }
 

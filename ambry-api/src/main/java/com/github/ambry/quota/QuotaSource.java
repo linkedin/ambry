@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.Account;
 import java.util.Collection;
 import java.util.List;
 
@@ -38,5 +39,5 @@ public interface QuotaSource {
    * Update the quota for newly created {@link List} of {@link QuotaResource}s.
    * @param quotaResources {@link List} of new created {@link QuotaResource}s.
    */
-  void updateNewQuotaResources(Collection<QuotaResource> quotaResources);
+  void updateNewQuotaResources(Collection<Account> quotaResources);
 }

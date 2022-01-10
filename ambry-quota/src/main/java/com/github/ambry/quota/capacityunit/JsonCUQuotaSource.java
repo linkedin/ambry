@@ -36,10 +36,12 @@ import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.storage.JSONStringStorageQuotaSource;
 import com.github.ambry.rest.RestRequest;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.slf4j.Logger;
@@ -55,6 +57,7 @@ public class JsonCUQuotaSource implements QuotaSource {
       EnumSet.of(QuotaResourceType.ACCOUNT, QuotaResourceType.CONTAINER);
   private static final long DEFAULT_RCU_FOR_NEW_RESOURCE = 0;
   private static final long DEFAULT_WCU_FOR_NEW_RESOURCE = 0;
+  private static final QuotaResource FE_QUOTA_RESOURCE = new QuotaResource("FE", QuotaResourceType.SERVICE);
   protected final CUQuota feUsage;
   protected final CUQuota feQuota;
   private final Map<String, CUQuota> cuQuota;
@@ -123,8 +126,14 @@ public class JsonCUQuotaSource implements QuotaSource {
   @Override
   public boolean isQuotaExceedAllowed(QuotaMethod quotaMethod) {
     if (quotaMethod == QuotaMethod.READ) {
+      if(feQuota.getRcu() == 0) {
+        return false;
+      }
       return ((feUsage.getRcu() * 100) / feQuota.getRcu()) < maxFrontendCuUsageToAllowExceed;
     } else {
+      if(feQuota.getWcu() == 0) {
+        return false;
+      }
       return ((feUsage.getWcu() * 100) / feQuota.getWcu()) < maxFrontendCuUsageToAllowExceed;
     }
   }
@@ -139,7 +148,17 @@ public class JsonCUQuotaSource implements QuotaSource {
   }
 
   @Override
-  public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
+  public void updateNewQuotaResources(Collection<Account> accounts) {
+    List<QuotaResource> quotaResources = new ArrayList<>();
+    for (Account account : accounts) {
+      if (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
+        quotaResources.add(QuotaResource.fromAccount(account));
+      } else {
+        for (Container container : account.getAllContainers()) {
+          quotaResources.add(QuotaResource.fromContainer(container));
+        }
+      }
+    }
     quotaResources.forEach(quotaResource -> {
       cuQuota.putIfAbsent(quotaResource.getResourceId(),
           new CUQuota(DEFAULT_RCU_FOR_NEW_RESOURCE, DEFAULT_WCU_FOR_NEW_RESOURCE));

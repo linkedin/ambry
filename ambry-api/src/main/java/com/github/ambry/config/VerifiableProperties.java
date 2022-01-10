@@ -146,6 +146,15 @@ public class VerifiableProperties {
     }
   }
 
+  /**
+   * Read a float from the properties instance. Throw an exception
+   * if the value is not in the given range (inclusive).
+   * @param name The property name
+   * @param defaultVal The default value to use if the property is not found
+   * @param start The start of the range in which the value must fall (inclusive)
+   * @param end The end of the range in which the value must fall
+   * @return the {@link Float} value
+   */
   public Float getFloatInRange(String name, Float defaultVal, Float start, Float end) {
     Float v = containsKey(name) ? Float.valueOf(Float.parseFloat(getProperty(name))) : defaultVal;
     if (v >= start && v <= end) {

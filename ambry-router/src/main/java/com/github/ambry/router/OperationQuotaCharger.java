@@ -63,6 +63,8 @@ public class OperationQuotaCharger implements Chargeable {
       }
     } catch (Exception ex) {
       LOGGER.warn("Could not check for the chunk {} due to {}.", blobId.toString(), ex.toString());
+      // This is unexpected. We don't want user requests to get affected so we let it go through.
+      return true;
     }
     return true;
   }
@@ -81,8 +83,11 @@ public class OperationQuotaCharger implements Chargeable {
         // We will return success to let the request go through.
         isCharged = true;
       }
+      return true;
     } catch (Exception ex) {
       LOGGER.warn("Could not charge for the chunk {} due to {}.", blobId.toString(), ex.toString());
+      // This is unexpected. We don't want user requests to get affected so we let it go through.
+      return true;
     }
     return isCharged;
   }
@@ -101,8 +106,11 @@ public class OperationQuotaCharger implements Chargeable {
         // We will return success to let the request go through.
         isCharged = true;
       }
+      return true;
     } catch (Exception ex) {
       LOGGER.warn("Could not charge for the chunk {} due to {}.", blobId.toString(), ex.toString());
+      // This is unexpected. We don't want user requests to get affected so we let it go through.
+      return true;
     }
     return isCharged;
   }

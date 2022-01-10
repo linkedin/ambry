@@ -274,7 +274,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    * {@code restRequest}, then this is a no-op. If there is no quota found for the account/container, then this is
    * a no-op. A {@link Pair} whose first element is quota and second element is the storage usage after charge.
    * @param restRequest the {@link RestRequest} that carries account and container in the header.
-   * @param usage the usage to chargeIfUsageWithinQuota
+   * @param usage the usage to charge
    * @return A {@link Pair} whose first element is quota and second element is the storage usage after charge.
    */
   Pair<Long, Long> charge(RestRequest restRequest, long usage) {
