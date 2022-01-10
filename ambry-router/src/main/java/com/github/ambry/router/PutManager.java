@@ -141,7 +141,8 @@ class PutManager {
    * @param quotaChargeCallback {@link QuotaChargeCallback} object.
    */
   void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
-      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
         PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
@@ -265,6 +266,7 @@ class PutManager {
       routerMetrics.operationFailureWithUnsetExceptionCount.inc();
     }
     if (e != null) {
+      op.cleanupChunks();
       blobId = null;
       routerMetrics.onPutBlobError(e, op.isEncryptionEnabled(), op.isStitchOperation());
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload(), op.getServiceId());
