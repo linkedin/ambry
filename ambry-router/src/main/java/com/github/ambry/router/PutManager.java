@@ -337,6 +337,7 @@ class PutManager {
       synchronized (chunkFillerSynchronizer) {
         if (isChunkFillerThreadAsleep) {
           chunkFillerThreadMaySleep = false;
+          forceChunkFillerThreadToSleep = false;
           chunkFillerSynchronizer.notify();
         }
       }

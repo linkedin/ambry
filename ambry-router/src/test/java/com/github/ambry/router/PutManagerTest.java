@@ -810,7 +810,7 @@ public class PutManagerTest {
 
     manager.poll(new ArrayList<>(), new HashSet<>());
     Assert.assertEquals(0, manager.getPutOperations().size());
-
+    NonBlockingRouter.currentOperationsCount.incrementAndGet(); // Make sure this static field's value stay the same
     manager.close();
   }
 
