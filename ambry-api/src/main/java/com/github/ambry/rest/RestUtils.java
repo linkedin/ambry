@@ -112,9 +112,9 @@ public class RestUtils {
      */
     public final static String COOKIE = "Cookie";
     /**
-     * Access_Control_Allow_Origin.
+     * Access-Control-Allow-Origin.
      */
-    public static final String ACCESS_CONTROL_ALLOW_ORIGIN = "Access_Control_Allow_Origin";
+    public static final String ACCESS_CONTROL_ALLOW_ORIGIN = "Access-Control-Allow-Origin";
     /**
      * Header to be set by the clients during a Get blob call to denote, that blob should be served only if the blob
      * has been modified after the value set for this header.
