@@ -669,7 +669,7 @@ public class RouterConfig {
     operationController =
         verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
     routerRequestHandlerNumOfThreads = verifiableProperties.getInt(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS, 7);
-    routerStoreKeyConverterFactory = verifiableProperties.getString(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS,
+    routerStoreKeyConverterFactory = verifiableProperties.getString(ROUTER_STORE_KEY_CONVERTER_FACTORY,
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");
   }
 }
