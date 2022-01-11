@@ -14,11 +14,14 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
@@ -124,9 +127,14 @@ public class InMemoryCloudDestinationErrorSimulationTest {
         Utils.getObj(cloudConfig.cloudDestinationFactoryClass, vprops, mockClusterMap.getMetricRegistry(),
             mockClusterMap);
     cloudDestination = (LatchBasedInMemoryCloudDestination) cloudDestinationFactory.getCloudDestination();
+
+    AccountService accountService = new InMemAccountService(false, true);
+    CloudRouterFactory cloudRouterFactory = new CloudRouterFactory(vprops, mockClusterMap,
+        new LoggingNotificationSystem(), null, accountService);
+
     // requestHandlerPool and its thread pool handle the cloud blob operations.
     RequestHandlerPool requestHandlerPool =
-        CloudRouterFactory.getRequestHandlerPool(vprops, mockClusterMap, cloudDestination, cloudConfig);
+        cloudRouterFactory.getRequestHandlerPool(vprops, mockClusterMap, cloudDestination, cloudConfig);
 
     LocalNetworkClientFactory cloudClientFactory =
         new LocalNetworkClientFactory((LocalRequestResponseChannel) requestHandlerPool.getChannel(),

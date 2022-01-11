@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
@@ -172,8 +173,13 @@ public class CloudOperationTest {
         Utils.getObj(cloudConfig.cloudDestinationFactoryClass, vprops, mockClusterMap.getMetricRegistry(),
             mockClusterMap);
     cloudDestination = (LatchBasedInMemoryCloudDestination) cloudDestinationFactory.getCloudDestination();
+
+    AccountService accountService = new InMemAccountService(false, true);
+    CloudRouterFactory cloudRouterFactory = new CloudRouterFactory(vprops, mockClusterMap,
+        new LoggingNotificationSystem(), null, accountService);
+
     RequestHandlerPool requestHandlerPool =
-        CloudRouterFactory.getRequestHandlerPool(vprops, mockClusterMap, cloudDestination, cloudConfig);
+        cloudRouterFactory.getRequestHandlerPool(vprops, mockClusterMap, cloudDestination, cloudConfig);
 
     Map<ReplicaType, NetworkClientFactory> childFactories = new EnumMap<>(ReplicaType.class);
     // requestHandlerPool and its thread pool handle the cloud blob operations.

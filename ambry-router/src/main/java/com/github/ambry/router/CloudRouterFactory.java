@@ -31,7 +31,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.CompositeNetworkClientFactory;
 import com.github.ambry.network.LocalNetworkClientFactory;
@@ -52,6 +51,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -166,11 +166,9 @@ public class CloudRouterFactory implements RouterFactory {
    * @return the constructed {@link RequestHandlerPool}.
    * @throws Exception if the construction fails.
    */
-  static public RequestHandlerPool getRequestHandlerPool(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+  public RequestHandlerPool getRequestHandlerPool(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       CloudDestination cloudDestination, CloudConfig cloudConfig) throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    // TODO: move properties into maybe routerConfig, frontendConfig
-    ServerConfig serverConfig = new ServerConfig(verifiableProperties);
     MetricRegistry registry = clusterMap.getMetricRegistry();
 
     DataNodeId nodeId = new CloudDataNode(cloudConfig, clusterMapConfig);
@@ -181,13 +179,13 @@ public class CloudRouterFactory implements RouterFactory {
     ServerMetrics serverMetrics = new ServerMetrics(registry, AmbryRequests.class);
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
     StoreKeyConverterFactory storeKeyConverterFactory =
-        Utils.getObj(serverConfig.serverStoreKeyConverterFactory, verifiableProperties, registry);
+        Utils.getObj(routerConfig.routerStoreKeyConverterFactory, verifiableProperties, registry);
     // A null notification system is passed into AmbryRequests so that replication events are not emitted from a
     // frontend.
     AmbryRequests requests =
         new AmbryRequests(cloudStorageManager, channel, clusterMap, nodeId, registry, serverMetrics, null, null, null,
             storeKeyFactory, storeKeyConverterFactory);
-    return new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, channel, requests);
+    return new RequestHandlerPool(routerConfig.routerRequestHandlerNumOfThreads, channel, requests);
   }
 
   /**
