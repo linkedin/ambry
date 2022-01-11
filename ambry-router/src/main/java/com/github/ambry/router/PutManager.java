@@ -30,6 +30,7 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.google.common.collect.Lists;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,7 @@ class PutManager {
   private final Object chunkFillerSynchronizer = new Object();
   private volatile boolean isChunkFillerThreadAsleep = false;
   private volatile boolean chunkFillerThreadMaySleep = false;
+  private volatile boolean forceChunkFillerThreadToSleep = false;
   // This helps the PutManager quickly find the appropriate PutOperation to hand over the response to.
   // Requests are added before they are sent out and get cleaned up as and when responses come in.
   // Because there is a guaranteed response from the NetworkClient for every request sent out, entries
@@ -141,7 +143,8 @@ class PutManager {
    * @param quotaChargeCallback {@link QuotaChargeCallback} object.
    */
   void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
-      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
         PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
@@ -265,6 +268,7 @@ class PutManager {
       routerMetrics.operationFailureWithUnsetExceptionCount.inc();
     }
     if (e != null) {
+      op.cleanupChunks();
       blobId = null;
       routerMetrics.onPutBlobError(e, op.isEncryptionEnabled(), op.isStitchOperation());
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload(), op.getServiceId());
@@ -313,6 +317,18 @@ class PutManager {
   }
 
   /**
+   * Return an unmodifiable set of put operations.
+   * @return
+   */
+  Set<PutOperation> getPutOperations() {
+    return Collections.unmodifiableSet(putOperations);
+  }
+
+  void forceChunkFillerThreadToSleep() {
+    forceChunkFillerThreadToSleep = true;
+  }
+
+  /**
    * Close the PutManager.
    * First notify the chunkFillerThread about closing and wait for it to exit. Then, complete all existing operations.
    */
@@ -321,6 +337,7 @@ class PutManager {
       synchronized (chunkFillerSynchronizer) {
         if (isChunkFillerThreadAsleep) {
           chunkFillerThreadMaySleep = false;
+          forceChunkFillerThreadToSleep = false;
           chunkFillerSynchronizer.notify();
         }
       }
@@ -346,6 +363,7 @@ class PutManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (putOperations.remove(op)) {
+        op.cleanupChunks();
         Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
@@ -371,9 +389,9 @@ class PutManager {
               chunkFillerThreadMaySleep = false;
             }
           }
-          if (chunkFillerThreadMaySleep) {
+          if (chunkFillerThreadMaySleep || forceChunkFillerThreadToSleep) {
             synchronized (chunkFillerSynchronizer) {
-              while (chunkFillerThreadMaySleep && isOpen.get()) {
+              while ((chunkFillerThreadMaySleep || forceChunkFillerThreadToSleep) && isOpen.get()) {
                 isChunkFillerThreadAsleep = true;
                 chunkFillerSynchronizer.wait();
               }

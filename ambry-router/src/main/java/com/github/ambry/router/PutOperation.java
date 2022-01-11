@@ -459,7 +459,7 @@ class PutOperation {
   /**
    * release all the chunk {@link ByteBuf} resource when the operation is done.
    */
-  private void releaseResource() {
+  private synchronized void clearReadyChunks() {
     for (PutChunk chunk : putChunks) {
       logger.debug("{}: Chunk {} state: {}", loggingContext, chunk.getChunkIndex(), chunk.getState());
       // Only release the chunk in ready or complete mode. Filler thread will release the chunk in building mode
@@ -470,9 +470,31 @@ class PutOperation {
     }
   }
 
+  /**
+   * Release the blob content of chunks, including building chunk, excluding encrypted chunks since encrypted chunks have
+   * other thread to release the data.
+   */
+  private synchronized void releaseDataForAllChunks() {
+    for (PutChunk chunk : putChunks) {
+      if (chunk.isBuilding() || chunk.isReady() || chunk.isComplete()) {
+        logger.info("{}: Clear unfinished chunk {} {} since operation is completed", loggingContext,
+            chunk.getChunkIndex(), chunk.getState());
+        chunk.releaseBlobContent();
+      }
+    }
+  }
+
   void setOperationCompleted() {
     operationCompleted = true;
-    releaseResource();
+    clearReadyChunks();
+  }
+
+  /**
+   * Clean up the chunks to release any data buffer. This should be invoked when terminating the operation with
+   * an exception.
+   */
+  public void cleanupChunks() {
+    releaseDataForAllChunks();
   }
 
   /**
@@ -636,13 +658,7 @@ class PutOperation {
         // Go over the put chunk list and release building, ready and complete chunks. This is because the multi-threading.
         // We have callback in chunk.readInto to release all the ready and complete chunks but that's in different
         // thread. There might a chance when callback runs, the last chunk is still building and then change to complete.
-        for (PutChunk chunk : putChunks) {
-          if (chunk.isBuilding() || chunk.isReady() || chunk.isComplete()) {
-            logger.info("{}: Clear unfinished chunk {} {} since operation is completed", loggingContext,
-                chunk.getChunkIndex(), chunk.getState());
-            chunk.releaseBlobContent();
-          }
-        }
+        releaseDataForAllChunks();
       }
     } catch (Exception e) {
       RouterException routerException = e instanceof RouterException ? (RouterException) e
@@ -1063,6 +1079,14 @@ class PutOperation {
         ReferenceCountUtil.safeRelease(buf);
         buf = null;
       }
+    }
+
+    /**
+     * True is the data in this chunk is released.
+     * @return
+     */
+    synchronized boolean isDataReleased() {
+      return buf == null;
     }
 
     /**
