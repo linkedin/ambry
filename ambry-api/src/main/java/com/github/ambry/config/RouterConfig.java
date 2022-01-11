@@ -538,6 +538,7 @@ public class RouterConfig {
 
   /**
    * Implementation class for StoreKeyConverterFactory
+   * This config is specific to the embedded AmbryRequests in cloud router only
    */
   @Config(ROUTER_STORE_KEY_CONVERTER_FACTORY)
   @Default("com.github.ambry.store.StoreKeyConverterFactoryImpl")
@@ -545,6 +546,7 @@ public class RouterConfig {
 
   /**
    * The number of request handler threads used by the server to process requests
+   * This config is specific to the embedded AmbryRequests in cloud router only
    */
   @Config(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS)
   @Default("7")
