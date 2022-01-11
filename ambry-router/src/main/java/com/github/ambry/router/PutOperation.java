@@ -1082,6 +1082,14 @@ class PutOperation {
     }
 
     /**
+     * True is the data in this chunk is released.
+     * @return
+     */
+    synchronized boolean isDataReleased() {
+      return buf == null;
+    }
+
+    /**
      * @return {@code true} if chunk is a MetadataChunk. {@code false} otherwise. Since this is a regular chunk,
      * false is returned
      */
