@@ -88,7 +88,7 @@ public class Container {
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
-  static final String ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE = null;
+  static final String ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE = "";
 
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;

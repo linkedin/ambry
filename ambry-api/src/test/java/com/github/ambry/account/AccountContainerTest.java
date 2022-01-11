@@ -638,7 +638,7 @@ public class AccountContainerTest {
           assertEquals("Wrong content type allow list for filenames on download value",
               CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
               updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
-          assertNull("Wrong accessControlAllowOrigin", updatedContainer.getAccessControlAllowOrigin());
+          assertEquals("Wrong accessControlAllowOrigin", "", updatedContainer.getAccessControlAllowOrigin());
           break;
         case Container.JSON_VERSION_2:
           assertEquals("Wrong encryption setting", updatedEncrypted, updatedContainer.isEncrypted());
@@ -694,7 +694,8 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
-            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0));
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
+            .setAccessControlAllowOrigin(refAccessControlAllowOriginValues.get(0));
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
     accountBuilder.removeContainer(null);
@@ -1147,7 +1148,7 @@ public class AccountContainerTest {
             container.isSecurePathRequired());
         assertEquals("Wrong override account acl setting", OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE,
             container.isAccountAclOverridden());
-        assertNull("Wrong accessControlAllowOrigin", container.getAccessControlAllowOrigin());
+        assertEquals("Wrong accessControlAllowOrigin", "", container.getAccessControlAllowOrigin());
         break;
       case Container.JSON_VERSION_2:
         assertEquals("Wrong encryption setting", refContainerEncryptionValues.get(index), container.isEncrypted());
@@ -1316,10 +1317,8 @@ public class AccountContainerTest {
       refContainerLastModifiedTimes.add(System.currentTimeMillis());
       refContainerSnapshotVersions.add(random.nextInt());
       if (i == 0) {
-        refAccessControlAllowOriginValues.add(null);
-      } else if (i == 1) {
         refAccessControlAllowOriginValues.add("*");
-      } else if (i == 2) {
+      } else if (i == 1) {
         refAccessControlAllowOriginValues.add("");
       } else {
         refAccessControlAllowOriginValues.add("https://" + TestUtils.getRandomString(10) + ".com");
@@ -1390,6 +1389,7 @@ public class AccountContainerTest {
         containerJson.put(PARENT_ACCOUNT_ID_KEY, container.getParentAccountId());
         containerJson.put(Container.LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
         containerJson.put(Container.SNAPSHOT_VERSION_KEY, container.getSnapshotVersion());
+        containerJson.put(ACCESS_CONTROL_ALLOW_ORIGIN_KEY, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
         break;
       case Container.JSON_VERSION_2:
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_2);
@@ -1415,7 +1415,7 @@ public class AccountContainerTest {
           containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
               container.getContentTypeWhitelistForFilenamesOnDownload());
         }
-        containerJson.put(Container.ACCESS_CONTROL_ALLOW_ORIGIN_KEY, container.getAccessControlAllowOrigin());
+        containerJson.put(ACCESS_CONTROL_ALLOW_ORIGIN_KEY, container.getAccessControlAllowOrigin());
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + Container.getCurrentJsonVersion());
