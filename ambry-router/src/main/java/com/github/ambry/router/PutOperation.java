@@ -471,7 +471,8 @@ class PutOperation {
   }
 
   /**
-   * Release the blob content of chunks, including building chunk.
+   * Release the blob content of chunks, including building chunk, excluding encrypted chunks since encrypted chunks have
+   * other thread to release the data.
    */
   private synchronized void releaseDataForAllChunks() {
     for (PutChunk chunk : putChunks) {
