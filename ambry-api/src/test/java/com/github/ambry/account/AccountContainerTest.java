@@ -89,6 +89,7 @@ public class AccountContainerTest {
   private List<Integer> refContainerSnapshotVersions;
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
+  private List<String> refAccessControlAllowOriginValues;
 
   /**
    * Initialize the metadata in JsonObject for account and container.
@@ -443,7 +444,8 @@ public class AccountContainerTest {
               .setNamedBlobMode(refContainerNamedBlobModes.get(i))
               .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(i))
               .setLastModifiedTime(refContainerLastModifiedTimes.get(i))
-              .setSnapshotVersion(refContainerSnapshotVersions.get(i));
+              .setSnapshotVersion(refContainerSnapshotVersions.get(i))
+              .setAccessControlAllowOrigin(refAccessControlAllowOriginValues.get(i));
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i);
 
@@ -592,6 +594,7 @@ public class AccountContainerTest {
       String updatedReplicationPolicy = container.getReplicationPolicy() + "---updated";
       boolean updatedTtlRequired = !container.isTtlRequired();
       boolean updatedSignedPathRequired = !container.isSecurePathRequired();
+      String updatedAccessControlAllowOrigin = container.getAccessControlAllowOrigin() + "---updated";
       Set<String> updatedContentTypeAllowListForFilenamesOnDownloadValues =
           container.getContentTypeWhitelistForFilenamesOnDownload()
               .stream()
@@ -608,7 +611,8 @@ public class AccountContainerTest {
           .setReplicationPolicy(updatedReplicationPolicy)
           .setTtlRequired(updatedTtlRequired)
           .setSecurePathRequired(updatedSignedPathRequired)
-          .setContentTypeWhitelistForFilenamesOnDownload(updatedContentTypeAllowListForFilenamesOnDownloadValues);
+          .setContentTypeWhitelistForFilenamesOnDownload(updatedContentTypeAllowListForFilenamesOnDownloadValues)
+          .setAccessControlAllowOrigin(updatedAccessControlAllowOrigin);
       accountBuilder.addOrUpdateContainer(containerBuilder.build());
 
       // build account and assert
@@ -634,6 +638,7 @@ public class AccountContainerTest {
           assertEquals("Wrong content type allow list for filenames on download value",
               CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
               updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
+          assertEquals("Wrong accessControlAllowOrigin", "", updatedContainer.getAccessControlAllowOrigin());
           break;
         case Container.JSON_VERSION_2:
           assertEquals("Wrong encryption setting", updatedEncrypted, updatedContainer.isEncrypted());
@@ -648,6 +653,8 @@ public class AccountContainerTest {
           assertEquals("Wrong content type allow list for filenames on download value",
               updatedContentTypeAllowListForFilenamesOnDownloadValues,
               updatedContainer.getContentTypeWhitelistForFilenamesOnDownload());
+          assertEquals("Wrong accessControlAllowOrigin", updatedAccessControlAllowOrigin,
+              updatedContainer.getAccessControlAllowOrigin());
           break;
         default:
           throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -687,7 +694,8 @@ public class AccountContainerTest {
             .setTtlRequired(refContainerTtlRequiredValues.get(0))
             .setContentTypeWhitelistForFilenamesOnDownload(
                 refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(0))
-            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0));
+            .setDeleteTriggerTime(refContainerDeleteTriggerTime.get(0))
+            .setAccessControlAllowOrigin(refAccessControlAllowOriginValues.get(0));
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
     accountBuilder.removeContainer(null);
@@ -981,6 +989,7 @@ public class AccountContainerTest {
         int snapshotVersion = metadata.optInt(Container.SNAPSHOT_VERSION_KEY, Container.SNAPSHOT_VERSION_DEFAULT_VALUE);
         boolean overrideAccountAcl = OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE;
         NamedBlobMode namedBlobMode = NAMED_BLOB_MODE_DEFAULT_VALUE;
+        String accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
         return new ContainerBuilder(id, name, status, description, parentAccountId).setDeleteTriggerTime(
             deleteTriggerTime)
             .setEncrypted(encrypted)
@@ -996,6 +1005,7 @@ public class AccountContainerTest {
             .setSnapshotVersion(snapshotVersion)
             .setOverrideAccountAcl(overrideAccountAcl)
             .setNamedBlobMode(namedBlobMode)
+            .setAccessControlAllowOrigin(accessControlAllowOrigin)
             .build();
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -1026,6 +1036,8 @@ public class AccountContainerTest {
         snapshotVersion = metadata.optInt(Container.SNAPSHOT_VERSION_KEY, Container.SNAPSHOT_VERSION_DEFAULT_VALUE);
         overrideAccountAcl = metadata.optBoolean(OVERRIDE_ACCOUNT_ACL_KEY, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE);
         namedBlobMode = metadata.optEnum(NamedBlobMode.class, NAMED_BLOB_MODE_KEY, NAMED_BLOB_MODE_DEFAULT_VALUE);
+        accessControlAllowOrigin =
+            metadata.optString(ACCESS_CONTROL_ALLOW_ORIGIN_KEY, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
         return new ContainerBuilder(id, name, status, description, parentAccountId).setDeleteTriggerTime(
             deleteTriggerTime)
             .setEncrypted(encrypted)
@@ -1041,6 +1053,7 @@ public class AccountContainerTest {
             .setSnapshotVersion(snapshotVersion)
             .setOverrideAccountAcl(overrideAccountAcl)
             .setNamedBlobMode(namedBlobMode)
+            .setAccessControlAllowOrigin(accessControlAllowOrigin)
             .build();
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -1135,6 +1148,7 @@ public class AccountContainerTest {
             container.isSecurePathRequired());
         assertEquals("Wrong override account acl setting", OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE,
             container.isAccountAclOverridden());
+        assertEquals("Wrong accessControlAllowOrigin", "", container.getAccessControlAllowOrigin());
         break;
       case Container.JSON_VERSION_2:
         assertEquals("Wrong encryption setting", refContainerEncryptionValues.get(index), container.isEncrypted());
@@ -1161,6 +1175,8 @@ public class AccountContainerTest {
             container.getLastModifiedTime());
         assertEquals("Wrong snapshot version setting", (int) refContainerSnapshotVersions.get(index),
             container.getSnapshotVersion());
+        assertEquals("Wrong accessControlAllowOrigin", refAccessControlAllowOriginValues.get(index),
+            container.getAccessControlAllowOrigin());
         break;
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
@@ -1230,7 +1246,7 @@ public class AccountContainerTest {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
           false, Collections.emptySet(), false, false, NamedBlobMode.DISABLED, (short) 0, System.currentTimeMillis(),
-          System.currentTimeMillis(), 0);
+          System.currentTimeMillis(), 0, null);
     }, null);
   }
 
@@ -1259,6 +1275,7 @@ public class AccountContainerTest {
     refContainerSnapshotVersions = new ArrayList<>();
     containerJsonList = new ArrayList<>();
     refContainers = new ArrayList<>();
+    refAccessControlAllowOriginValues = new ArrayList<>();
     Set<Short> containerIdSet = new HashSet<>();
     Set<String> containerNameSet = new HashSet<>();
     for (int i = 0; i < CONTAINER_COUNT; i++) {
@@ -1299,6 +1316,13 @@ public class AccountContainerTest {
       }
       refContainerLastModifiedTimes.add(System.currentTimeMillis());
       refContainerSnapshotVersions.add(random.nextInt());
+      if (i == 0) {
+        refAccessControlAllowOriginValues.add("*");
+      } else if (i == 1) {
+        refAccessControlAllowOriginValues.add("");
+      } else {
+        refAccessControlAllowOriginValues.add("https://" + TestUtils.getRandomString(10) + ".com");
+      }
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
@@ -1307,7 +1331,7 @@ public class AccountContainerTest {
           refContainerContentTypeAllowListForFilenamesOnDownloadValues.get(i), refContainerBackupEnabledValues.get(i),
           refContainerOverrideAccountAcls.get(i), refContainerNamedBlobModes.get(i), refAccountId,
           refContainerDeleteTriggerTime.get(i), refContainerLastModifiedTimes.get(i),
-          refContainerSnapshotVersions.get(i)));
+          refContainerSnapshotVersions.get(i), refAccessControlAllowOriginValues.get(i)));
       containerJsonList.add(buildContainerJson(refContainers.get(i)));
     }
   }
@@ -1365,6 +1389,7 @@ public class AccountContainerTest {
         containerJson.put(PARENT_ACCOUNT_ID_KEY, container.getParentAccountId());
         containerJson.put(Container.LAST_MODIFIED_TIME_KEY, container.getLastModifiedTime());
         containerJson.put(Container.SNAPSHOT_VERSION_KEY, container.getSnapshotVersion());
+        containerJson.put(ACCESS_CONTROL_ALLOW_ORIGIN_KEY, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
         break;
       case Container.JSON_VERSION_2:
         containerJson.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_2);
@@ -1390,6 +1415,7 @@ public class AccountContainerTest {
           containerJson.put(CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD,
               container.getContentTypeWhitelistForFilenamesOnDownload());
         }
+        containerJson.put(ACCESS_CONTROL_ALLOW_ORIGIN_KEY, container.getAccessControlAllowOrigin());
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + Container.getCurrentJsonVersion());

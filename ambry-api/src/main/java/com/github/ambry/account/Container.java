@@ -70,6 +70,7 @@ public class Container {
   static final String SECURE_PATH_REQUIRED_KEY = "securePathRequired";
   static final String OVERRIDE_ACCOUNT_ACL_KEY = "overrideAccountAcl";
   static final String NAMED_BLOB_MODE_KEY = "namedBlobMode";
+  static final String ACCESS_CONTROL_ALLOW_ORIGIN_KEY = "accessControlAllowOrigin";
   static final String CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD = "contentTypeWhitelistForFilenamesOnDownload";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
   static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
@@ -87,6 +88,7 @@ public class Container {
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
+  static final String ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE = "";
 
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -297,7 +299,7 @@ public class Container {
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
           BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID, UNKNOWN_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-          SNAPSHOT_VERSION_DEFAULT_VALUE);
+          SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -314,7 +316,7 @@ public class Container {
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
           BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME,
-          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE);
+          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -331,7 +333,7 @@ public class Container {
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
           BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME,
-          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE);
+          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
 
   // container field variables
   @JsonProperty(CONTAINER_ID_KEY)
@@ -353,6 +355,7 @@ public class Container {
   @JsonProperty(OVERRIDE_ACCOUNT_ACL_KEY)
   private final boolean overrideAccountAcl;
   private final NamedBlobMode namedBlobMode;
+  private final String accessControlAllowOrigin;
   private final Set<String> contentTypeWhitelistForFilenamesOnDownload;
   private final short parentAccountId;
   private final long lastModifiedTime;
@@ -382,12 +385,13 @@ public class Container {
    * @param namedBlobMode how named blob requests should be treated for this container.
    * @param parentAccountId The id of the parent {@link Account} of this container.
    * @param lastModifiedTime created/modified time of this container.
+   * @param accessControlAllowOrigin The Access-Control-Allow-Origin header field name of this container.
    */
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
       boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
       boolean backupEnabled, boolean overrideAccountAcl, NamedBlobMode namedBlobMode, short parentAccountId,
-      long deleteTriggerTime, long lastModifiedTime, int snapshotVersion) {
+      long deleteTriggerTime, long lastModifiedTime, int snapshotVersion, String accessControlAllowOrigin) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -411,6 +415,7 @@ public class Container {
             CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE;
         this.overrideAccountAcl = OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE;
         this.namedBlobMode = NAMED_BLOB_MODE_DEFAULT_VALUE;
+        this.accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
         this.backupEnabled = backupEnabled;
@@ -426,6 +431,7 @@ public class Container {
                 : contentTypeWhitelistForFilenamesOnDownload;
         this.overrideAccountAcl = overrideAccountAcl;
         this.namedBlobMode = namedBlobMode;
+        this.accessControlAllowOrigin = accessControlAllowOrigin;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -589,6 +595,13 @@ public class Container {
   }
 
   /**
+   * @return The Access-Control-Allow-Origin header field name for this container.
+   */
+  public String getAccessControlAllowOrigin() {
+    return accessControlAllowOrigin;
+  }
+
+  /**
    * Gets the if of the {@link Account} that owns this container.
    * @return The id of the parent {@link Account} of this container.
    */
@@ -642,7 +655,8 @@ public class Container {
         && deleteTriggerTime == container.deleteTriggerTime && Objects.equals(description, container.description)
         && Objects.equals(replicationPolicy, container.replicationPolicy) && ttlRequired == container.ttlRequired
         && securePathRequired == container.securePathRequired && overrideAccountAcl == container.overrideAccountAcl
-        && namedBlobMode == container.namedBlobMode && Objects.equals(contentTypeWhitelistForFilenamesOnDownload,
+        && namedBlobMode == container.namedBlobMode && Objects.equals(accessControlAllowOrigin,
+        container.accessControlAllowOrigin) && Objects.equals(contentTypeWhitelistForFilenamesOnDownload,
         container.contentTypeWhitelistForFilenamesOnDownload);
   }
 
