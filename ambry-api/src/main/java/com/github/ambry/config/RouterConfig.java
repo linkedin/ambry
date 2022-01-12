@@ -109,6 +109,8 @@ public class RouterConfig {
       "router.background.deleter.max.concurrent.operations";
   public static final String ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32 = "router.put.request.use.java.native.crc32";
   public static final String OPERATION_CONTROLLER = "router.operation.controller";
+  public static final String ROUTER_REQUEST_HANDLER_NUM_OF_THREADS = "router.request.handler.num.of.threads";
+  public static final String ROUTER_STORE_KEY_CONVERTER_FACTORY = "router.store.key.converter.factory";
 
   /**
    * Number of independent scaling units for the router.
@@ -535,6 +537,22 @@ public class RouterConfig {
   public final String operationController;
 
   /**
+   * Implementation class for StoreKeyConverterFactory
+   * This config is specific to the embedded AmbryRequests in cloud router only
+   */
+  @Config(ROUTER_STORE_KEY_CONVERTER_FACTORY)
+  @Default("com.github.ambry.store.StoreKeyConverterFactoryImpl")
+  public final String routerStoreKeyConverterFactory;
+
+  /**
+   * The number of request handler threads used by the server to process requests
+   * This config is specific to the embedded AmbryRequests in cloud router only
+   */
+  @Config(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS)
+  @Default("7")
+  public final int routerRequestHandlerNumOfThreads;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -650,5 +668,8 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32, false);
     operationController =
         verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
+    routerRequestHandlerNumOfThreads = verifiableProperties.getInt(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS, 7);
+    routerStoreKeyConverterFactory = verifiableProperties.getString(ROUTER_STORE_KEY_CONVERTER_FACTORY,
+        "com.github.ambry.store.StoreKeyConverterFactoryImpl");
   }
 }

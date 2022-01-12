@@ -13,6 +13,8 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
@@ -124,8 +126,13 @@ public class CloudRouterTest extends NonBlockingRouterTest {
         Utils.getObj(cloudConfig.cloudDestinationFactoryClass, verifiableProperties, mockClusterMap.getMetricRegistry(),
             mockClusterMap);
     CloudDestination cloudDestination = cloudDestinationFactory.getCloudDestination();
+
+    AccountService accountService = new InMemAccountService(false, true);
+    CloudRouterFactory cloudRouterFactory = new CloudRouterFactory(verifiableProperties, mockClusterMap,
+        new LoggingNotificationSystem(), null, accountService);
+
     RequestHandlerPool requestHandlerPool =
-        CloudRouterFactory.getRequestHandlerPool(verifiableProperties, mockClusterMap, cloudDestination, cloudConfig);
+        cloudRouterFactory.getRequestHandlerPool(verifiableProperties, mockClusterMap, cloudDestination, cloudConfig);
 
     Map<ReplicaType, NetworkClientFactory> childFactories = new EnumMap<>(ReplicaType.class);
     childFactories.put(ReplicaType.CLOUD_BACKED,
