@@ -130,8 +130,8 @@ public class MockRestRequest implements RestRequest {
   public MockRestRequest(JSONObject data, List<ByteBuffer> requestContents)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     restRequestMetricsTracker.nioMetricsTracker.markRequestReceived();
-    this.restMethod = RestMethod.valueOf(data.getString(REST_METHOD_KEY));
-    this.uri = new URI(data.getString(URI_KEY));
+    this.restMethod = (data.isNull(REST_METHOD_KEY)) ? null : RestMethod.valueOf(data.getString(REST_METHOD_KEY));
+    this.uri = (data.isNull(URI_KEY)) ? null : new URI(data.getString(URI_KEY));
     JSONObject headers = data.has(HEADERS_KEY) ? data.getJSONObject(HEADERS_KEY) : null;
     populateArgs(headers);
     if (requestContents != null) {
@@ -151,13 +151,13 @@ public class MockRestRequest implements RestRequest {
   @Override
   public String getPath() {
     onEventComplete(Event.GetPath);
-    return uri.getPath();
+    return (uri == null) ? null: uri.getPath();
   }
 
   @Override
   public String getUri() {
     onEventComplete(Event.GetUri);
-    return uri.toString();
+    return (uri == null) ? null: uri.toString();
   }
 
   @Override
@@ -365,7 +365,7 @@ public class MockRestRequest implements RestRequest {
     }
 
     // decode parameters in the URI. Handles parameters without values and multiple values for the same parameter.
-    if (uri.getQuery() != null) {
+    if (uri != null && uri.getQuery() != null) {
       for (String parameterValue : uri.getQuery().split("&")) {
         int idx = parameterValue.indexOf("=");
         String key = idx > 0 ? parameterValue.substring(0, idx) : parameterValue;

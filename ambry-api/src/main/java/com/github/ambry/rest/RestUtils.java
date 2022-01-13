@@ -1161,6 +1161,33 @@ public class RestUtils {
   }
 
   /**
+   * Convert the specified {@link RestRequest} object to a string representation.
+   * @param restRequest {@link RestRequest} object.
+   * @return String representation of the {@link RestRequest} object.
+   */
+  public static String convertToStr(RestRequest restRequest) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("RestRequest: [");
+    sb.append("Method: " + ((restRequest.getRestMethod() == null) ? "null" : restRequest.getRestMethod().name()));
+    sb.append(", Path: " + ((restRequest.getPath() == null) ? "null" : restRequest.getPath()));
+    sb.append(", Uri: " + ((restRequest.getUri() == null) ? "null" : restRequest.getUri()));
+    Account account = null;
+    try {
+      account = RestUtils.getAccountFromArgs(restRequest.getArgs());
+    } catch (RestServiceException restServiceException) {
+    }
+    sb.append(", Account: " + ((account == null) ? "null" : account.toString()));
+    Container container = null;
+    try {
+      container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+    } catch (RestServiceException restServiceException) {
+    }
+    sb.append(", Container: " + ((container == null) ? "null" : container.toString()));
+    sb.append("]");
+    return sb.toString();
+  }
+
+  /**
    * Class to encode decode kv header values.
    */
   public static class KVHeaderValueEncoderDecoder {
