@@ -29,6 +29,7 @@ import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -107,6 +108,9 @@ public class QuotaAwareOperationControllerTest {
     quotaAwareOperationController =
         new QuotaAwareOperationController(null, null, null, networkClientFactory, clusterMap, routerConfig, null, null,
             routerMetrics, null, null, null, null, nonBlockingRouter);
+    Field privateField = OperationController.class.getDeclaredField("putManager");
+    privateField.setAccessible(true);
+    ((PutManager) privateField.get(quotaAwareOperationController)).close();
     FieldSetter.setField(quotaAwareOperationController,
         quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("putManager"), putManager);
     FieldSetter.setField(quotaAwareOperationController,
