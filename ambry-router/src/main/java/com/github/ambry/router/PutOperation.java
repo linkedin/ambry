@@ -39,11 +39,11 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -1177,9 +1177,9 @@ class PutOperation {
       try {
         quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
         isCharged = true;
-      } catch (RouterException rEx) {
+      } catch (QuotaException quotaException) {
         logger.warn(String.format("Quota charging failed in GetBlobOperation for blob %s due to %s ", blobId.toString(),
-            rEx.toString()));
+            quotaException.toString()));
       }
       return isCharged;
     }
@@ -1199,10 +1199,10 @@ class PutOperation {
       }
       try {
         return quotaChargeCallback.getQuotaResource();
-      } catch (RestServiceException rEx) {
+      } catch (QuotaException quotaException) {
         logger.error(String.format(
             "Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-            blobId.toString(), rEx.toString()));
+            blobId.toString(), quotaException.toString()));
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;
@@ -1456,9 +1456,9 @@ class PutOperation {
         if (quotaChargeCallback != null && !(this instanceof MetadataPutChunk) && chunkException == null) {
           try {
             quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
-          } catch (RouterException rEx) {
+          } catch (QuotaException quotaException) {
             // For now we only log for quota charge exceptions for in progress requests.
-            logger.info("{}: Exception {} while handling quota charge event", loggingContext, rEx.toString());
+            logger.info("{}: Exception {} while handling quota charge event", loggingContext, quotaException.toString());
           }
         }
         state = ChunkState.Complete;

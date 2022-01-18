@@ -40,6 +40,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -749,9 +750,9 @@ class GetBlobOperation extends GetOperation {
       try {
         quotaChargeCallback.charge(chunkSize);
         isCharged = true;
-      } catch (RouterException rEx) {
-        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob %s due to %s ", blobId.toString(),
-            rEx.toString()));
+      } catch (QuotaException quotaException) {
+        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob {} due to {} ", blobId.toString(),
+            quotaException.toString()));
       }
       return isCharged;
     }
@@ -771,10 +772,10 @@ class GetBlobOperation extends GetOperation {
       }
       try {
         return quotaChargeCallback.getQuotaResource();
-      } catch (RestServiceException rEx) {
+      } catch (QuotaException quotaException) {
         logger.error(
-            String.format("Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-                blobId.toString(), rEx.toString()));
+            String.format("Could create QuotaResource object during GetBlobOperation for the chunk {} due to {}. This should never happen.",
+                blobId.toString(), quotaException.toString()));
       }
       // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
       return null;
@@ -919,8 +920,8 @@ class GetBlobOperation extends GetOperation {
               }
               // other cases mean that either this was a metadata blob, or there was an error.
             }
-          } catch (RouterException routerException) {
-            logger.info("Exception {} occurred during the quota charge event of blob {}", routerException,
+          } catch (QuotaException quotaException) {
+            logger.info("Exception {} occurred during the quota charge event of blob {}", quotaException,
                 blobId.getID());
           }
         }

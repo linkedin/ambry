@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.Partition;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -66,7 +67,10 @@ public class OperationQuotaChargerTest {
     operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, BLOBID, "GetOperation");
 
     // charge should return false if quotaChargeCallback throws exception and isCharged is false.
-    Mockito.doThrow(new RouterException("", RouterErrorCode.TooManyRequests)).when(quotaChargeCallback).charge();
+    Mockito.doThrow(
+        new QuotaException("too many requests", new RouterException("", RouterErrorCode.TooManyRequests), true))
+        .when(quotaChargeCallback)
+        .charge();
     Assert.assertFalse("charge should return true if quotaChargeCallback throws exception and isCharged is false.",
         operationQuotaCharger.charge());
     Mockito.verify(quotaChargeCallback, Mockito.times(1)).charge();
@@ -88,25 +92,30 @@ public class OperationQuotaChargerTest {
   public void testQuotaExceedAllowed() throws Exception {
     // quotaExceedAllowed should return true if quotaChargeCallback is null.
     OperationQuotaCharger operationQuotaCharger = new OperationQuotaCharger(null, BLOBID, "GetOperation");
-    Assert.assertTrue("quotaExceedAllowed should return true if quotaChargeCallback is null.", operationQuotaCharger.quotaExceedAllowed());
+    Assert.assertTrue("quotaExceedAllowed should return true if quotaChargeCallback is null.",
+        operationQuotaCharger.quotaExceedAllowed());
 
     QuotaChargeCallback quotaChargeCallback = Mockito.mock(QuotaChargeCallback.class);
     operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, BLOBID, "GetOperation");
 
     // quotaExceedAllowed should return true if quotaChargeCallback.quotaExceedAllowed returns true.
     Mockito.when(quotaChargeCallback.quotaExceedAllowed()).thenReturn(true);
-    Assert.assertTrue("quotaExceedAllowed should return true if quotaChargeCallback.quotaExceedAllowed returns true.", operationQuotaCharger.quotaExceedAllowed());
+    Assert.assertTrue("quotaExceedAllowed should return true if quotaChargeCallback.quotaExceedAllowed returns true.",
+        operationQuotaCharger.quotaExceedAllowed());
 
     // quotaExceedAllowed should return false if quotaChargeCallback.quotaExceedAllowed returns false.
     Mockito.when(quotaChargeCallback.quotaExceedAllowed()).thenReturn(false);
-    Assert.assertFalse("quotaExceedAllowed should return false if quotaChargeCallback.quotaExceedAllowed returns false.", operationQuotaCharger.quotaExceedAllowed());
+    Assert.assertFalse(
+        "quotaExceedAllowed should return false if quotaChargeCallback.quotaExceedAllowed returns false.",
+        operationQuotaCharger.quotaExceedAllowed());
   }
 
   @Test
   public void testGetQuotaResource() throws Exception {
     // getQuotaResource should return null if quotaChargeCallback is null.
     OperationQuotaCharger operationQuotaCharger = new OperationQuotaCharger(null, BLOBID, "GetOperation");
-    Assert.assertNull("getQuotaResource should return null if quotaChargeCallback is null.", operationQuotaCharger.getQuotaResource());
+    Assert.assertNull("getQuotaResource should return null if quotaChargeCallback is null.",
+        operationQuotaCharger.getQuotaResource());
 
     QuotaChargeCallback quotaChargeCallback = Mockito.mock(QuotaChargeCallback.class);
     operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, BLOBID, "GetOperation");
@@ -114,10 +123,14 @@ public class OperationQuotaChargerTest {
     // getQuotaResource should return what quotaChargeCallback.getQuotaResource returns.
     QuotaResource quotaResource = new QuotaResource("test", QuotaResourceType.ACCOUNT);
     Mockito.when(quotaChargeCallback.getQuotaResource()).thenReturn(quotaResource);
-    Assert.assertEquals("getQuotaResource should return what quotaChargeCallback.getQuotaResource returns.", quotaResource, quotaChargeCallback.getQuotaResource());
+    Assert.assertEquals("getQuotaResource should return what quotaChargeCallback.getQuotaResource returns.",
+        quotaResource, quotaChargeCallback.getQuotaResource());
 
     // getQuotaResource should return null if quotaChargeCallback throws exception.
-    Mockito.when(quotaChargeCallback.getQuotaResource()).thenThrow(new RestServiceException("", RestServiceErrorCode.InternalServerError));
-    Assert.assertNull("getQuotaResource should return null if quotaChargeCallback is null.", operationQuotaCharger.getQuotaResource());
+    Mockito.when(quotaChargeCallback.getQuotaResource())
+        .thenThrow(
+            new QuotaException("", new RestServiceException("", RestServiceErrorCode.InternalServerError), false));
+    Assert.assertNull("getQuotaResource should return null if quotaChargeCallback is null.",
+        operationQuotaCharger.getQuotaResource());
   }
 }

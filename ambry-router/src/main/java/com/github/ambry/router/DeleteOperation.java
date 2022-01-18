@@ -25,6 +25,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -315,8 +316,9 @@ class DeleteOperation {
       if (quotaChargeCallback != null) {
         try {
           quotaChargeCallback.charge();
-        } catch (RouterException routerException) {
-          logger.error("Exception  {} in quota charge event listener during delete operation", routerException.toString());
+        } catch (QuotaException quotaException) {
+          logger.error("Exception  {} in quota charge event listener during delete operation",
+              quotaException.toString());
         }
       }
       operationCompleted = true;

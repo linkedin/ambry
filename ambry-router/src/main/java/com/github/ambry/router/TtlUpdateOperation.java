@@ -24,10 +24,8 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
-import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.QuotaResource;
-import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -340,8 +338,8 @@ class TtlUpdateOperation {
       if (quotaChargeCallback != null) {
         try {
           quotaChargeCallback.charge();
-        } catch (RouterException rEx) {
-          LOGGER.info("Exception {} while charging quota for ttl update operation.", rEx.toString());
+        } catch (QuotaException quotaException) {
+          LOGGER.info("Exception {} while charging quota for ttl update operation.", quotaException.toString());
         }
       }
       operationCompleted = true;

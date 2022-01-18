@@ -16,9 +16,9 @@ package com.github.ambry.router;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
-import com.github.ambry.rest.RestServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,9 +63,9 @@ public class OperationQuotaCharger implements Chargeable {
     try {
       quotaChargeCallback.charge();
       isCharged = true;
-    } catch (RouterException rEx) {
-      LOGGER.warn(String.format("Quota charging failed in %s for blob %s due to %s ", operationName, blobId.toString(),
-          rEx.toString()));
+    } catch (QuotaException quotaException) {
+      LOGGER.warn(String.format("Quota charging failed in {} for blob {} due to {}.", operationName, blobId.toString(),
+          quotaException.toString()));
     }
     return isCharged;
   }
@@ -85,10 +85,10 @@ public class OperationQuotaCharger implements Chargeable {
     }
     try {
       return quotaChargeCallback.getQuotaResource();
-    } catch (RestServiceException rEx) {
-      LOGGER.error(String.format(
-          "Could create QuotaResource object during %s operation for the chunk %s due to %s. This should never happen.",
-          operationName, blobId.toString(), rEx.toString()));
+    } catch (QuotaException quotaException) {
+      LOGGER.error(
+          "Could create QuotaResource object during {} operation for the chunk {} due to {}. This should never happen.",
+          operationName, blobId.toString(), quotaException.toString());
     }
     // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
     return null;

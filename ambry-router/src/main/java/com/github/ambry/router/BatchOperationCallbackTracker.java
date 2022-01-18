@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -89,8 +90,8 @@ class BatchOperationCallbackTracker {
       if (quotaChargeCallback != null) {
         try {
           quotaChargeCallback.charge();
-        } catch (RouterException rEx) {
-          LOGGER.info("Exception {} while charging quota for ttl operation", rEx.toString());
+        } catch (QuotaException quotaException) {
+          LOGGER.info("Exception {} while charging quota for ttl operation", quotaException.toString());
         }
       }
       NonBlockingRouter.completeOperation(futureResult, callback, null, e, false);

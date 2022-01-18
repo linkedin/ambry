@@ -24,6 +24,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
@@ -368,8 +369,8 @@ public class UndeleteOperation {
       if (quotaChargeCallback != null) {
         try {
           quotaChargeCallback.charge();
-        } catch (RouterException routerException) {
-          LOGGER.info("Exception {} while charging quota for undelete operation", routerException.toString());
+        } catch (QuotaException quotaException) {
+          LOGGER.info("Exception {} while charging quota for undelete operation", quotaException.toString());
         }
       }
       operationCompleted = true;

@@ -83,6 +83,29 @@ public class RestUtilsTest {
   }
 
   /**
+   * Method to easily create {@link RestRequest} objects containing a specific request, account and container.
+   * @param restMethod string representation of the rest method.
+   * @param uri string representation of the desired URI.
+   * @param account {@link Account} object associated with the request.
+   * @param container {@link Container} object associated with the request.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  static RestRequest createRestRequest(String restMethod, String uri, Account account, Container container)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    JSONObject request = new JSONObject();
+    request.put(MockRestRequest.REST_METHOD_KEY, (restMethod == null) ? JSONObject.NULL : restMethod);
+    request.put(MockRestRequest.URI_KEY, ((uri == null) ? JSONObject.NULL : uri));
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, ((account == null) ? JSONObject.NULL : account));
+    headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, ((container == null) ? JSONObject.NULL : container));
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    return new MockRestRequest(request, null);
+  }
+
+  /**
    * Sets entries from the passed in HashMap to the @{link JSONObject} headers
    * @param headers  {@link JSONObject} to which the new headers are to be added
    * @param userMetadata {@link Map} which has the new entries that has to be added
@@ -948,6 +971,42 @@ public class RestUtilsTest {
       boolean isUpload = RestUtils.isUploadRequest(request);
       assertEquals(method == RestMethod.POST, isUpload);
     }
+  }
+
+  @Test
+  public void convertToStrTest() throws Exception {
+    String template = "RestRequest: [Method: %s, Path: %s, Uri: %s, Account: %s, Container: %s]";
+    String method = RestMethod.GET.name();
+    String uri = "/";
+    Account account = InMemAccountService.UNKNOWN_ACCOUNT;
+    Container container = Container.UNKNOWN_CONTAINER;
+
+    // Test with no null values.
+    RestRequest restRequest = createRestRequest(method, "/", InMemAccountService.UNKNOWN_ACCOUNT,
+        Container.UNKNOWN_CONTAINER);
+    String s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, uri, uri, account.toString(), container.toString()), s);
+
+    // Test with null method.
+    restRequest = createRestRequest(null, "/", InMemAccountService.UNKNOWN_ACCOUNT,
+        Container.UNKNOWN_CONTAINER);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, "null", uri, uri, account.toString(), container.toString()), s);
+
+    // Test with null uri.
+    restRequest = createRestRequest(method, null, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, "null", "null", account.toString(), container.toString()), s);
+
+    // Test with null account.
+    restRequest = createRestRequest(method, uri, null, Container.UNKNOWN_CONTAINER);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, uri, uri, "null", container.toString()), s);
+
+    // Test with null container.
+    restRequest = createRestRequest(method, uri, account, null);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, uri, uri, account, "null"), s);
   }
 
   // helpers.
