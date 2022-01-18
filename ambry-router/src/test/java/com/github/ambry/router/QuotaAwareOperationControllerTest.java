@@ -108,9 +108,7 @@ public class QuotaAwareOperationControllerTest {
     quotaAwareOperationController =
         new QuotaAwareOperationController(null, null, null, networkClientFactory, clusterMap, routerConfig, null, null,
             routerMetrics, null, null, null, null, nonBlockingRouter);
-    Field privateField = OperationController.class.getDeclaredField("putManager");
-    privateField.setAccessible(true);
-    ((PutManager) privateField.get(quotaAwareOperationController)).close();
+    quotaAwareOperationController.putManager.close(); // closing existing put manager before setting mock to clean up the threads.
     FieldSetter.setField(quotaAwareOperationController,
         quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("putManager"), putManager);
     FieldSetter.setField(quotaAwareOperationController,
