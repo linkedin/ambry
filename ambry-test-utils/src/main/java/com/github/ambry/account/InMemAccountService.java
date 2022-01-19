@@ -166,7 +166,24 @@ public class InMemAccountService implements AccountService {
    * @return the {@link Account} that was created and added.
    */
   public synchronized Account createAndAddRandomAccount() {
-    Account account = generateRandomAccount();
+    Account account = generateRandomAccount(null);
+    try {
+      updateAccounts(Collections.singletonList(account));
+    } catch (AccountServiceException ase) {
+      throw new IllegalStateException(ase);
+    }
+    return account;
+  }
+
+  /**
+   * Creates and adds an {@link Account} to this {@link AccountService}. The account will contain one container
+   * with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and
+   * one other random {@link Container}.
+   * @param quotaResourceType {@link QuotaResourceType} for the account.
+   * @return the {@link Account} that was created and added.
+   */
+  public synchronized Account createAndAddRandomAccount(QuotaResourceType quotaResourceType) {
+    Account account = generateRandomAccount(quotaResourceType);
     try {
       updateAccounts(Collections.singletonList(account));
     } catch (AccountServiceException ase) {
@@ -182,6 +199,20 @@ public class InMemAccountService implements AccountService {
    * @return the {@link Account} that was created.
    */
   public synchronized Account generateRandomAccount() {
+    return generateRandomAccount(null);
+  }
+
+  /**
+   * Generates an {@link Account} but does not add it to this {@link AccountService}. The account will contain one
+   * container with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with
+   * {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and one other random {@link Container}.
+   * @param quotaResourceType {@link QuotaResourceType} for the account.
+   * @return the {@link Account} that was created.
+   */
+  public synchronized Account generateRandomAccount(QuotaResourceType quotaResourceType) {
+    if(quotaResourceType == null) {
+      quotaResourceType = QuotaResourceType.values()[Utils.getRandomShort(TestUtils.RANDOM) % QuotaResourceType.values().length];
+    }
     short refAccountId;
     String refAccountName;
     do {
@@ -198,8 +229,6 @@ public class InMemAccountService implements AccountService {
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId)
             .setNamedBlobMode(Container.NamedBlobMode.OPTIONAL)
             .build();
-    QuotaResourceType quotaResourceType =
-        QuotaResourceType.values()[Utils.getRandomShort(TestUtils.RANDOM) % QuotaResourceType.values().length];
     return new AccountBuilder(refAccountId, refAccountName, refAccountStatus, quotaResourceType).addOrUpdateContainer(
         publicContainer).addOrUpdateContainer(privateContainer).addOrUpdateContainer(randomContainer).build();
   }

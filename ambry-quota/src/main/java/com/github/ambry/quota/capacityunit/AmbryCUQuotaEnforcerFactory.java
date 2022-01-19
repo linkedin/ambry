@@ -11,31 +11,34 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaEnforcer;
+import com.github.ambry.quota.QuotaEnforcerFactory;
+import com.github.ambry.quota.QuotaSource;
 
 
 /**
- * Factory that instantiates {@link RejectRequestQuotaEnforcer} for tests.
+ * A {@link QuotaEnforcerFactory} implementation for {@link AmbryCUQuotaEnforcer}.
  */
-public class RejectQuotaEnforcerFactory implements QuotaEnforcerFactory {
-  private final RejectRequestQuotaEnforcer rejectQuotaEnforcer;
+public class AmbryCUQuotaEnforcerFactory implements QuotaEnforcerFactory {
+  private final AmbryCUQuotaEnforcer ambryCUQuotaEnforcer;
 
   /**
-   * Constructor for {@link RejectQuotaEnforcerFactory}.
+   * Constructor for {@link AmbryCUQuotaEnforcerFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param quotaSource {@link QuotaSource} object.
-   * @param accountStatsStore the {@link AccountStatsStore}.
+   * @param accountStatsStore {@link AccountStatsStore} object.
    */
-  public RejectQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
+  public AmbryCUQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
       AccountStatsStore accountStatsStore) {
-    this.rejectQuotaEnforcer = new RejectRequestQuotaEnforcer(quotaSource);
+    ambryCUQuotaEnforcer = new AmbryCUQuotaEnforcer(quotaSource, quotaConfig);
   }
 
   @Override
   public QuotaEnforcer getRequestQuotaEnforcer() {
-    return rejectQuotaEnforcer;
+    return ambryCUQuotaEnforcer;
   }
 }

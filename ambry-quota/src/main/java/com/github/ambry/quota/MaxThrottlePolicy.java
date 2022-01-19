@@ -59,6 +59,7 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
     Map<QuotaName, Float> quotaUsagePercentage = new HashMap<>();
     int recommendedHttpStatus = DEFAULT_RECOMMENDED_HTTP_STATUS;
     long retryAfterMs = DEFAULT_RETRY_AFTER_MS;
+    quotaRecommendations.remove(Collections.singletonList(null));
     for (QuotaRecommendation recommendation : quotaRecommendations) {
       boolean currentQuotaShouldThrottle = recommendation.shouldThrottle();
       if (recommendation.getQuotaName() == QuotaName.READ_CAPACITY_UNIT

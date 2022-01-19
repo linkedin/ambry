@@ -23,6 +23,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -31,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -104,10 +104,10 @@ public class AmbryQuotaManager implements QuotaManager {
     ThrottlingRecommendation throttlingRecommendation;
     Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
     try {
-      List<QuotaRecommendation> quotaRecommendations = requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.recommend(restRequest))
-          .filter(Objects::nonNull)
-          .collect(Collectors.toList());
+      List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
+      for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+        quotaRecommendations.add(quotaEnforcer.recommend(restRequest));
+      }
       if (quotaRecommendations.size() == 0) {
         quotaMetrics.quotaNotEnforcedCount.inc();
       }
@@ -115,6 +115,9 @@ public class AmbryQuotaManager implements QuotaManager {
       if (throttlingRecommendation.shouldThrottle()) {
         quotaMetrics.quotaExceededCount.inc();
       }
+    } catch (QuotaException quotaException) {
+      logger.warn("Exception while getting throttling recommendation", quotaException);
+      throttlingRecommendation = throttlePolicy.recommend(Collections.emptyList());
     } finally {
       timer.stop();
     }
@@ -130,10 +133,14 @@ public class AmbryQuotaManager implements QuotaManager {
     ThrottlingRecommendation throttlingRecommendation;
     Timer.Context timer = quotaMetrics.quotaChargeTime.time();
     try {
-      throttlingRecommendation = throttlePolicy.recommend(requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
-          .filter(Objects::nonNull)
-          .collect(Collectors.toList()));
+      List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
+      for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+        quotaRecommendations.add(quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap));
+      }
+      throttlingRecommendation = throttlePolicy.recommend(quotaRecommendations);
+    } catch (QuotaException quotaException) {
+      logger.warn("Exception while charging.", quotaException);
+      throttlingRecommendation = throttlePolicy.recommend(Collections.emptyList());
     } finally {
       timer.stop();
     }
@@ -153,34 +160,25 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public void setQuotaMode(QuotaMode mode) {
-    this.quotaMode = mode;
-  }
-
-  @Override
   public QuotaMode getQuotaMode() {
     return quotaMode;
   }
 
+  @Override
+  public void setQuotaMode(QuotaMode mode) {
+    this.quotaMode = mode;
+  }
+
   /**
-   * Notify {@link QuotaSource}s about creation of new Ambry {@link Account} or {@link com.github.ambry.account.Container}.
+   * Notify {@link QuotaSource}s about creation of new Ambry {@link Account}s.
    * Note that this method can also get notification about changes to account or container unrelated to quota.
    * @param updatedAccounts {@link Collection} of {@link Account}s updated.
    */
   protected void onAccountUpdateNotification(Collection<Account> updatedAccounts) {
-    Set<QuotaResource> updatedQuotaResources = new HashSet<>();
-    updatedAccounts.forEach(account -> {
-      if (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
-        updatedQuotaResources.add(QuotaResource.fromAccount(account));
-      } else {
-        account.getAllContainers()
-            .forEach(container -> updatedQuotaResources.add(QuotaResource.fromContainer(container)));
-      }
-    });
     requestQuotaEnforcers.stream()
         .map(QuotaEnforcer::getQuotaSource)
         .filter(Objects::nonNull)
-        .forEach(quotaSource -> quotaSource.updateNewQuotaResources(updatedQuotaResources));
+        .forEach(quotaSource -> quotaSource.updateNewQuotaResources(updatedAccounts));
   }
 
   /**

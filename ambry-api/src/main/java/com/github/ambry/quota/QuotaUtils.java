@@ -34,7 +34,7 @@ public class QuotaUtils {
   private static final Logger LOGGER = LoggerFactory.getLogger(QuotaUtils.class);
 
   /**
-   * Returns checks if user request quota should be applied to the request.
+   * Checks if user request quota should be applied to the request.
    * Request quota should not be applied to Admin requests and OPTIONS requests.
    * @param restRequest {@link RestRequest} object.
    * @return {@code true} if user request quota should be applied to the request. {@code false} otherwise.
@@ -72,11 +72,10 @@ public class QuotaUtils {
   }
 
   /**
-   * Create {@link QuotaResource} for the specified {@link RestRequest}.
+   * Create {@link QuotaMethod} for the specified {@link RestRequest}.
    *
    * @param restRequest {@link RestRequest} object.
-   * @return QuotaResource extracted from headers of {@link RestRequest}.
-   * @throws RestServiceException if appropriate headers aren't found in the {@link RestRequest}.
+   * @return QuotaMethod extracted from headers of {@link RestRequest}.
    */
   public static QuotaMethod getQuotaMethod(RestRequest restRequest) {
     return isReadRequest(restRequest) ? QuotaMethod.READ : QuotaMethod.WRITE;
@@ -85,7 +84,7 @@ public class QuotaUtils {
   /**
    * @return {@code true} if the request is a read request. {@code false} otherwise.
    */
-  private static boolean isReadRequest(RestRequest restRequest) {
+  public static boolean isReadRequest(RestRequest restRequest) {
     switch (restRequest.getRestMethod()) {
       case GET:
       case OPTIONS:
@@ -94,5 +93,24 @@ public class QuotaUtils {
       default:
         return false;
     }
+  }
+
+  /**
+   * @return QuotaName of the CU quota associated with {@link RestRequest}.
+   */
+  public static QuotaName getCUQuotaName(RestRequest restRequest) {
+    return isReadRequest(restRequest) ? QuotaName.READ_CAPACITY_UNIT : QuotaName.WRITE_CAPACITY_UNIT;
+  }
+
+  /**
+   * Calculate percentage usage based on specified limit and usage values. A limit of less than or equal to 0 is assumed
+   * to denote 100% usage.
+   *
+   * @param limit max allowed usage.
+   * @param usage actual usage value.
+   * @return percentage of usage.
+   */
+  public static float getUsagePercentage(double limit, double usage) {
+    return (float) ((limit <= 0) ? 100 : ((usage * 100) / limit));
   }
 }

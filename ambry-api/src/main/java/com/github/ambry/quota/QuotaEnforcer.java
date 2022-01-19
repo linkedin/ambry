@@ -23,10 +23,12 @@ import java.util.Map;
  * A {@link QuotaEnforcer} object would need a {@link QuotaSource} to get and save quota and usage.
  */
 public interface QuotaEnforcer {
+
   /**
    * Method to initialize the {@link QuotaEnforcer}.
+   * @throws QuotaException in case of any exception.
    */
-  void init() throws Exception;
+  void init() throws QuotaException;
 
   /**
    * Makes an {@link QuotaRecommendation} using the information in {@link BlobInfo} and {@link RestRequest}. This
@@ -35,17 +37,26 @@ public interface QuotaEnforcer {
    * @param blobInfo {@link BlobInfo} object representing the blob information involved in the request.
    * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
    * @return QuotaRecommendation object with the recommendation.
+   * @throws QuotaException in case of any exception.
    */
   QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap);
+      Map<QuotaName, Double> requestCostMap) throws QuotaException;
 
   /**
    * Makes an {@link QuotaRecommendation} for the restRequest. This method doesn't know the
-   * request details and hence makes the recommendation based on current quota usage.
+   * request cost and hence makes the recommendation based on existing quota usage.
    * @param restRequest {@link RestRequest} object.
    * @return QuotaRecommendation object with the recommendation.
+   * @throws QuotaException in case of any exception.
    */
-  QuotaRecommendation recommend(RestRequest restRequest);
+  QuotaRecommendation recommend(RestRequest restRequest) throws QuotaException;
+
+  /**
+   * @return {@code true} if quota exceed is allowed. {@code false} otherwise.
+   * A QuotaResource's request could be allowed to exceed its quota is the system has enough resources to handle the request.
+   * @throws QuotaException in case of any exception.
+   */
+  boolean isQuotaExceedAllowed(RestRequest restRequest) throws QuotaException;
 
   /**
    * @return QuotaSource object of the enforcer.

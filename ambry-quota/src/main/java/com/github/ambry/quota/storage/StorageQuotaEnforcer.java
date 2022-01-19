@@ -22,6 +22,7 @@ import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaEnforcer;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
@@ -106,14 +107,18 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public void init() throws Exception {
-    initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
-    registerListeners();
+  public void init() throws QuotaException {
+    try {
+      initStorageUsage(storageUsageRefresher.getContainerStorageUsage());
+      registerListeners();
+    } catch (Exception e) {
+      throw new QuotaException("Storage quota enforcer initialization failed.", e, false);
+    }
   }
 
   @Override
   public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap) {
+      Map<QuotaName, Double> requestCostMap) throws QuotaException {
     if (!RestUtils.isUploadRequest(restRequest)) {
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
@@ -129,12 +134,18 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation recommend(RestRequest restRequest) {
+  public QuotaRecommendation recommend(RestRequest restRequest) throws QuotaException {
     if (!RestUtils.isUploadRequest(restRequest)) {
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
     Pair<Long, Long> pair = getQuotaAndUsage(restRequest);
     return recommendBasedOnQuotaAndUsage(pair);
+  }
+
+  @Override
+  public boolean isQuotaExceedAllowed(RestRequest restRequest) {
+    // Exceeding storage quota limit is not allowed.
+    return false;
   }
 
   /**
@@ -242,8 +253,9 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    * quota as well.
    * @param restRequest the {@link RestRequest} that carries account and container in the header.
    * @return A {@link Pair} whose first element is quota the second element is current storage usage.
+   * @throws QuotaException in case of any exception.
    */
-  Pair<Long, Long> getQuotaAndUsage(RestRequest restRequest) {
+  Pair<Long, Long> getQuotaAndUsage(RestRequest restRequest) throws QuotaException {
     long quotaValue = -1L;
     long currentUsage = 0L;
     try {
@@ -302,8 +314,9 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    * Return the storage quota value (in bytes) for given {@link QuotaResource}.
    * @param resource The {@link QuotaResource} to fetch quota value.
    * @return The storage quota value (in bytes)
+   * @throws QuotaException in case of any exception while getting quota.
    */
-  protected long getQuotaValueForResource(QuotaResource resource) {
+  protected long getQuotaValueForResource(QuotaResource resource) throws QuotaException {
     Quota quota = quotaSource.getQuota(resource, QuotaName.STORAGE_IN_GB);
     if (quota != null) {
       return (long) quota.getQuotaValue() * BYTES_IN_GB;
