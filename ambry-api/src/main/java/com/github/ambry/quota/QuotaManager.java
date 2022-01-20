@@ -21,8 +21,9 @@ import java.util.Map;
 
 /**
  * Interface for the class that acts as the manager of all the quotas in Ambry. Implementations of this interface
- * should take care of initializing all the various type of quota enforcements and getting the overall quota
- * recommendation for each request.
+ * should take care of initializing {@link QuotaEnforcer}s for all the various type of quota. Each {@link QuotaEnforcer}
+ * is responsible to make recommendations about its own type of quota and {@link QuotaManager} merges the
+ * recommendation from each enforcer using the specified {@link ThrottlePolicy}.
  */
 public interface QuotaManager {
 

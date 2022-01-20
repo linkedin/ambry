@@ -19,7 +19,9 @@ import java.util.Map;
 
 
 /**
- * Interface for class that would do the quota enforcement of a particular quota.
+ * Interface for class that would do the quota enforcement of a particular type of quota.
+ * Each enforcer is responsible to make decisions only for its own particular type of quota. The {@link QuotaManager}
+ * looks at each of the enforcers' decision and merges them based on {@link ThrottlePolicy}.
  * A {@link QuotaEnforcer} object would need a {@link QuotaSource} to get and save quota and usage.
  */
 public interface QuotaEnforcer {
