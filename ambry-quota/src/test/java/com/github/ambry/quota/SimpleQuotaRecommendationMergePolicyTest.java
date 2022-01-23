@@ -29,18 +29,19 @@ import static org.junit.Assert.*;
 
 
 /**
- * Test for @{@link MaxThrottlePolicy}.
+ * Test for @{@link SimpleQuotaRecommendationMergePolicy}.
  */
-public class MaxThrottlePolicyTest {
+public class SimpleQuotaRecommendationMergePolicyTest {
 
-  /** Test for {@link MaxThrottlePolicy#recommend}*/
+  /** Test for {@link SimpleQuotaRecommendationMergePolicy#mergeEnforcementRecommendations}*/
   @Test
   public void testRecommend() {
-    MaxThrottlePolicy maxThrottlePolicy =
-        new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(new Properties())));
+    SimpleQuotaRecommendationMergePolicy simpleThrottlePolicy =
+        new SimpleQuotaRecommendationMergePolicy(new QuotaConfig(new VerifiableProperties(new Properties())));
 
     // test for empty quota recommendation list
-    ThrottlingRecommendation throttlingRecommendation = maxThrottlePolicy.recommend(Collections.emptyList());
+    ThrottlingRecommendation throttlingRecommendation =
+        simpleThrottlePolicy.mergeEnforcementRecommendations(Collections.emptyList());
     assertEquals(ThrottlingRecommendation.NO_RETRY_AFTER_MS, throttlingRecommendation.getRetryAfterMs());
     assertEquals(QuotaUsageLevel.HEALTHY, throttlingRecommendation.getQuotaUsageLevel());
     assertEquals(HttpResponseStatus.OK, throttlingRecommendation.getRecommendedHttpStatus());
@@ -49,148 +50,154 @@ public class MaxThrottlePolicyTest {
 
     // test for a single quota recommendation.
     QuotaRecommendation quotaRecommendation = new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, 5);
-    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    throttlingRecommendation =
+        simpleThrottlePolicy.mergeEnforcementRecommendations(Collections.singletonList(quotaRecommendation));
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.THROTTLE_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.THROTTLE_HTTP_STATUS, 5, throttlingRecommendation);
 
     // test for retry after interval
     List<QuotaRecommendation> quotaRecommendationList = new ArrayList<>();
     quotaRecommendationList.add(new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, 5));
     quotaRecommendationList.add(new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, 10));
     quotaRecommendationList.add(new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, 1));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 10,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 10, throttlingRecommendation);
 
     quotaRecommendationList.add(new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, 12));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 12,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 12, throttlingRecommendation);
 
     // test for should throttle
     quotaRecommendationList = new ArrayList<>();
     quotaRecommendationList.add(new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, 5));
     quotaRecommendationList.add(new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, 5));
     quotaRecommendationList.add(new QuotaRecommendation(false, 101, QuotaName.READ_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
 
     quotaRecommendationList.add(new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.THROTTLE_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.THROTTLE_HTTP_STATUS, 5, throttlingRecommendation);
 
     // test for warning level
     quotaRecommendationList = new ArrayList<>();
     quotaRecommendationList.add(new QuotaRecommendation(false, 70, QuotaName.READ_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.HEALTHY, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 70.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 70.0), HttpResponseStatus.OK, 5,
         throttlingRecommendation);
     quotaRecommendationList.add(new QuotaRecommendation(false, 81, QuotaName.READ_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.WARNING, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 81.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 81.0), HttpResponseStatus.OK, 5,
         throttlingRecommendation);
     quotaRecommendationList.add(new QuotaRecommendation(false, 96, QuotaName.READ_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.CRITICAL, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 96.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 96.0), HttpResponseStatus.OK, 5,
         throttlingRecommendation);
     quotaRecommendationList.add(new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.THROTTLE_HTTP_STATUS, 5,
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), HttpResponseStatus.TOO_MANY_REQUESTS, 5,
         throttlingRecommendation);
 
     // Test when the request throttling is disabled
     Properties prop = new Properties();
     prop.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, "false");
-    maxThrottlePolicy = new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(prop)));
+    simpleThrottlePolicy = new SimpleQuotaRecommendationMergePolicy(new QuotaConfig(new VerifiableProperties(prop)));
 
     // test for a request quota recommendation.
     quotaRecommendation = new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, 5);
-    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    throttlingRecommendation =
+        simpleThrottlePolicy.mergeEnforcementRecommendations(Collections.singletonList(quotaRecommendation));
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
 
     quotaRecommendationList.clear();
     quotaRecommendationList.add(quotaRecommendation);
     quotaRecommendationList.add(new QuotaRecommendation(true, 101, QuotaName.STORAGE_IN_GB, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true, new HashMap<QuotaName, Float>() {
       {
         put(QuotaName.READ_CAPACITY_UNIT, (float) 101.0);
         put(QuotaName.STORAGE_IN_GB, (float) 101.0);
       }
-    }, ThrottlePolicy.THROTTLE_HTTP_STATUS, 5, throttlingRecommendation);
+    }, QuotaRecommendationMergePolicy.THROTTLE_HTTP_STATUS, 5, throttlingRecommendation);
 
     // Test when the storage quota throttling is disabled
     prop = new Properties();
     prop.setProperty(StorageQuotaConfig.SHOULD_THROTTLE, "false");
-    maxThrottlePolicy = new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(prop)));
+    simpleThrottlePolicy = new SimpleQuotaRecommendationMergePolicy(new QuotaConfig(new VerifiableProperties(prop)));
 
     // test for a storage quota recommendation.
     quotaRecommendation = new QuotaRecommendation(true, 101, QuotaName.STORAGE_IN_GB, 5);
-    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    throttlingRecommendation =
+        simpleThrottlePolicy.mergeEnforcementRecommendations(Collections.singletonList(quotaRecommendation));
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.STORAGE_IN_GB, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.STORAGE_IN_GB, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
 
     quotaRecommendationList.clear();
     quotaRecommendationList.add(quotaRecommendation);
     quotaRecommendationList.add(new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, true, new HashMap<QuotaName, Float>() {
       {
         put(QuotaName.READ_CAPACITY_UNIT, (float) 101.0);
         put(QuotaName.STORAGE_IN_GB, (float) 101.0);
       }
-    }, ThrottlePolicy.THROTTLE_HTTP_STATUS, 5, throttlingRecommendation);
+    }, QuotaRecommendationMergePolicy.THROTTLE_HTTP_STATUS, 5, throttlingRecommendation);
 
     // Test when both quota throttling are disabled
     prop = new Properties();
     prop.setProperty(StorageQuotaConfig.SHOULD_THROTTLE, "false");
     prop.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, "false");
-    maxThrottlePolicy = new MaxThrottlePolicy(new QuotaConfig(new VerifiableProperties(prop)));
+    simpleThrottlePolicy = new SimpleQuotaRecommendationMergePolicy(new QuotaConfig(new VerifiableProperties(prop)));
 
     quotaRecommendation = new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, 5);
-    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    throttlingRecommendation =
+        simpleThrottlePolicy.mergeEnforcementRecommendations(Collections.singletonList(quotaRecommendation));
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
 
     quotaRecommendation = new QuotaRecommendation(true, 101, QuotaName.WRITE_CAPACITY_UNIT, 5);
-    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    throttlingRecommendation =
+        simpleThrottlePolicy.mergeEnforcementRecommendations(Collections.singletonList(quotaRecommendation));
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.WRITE_CAPACITY_UNIT, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.WRITE_CAPACITY_UNIT, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
 
     quotaRecommendation = new QuotaRecommendation(true, 101, QuotaName.STORAGE_IN_GB, 5);
-    throttlingRecommendation = maxThrottlePolicy.recommend(Collections.singletonList(quotaRecommendation));
+    throttlingRecommendation =
+        simpleThrottlePolicy.mergeEnforcementRecommendations(Collections.singletonList(quotaRecommendation));
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false,
-        Collections.singletonMap(QuotaName.STORAGE_IN_GB, (float) 101.0), ThrottlePolicy.ACCEPT_HTTP_STATUS, 5,
-        throttlingRecommendation);
+        Collections.singletonMap(QuotaName.STORAGE_IN_GB, (float) 101.0),
+        QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
 
     quotaRecommendationList.clear();
     quotaRecommendationList.add(quotaRecommendation);
     quotaRecommendationList.add(new QuotaRecommendation(true, 101, QuotaName.READ_CAPACITY_UNIT, 5));
     quotaRecommendationList.add(new QuotaRecommendation(true, 101, QuotaName.WRITE_CAPACITY_UNIT, 5));
-    throttlingRecommendation = maxThrottlePolicy.recommend(quotaRecommendationList);
+    throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.EXCEEDED, false, new HashMap<QuotaName, Float>() {
       {
         put(QuotaName.READ_CAPACITY_UNIT, (float) 101.0);
         put(QuotaName.WRITE_CAPACITY_UNIT, (float) 101.0);
         put(QuotaName.STORAGE_IN_GB, (float) 101.0);
       }
-    }, ThrottlePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
+    }, QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS, 5, throttlingRecommendation);
   }
 
   /**

@@ -27,16 +27,17 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
 
   /**
    * @param quotaConfig {@link QuotaConfig} object.
-   * @param throttlePolicy {@link ThrottlePolicy} object.
+   * @param quotaRecommendationMergePolicy {@link QuotaRecommendationMergePolicy} object.
    * @param accountService {@link AccountService} object.
    * @param accountStatsStore {@link AccountStatsStore} object.
    * @param metricRegistry {@link MetricRegistry} object.
    * @throws ReflectiveOperationException
    */
-  public AmbryQuotaManagerFactory(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
+  public AmbryQuotaManagerFactory(QuotaConfig quotaConfig,
+      QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
       AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
-    quotaManager =
-        new AmbryQuotaManager(quotaConfig, throttlePolicy, accountService, accountStatsStore, metricRegistry);
+    quotaManager = new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore,
+        metricRegistry);
   }
 
   @Override

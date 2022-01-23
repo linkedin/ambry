@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@ package com.github.ambry.quota;
 
 /**
  * Quota usage levels.
- * The limit for each type of level should be determined by {@link ThrottlePolicy} implementation.
+ * The limit for each type of level should be determined by {@link QuotaRecommendationMergePolicy} implementation.
  * NOTE that the order of these enums should not be changed since their relative position is used for comparison.
  */
 public enum QuotaUsageLevel {

@@ -23,7 +23,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
-import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.rest.RestRequestService;
@@ -97,7 +97,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               clusterMapConfig, clusterMap.getMetricRegistry()).getAccountStatsStore();
       QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
       QuotaManager quotaManager = ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig,
-          new MaxThrottlePolicy(quotaConfig), accountService, accountStatsStore,
+          new SimpleQuotaRecommendationMergePolicy(quotaConfig), accountService, accountStatsStore,
           clusterMap.getMetricRegistry())).getQuotaManager();
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,

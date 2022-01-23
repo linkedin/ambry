@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,12 +47,13 @@ public class AmbryQuotaManagerUpdateNotificationTest {
     MetricRegistry metricRegistry = new MetricRegistry();
 
     QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
-    ThrottlePolicy throttlePolicy = new MaxThrottlePolicy(quotaConfig);
+    QuotaRecommendationMergePolicy quotaRecommendationMergePolicy =
+        new SimpleQuotaRecommendationMergePolicy(quotaConfig);
     AccountServiceForConsumerTest accountService =
         new AccountServiceForConsumerTest(new AccountServiceConfig(verifiableProperties),
             new AccountServiceMetrics(metricRegistry), null);
     AmbryQuotaManager ambryQuotaManager =
-        new AmbryQuotaManager(quotaConfig, throttlePolicy, accountService, null, metricRegistry);
+        new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, null, metricRegistry);
     UnlimitedQuotaSource quotaSource = (UnlimitedQuotaSource) getQuotaSourceMember(ambryQuotaManager);
     assertTrue("updated accounts should be empty", quotaSource.getQuotaResourceList().isEmpty());
 

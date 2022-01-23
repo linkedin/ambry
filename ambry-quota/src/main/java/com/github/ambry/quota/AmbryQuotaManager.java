@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
 public class AmbryQuotaManager implements QuotaManager {
   private static final Logger logger = LoggerFactory.getLogger(AmbryQuotaManager.class);
   private final Set<QuotaEnforcer> requestQuotaEnforcers;
-  private final ThrottlePolicy throttlePolicy;
+  private final QuotaRecommendationMergePolicy quotaRecommendationMergePolicy;
   private final QuotaConfig quotaConfig;
   private final QuotaMetrics quotaMetrics;
   private volatile QuotaMode quotaMode;
@@ -52,13 +52,14 @@ public class AmbryQuotaManager implements QuotaManager {
   /**
    * Constructor for {@link AmbryQuotaManager}.
    * @param quotaConfig {@link QuotaConfig} object.
-   * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
+   * @param quotaRecommendationMergePolicy {@link QuotaRecommendationMergePolicy} object that makes the overall recommendation.
    * @param accountService {@link AccountService} object to get all the accounts and container information.
    * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
    * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
    * @throws ReflectiveOperationException in case of any exception.
    */
-  public AmbryQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy, AccountService accountService,
+  public AmbryQuotaManager(QuotaConfig quotaConfig,
+      QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
       AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
@@ -70,7 +71,7 @@ public class AmbryQuotaManager implements QuotaManager {
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)),
           accountStatsStore)).getRequestQuotaEnforcer());
     }
-    this.throttlePolicy = throttlePolicy;
+    this.quotaRecommendationMergePolicy = quotaRecommendationMergePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = new QuotaMetrics(metricRegistry);
     this.quotaMode = quotaConfig.throttlingMode;
@@ -111,7 +112,7 @@ public class AmbryQuotaManager implements QuotaManager {
       if (quotaRecommendations.size() == 0) {
         quotaMetrics.quotaNotEnforcedCount.inc();
       }
-      throttlingRecommendation = throttlePolicy.recommend(quotaRecommendations);
+      throttlingRecommendation = quotaRecommendationMergePolicy.mergeEnforcementRecommendations(quotaRecommendations);
       if (throttlingRecommendation.shouldThrottle()) {
         quotaMetrics.quotaExceededCount.inc();
       }
@@ -130,7 +131,7 @@ public class AmbryQuotaManager implements QuotaManager {
     ThrottlingRecommendation throttlingRecommendation;
     Timer.Context timer = quotaMetrics.quotaChargeTime.time();
     try {
-      throttlingRecommendation = throttlePolicy.recommend(requestQuotaEnforcers.stream()
+      throttlingRecommendation = quotaRecommendationMergePolicy.mergeEnforcementRecommendations(requestQuotaEnforcers.stream()
           .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
           .filter(Objects::nonNull)
           .collect(Collectors.toList()));
