@@ -32,6 +32,8 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  * Common utility functions that can be used across implementations of Quota interfaces.
  */
 public class QuotaUtils {
+  public final static long BYTES_IN_GB = 1024 * 1024 * 1024; // 1GB
+
   private static final Logger LOGGER = LoggerFactory.getLogger(QuotaUtils.class);
 
   /**
@@ -120,5 +122,22 @@ public class QuotaUtils {
     } else {
       throw new UnsupportedOperationException("Not implemented yet.");
     }
+  }
+
+  /*
+   * @return QuotaName of the CU quota associated with {@link RestRequest}.
+   */
+  public static QuotaName getCUQuotaName(RestRequest restRequest) {
+    return isReadRequest(restRequest) ? QuotaName.READ_CAPACITY_UNIT : QuotaName.WRITE_CAPACITY_UNIT;
+  }
+
+  /**
+   * Calculate the storage cost incurred to serve a request.
+   * @param restRequest {@link RestRequest} to find type of request.
+   * @param size size of the blob or chunk.
+   * @return storage cost.
+   */
+  public static double calculateStorageCost(RestRequest restRequest, long size) {
+    return RestUtils.isUploadRequest(restRequest) ? size / (double) QuotaUtils.BYTES_IN_GB : 0;
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 LinkedIn Corp. All rights reserved.
+ * Copyright 2022 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,26 +20,18 @@ import java.util.Map;
 
 
 /**
- * Interface to define the policy to calculate cost of a request.
- * This can be used for quota enforcement or cost to serve type calculations.
+ * Interface for the policy to calculate cost of a request for determining cost incurred via the SCE events.
+ * This forms the basis of Ambry's cost model for its customers.
  */
-public interface RequestCostPolicy {
+public interface SCERequestCostPolicy {
 
   /**
-   * Calculates the cost incurred to serve the specified {@link RestRequest} for blob specified by {@link BlobInfo}
+   * Calculates the cost incurred to serve the specified {@link RestRequest} for blob specified by {@link BlobInfo}.
    * @param restRequest {@link RestRequest} served.
    * @param responseChannel {@link RestResponseChannel} object.
    * @param blobInfo {@link BlobInfo} of the blob in request.
    * @return Map of cost metrics and actual cost value.
    */
-  Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel responseChannel,
+  Map<String, Double> calculateSCERequestCost(RestRequest restRequest, RestResponseChannel responseChannel,
       BlobInfo blobInfo);
-
-  /**
-   * Calculates the quota charge incurred to serve the specified {@link RestRequest} for blob or chunk of the specified {@code size}.
-   * @param restRequest {@link RestRequest} served.
-   * @param size size of the blob or chunk.
-   * @return Map of cost metrics and actual cost value.
-   */
-  Map<String, Double> calculateRequestQuotaCharge(RestRequest restRequest, long size);
 }
