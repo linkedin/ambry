@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@ import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,6 +81,15 @@ public class QuotaUtils {
    */
   public static QuotaMethod getQuotaMethod(RestRequest restRequest) {
     return isReadRequest(restRequest) ? QuotaMethod.READ : QuotaMethod.WRITE;
+  }
+
+  /**
+   * Returns recommended {@link HttpResponseStatus} by quota manager based on throttling recommendation.
+   * @param shouldThrottle throttling recommendation.
+   * @return ThrottlePolicy.THROTTLE_HTTP_STATUS if shouldThrottle is {@code true}. ThrottlePolicy.ACCEPT_HTTP_STATUS otherwise.
+   */
+  public static HttpResponseStatus quotaRecommendedHttpResponse(boolean shouldThrottle) {
+    return shouldThrottle ? ThrottlePolicy.THROTTLE_HTTP_STATUS : ThrottlePolicy.ACCEPT_HTTP_STATUS;
   }
 
   /**
