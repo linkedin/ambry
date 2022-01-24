@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,15 +23,16 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
-import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaRecommendationMergePolicy;
+import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
@@ -123,7 +124,8 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
         @Override
         public void charge(long chunkSize) throws QuotaException {
           listenerCalledCount.addAndGet(chunkSize);
-          throw new QuotaException("exception during check and charge", new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests), false);
+          throw new QuotaException("exception during check and charge",
+              new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests), false);
         }
 
         @Override
@@ -243,7 +245,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
 
       router.deleteBlob(stitchedBlobId, null, null, quotaChargeCallback).get();
-      assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
     } finally {
       router.close();
       assertExpectedThreadCounts(0, 0);
@@ -264,9 +266,9 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       AtomicInteger listenerCalledCount = new AtomicInteger(0);
       QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
       QuotaManager quotaManager =
-          new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig), accountService, null,
-              new MetricRegistry(), listenerCalledCount);
-      QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager, true);
+          new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+              accountService, null, new MetricRegistry(), listenerCalledCount);
+      QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(null, quotaManager, true);
 
       int blobSize = 3000;
       setOperationParams(blobSize, TTL_SECS);
@@ -307,9 +309,10 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
      * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
      * @throws ReflectiveOperationException in case of any exception.
      */
-    public ChargeTesterQuotaManager(QuotaConfig quotaConfig, QuotaRecommendationMergePolicy quotaRecommendationMergePolicy,
-        AccountService accountService, AccountStatsStore accountStatsStore, MetricRegistry metricRegistry,
-        AtomicInteger chargeCalledCount) throws ReflectiveOperationException {
+    public ChargeTesterQuotaManager(QuotaConfig quotaConfig,
+        QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
+        AccountStatsStore accountStatsStore, MetricRegistry metricRegistry, AtomicInteger chargeCalledCount)
+        throws ReflectiveOperationException {
       super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, metricRegistry);
       this.chargeCalledCount = chargeCalledCount;
     }

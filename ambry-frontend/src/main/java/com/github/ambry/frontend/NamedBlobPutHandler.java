@@ -23,8 +23,8 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -190,7 +190,7 @@ public class NamedBlobPutHandler {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -220,7 +220,7 @@ public class NamedBlobPutHandler {
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo),
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true)), uri, LOGGER,
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)), uri, LOGGER,
           finalCallback);
     }
 
@@ -252,7 +252,7 @@ public class NamedBlobPutHandler {
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                  QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,

@@ -16,8 +16,8 @@ package com.github.ambry.frontend;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
@@ -144,7 +144,7 @@ class TtlUpdateHandler {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
         router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(),
-            QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
+            QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
