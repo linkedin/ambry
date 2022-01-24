@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.List;
 
 
@@ -20,6 +21,8 @@ import java.util.List;
  * Interface to apply application specific policy to make overall recommendation based on {@link QuotaRecommendation}s.
  */
 public interface ThrottlePolicy {
+  static final HttpResponseStatus ACCEPT_HTTP_STATUS = HttpResponseStatus.OK;
+  static final HttpResponseStatus THROTTLE_HTTP_STATUS = HttpResponseStatus.TOO_MANY_REQUESTS;
 
   /**
    * Provide overall recommendation by merging {@link QuotaRecommendation}s from all quota enforcers.

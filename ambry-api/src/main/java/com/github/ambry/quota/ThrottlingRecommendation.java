@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,7 +26,7 @@ public class ThrottlingRecommendation {
   public static final long NO_RETRY_AFTER_MS = -1; // No retry needed when request is not throttled.
   private final boolean throttle;
   private final Map<QuotaName, Float> quotaUsagePercentage;
-  private final int recommendedHttpStatus;
+  private final HttpResponseStatus recommendedHttpStatus;
   private final long retryAfterMs;
   private final QuotaUsageLevel quotaUsageLevel;
 
@@ -33,12 +34,12 @@ public class ThrottlingRecommendation {
    * Constructor for {@link ThrottlingRecommendation}.
    * @param throttle flag indicating if request should be throttled.
    * @param quotaUsagePercentage A {@link Map} of {@link QuotaName} to usage percentage.
-   * @param recommendedHttpStatus overall recommended http status.
+   * @param recommendedHttpStatus {@link HttpResponseStatus} representing overall recommended http status.
    * @param retryAfterMs time in ms after which request should be retried. -1 if request is not throttled.
    * @param quotaUsageLevel {@link QuotaUsageLevel} object.
    */
   public ThrottlingRecommendation(boolean throttle, Map<QuotaName, Float> quotaUsagePercentage,
-      int recommendedHttpStatus, long retryAfterMs, QuotaUsageLevel quotaUsageLevel) {
+      HttpResponseStatus recommendedHttpStatus, long retryAfterMs, QuotaUsageLevel quotaUsageLevel) {
     this.throttle = throttle;
     this.quotaUsagePercentage = new HashMap<>(quotaUsagePercentage);
     this.recommendedHttpStatus = recommendedHttpStatus;
@@ -63,7 +64,7 @@ public class ThrottlingRecommendation {
   /**
    * @return http status recommended.
    */
-  public int getRecommendedHttpStatus() {
+  public HttpResponseStatus getRecommendedHttpStatus() {
     return this.recommendedHttpStatus;
   }
 

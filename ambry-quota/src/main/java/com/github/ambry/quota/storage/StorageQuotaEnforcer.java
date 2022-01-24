@@ -54,7 +54,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   private static final long BYTES_IN_GB = 1024 * 1024 * 1024;
   // The quota recommendation returned when there is no quota found for the given account/container.
   private static final QuotaRecommendation NO_QUOTA_VALUE_RECOMMENDATION =
-      new QuotaRecommendation(false, 0.0f, QuotaName.STORAGE_IN_GB, HTTP_STATUS_ALLOW, NO_RETRY);
+      new QuotaRecommendation(false, 0.0f, QuotaName.STORAGE_IN_GB, NO_RETRY);
   protected final StorageUsageRefresher storageUsageRefresher;
   protected final QuotaSource quotaSource;
   protected final StorageQuotaConfig config;
@@ -151,8 +151,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     }
     boolean shouldThrottle = currentUsage >= quotaValue;
     float usagePercentage = currentUsage >= quotaValue ? 100f : ((float) currentUsage) / quotaValue * 100f;
-    return new QuotaRecommendation(shouldThrottle, usagePercentage, QuotaName.STORAGE_IN_GB,
-        shouldThrottle ? HTTP_STATUS_THROTTLE : HTTP_STATUS_ALLOW, NO_RETRY);
+    return new QuotaRecommendation(shouldThrottle, usagePercentage, QuotaName.STORAGE_IN_GB, NO_RETRY);
   }
 
   /**

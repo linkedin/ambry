@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,6 @@ import java.util.Map;
  */
 public class MaxThrottlePolicy implements ThrottlePolicy {
   static final long DEFAULT_RETRY_AFTER_MS = ThrottlingRecommendation.NO_RETRY_AFTER_MS;
-  static final int DEFAULT_RECOMMENDED_HTTP_STATUS = HttpResponseStatus.OK.code();
   static final QuotaUsageLevel DEFAULT_QUOTA_USAGE_LEVEL = QuotaUsageLevel.HEALTHY;
 
   // Percentage usage at or below this limit is healthy.
@@ -57,7 +56,7 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
   public ThrottlingRecommendation recommend(List<QuotaRecommendation> quotaRecommendations) {
     boolean shouldThrottle = false;
     Map<QuotaName, Float> quotaUsagePercentage = new HashMap<>();
-    int recommendedHttpStatus = DEFAULT_RECOMMENDED_HTTP_STATUS;
+    HttpResponseStatus recommendedHttpStatus = ThrottlePolicy.ACCEPT_HTTP_STATUS;
     long retryAfterMs = DEFAULT_RETRY_AFTER_MS;
     for (QuotaRecommendation recommendation : quotaRecommendations) {
       boolean currentQuotaShouldThrottle = recommendation.shouldThrottle();
@@ -69,7 +68,7 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
       }
       shouldThrottle = shouldThrottle | currentQuotaShouldThrottle;
       quotaUsagePercentage.put(recommendation.getQuotaName(), recommendation.getQuotaUsagePercentage());
-      recommendedHttpStatus = Math.max(recommendation.getRecommendedHttpStatus(), recommendedHttpStatus);
+      recommendedHttpStatus = QuotaUtils.quotaRecommendedHttpResponse(shouldThrottle);
       retryAfterMs = Math.max(recommendation.getRetryAfterMs(), retryAfterMs);
     }
     QuotaUsageLevel quotaUsageLevel = quotaUsagePercentage.isEmpty() ? DEFAULT_QUOTA_USAGE_LEVEL

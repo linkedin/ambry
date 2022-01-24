@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,6 @@ public class QuotaRecommendation {
   private final boolean shouldThrottle;
   private final float usagePercentage;
   private final QuotaName quotaName;
-  private final int recommendedHttpStatus;
   private final long retryAfterMs;
 
   /**
@@ -31,15 +30,12 @@ public class QuotaRecommendation {
    * @param shouldThrottle boolean flag indicating throttling recommendation.
    * @param usagePercentage percentage of resource usage.
    * @param quotaName name of the enforcement that made the recommendation.
-   * @param recommendedHttpStatus recommended http status.
    * @param retryAfterMs time after which request can be retried.
    */
-  public QuotaRecommendation(boolean shouldThrottle, float usagePercentage, QuotaName quotaName,
-      int recommendedHttpStatus, long retryAfterMs) {
+  public QuotaRecommendation(boolean shouldThrottle, float usagePercentage, QuotaName quotaName, long retryAfterMs) {
     this.shouldThrottle = shouldThrottle;
     this.usagePercentage = usagePercentage;
     this.quotaName = quotaName;
-    this.recommendedHttpStatus = recommendedHttpStatus;
     this.retryAfterMs = retryAfterMs;
   }
 
@@ -62,13 +58,6 @@ public class QuotaRecommendation {
    */
   public QuotaName getQuotaName() {
     return quotaName;
-  }
-
-  /**
-   * @return http status recommended by enforcer.
-   */
-  public int getRecommendedHttpStatus() {
-    return recommendedHttpStatus;
   }
 
   /**
