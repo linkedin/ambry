@@ -33,10 +33,14 @@ public class QuotaConfig {
       QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
   public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manager.factory";
   public static final String QUOTA_ACCOUNTING_UNIT = QUOTA_CONFIG_PREFIX + "accounting.unit";
+  public static final String RESOURCE_CU_QUOTA_IN_JSON = QUOTA_CONFIG_PREFIX + "resource.cu.quota.in.json";
+  public static final String FRONTEND_CU_CAPACITY_IN_JSON = QUOTA_CONFIG_PREFIX + "frontend.cu.capacity.in.json";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
   public static final long DEFAULT_QUOTA_ACCOUNTING_UNIT = 1024; //1kb
+  public static final String DEFAULT_CU_QUOTA_IN_JSON = "{}";
+  public static final String DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON = "{}";
   public StorageQuotaConfig storageQuotaConfig;
 
 
@@ -95,6 +99,51 @@ public class QuotaConfig {
   public long quotaAccountingUnit;
 
   /**
+   * A JSON string representing CU quota for all accounts and containers. eg:
+   * {
+   *   "101": {
+   *     "1": {
+   *       "rcu": 1024000000,
+   *       "wcu": 1024000000
+   *     },
+   *     "1": {
+   *       "rcu": 258438456,
+   *       "wcu": 258438456
+   *     },
+   *   },
+   *   "102": {
+   *     "1": {
+   *       "rcu": 1024000000,
+   *       "wcu": 1024000000
+   *     }
+   *   },
+   *   "103": {
+   *     "rcu": 10737418240,
+   *     "wcu": 10737418240
+   *   }
+   * }
+   * The key of the top object is the account id and the key of the inner object is the container id.
+   * If there is no inner object, then the quota is for account.
+   * Each quota comprises of a rcu value representing read capacity unit quota, and a wcu value
+   * representing write capacity unit quota.
+   */
+
+  @Config(RESOURCE_CU_QUOTA_IN_JSON)
+  @Default("{}")
+  public final String resourceCUQuotaInJson;
+  /**
+   * A JSON string representing bandwidth capacity of frontend node in terms of read capacity unit and write capacity unit.
+   * {
+   *   "rcu": 1024000000,
+   *   "wcu": 1024000000
+   * }
+   */
+
+  @Config(FRONTEND_CU_CAPACITY_IN_JSON)
+  @Default("{}")
+  public final String frontendCUCapacityInJson;
+
+  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
@@ -109,6 +158,9 @@ public class QuotaConfig {
     throttleInProgressRequests =
         verifiableProperties.getBoolean(THROTTLE_IN_PROGRESS_REQUESTS, DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS);
     quotaAccountingUnit = verifiableProperties.getLong(QUOTA_ACCOUNTING_UNIT, DEFAULT_QUOTA_ACCOUNTING_UNIT);
+    resourceCUQuotaInJson = verifiableProperties.getString(RESOURCE_CU_QUOTA_IN_JSON, DEFAULT_CU_QUOTA_IN_JSON);
+    frontendCUCapacityInJson =
+        verifiableProperties.getString(FRONTEND_CU_CAPACITY_IN_JSON, DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON);
   }
 
   /**
