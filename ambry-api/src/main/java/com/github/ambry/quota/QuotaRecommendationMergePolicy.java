@@ -20,14 +20,14 @@ import java.util.List;
 /**
  * Interface to apply application specific policy to make overall recommendation based on {@link QuotaRecommendation}s.
  */
-public interface ThrottlePolicy {
-  static final HttpResponseStatus ACCEPT_HTTP_STATUS = HttpResponseStatus.OK;
-  static final HttpResponseStatus THROTTLE_HTTP_STATUS = HttpResponseStatus.TOO_MANY_REQUESTS;
+public interface QuotaRecommendationMergePolicy {
+  HttpResponseStatus ACCEPT_HTTP_STATUS = HttpResponseStatus.OK;
+  HttpResponseStatus THROTTLE_HTTP_STATUS = HttpResponseStatus.TOO_MANY_REQUESTS;
 
   /**
    * Provide overall recommendation by merging {@link QuotaRecommendation}s from all quota enforcers.
    * @param quotaRecommendations {@link List} of {@link QuotaRecommendation}s.
    * @return ThrottlingRecommendation object containing overall quota usage and recommendation.
    */
-  ThrottlingRecommendation recommend(List<QuotaRecommendation> quotaRecommendations);
+  ThrottlingRecommendation mergeEnforcementRecommendations(List<QuotaRecommendation> quotaRecommendations);
 }

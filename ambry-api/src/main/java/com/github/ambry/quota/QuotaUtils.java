@@ -77,7 +77,6 @@ public class QuotaUtils {
    *
    * @param restRequest {@link RestRequest} object.
    * @return QuotaResource extracted from headers of {@link RestRequest}.
-   * @throws RestServiceException if appropriate headers aren't found in the {@link RestRequest}.
    */
   public static QuotaMethod getQuotaMethod(RestRequest restRequest) {
     return isReadRequest(restRequest) ? QuotaMethod.READ : QuotaMethod.WRITE;
@@ -89,7 +88,8 @@ public class QuotaUtils {
    * @return ThrottlePolicy.THROTTLE_HTTP_STATUS if shouldThrottle is {@code true}. ThrottlePolicy.ACCEPT_HTTP_STATUS otherwise.
    */
   public static HttpResponseStatus quotaRecommendedHttpResponse(boolean shouldThrottle) {
-    return shouldThrottle ? ThrottlePolicy.THROTTLE_HTTP_STATUS : ThrottlePolicy.ACCEPT_HTTP_STATUS;
+    return shouldThrottle ? QuotaRecommendationMergePolicy.THROTTLE_HTTP_STATUS
+        : QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS;
   }
 
   /**

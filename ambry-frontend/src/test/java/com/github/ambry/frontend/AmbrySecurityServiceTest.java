@@ -28,7 +28,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -130,7 +130,7 @@ public class AmbrySecurityServiceTest {
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER =
-          new AmbryQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), mock(AccountService.class), null,
+          new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig), mock(AccountService.class), null,
               new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);

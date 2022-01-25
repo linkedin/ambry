@@ -23,7 +23,7 @@ import java.util.Map;
 
 
 /**
- * An implementation of {@link ThrottlePolicy} that creates a {@link ThrottlingRecommendation} to throttle if any one of
+ * An implementation of {@link QuotaRecommendationMergePolicy} that creates a {@link ThrottlingRecommendation} to throttle if any one of
  * {@link QuotaRecommendation} recommendation is to throttle, and takes the max of retry after time interval. Also
  * groups the quota usage for all the quotas.
  *
@@ -31,7 +31,7 @@ import java.util.Map;
  * false, we don't throttle on {@link QuotaName#READ_CAPACITY_UNIT} and {@link QuotaName#WRITE_CAPACITY_UNIT}. If the
  * {@link StorageQuotaConfig#shouldThrottle} is false, we don't throttle on {@link QuotaName#STORAGE_IN_GB}.
  */
-public class MaxThrottlePolicy implements ThrottlePolicy {
+public class SimpleQuotaRecommendationMergePolicy implements QuotaRecommendationMergePolicy {
   static final long DEFAULT_RETRY_AFTER_MS = ThrottlingRecommendation.NO_RETRY_AFTER_MS;
   static final QuotaUsageLevel DEFAULT_QUOTA_USAGE_LEVEL = QuotaUsageLevel.HEALTHY;
 
@@ -45,18 +45,18 @@ public class MaxThrottlePolicy implements ThrottlePolicy {
   private final QuotaConfig quotaConfig;
 
   /**
-   * Constructor to create a {@link MaxThrottlePolicy}.
+   * Constructor to create a {@link SimpleQuotaRecommendationMergePolicy}.
    * @param quotaConfig The {@link QuotaConfig}.
    */
-  public MaxThrottlePolicy(QuotaConfig quotaConfig) {
+  public SimpleQuotaRecommendationMergePolicy(QuotaConfig quotaConfig) {
     this.quotaConfig = quotaConfig;
   }
 
   @Override
-  public ThrottlingRecommendation recommend(List<QuotaRecommendation> quotaRecommendations) {
+  public ThrottlingRecommendation mergeEnforcementRecommendations(List<QuotaRecommendation> quotaRecommendations) {
     boolean shouldThrottle = false;
     Map<QuotaName, Float> quotaUsagePercentage = new HashMap<>();
-    HttpResponseStatus recommendedHttpStatus = ThrottlePolicy.ACCEPT_HTTP_STATUS;
+    HttpResponseStatus recommendedHttpStatus = QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS;
     long retryAfterMs = DEFAULT_RETRY_AFTER_MS;
     for (QuotaRecommendation recommendation : quotaRecommendations) {
       boolean currentQuotaShouldThrottle = recommendation.shouldThrottle();

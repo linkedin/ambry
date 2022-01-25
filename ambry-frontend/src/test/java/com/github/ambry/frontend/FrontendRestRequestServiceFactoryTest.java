@@ -23,7 +23,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -49,7 +49,7 @@ public class FrontendRestRequestServiceFactoryTest {
     try {
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER =
-          new AmbryQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), Mockito.mock(AccountService.class),
+          new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig), Mockito.mock(AccountService.class),
               null, new MetricRegistry());
     } catch (Exception e) {
       throw new IllegalStateException(e);

@@ -23,7 +23,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
@@ -31,7 +31,7 @@ import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
-import com.github.ambry.quota.ThrottlePolicy;
+import com.github.ambry.quota.QuotaRecommendationMergePolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
@@ -264,7 +264,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       AtomicInteger listenerCalledCount = new AtomicInteger(0);
       QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
       QuotaManager quotaManager =
-          new ChargeTesterQuotaManager(quotaConfig, new MaxThrottlePolicy(quotaConfig), accountService, null,
+          new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig), accountService, null,
               new MetricRegistry(), listenerCalledCount);
       QuotaChargeCallback quotaChargeCallback = QuotaChargeCallback.buildQuotaChargeCallback(null, quotaManager, true);
 
@@ -301,16 +301,16 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     /**
      * Constructor for {@link ChargeTesterQuotaManager}.
      * @param quotaConfig {@link QuotaConfig} object.
-     * @param throttlePolicy {@link ThrottlePolicy} object that makes the overall recommendation.
+     * @param quotaRecommendationMergePolicy {@link QuotaRecommendationMergePolicy} object that makes the overall recommendation.
      * @param accountService {@link AccountService} object to get all the accounts and container information.
      * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
      * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
      * @throws ReflectiveOperationException in case of any exception.
      */
-    public ChargeTesterQuotaManager(QuotaConfig quotaConfig, ThrottlePolicy throttlePolicy,
+    public ChargeTesterQuotaManager(QuotaConfig quotaConfig, QuotaRecommendationMergePolicy quotaRecommendationMergePolicy,
         AccountService accountService, AccountStatsStore accountStatsStore, MetricRegistry metricRegistry,
         AtomicInteger chargeCalledCount) throws ReflectiveOperationException {
-      super(quotaConfig, throttlePolicy, accountService, accountStatsStore, metricRegistry);
+      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, metricRegistry);
       this.chargeCalledCount = chargeCalledCount;
     }
 
