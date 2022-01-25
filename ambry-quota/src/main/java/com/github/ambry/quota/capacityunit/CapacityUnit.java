@@ -15,7 +15,7 @@ package com.github.ambry.quota.capacityunit;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.ambry.quota.QuotaName;
-import com.google.common.util.concurrent.AtomicDouble;
+import java.util.concurrent.atomic.AtomicLong;
 import org.codehaus.jackson.annotate.JsonIgnore;
 
 
@@ -26,21 +26,21 @@ public class CapacityUnit {
   static final String RCU_FIELD_NAME = "rcu";
   static final String WCU_FIELD_NAME = "wcu";
 
-  private final AtomicDouble rcu;
-  private final AtomicDouble wcu;
+  private final AtomicLong rcu;
+  private final AtomicLong wcu;
 
   /**
    * Constructor for {@link CapacityUnit}.
    */
   public CapacityUnit() {
-    rcu = new AtomicDouble(0);
-    wcu = new AtomicDouble(0);
+    rcu = new AtomicLong(0);
+    wcu = new AtomicLong(0);
   }
 
   @JsonIgnore
   public CapacityUnit(JsonNode jsonNode) {
-    this.rcu = new AtomicDouble(jsonNode.get(RCU_FIELD_NAME).asLong());
-    this.wcu = new AtomicDouble(jsonNode.get(WCU_FIELD_NAME).asLong());
+    this.rcu = new AtomicLong(jsonNode.get(RCU_FIELD_NAME).asLong());
+    this.wcu = new AtomicLong(jsonNode.get(WCU_FIELD_NAME).asLong());
   }
 
   @JsonIgnore
@@ -49,7 +49,7 @@ public class CapacityUnit {
   }
 
   @JsonIgnore
-  public double getQuotaValue(QuotaName quotaName) {
+  public long getQuotaValue(QuotaName quotaName) {
     switch (quotaName) {
       case READ_CAPACITY_UNIT:
         return rcu.get();
@@ -63,7 +63,7 @@ public class CapacityUnit {
   /**
    * @return Read Capacity Unit quota value.
    */
-  public double getRcu() {
+  public long getRcu() {
     return rcu.get();
   }
 
@@ -77,7 +77,7 @@ public class CapacityUnit {
   /**
    * @return Write Capacity Unit quota value.
    */
-  public double getWcu() {
+  public long getWcu() {
     return wcu.get();
   }
 
