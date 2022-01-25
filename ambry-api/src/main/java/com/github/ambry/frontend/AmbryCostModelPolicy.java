@@ -20,8 +20,8 @@ import java.util.Map;
 
 
 /**
- * Interface for the policy to calculate cost of a request for determining cost incurred via the SCE events.
- * This forms the basis of Ambry's cost model for its customers.
+ * Interface for the policy to calculate cost of a request that determines the cost incurred to serve customer requests.
+ * This information will be used by Ambry's cost model.
  */
 public interface AmbryCostModelPolicy {
 
