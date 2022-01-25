@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.frontend;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
@@ -23,7 +23,7 @@ import java.util.Map;
  * Interface for the policy to calculate cost of a request for determining cost incurred via the SCE events.
  * This forms the basis of Ambry's cost model for its customers.
  */
-public interface SCERequestCostPolicy {
+public interface AmbryCostModelPolicy {
 
   /**
    * Calculates the cost incurred to serve the specified {@link RestRequest} for blob specified by {@link BlobInfo}.

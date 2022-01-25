@@ -11,10 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.frontend;
 
-import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -29,14 +30,14 @@ import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
- * Simple {@link SCERequestCostPolicy} implementation that calculates CU costs in 4MB units and Storage cost in GB units.
+ * Simple {@link AmbryCostModelPolicy} implementation that calculates CU costs in 4MB units and Storage cost in GB units.
  */
-public class SimpleSCERequestCostPolicy implements SCERequestCostPolicy {
+public class SimpleAmbryCostModelPolicy implements AmbryCostModelPolicy {
   public final static double CU_COST_UNIT = 4 * 1024 * 1024; //4 MB
   final static double INDEX_ONLY_COST = 1;
   final static double MIN_CU_COST = INDEX_ONLY_COST;
 
-  private static final Logger logger = LoggerFactory.getLogger(SimpleSCERequestCostPolicy.class);
+  private static final Logger logger = LoggerFactory.getLogger(SimpleAmbryCostModelPolicy.class);
 
   @Override
   public Map<String, Double> calculateSCERequestCost(RestRequest restRequest, RestResponseChannel restResponseChannel,

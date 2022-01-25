@@ -11,10 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.quota;
+package com.github.ambry.frontend;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -26,9 +27,9 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Test for {@link SimpleSCERequestCostPolicy}.
+ * Test for {@link SimpleAmbryCostModelPolicy}.
  */
-public class SimpleSCERequestCostPolicyTest {
+public class SimpleAmbryCostModelPolicyTest {
   private final static String TEST_SERVICE_ID = "test-service-id";
   private final static short TEST_ACCOUNT_ID = 1;
   private final static short TEST_CONTAINER_ID = 1;
@@ -39,7 +40,7 @@ public class SimpleSCERequestCostPolicyTest {
 
   @Test
   public void testCalculateRequestCost() throws Exception {
-    SimpleSCERequestCostPolicy requestCostPolicy = new SimpleSCERequestCostPolicy();
+    SimpleAmbryCostModelPolicy requestCostPolicy = new SimpleAmbryCostModelPolicy();
 
     RestResponseChannel restResponseChannel = mock(RestResponseChannel.class);
     when(restResponseChannel.getHeader(anyString())).thenReturn(0);

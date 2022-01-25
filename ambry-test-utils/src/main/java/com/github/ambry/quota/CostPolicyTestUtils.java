@@ -34,7 +34,7 @@ public class CostPolicyTestUtils {
    * @param costMap {@link Map} of the costs to verify.
    * @param cUCost expected capacity unit cost.
    */
-  static void verifyReadCost(Map<String, Double> costMap, double cUCost) {
+  public static void verifyReadCost(Map<String, Double> costMap, double cUCost) {
     assertEquals("incorrect number of entries in cost map", 2, costMap.size());
     assertTrue("cost for " + QuotaName.READ_CAPACITY_UNIT.name() + " should be present",
         costMap.containsKey(QuotaName.READ_CAPACITY_UNIT.name()));
@@ -50,7 +50,7 @@ public class CostPolicyTestUtils {
    * @param cUCost expected capacity unit cost.
    * @param storageCost expected storage cost.
    */
-  static void verifyWriteCost(Map<String, Double> costMap, double cUCost, double storageCost) {
+  public static void verifyWriteCost(Map<String, Double> costMap, double cUCost, double storageCost) {
     assertEquals("incorrect number of entries in cost map", 2, costMap.size());
     assertTrue("cost for " + QuotaName.WRITE_CAPACITY_UNIT.name() + " should be present",
         costMap.containsKey(QuotaName.WRITE_CAPACITY_UNIT.name()));
@@ -66,7 +66,7 @@ public class CostPolicyTestUtils {
    * @param bytesReceived number of bytes received in the request.
    * @return RestRequest object.
    */
-  static RestRequest createMockRequestWithMethod(RestMethod restMethod, String uri, long bytesReceived)
+  public static RestRequest createMockRequestWithMethod(RestMethod restMethod, String uri, long bytesReceived)
       throws RestServiceException {
     RestRequest restRequest = mock(RestRequest.class);
     when(restRequest.getRestMethod()).thenReturn(restMethod);

@@ -25,8 +25,6 @@ import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaUtils;
-import com.github.ambry.quota.SCERequestCostPolicy;
-import com.github.ambry.quota.SimpleSCERequestCostPolicy;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
@@ -65,7 +63,7 @@ class AmbrySecurityService implements SecurityService {
   private final UrlSigningService urlSigningService;
   private final HostLevelThrottler hostLevelThrottler;
   private final QuotaManager quotaManager;
-  private final SCERequestCostPolicy sceRequestCostPolicy;
+  private final AmbryCostModelPolicy ambryCostModelPolicy;
   private boolean isOpen;
 
   AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
@@ -75,7 +73,7 @@ class AmbrySecurityService implements SecurityService {
     this.urlSigningService = urlSigningService;
     this.hostLevelThrottler = hostLevelThrottler;
     this.quotaManager = quotaManager;
-    this.sceRequestCostPolicy = new SimpleSCERequestCostPolicy();
+    this.ambryCostModelPolicy = new SimpleAmbryCostModelPolicy();
     isOpen = true;
   }
 
@@ -162,7 +160,7 @@ class AmbrySecurityService implements SecurityService {
 
   @Override
   public void processRequestCharges(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo) {
-    Map<QuotaName, Double> requestCost = sceRequestCostPolicy.calculateSCERequestCost(restRequest, responseChannel, blobInfo)
+    Map<QuotaName, Double> requestCost = ambryCostModelPolicy.calculateSCERequestCost(restRequest, responseChannel, blobInfo)
         .entrySet()
         .stream()
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
