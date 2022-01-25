@@ -28,7 +28,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
@@ -61,47 +60,6 @@ public class GetStatsReportHandlerTest {
 
   @Test
   public void handleGoodCaseTest() throws Exception {
-    ThrowingBiConsumer<RestRequest, StatsSnapshot> testAction = (request, expectedStatsSnapshot) -> {
-      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-      ReadableStreamChannel channel = sendRequestGetResponse(request, restResponseChannel);
-      assertNotNull("There should be a response", channel);
-      assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
-      assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
-          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-      assertEquals("Content-length is not as expected", channel.getSize(),
-          Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
-      assertEquals("StatsSnapshot mismatch", expectedStatsSnapshot,
-          mapper.readValue(RestTestUtils.getResponseBody(channel), StatsSnapshot.class));
-    };
-    StatsSnapshot accountStatsSnapshot =
-        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
-    doAnswer(invocation -> {
-      String clusterName = invocation.getArgument(0);
-      if (clusterName.equals(CLUSTER_NAME)) {
-        return accountStatsSnapshot;
-      } else {
-        return null;
-      }
-    }).when(accountStatsStore).queryAggregatedAccountStatsByClusterName(anyString());
-    RestRequest restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.ACCOUNT_REPORT.name());
-    testAction.accept(restRequest, accountStatsSnapshot);
-
-    StatsSnapshot partitionClassStatsSnapshot =
-        TestUtils.makeAggregatedPartitionClassStats(new String[]{"PartitionClass1", "PartitionClass2"}, 10, 10);
-    doAnswer(invocation -> {
-      String clusterName = invocation.getArgument(0);
-      if (clusterName.equals(CLUSTER_NAME)) {
-        return partitionClassStatsSnapshot;
-      } else {
-        return null;
-      }
-    }).when(accountStatsStore).queryAggregatedPartitionClassStatsByClusterName(anyString());
-    restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.PARTITION_CLASS_REPORT.name());
-    testAction.accept(restRequest, partitionClassStatsSnapshot);
-  }
-
-  @Test
-  public void handleGoodCaseWithNewFormatTest() throws Exception {
     AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(
         StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 1, 10, 10, 1000L, 2, 100));
     doAnswer(invocation -> {
@@ -112,7 +70,7 @@ public class GetStatsReportHandlerTest {
         return null;
       }
     }).when(accountStatsStore).queryAggregatedAccountStorageStatsByClusterName(anyString());
-    RestRequest restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.ACCOUNT_REPORT.name(), true);
+    RestRequest restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.ACCOUNT_REPORT.name());
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
     assertNotNull("There should be a response", channel);
@@ -137,7 +95,7 @@ public class GetStatsReportHandlerTest {
         return null;
       }
     }).when(accountStatsStore).queryAggregatedPartitionClassStorageStatsByClusterName(anyString());
-    restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.PARTITION_CLASS_REPORT.name(), true);
+    restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.PARTITION_CLASS_REPORT.name());
     restResponseChannel = new MockRestResponseChannel();
     channel = sendRequestGetResponse(restRequest, restResponseChannel);
     assertNotNull("There should be a response", channel);
@@ -171,10 +129,6 @@ public class GetStatsReportHandlerTest {
   // Helpers
 
   private RestRequest createRestRequest(String clusterName, String reportType) throws Exception {
-    return createRestRequest(clusterName, reportType, false);
-  }
-
-  private RestRequest createRestRequest(String clusterName, String reportType, boolean newFormat) throws Exception {
     JSONObject data = new JSONObject();
     data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET.name());
     data.put(MockRestRequest.URI_KEY, Operations.STATS_REPORT);
@@ -184,9 +138,6 @@ public class GetStatsReportHandlerTest {
     }
     if (clusterName != null) {
       headers.put(RestUtils.Headers.CLUSTER_NAME, clusterName);
-    }
-    if (newFormat) {
-      headers.put(RestUtils.Headers.GET_STATS_NEW_FORMAT, String.valueOf(newFormat));
     }
     data.put(MockRestRequest.HEADERS_KEY, headers);
     return new MockRestRequest(data, null);

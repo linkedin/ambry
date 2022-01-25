@@ -116,8 +116,6 @@ class GetStatsReportHandler {
       return buildCallback(metrics.getStatsReportSecurityPostProcessRequestMetrics, securityCheckResult -> {
         String clusterName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.CLUSTER_NAME, true);
         String reportType = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.GET_STATS_REPORT_TYPE, true);
-        boolean newFormatRequested =
-            RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.GET_STATS_NEW_FORMAT, false);
         StatsReportType statsReportType;
         try {
           statsReportType = StatsReportType.valueOf(reportType);
@@ -126,38 +124,20 @@ class GetStatsReportHandler {
               RestServiceErrorCode.BadRequest);
         }
         Object result;
-        if (!newFormatRequested) {
-          switch (statsReportType) {
-            case ACCOUNT_REPORT:
-              result = accountStatsStore.queryAggregatedAccountStatsByClusterName(clusterName);
-              break;
-            case PARTITION_CLASS_REPORT:
-              result = accountStatsStore.queryAggregatedPartitionClassStatsByClusterName(clusterName);
-              break;
-            default:
-              throw new RestServiceException("StatsReportType " + statsReportType + "not supported",
-                  RestServiceErrorCode.BadRequest);
-          }
-          if (result == null) {
-            throw new RestServiceException("StatsReport not found for clusterName " + clusterName,
-                RestServiceErrorCode.NotFound);
-          }
-        } else {
-          switch (statsReportType) {
-            case ACCOUNT_REPORT:
-              result = accountStatsStore.queryAggregatedAccountStorageStatsByClusterName(clusterName);
-              break;
-            case PARTITION_CLASS_REPORT:
-              result = accountStatsStore.queryAggregatedPartitionClassStorageStatsByClusterName(clusterName);
-              break;
-            default:
-              throw new RestServiceException("StatsReportType " + statsReportType + "not supported",
-                  RestServiceErrorCode.BadRequest);
-          }
-          if (result == null) {
-            throw new RestServiceException("StatsReport not found for clusterName " + clusterName,
-                RestServiceErrorCode.NotFound);
-          }
+        switch (statsReportType) {
+          case ACCOUNT_REPORT:
+            result = accountStatsStore.queryAggregatedAccountStorageStatsByClusterName(clusterName);
+            break;
+          case PARTITION_CLASS_REPORT:
+            result = accountStatsStore.queryAggregatedPartitionClassStorageStatsByClusterName(clusterName);
+            break;
+          default:
+            throw new RestServiceException("StatsReportType " + statsReportType + "not supported",
+                RestServiceErrorCode.BadRequest);
+        }
+        if (result == null) {
+          throw new RestServiceException("StatsReport not found for clusterName " + clusterName,
+              RestServiceErrorCode.NotFound);
         }
         try {
           byte[] jsonBytes = mapper.writeValueAsBytes(result);
