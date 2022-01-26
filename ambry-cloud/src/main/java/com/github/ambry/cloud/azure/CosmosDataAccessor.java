@@ -834,6 +834,8 @@ public class CosmosDataAccessor {
           String.format("One of the required configs for fetching the cosmos key from a keyvault (%s, %s) missing",
               AzureCloudConfig.COSMOS_KEY_SECRET_NAME, AzureCloudConfig.COSMOS_VAULT_URL));
     }
+    // check that all required azure identity configs are present if keyvault lookup is used.
+    AzureUtils.validateAzureIdentityConfigs(azureCloudConfig);
     SecretClient secretClient = new SecretClientBuilder().vaultUrl(azureCloudConfig.cosmosVaultUrl)
         .credential(AzureUtils.getClientSecretCredential(azureCloudConfig))
         .buildClient();
