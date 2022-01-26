@@ -50,8 +50,8 @@ class AzureUtils {
   static ClientSecretCredential getClientSecretCredential(AzureCloudConfig azureCloudConfig) {
     ClientSecretCredentialBuilder builder =
         new ClientSecretCredentialBuilder().tenantId(azureCloudConfig.azureIdentityTenantId)
-            .clientId(azureCloudConfig.azureStorageClientId)
-            .clientSecret(azureCloudConfig.azureStorageSecret);
+            .clientId(azureCloudConfig.azureIdentityClientId)
+            .clientSecret(azureCloudConfig.azureIdentitySecret);
     if (!azureCloudConfig.azureIdentityProxyHost.isEmpty()) {
       logger.info("Using proxy for ClientSecretCredential: {}:{}", azureCloudConfig.azureIdentityProxyHost,
           azureCloudConfig.azureIdentityProxyPort);
