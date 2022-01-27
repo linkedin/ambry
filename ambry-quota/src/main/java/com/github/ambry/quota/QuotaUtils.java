@@ -115,7 +115,7 @@ public class QuotaUtils {
    */
   public static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
       boolean shouldThrottle) {
-    if (quotaManager.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
+    if (!quotaManager.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
       return new RejectingQuotaChargeCallback(quotaManager, restRequest, shouldThrottle);
     } else {
       throw new UnsupportedOperationException("Not implemented yet.");
