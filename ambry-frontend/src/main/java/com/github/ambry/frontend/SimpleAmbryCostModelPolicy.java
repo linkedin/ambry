@@ -40,7 +40,7 @@ public class SimpleAmbryCostModelPolicy implements AmbryCostModelPolicy {
   private static final Logger logger = LoggerFactory.getLogger(SimpleAmbryCostModelPolicy.class);
 
   @Override
-  public Map<String, Double> calculateSCERequestCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
+  public Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo) {
     Map<String, Double> costMap = new HashMap<>();
     costMap.put(QuotaUtils.getCUQuotaName(restRequest).name(),

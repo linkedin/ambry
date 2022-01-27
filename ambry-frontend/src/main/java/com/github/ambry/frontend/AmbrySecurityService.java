@@ -160,10 +160,7 @@ class AmbrySecurityService implements SecurityService {
 
   @Override
   public void processRequestCharges(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo) {
-    Map<QuotaName, Double> requestCost = ambryCostModelPolicy.calculateSCERequestCost(restRequest, responseChannel, blobInfo)
-        .entrySet()
-        .stream()
-        .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), entry -> entry.getValue()));
+    Map<String, Double> requestCost = ambryCostModelPolicy.calculateRequestCost(restRequest, responseChannel, blobInfo);
     setRequestCostHeader(requestCost, responseChannel);
     if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
       ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);

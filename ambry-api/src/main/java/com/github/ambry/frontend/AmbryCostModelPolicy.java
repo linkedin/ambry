@@ -32,6 +32,6 @@ public interface AmbryCostModelPolicy {
    * @param blobInfo {@link BlobInfo} of the blob in request.
    * @return Map of cost metrics and actual cost value.
    */
-  Map<String, Double> calculateSCERequestCost(RestRequest restRequest, RestResponseChannel responseChannel,
+  Map<String, Double> calculateRequestCost(RestRequest restRequest, RestResponseChannel responseChannel,
       BlobInfo blobInfo);
 }

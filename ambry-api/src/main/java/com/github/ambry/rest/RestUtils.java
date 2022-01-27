@@ -1027,12 +1027,10 @@ public class RestUtils {
    * @param costMap {@link Map} of cost for each quota.
    * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
    */
-  public static void setRequestCostHeader(Map<QuotaName, Double> costMap, RestResponseChannel restResponseChannel) {
+  public static void setRequestCostHeader(Map<String, Double> costMap, RestResponseChannel restResponseChannel) {
     Objects.requireNonNull(costMap, "cost map cannot be null");
     restResponseChannel.setHeader(RequestCostHeaders.REQUEST_COST, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
-        costMap.entrySet()
-            .stream()
-            .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
+        costMap.entrySet().stream().collect(Collectors.toMap(e -> e.getKey(), e -> String.valueOf(e.getValue())))));
   }
 
   /**

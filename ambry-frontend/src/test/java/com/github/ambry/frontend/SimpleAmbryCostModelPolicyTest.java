@@ -48,68 +48,68 @@ public class SimpleAmbryCostModelPolicyTest {
     // test for a 4 MB GET request.
     BlobInfo blobInfo = getBlobInfo(4 * MB);
     RestRequest restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
-    Map<String, Double> costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    Map<String, Double> costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1);
 
     // test for a small GET request (fractional CU).
     blobInfo = getBlobInfo(6 * MB);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 2);
 
     // test for a GET request of blob of size 0.
     blobInfo = getBlobInfo(0);
     restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1);
 
     // test for a small POST request (fractional storage cost).
     blobInfo = getBlobInfo(8 * MB);
     restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 8 * MB);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 2, 8 * 1024 * 1024 / (double) QuotaUtils.BYTES_IN_GB);
 
     // test for a large POST request.
     blobInfo = getBlobInfo(4 * GB);
     restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 4 * GB);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1024, 4);
 
     // test for a POST request of blob of size 0.
     blobInfo = getBlobInfo(0);
     restRequest = createMockRequestWithMethod(RestMethod.POST, blobUri, 0);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0);
 
     // test for a HEAD request.
     restRequest = createMockRequestWithMethod(RestMethod.HEAD, blobUri, -1);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1);
 
     // test for a DELETE request.
     restRequest = createMockRequestWithMethod(RestMethod.DELETE, blobUri, -1);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0.0);
 
     // test for a PUT request.
     restRequest = createMockRequestWithMethod(RestMethod.PUT, blobUri, -1);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyWriteCost(costMap, 1, 0.0);
 
     // test for PUT with null blob info.
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, null);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, null);
     verifyWriteCost(costMap, 1, 0.0);
 
     // test BlobInfo and UserMetadata GET requests
     blobInfo = getBlobInfo(40 * GB);
     restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri + "/BlobInfo", -1);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1);
     restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri + "/UserMetadata", -1);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 1);
     // Plain GET should use blob size
     restRequest = createMockRequestWithMethod(RestMethod.GET, blobUri, -1);
-    costMap = requestCostPolicy.calculateSCERequestCost(restRequest, restResponseChannel, blobInfo);
+    costMap = requestCostPolicy.calculateRequestCost(restRequest, restResponseChannel, blobInfo);
     verifyReadCost(costMap, 10240);
 
     // TODO add a range request case with large range
