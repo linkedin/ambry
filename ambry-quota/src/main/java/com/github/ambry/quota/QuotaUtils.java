@@ -105,4 +105,20 @@ public class QuotaUtils {
         return false;
     }
   }
+
+  /**
+   * Build {@link QuotaChargeCallback} to handle quota compliance of requests.
+   * @param restRequest {@link RestRequest} for which quota is being charged.
+   * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
+   * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
+   * @return QuotaChargeCallback object.
+   */
+  public static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
+      boolean shouldThrottle) {
+    if (!quotaManager.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
+      return new RejectingQuotaChargeCallback(quotaManager, restRequest, shouldThrottle);
+    } else {
+      throw new UnsupportedOperationException("Not implemented yet.");
+    }
+  }
 }

@@ -35,14 +35,16 @@ public class QuotaConfig {
   public static final String QUOTA_ACCOUNTING_UNIT = QUOTA_CONFIG_PREFIX + "accounting.unit";
   public static final String RESOURCE_CU_QUOTA_IN_JSON = QUOTA_CONFIG_PREFIX + "resource.cu.quota.in.json";
   public static final String FRONTEND_CU_CAPACITY_IN_JSON = QUOTA_CONFIG_PREFIX + "frontend.cu.capacity.in.json";
+  public static final String BANDWIDTH_THROTTLING_FEATURE_ENABLED =
+      QUOTA_CONFIG_PREFIX + "bandwidth.throttling.feature.enabled";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
   public static final long DEFAULT_QUOTA_ACCOUNTING_UNIT = 1024; //1kb
   public static final String DEFAULT_CU_QUOTA_IN_JSON = "{}";
   public static final String DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON = "{}";
+  public static final boolean DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED = false;
   public StorageQuotaConfig storageQuotaConfig;
-
 
   /**
    * Serialized json containing pairs of enforcer classes and corresponding source classes.
@@ -127,10 +129,10 @@ public class QuotaConfig {
    * Each quota comprises of a rcu value representing read capacity unit quota, and a wcu value
    * representing write capacity unit quota.
    */
-
   @Config(RESOURCE_CU_QUOTA_IN_JSON)
   @Default("{}")
   public final String resourceCUQuotaInJson;
+
   /**
    * A JSON string representing bandwidth capacity of frontend node in terms of read capacity unit and write capacity unit.
    * {
@@ -138,10 +140,15 @@ public class QuotaConfig {
    *   "wcu": 1024000000
    * }
    */
-
   @Config(FRONTEND_CU_CAPACITY_IN_JSON)
   @Default("{}")
   public final String frontendCUCapacityInJson;
+
+  /**
+   * Flag to identify if the bandwidth throttling feature is enabled.
+   */
+  @Config(BANDWIDTH_THROTTLING_FEATURE_ENABLED)
+  public boolean bandwidthThrottlingFeatureEnabled;
 
   /**
    * Constructor for {@link QuotaConfig}.
@@ -161,6 +168,8 @@ public class QuotaConfig {
     resourceCUQuotaInJson = verifiableProperties.getString(RESOURCE_CU_QUOTA_IN_JSON, DEFAULT_CU_QUOTA_IN_JSON);
     frontendCUCapacityInJson =
         verifiableProperties.getString(FRONTEND_CU_CAPACITY_IN_JSON, DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON);
+    bandwidthThrottlingFeatureEnabled = verifiableProperties.getBoolean(BANDWIDTH_THROTTLING_FEATURE_ENABLED,
+        DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED);
   }
 
   /**
