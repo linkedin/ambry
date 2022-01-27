@@ -75,7 +75,9 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StorageStatsUtilTest;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -1024,26 +1026,28 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void getStatsReportTest() throws Exception {
-    StatsSnapshot accountStatsSnapshot =
-        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
-    StatsSnapshot partitionClassStatsSnapshot =
-        TestUtils.makeAggregatedPartitionClassStats(new String[]{"PartitionClass1", "PartitionClass2"}, 10, 10);
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(
+        StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 1, 10, 10, 1000L, 2, 100));
+    AggregatedPartitionClassStorageStats aggregatedPartitionClassStorageStats =
+        new AggregatedPartitionClassStorageStats(
+            StorageStatsUtilTest.generateRandomAggregatedPartitionClassStorageStats(new String[]{"default", "newClass"},
+                (short) 1, 10, 10, 1000L, 2, 100));
     doAnswer(invocation -> {
       String clusterName = invocation.getArgument(0);
       if (clusterName.equals(CLUSTER_NAME)) {
-        return accountStatsSnapshot;
+        return aggregatedAccountStorageStats;
       } else {
         return null;
       }
-    }).when(accountStatsStore).queryAggregatedAccountStatsByClusterName(anyString());
+    }).when(accountStatsStore).queryAggregatedAccountStorageStatsByClusterName(anyString());
     doAnswer(invocation -> {
       String clusterName = invocation.getArgument(0);
       if (clusterName.equals(CLUSTER_NAME)) {
-        return partitionClassStatsSnapshot;
+        return aggregatedPartitionClassStorageStats;
       } else {
         return null;
       }
-    }).when(accountStatsStore).queryAggregatedPartitionClassStatsByClusterName(anyString());
+    }).when(accountStatsStore).queryAggregatedPartitionClassStorageStatsByClusterName(anyString());
     ObjectMapper mapper = new ObjectMapper();
 
     // construct a request to get account stats
@@ -1053,9 +1057,8 @@ public class FrontendRestRequestServiceTest {
     RestRequest request = createRestRequest(RestMethod.GET, Operations.STATS_REPORT, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(request, restResponseChannel);
-    StatsSnapshot accountStatsFromService =
-        mapper.readValue(restResponseChannel.getResponseBody(), StatsSnapshot.class);
-    assertEquals(accountStatsSnapshot, accountStatsFromService);
+    assertEquals("Storage stats mismatch", aggregatedAccountStorageStats.getStorageStats(),
+        mapper.readValue(restResponseChannel.getResponseBody(), AggregatedAccountStorageStats.class).getStorageStats());
 
     // construct a request to get partition class stats
     headers = new JSONObject();
@@ -1064,9 +1067,9 @@ public class FrontendRestRequestServiceTest {
     request = createRestRequest(RestMethod.GET, Operations.STATS_REPORT, headers, null);
     restResponseChannel = new MockRestResponseChannel();
     doOperation(request, restResponseChannel);
-    StatsSnapshot partitionClassStatsFromService =
-        mapper.readValue(restResponseChannel.getResponseBody(), StatsSnapshot.class);
-    assertEquals(partitionClassStatsSnapshot, partitionClassStatsFromService);
+    assertEquals("Storage stats mismatch", aggregatedPartitionClassStorageStats.getStorageStats(),
+        mapper.readValue(restResponseChannel.getResponseBody(), AggregatedPartitionClassStorageStats.class)
+            .getStorageStats());
 
     // test clustername not found case to ensure that it goes through the exception path
     headers = new JSONObject();
