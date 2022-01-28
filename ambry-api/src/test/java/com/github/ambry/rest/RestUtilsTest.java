@@ -835,11 +835,11 @@ public class RestUtilsTest {
    */
   @Test
   public void setRequestCostHeaderTest() {
-    Map<QuotaName, Double> costMap = new HashMap<>();
+    Map<String, Double> costMap = new HashMap<>();
 
     // test for valid cost map
-    costMap.put(QuotaName.READ_CAPACITY_UNIT, 1.9);
-    costMap.put(QuotaName.STORAGE_IN_GB, 3.0);
+    costMap.put(QuotaName.READ_CAPACITY_UNIT.name(), 1.9);
+    costMap.put(QuotaName.STORAGE_IN_GB.name(), 3.0);
     String expectedQuotaHeaderValue = "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0";
     MockRestResponseChannel responseChannel = new MockRestResponseChannel();
     RestUtils.setRequestCostHeader(costMap, responseChannel);
