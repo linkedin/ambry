@@ -29,7 +29,7 @@ public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
   private static Logger LOGGER = LoggerFactory.getLogger(QuotaChargeCallback.class);
   private final QuotaManager quotaManager;
   private final RestRequest restRequest;
-  private final RequestCostPolicy requestCostPolicy;
+  private final RequestQuotaCostPolicy requestCostPolicy;
   private final boolean shouldThrottle;
 
   /**
@@ -40,7 +40,7 @@ public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
    */
   public RejectingQuotaChargeCallback(QuotaManager quotaManager, RestRequest restRequest, boolean shouldThrottle) {
     this.quotaManager = quotaManager;
-    requestCostPolicy = new UserQuotaRequestCostPolicy(quotaManager.getQuotaConfig());
+    requestCostPolicy = new SimpleRequestQuotaCostPolicy(quotaManager.getQuotaConfig());
     this.restRequest = restRequest;
     this.shouldThrottle = shouldThrottle;
   }

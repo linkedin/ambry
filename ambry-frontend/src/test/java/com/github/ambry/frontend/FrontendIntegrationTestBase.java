@@ -23,7 +23,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
-import com.github.ambry.quota.UserQuotaRequestCostPolicy;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
@@ -899,9 +899,9 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the content posted.
    */
   private void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
+    double cuCost = contentSize / SimpleAmbryCostModelPolicy.CU_COST_UNIT;
     cuCost = Math.max(cuCost, 1);
-    double storageCost = contentSize / UserQuotaRequestCostPolicy.BYTES_IN_GB;
+    double storageCost = contentSize / (double) QuotaUtils.BYTES_IN_GB;
     verifyCommonRequestCostHeaders(response, cuCost, storageCost, false);
   }
 
@@ -911,7 +911,7 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the blob.
    */
   private void verifyGetRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = Math.ceil(contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT);
+    double cuCost = Math.ceil(contentSize / SimpleAmbryCostModelPolicy.CU_COST_UNIT);
     cuCost = Math.max(cuCost, 1);
     verifyCommonRequestCostHeaders(response, cuCost, 0, true);
   }
