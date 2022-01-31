@@ -24,15 +24,15 @@ import org.mockito.Mockito;
 
 
 /**
- * Test for {@link InMemoryCUQuotaSourceFactory}.
+ * Test for {@link AmbryCUQuotaSourceFactory}.
  */
-public class InMemoryCUQuotaSourceFactoryTest {
+public class AmbryCUQuotaSourceFactoryTest {
   @Test
   public void testGetQuotaSource() throws IOException {
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
     AccountService mockAccountService = Mockito.mock(AccountService.class);
-    InMemoryCUQuotaSourceFactory inMemoryCUQuotaSourceFactory =
-        new InMemoryCUQuotaSourceFactory(quotaConfig, mockAccountService);
-    Assert.assertEquals(InMemoryCUQuotaSource.class, inMemoryCUQuotaSourceFactory.getQuotaSource().getClass());
+    AmbryCUQuotaSourceFactory ambryCUQuotaSourceFactory =
+        new AmbryCUQuotaSourceFactory(quotaConfig, mockAccountService);
+    Assert.assertEquals(AmbryCUQuotaSource.class, ambryCUQuotaSourceFactory.getQuotaSource().getClass());
   }
 }

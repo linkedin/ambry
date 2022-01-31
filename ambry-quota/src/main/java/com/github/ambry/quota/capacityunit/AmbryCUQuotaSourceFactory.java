@@ -21,22 +21,22 @@ import java.io.IOException;
 
 
 /**
- * An implementation of {@link QuotaSourceFactory} for that creates and returns {@link InMemoryCUQuotaSource} object.
+ * An implementation of {@link QuotaSourceFactory} for that creates and returns {@link AmbryCUQuotaSource} object.
  */
-public class InMemoryCUQuotaSourceFactory implements QuotaSourceFactory {
-  private final InMemoryCUQuotaSource inMemoryCUQuotaSource;
+public class AmbryCUQuotaSourceFactory implements QuotaSourceFactory {
+  private final AmbryCUQuotaSource ambryCUQuotaSource;
 
   /**
-   * Constructor for {@link InMemoryCUQuotaSourceFactory}.
+   * Constructor for {@link AmbryCUQuotaSourceFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    */
-  public InMemoryCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
-    inMemoryCUQuotaSource = new InMemoryCUQuotaSource(quotaConfig, accountService);
+  public AmbryCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
+    ambryCUQuotaSource = new AmbryCUQuotaSource(quotaConfig, accountService);
   }
 
   @Override
   public QuotaSource getQuotaSource() {
-    return inMemoryCUQuotaSource;
+    return ambryCUQuotaSource;
   }
 }

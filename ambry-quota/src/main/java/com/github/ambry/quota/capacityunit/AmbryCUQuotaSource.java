@@ -41,13 +41,13 @@ import org.slf4j.LoggerFactory;
  * A {@link QuotaSource} implementation that keeps the quota and usage values in memory, and treats Ambry frontend's
  * Read and Write Capacity Units as system resources for handling quota exceeded requests.
  */
-public class InMemoryCUQuotaSource implements QuotaSource {
+public class AmbryCUQuotaSource implements QuotaSource {
   static final String REFRESHER_THREAD_NAME_PREFIX = "inmem-quota-source-refresher";
   private static final EnumSet<QuotaName> SUPPORTED_QUOTA_NAMES =
       EnumSet.of(QuotaName.READ_CAPACITY_UNIT, QuotaName.WRITE_CAPACITY_UNIT);
   private static final EnumSet<QuotaResourceType> SUPPORTED_QUOTA_RESOURCE_TYPES =
       EnumSet.of(QuotaResourceType.ACCOUNT, QuotaResourceType.CONTAINER);
-  private static final Logger LOGGER = LoggerFactory.getLogger(InMemoryCUQuotaSource.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(AmbryCUQuotaSource.class);
   private static final long DEFAULT_RCU_FOR_NEW_RESOURCE = 0;
   private static final long DEFAULT_WCU_FOR_NEW_RESOURCE = 0;
   protected final CapacityUnit feQuota; // Ambry frontend's CU capacity.
@@ -59,12 +59,12 @@ public class InMemoryCUQuotaSource implements QuotaSource {
   protected CapacityUnit feUsage; // Ambry frontend's CU usage.
 
   /**
-   * Constructor for {@link InMemoryCUQuotaSource}.
+   * Constructor for {@link AmbryCUQuotaSource}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    * @throws IOException in case of any exception.
    */
-  public InMemoryCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
+  public AmbryCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
     feQuota = JsonCUQuotaDataProviderUtil.getFeCUCapacityFromJson(quotaConfig.frontendCUCapacityInJson);
     cuQuota = JsonCUQuotaDataProviderUtil.getCUQuotasFromJson(quotaConfig.resourceCUQuotaInJson, accountService);
     cuUsage = new HashMap<>();
