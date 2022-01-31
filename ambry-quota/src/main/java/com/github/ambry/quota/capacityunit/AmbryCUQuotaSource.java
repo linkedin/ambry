@@ -28,11 +28,13 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,12 +53,12 @@ public class AmbryCUQuotaSource implements QuotaSource {
   private static final long DEFAULT_RCU_FOR_NEW_RESOURCE = 0;
   private static final long DEFAULT_WCU_FOR_NEW_RESOURCE = 0;
   protected final CapacityUnit feQuota; // Ambry frontend's CU capacity.
-  private final Map<String, CapacityUnit> cuQuota; // in memory quota for all resources.
-  private final Map<String, CapacityUnit> cuUsage; // in memory quota usage for all resources.
+  private final ConcurrentMap<String, CapacityUnit> cuQuota; // in memory quota for all resources.
+  private final ConcurrentMap<String, CapacityUnit> cuUsage; // in memory quota usage for all resources.
   private final ScheduledExecutorService usageRefresher;
   private final long aggregationWindowsInSecs;
   private final AtomicBoolean isReady;
-  protected CapacityUnit feUsage; // Ambry frontend's CU usage.
+  protected AtomicReference<CapacityUnit> feUsage; // Ambry frontend's CU usage.
 
   /**
    * Constructor for {@link AmbryCUQuotaSource}.
@@ -66,8 +68,9 @@ public class AmbryCUQuotaSource implements QuotaSource {
    */
   public AmbryCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
     feQuota = JsonCUQuotaDataProviderUtil.getFeCUCapacityFromJson(quotaConfig.frontendCUCapacityInJson);
-    cuQuota = JsonCUQuotaDataProviderUtil.getCUQuotasFromJson(quotaConfig.resourceCUQuotaInJson, accountService);
-    cuUsage = new HashMap<>();
+    cuQuota = new ConcurrentHashMap<>(
+        JsonCUQuotaDataProviderUtil.getCUQuotasFromJson(quotaConfig.resourceCUQuotaInJson, accountService));
+    cuUsage = new ConcurrentHashMap<>();
     usageRefresher = Utils.newScheduler(1, REFRESHER_THREAD_NAME_PREFIX, true);
     aggregationWindowsInSecs = quotaConfig.cuQuotaAggregationWindowInSecs;
     isReady = new AtomicBoolean(false);
@@ -79,7 +82,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
       LOGGER.warn("InMemoryCuQuotaSource is already initialized.");
       return;
     }
-    feUsage = new CapacityUnit();
+    feUsage.set(new CapacityUnit());
     cuQuota.keySet().forEach(key -> cuUsage.put(key, new CapacityUnit()));
     usageRefresher.scheduleAtFixedRate(this::resetQuotaUsage, aggregationWindowsInSecs, aggregationWindowsInSecs,
         TimeUnit.SECONDS);
@@ -95,7 +98,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) throws QuotaException {
     checkSupported(quotaName, quotaResource);
 
-    String resourceId = quotaResource.getResourceId();
+    final String resourceId = quotaResource.getResourceId();
     assertResourceId(resourceId);
     return new Quota<>(quotaName, cuQuota.get(resourceId).getQuotaValue(quotaName), quotaResource);
   }
@@ -103,7 +106,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   @Override
   public float getUsage(QuotaResource quotaResource, QuotaName quotaName) throws QuotaException {
     checkSupported(quotaName, quotaResource);
-    String resourceId = quotaResource.getResourceId();
+    final String resourceId = quotaResource.getResourceId();
     assertResourceId(resourceId);
     double usage = 0;
     if (cuUsage.containsKey(resourceId)) {
@@ -115,7 +118,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   @Override
   public void chargeUsage(QuotaResource quotaResource, QuotaName quotaName, double usageCost) throws QuotaException {
     checkSupported(quotaName, quotaResource);
-    String resourceId = quotaResource.getResourceId();
+    final String resourceId = quotaResource.getResourceId();
     assertResourceId(resourceId);
     if (quotaName == QuotaName.READ_CAPACITY_UNIT) {
       cuUsage.get(resourceId).incrementRcu((long) Math.ceil(usageCost));
@@ -125,28 +128,30 @@ public class AmbryCUQuotaSource implements QuotaSource {
   }
 
   @Override
-  public float getSystemResourceUsage(QuotaName quotaName) throws QuotaException {
-    return QuotaUtils.getUsagePercentage(feQuota.getQuotaValue(quotaName), feUsage.getQuotaValue(quotaName));
+  public float getSystemResourceUsage(QuotaName quotaName) {
+    return QuotaUtils.getUsagePercentage(feQuota.getQuotaValue(quotaName), feUsage.get().getQuotaValue(quotaName));
   }
 
   @Override
-  public void chargeSystemResourceUsage(QuotaName quotaName, double usageCost) throws QuotaException {
+  public void chargeSystemResourceUsage(QuotaName quotaName, double usageCost) {
     if (quotaName == QuotaName.READ_CAPACITY_UNIT) {
-      feUsage.incrementRcu((long) Math.ceil(usageCost));
+      feUsage.get().incrementRcu((long) Math.ceil(usageCost));
     } else {
-      feUsage.incrementWcu((long) Math.ceil(usageCost));
+      feUsage.get().incrementWcu((long) Math.ceil(usageCost));
     }
   }
 
   @Override
   public void updateNewQuotaResources(Collection<Account> accounts) {
     Collection<QuotaResource> quotaResources = QuotaUtils.getQuotaResourcesFromAccounts(accounts);
-    quotaResources.forEach(quotaResource -> {
-      cuQuota.putIfAbsent(quotaResource.getResourceId(),
-          new CapacityUnit(DEFAULT_RCU_FOR_NEW_RESOURCE, DEFAULT_WCU_FOR_NEW_RESOURCE));
-      cuUsage.putIfAbsent(quotaResource.getResourceId(),
-          new CapacityUnit(DEFAULT_RCU_FOR_NEW_RESOURCE, DEFAULT_WCU_FOR_NEW_RESOURCE));
-    });
+    synchronized (this) {
+      quotaResources.forEach(quotaResource -> {
+        cuQuota.putIfAbsent(quotaResource.getResourceId(),
+            new CapacityUnit(DEFAULT_RCU_FOR_NEW_RESOURCE, DEFAULT_WCU_FOR_NEW_RESOURCE));
+        cuUsage.putIfAbsent(quotaResource.getResourceId(),
+            new CapacityUnit(DEFAULT_RCU_FOR_NEW_RESOURCE, DEFAULT_WCU_FOR_NEW_RESOURCE));
+      });
+    }
   }
 
   @Override
@@ -178,8 +183,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
     for (String resourceId : cuUsage.keySet()) {
       cuUsage.put(resourceId, new CapacityUnit());
     }
-    feUsage.setWcu(0);
-    feUsage.setRcu(0);
+    feUsage.set(new CapacityUnit());
   }
 
   /**
