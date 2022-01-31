@@ -21,8 +21,7 @@ import java.io.IOException;
 
 
 /**
- * An implementation of {@link QuotaSourceFactory} for that creates and returns {@link InMemoryCUQuotaSource} object which
- * is the default implementation of Capacity Unit {@link QuotaSource} for Ambry.
+ * An implementation of {@link QuotaSourceFactory} for that creates and returns {@link InMemoryCUQuotaSource} object.
  */
 public class InMemoryCUQuotaSourceFactory implements QuotaSourceFactory {
   private final InMemoryCUQuotaSource inMemoryCUQuotaSource;
