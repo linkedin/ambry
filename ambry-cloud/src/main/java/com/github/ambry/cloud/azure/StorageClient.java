@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.azure.core.exception.UnexpectedLengthException;
 import com.azure.core.http.HttpClient;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
@@ -27,9 +26,7 @@ import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatch;
 import com.azure.storage.blob.batch.BlobBatchAsyncClient;
-import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.batch.BlobBatchClientBuilder;
-import com.azure.storage.blob.batch.BlobBatchStorageException;
 import com.azure.storage.blob.models.AccessTier;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobHttpHeaders;
@@ -37,50 +34,52 @@ import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
-import com.azure.storage.blob.models.BlockBlobItem;
 import com.azure.storage.blob.models.DownloadRetryOptions;
 import com.azure.storage.blob.specialized.BlockBlobAsyncClient;
-import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.azure.storage.common.policy.RetryPolicyType;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.FutureUtils;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * Abstract class encapsulation ABS client operations.
+ * Abstract class to encapsulate ABS client operations. Please note that all its operations are asynchronous.
  */
 public abstract class StorageClient {
   Logger logger = LoggerFactory.getLogger(StorageClient.class);
-  private AtomicReference<BlobServiceClient> storageClientRef;
-  private AtomicReference<BlobBatchClient> blobBatchClientRef;
-  private AtomicReference<BlobServiceAsyncClient> storageAsyncClientRef;
-  private AtomicReference<BlobBatchAsyncClient> blobBatchAsyncClientRef;
+  private final AtomicReference<BlobServiceAsyncClient> storageAsyncClientRef;
+  private final AtomicReference<BlobBatchAsyncClient> blobBatchAsyncClientRef;
   private final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   protected final AzureMetrics azureMetrics;
   // Containers known to exist in the storage account
   private final Set<String> knownContainers = ConcurrentHashMap.newKeySet();
+  // All storage client are retried once if the retry condition is met.
+  private final int retries = 1;
+  private final Predicate<Throwable> retryPredicate =
+      throwable -> throwable instanceof BlobStorageException && handleExceptionAndHintRetry(
+          (BlobStorageException) throwable);
 
   /**
    * Constructor for {@link StorageClient}.
@@ -95,46 +94,39 @@ public abstract class StorageClient {
     this.cloudConfig = cloudConfig;
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      storageAsyncClientRef = new AtomicReference<>(createBlobStorageAsyncClient());
-      blobBatchAsyncClientRef =
-          new AtomicReference<>(new BlobBatchClientBuilder(storageAsyncClientRef.get()).buildAsyncClient());
-    } else {
-      storageClientRef = new AtomicReference<>(createBlobStorageClient());
-      blobBatchClientRef = new AtomicReference<>(new BlobBatchClientBuilder(storageClientRef.get()).buildClient());
-    }
+    storageAsyncClientRef = new AtomicReference<>(createBlobStorageAsyncClient());
+    blobBatchAsyncClientRef =
+        new AtomicReference<>(new BlobBatchClientBuilder(storageAsyncClientRef.get()).buildAsyncClient());
   }
 
   /**
    * Constructor for {@link StorageClient}.
-   * @param blobServiceClient {@link BlobServiceClient} object.
-   * @param blobBatchClient {@link BlobBatchClient} object.
+   * @param storageAsyncClient {@link BlobServiceAsyncClient} object.
+   * @param blobBatchAsyncClient {@link BlobBatchAsyncClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
-  public StorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient, AzureMetrics azureMetrics,
-      AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
-    this.storageClientRef = new AtomicReference<>(blobServiceClient);
-    this.blobBatchClientRef = new AtomicReference<>(blobBatchClient);
+  public StorageClient(BlobServiceAsyncClient storageAsyncClient, BlobBatchAsyncClient blobBatchAsyncClient,
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
     this.cloudConfig = null;
     this.azureCloudConfig = azureCloudConfig;
-    storageAsyncClientRef = null;
-    blobBatchAsyncClientRef = null;
+    this.storageAsyncClientRef = new AtomicReference<>(storageAsyncClient);
+    this.blobBatchAsyncClientRef = new AtomicReference<>(blobBatchAsyncClient);
   }
 
   /**
    * Visible for testing.
-   * @return the underlying {@link BlobServiceClient}.
+   * @return the underlying {@link BlobServiceAsyncClient}.
    */
-  public BlobServiceClient getStorageClient() {
-    return storageClientRef.get();
+  public BlobServiceAsyncClient getStorageClient() {
+    return storageAsyncClientRef.get();
   }
 
   /**
-   * Creates a new block blob, or updates the content of an existing block blob.
+   * Creates a new block blob, or updates the content of an existing block blob asynchronously.
    * @param blobId {@link BlobId} of the blob to upload.
    * @param data The data to write to the blob.
    * @param length The exact length of the data. It is important that this value match precisely the length of the
@@ -144,26 +136,21 @@ public abstract class StorageClient {
    * @param tier {@link AccessTier} for the destination blob.
    * @param contentMd5 An MD5 hash of the block content.
    * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @return The information of the uploaded block blob.
-   * @throws UnexpectedLengthException when the length of data does not match the input {@code length}.
-   * @throws NullPointerException if the input data is null.
-   * @throws UncheckedIOException If an I/O error occurs
+   * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete when block blob is uploaded
+   *         or will contain an exception if an error occurred.
    */
-  public Response<BlockBlobItem> uploadWithResponse(BlobId blobId, InputStream data, long length,
+  public CompletableFuture<Void> uploadWithResponse(BlobId blobId, InputStream data, long length,
       BlobHttpHeaders headers, Map<String, String> metadata, AccessTier tier, byte[] contentMd5,
-      BlobRequestConditions requestConditions, Duration timeout) {
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      return uploadAsyncWithResponse(blobId, data, length, headers, metadata, tier, contentMd5, requestConditions,
-          timeout);
-    }
-    return doStorageClientOperation(
-        () -> getBlockBlobClient(blobId, true).uploadWithResponse(data, length, headers, metadata, tier, contentMd5,
-            requestConditions, timeout, Context.NONE));
+      BlobRequestConditions requestConditions) {
+    return FutureUtils.retry(() -> {
+      BlockBlobAsyncClient blobAsyncClient = getBlockBlobAsyncClient(blobId, true);
+      return blobAsyncClient.uploadWithResponse(FluxUtil.toFluxByteBuffer(data), length, headers, metadata, tier,
+          contentMd5, requestConditions).toFuture().thenApply(blockBlobItemResponse -> null);
+    }, retries, retryPredicate, this::onRetriableError, this::onError);
   }
 
   /**
-   * Creates a new block blob, or updates the content of an existing block blob.
+   * Creates a new block blob, or updates the content of an existing block blob asynchronously.
    * @param containerName name of the Azure container where the blob lives.
    * @param blobName name of the blob.
    * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
@@ -175,84 +162,21 @@ public abstract class StorageClient {
    * @param tier {@link AccessTier} for the destination blob.
    * @param contentMd5 An MD5 hash of the block content.
    * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @return The information of the uploaded block blob.
-   * @throws UnexpectedLengthException when the length of data does not match the input {@code length}.
-   * @throws NullPointerException if the input data is null.
-   * @throws UncheckedIOException If an I/O error occurs
+   * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete when block blob is uploaded
+   *         or an exception if an error occurred.
    */
-  public Response<BlockBlobItem> uploadWithResponse(String containerName, String blobName, boolean autoCreateContainer,
+  public CompletableFuture<Void> uploadWithResponse(String containerName, String blobName, boolean autoCreateContainer,
       InputStream data, long length, BlobHttpHeaders headers, Map<String, String> metadata, AccessTier tier,
-      byte[] contentMd5, BlobRequestConditions requestConditions, Duration timeout) {
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      return uploadAsyncWithResponse(containerName, blobName, autoCreateContainer, data, length, headers, metadata,
-          tier, contentMd5, requestConditions, timeout);
-    }
-    return doStorageClientOperation(
-        () -> getBlockBlobClient(containerName, blobName, autoCreateContainer).uploadWithResponse(data, length, headers,
-            metadata, tier, contentMd5, requestConditions, timeout, Context.NONE));
+      byte[] contentMd5, BlobRequestConditions requestConditions) {
+    return FutureUtils.retry(() -> {
+      BlockBlobAsyncClient blobAsyncClient = getBlockBlobAsyncClient(containerName, blobName, autoCreateContainer);
+      return blobAsyncClient.uploadWithResponse(FluxUtil.toFluxByteBuffer(data), length, headers, metadata, tier,
+          contentMd5, requestConditions).toFuture().thenApply(blockBlobItemResponse -> null);
+    }, retries, retryPredicate, this::onRetriableError, this::onError);
   }
 
   /**
-   * Creates a new block blob, or updates the content of an existing block blob asynchronously. This method is blocking
-   * for now until classes like {@link com.github.ambry.cloud.CloudDestination} and {@link com.github.ambry.store.Store}
-   * are refactored to handle response asynchronously.
-   * @param blobId {@link BlobId} of the blob to upload.
-   * @param data The data to write to the blob.
-   * @param length The exact length of the data. It is important that this value match precisely the length of the
-   * data provided in the {@link InputStream}.
-   * @param headers {@link BlobHttpHeaders}
-   * @param metadata Metadata to associate with the blob.
-   * @param tier {@link AccessTier} for the destination blob.
-   * @param contentMd5 An MD5 hash of the block content.
-   * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @return The information of the uploaded block blob.
-   * @throws UnexpectedLengthException when the length of data does not match the input {@code length}.
-   * @throws NullPointerException if the input data is null.
-   * @throws UncheckedIOException If an I/O error occurs
-   */
-  public Response<BlockBlobItem> uploadAsyncWithResponse(BlobId blobId, InputStream data, long length,
-      BlobHttpHeaders headers, Map<String, String> metadata, AccessTier tier, byte[] contentMd5,
-      BlobRequestConditions requestConditions, Duration timeout) {
-    return doStorageClientOperation(
-        () -> getBlockBlobAsyncClient(blobId, true).uploadWithResponse(FluxUtil.toFluxByteBuffer(data), length, headers,
-            metadata, tier, contentMd5, requestConditions).toFuture().get(timeout.toMillis(), TimeUnit.MILLISECONDS));
-  }
-
-  /**
-   * Creates a new block blob, or updates the content of an existing block blob asynchronously. This method is blocking
-   * for now until other classes like {@link com.github.ambry.cloud.CloudDestination} and {@link com.github.ambry.store.Store}
-   * are refactored to download blobs asynchronously.
-   * @param containerName name of the Azure container where the blob lives.
-   * @param blobName name of the blob.
-   * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
-   * @param data The data to write to the blob.
-   * @param length The exact length of the data. It is important that this value match precisely the length of the
-   * data provided in the {@link InputStream}.
-   * @param headers {@link BlobHttpHeaders}
-   * @param metadata Metadata to associate with the blob.
-   * @param tier {@link AccessTier} for the destination blob.
-   * @param contentMd5 An MD5 hash of the block content.
-   * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @return The information of the uploaded block blob.
-   * @throws UnexpectedLengthException when the length of data does not match the input {@code length}.
-   * @throws NullPointerException if the input data is null.
-   * @throws UncheckedIOException If an I/O error occurs
-   */
-  public Response<BlockBlobItem> uploadAsyncWithResponse(String containerName, String blobName,
-      boolean autoCreateContainer, InputStream data, long length, BlobHttpHeaders headers, Map<String, String> metadata,
-      AccessTier tier, byte[] contentMd5, BlobRequestConditions requestConditions, Duration timeout) {
-    return doStorageClientOperation(
-        () -> getBlockBlobAsyncClient(containerName, blobName, autoCreateContainer).uploadWithResponse(
-            FluxUtil.toFluxByteBuffer(data), length, headers, metadata, tier, contentMd5, requestConditions)
-            .toFuture()
-            .get(timeout.toMillis(), TimeUnit.MILLISECONDS));
-  }
-
-  /**
-   * Downloads a range of bytes from a blob into an output stream.
+   * Downloads a range of bytes from a blob asynchronously into an output stream.
    * @param containerName name of the Azure container where the blob lives.
    * @param blobName name of the blob.
    * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
@@ -261,138 +185,73 @@ public abstract class StorageClient {
    * @param options {@link DownloadRetryOptions}
    * @param requestConditions {@link BlobRequestConditions}
    * @param getRangeContentMd5 Whether the contentMD5 for the specified blob range should be returned.
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @throws UncheckedIOException If an I/O error occurs.
-   * @throws NullPointerException if {@code stream} is null
+   * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete when blob is downloaded
+   *         or an exception if an error occurred.
    */
-  public void downloadWithResponse(String containerName, String blobName, boolean autoCreateContainer,
-      OutputStream stream, BlobRange range, DownloadRetryOptions options, BlobRequestConditions requestConditions,
-      boolean getRangeContentMd5, Duration timeout) {
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      downloadAsyncWithResponse(containerName, blobName, autoCreateContainer, stream, range, options, requestConditions,
-          getRangeContentMd5, timeout);
-      return;
-    }
+  public CompletableFuture<Void> downloadWithResponse(String containerName, String blobName,
+      boolean autoCreateContainer, OutputStream stream, BlobRange range, DownloadRetryOptions options,
+      BlobRequestConditions requestConditions, boolean getRangeContentMd5) {
     // Might as well use same timeout for upload and download
-    doStorageClientOperation(
-        () -> getBlockBlobClient(containerName, blobName, false).downloadWithResponse(stream, null, null,
-            requestConditions, false, timeout, Context.NONE));
-  }
-
-  /**
-   * Downloads a range of bytes from a blob asynchronously into an output stream. This method is blocking for now
-   * until other classes like {@link com.github.ambry.cloud.CloudDestination} and {@link com.github.ambry.store.Store}
-   * are refactored to download blobs asynchronously.
-   * @param containerName name of the Azure container where the blob lives.
-   * @param blobName name of the blob.
-   * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
-   * @param stream A non-null {@link OutputStream} instance where the downloaded data will be written.
-   * @param range {@link BlobRange}
-   * @param options {@link DownloadRetryOptions}
-   * @param requestConditions {@link BlobRequestConditions}
-   * @param getRangeContentMd5 Whether the contentMD5 for the specified blob range should be returned.
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @throws UncheckedIOException If an I/O error occurs.
-   * @throws NullPointerException if {@code stream} is null
-   */
-  public void downloadAsyncWithResponse(String containerName, String blobName, boolean autoCreateContainer,
-      OutputStream stream, BlobRange range, DownloadRetryOptions options, BlobRequestConditions requestConditions,
-      boolean getRangeContentMd5, Duration timeout) {
-    // Might as well use same timeout for upload and download
-    doStorageClientOperation(
-        () -> getBlockBlobAsyncClient(containerName, blobName, autoCreateContainer).downloadWithResponse(null, null,
-            requestConditions, false).toFuture().get().getValue().doOnNext(byteBuffer -> {
-          try {
-            stream.write(byteBuffer.array());
-          } catch (IOException e) {
-            throw new UncheckedIOException(e);
-          }
-        }).blockLast());
-  }
-
-  /**
-   * Delete a file from blob storage, if it exists.
-   * @param containerName name of the container containing file to delete.
-   * @param fileName name of the file to delete.
-   * @return true if the file was deleted, otherwise false.
-   * @throws BlobStorageException for any error on ABS side.
-   */
-  boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
-    AtomicReference<Boolean> retValRef = new AtomicReference<>(false);
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      return deleteFileAsync(containerName, fileName);
-    }
-    doStorageClientOperation(() -> {
-      BlockBlobClient blobClient = getBlockBlobClient(containerName, fileName, false);
-      if (blobClient.exists()) {
-        blobClient.delete();
-        retValRef.set(true);
-      }
-      return null;
-    });
-    return retValRef.get();
+    return FutureUtils.retry(() -> {
+      CompletableFuture<Void> completableFuture = new CompletableFuture<>();
+      BlockBlobAsyncClient blobAsyncClient = getBlockBlobAsyncClient(containerName, blobName, autoCreateContainer);
+      blobAsyncClient.downloadWithResponse(range, options, requestConditions, getRangeContentMd5)
+          .subscribe(response -> response.getValue().subscribe(byteBuffer -> {
+                try {
+                  stream.write(byteBuffer.array());
+                } catch (IOException e) {
+                  completableFuture.completeExceptionally(e);
+                }
+              }, completableFuture::completeExceptionally, () -> completableFuture.complete(null)),
+              completableFuture::completeExceptionally);
+      return completableFuture;
+    }, retries, retryPredicate, this::onRetriableError, this::onError);
   }
 
   /**
    * Delete a file from blob storage asynchronously, if it exists.
    * @param containerName name of the container containing file to delete.
    * @param fileName name of the file to delete.
-   * @return true if the file was deleted, otherwise false.
-   * @throws BlobStorageException for any error on ABS side.
+   * @return a {@link CompletableFuture} of type {@link Boolean} that will eventually complete successfully when the file
+   *         is deleted or will complete exceptionally if an error occurs.
    */
-  boolean deleteFileAsync(String containerName, String fileName) throws BlobStorageException {
-    AtomicReference<Boolean> retValRef = new AtomicReference<>(false);
-    doStorageClientOperation(() -> {
-      BlockBlobAsyncClient blobClient = getBlockBlobAsyncClient(containerName, fileName, false);
-      if (blobClient.exists().toFuture().get()) {
-        blobClient.delete().toFuture().get();
-        retValRef.set(true);
-      }
-      return null;
-    });
-    return retValRef.get();
+  CompletableFuture<Boolean> deleteFile(String containerName, String fileName) throws BlobStorageException {
+    return FutureUtils.retry(() -> {
+      CompletableFuture<Boolean> completableFuture = new CompletableFuture<>();
+      BlockBlobAsyncClient blobAsyncClient = getBlockBlobAsyncClient(containerName, fileName, false);
+      return blobAsyncClient.exists().toFuture().thenCompose((response) -> {
+        if (response) {
+          blobAsyncClient.delete().toFuture().thenAccept((result) -> completableFuture.complete(true));
+        } else {
+          completableFuture.complete(false);
+        }
+        return completableFuture;
+      });
+    }, retries, retryPredicate, this::onRetriableError, this::onError);
   }
 
   /**
    * Perform basic connectivity test.
    */
   void testConnectivity() {
-    doStorageClientOperation(() -> storageClientRef.get()
-        .getBlobContainerClient("partition-0")
-        .existsWithResponse(Duration.ofSeconds(5), Context.NONE));
+    CompletableFuture<Response<Boolean>> completableFuture = FutureUtils.retry(
+        () -> storageAsyncClientRef.get().getBlobContainerAsyncClient("partition-0").existsWithResponse().toFuture(),
+        retries, retryPredicate, this::onRetriableError, this::onError);
+    completableFuture.join();
   }
 
   /**
    * Returns the blob's metadata and properties.
    * @param blobId {@link BlobId}
    * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @return The blob properties and metadata.
+   * @return a {@link CompletableFuture} that will eventually contain blob properties and metadata or an exception
+   *         if an error occurred.
    */
-  public BlobProperties getPropertiesWithResponse(BlobId blobId, BlobRequestConditions requestConditions,
-      Duration timeout) {
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      return getPropertiesAsyncWithResponse(blobId, requestConditions, timeout);
-    }
-    return doStorageClientOperation(
-        () -> getBlockBlobClient(blobId, false).getPropertiesWithResponse(requestConditions, timeout, Context.NONE)
-            .getValue());
-  }
-
-  /**
-   * Returns the blob's metadata and properties.
-   * @param blobId {@link BlobId}
-   * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @return The blob properties and metadata.
-   */
-  public BlobProperties getPropertiesAsyncWithResponse(BlobId blobId, BlobRequestConditions requestConditions,
-      Duration timeout) {
-    return doStorageClientOperation(
-        () -> getBlockBlobAsyncClient(blobId, false).getPropertiesWithResponse(requestConditions)
-            .toFuture()
-            .get(timeout.toMillis(), TimeUnit.MILLISECONDS)
-            .getValue());
+  public CompletableFuture<BlobProperties> getPropertiesWithResponse(BlobId blobId,
+      BlobRequestConditions requestConditions) {
+    return FutureUtils.retry(() -> getBlockBlobAsyncClient(blobId, false).getPropertiesWithResponse(requestConditions)
+        .toFuture()
+        .thenApply(Response::getValue), retries, retryPredicate, this::onRetriableError, this::onError);
   }
 
   /**
@@ -401,112 +260,38 @@ public abstract class StorageClient {
    * @param blobId {@link BlobId} object.
    * @param metadata Metadata to associate with the blob.
    * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
    * @param context Additional context that is passed through the Http pipeline during the service call.
+   * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete successfully when blob
+   *         metadata is changed or completes exceptionally if an error occurred.
    */
-  public void setMetadataWithResponse(BlobId blobId, Map<String, String> metadata,
-      BlobRequestConditions requestConditions, Duration timeout, Context context) {
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      setMetadataAsyncWithResponse(blobId, metadata, requestConditions, timeout, context);
-    }
-    doStorageClientOperation(
-        () -> getBlockBlobClient(blobId, false).setMetadataWithResponse(metadata, requestConditions, timeout,
-            Context.NONE));
-  }
-
-  /**
-   * Changes a blob's metadata. The specified metadata in this method will replace existing metadata. If old values
-   * must be preserved, they must be downloaded and included in the call to this method.
-   * @param blobId {@link BlobId} object.
-   * @param metadata Metadata to associate with the blob.
-   * @param requestConditions {@link BlobRequestConditions}
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @param context Additional context that is passed through the Http pipeline during the service call.
-   */
-  public void setMetadataAsyncWithResponse(BlobId blobId, Map<String, String> metadata,
-      BlobRequestConditions requestConditions, Duration timeout, Context context) {
-    doStorageClientOperation(
+  public CompletableFuture<Void> setMetadataWithResponse(BlobId blobId, Map<String, String> metadata,
+      BlobRequestConditions requestConditions, Context context) {
+    return FutureUtils.retry(
         () -> getBlockBlobAsyncClient(blobId, false).setMetadataWithResponse(metadata, requestConditions)
             .toFuture()
-            .get(timeout.toMillis(), TimeUnit.MILLISECONDS));
+            .thenApply(response -> null), retries, retryPredicate, this::onRetriableError, this::onError);
   }
 
   /**
-   * Deletes a list of blobs.
+   * Deletes a list of blobs asynchronously.
    * @param batchOfBlobs {@link List} of {@link CloudBlobMetadata} objects.
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
    * @return {@link List} of {@link Response}s for the blobs in the batch.
-   * @throws RuntimeException If the {@code timeout} duration completes before a response is returned.
-   * @throws BlobStorageException If the batch request is malformed.
-   * @throws BlobBatchStorageException If {@code throwOnAnyFailure} is {@code true} and any request in the
-   * {@link BlobBatch} failed.
+   * @return a {@link CompletableFuture} that will eventually contain {@link List} of {@link Response}s for the blobs
+   *         in the batch or an exception if an error occurred.
    */
-  public List<Response<Void>> deleteBatch(List<CloudBlobMetadata> batchOfBlobs, Duration timeout) {
-    if (azureCloudConfig.useAsyncAzureAPIs) {
-      return deleteBatchAsync(batchOfBlobs, timeout);
-    }
-    List<Response<Void>> responseList = new ArrayList<>();
-    doStorageClientOperation(() -> {
-      BlobBatch blobBatch = blobBatchClientRef.get().getBlobBatch();
-      for (CloudBlobMetadata blobMetadata : batchOfBlobs) {
-        AzureBlobLayoutStrategy.BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobMetadata);
-        responseList.add(blobBatch.deleteBlob(blobLayout.containerName, blobLayout.blobFilePath));
-      }
-      blobBatchClientRef.get().submitBatchWithResponse(blobBatch, false, timeout, Context.NONE);
-      return null;
-    });
-    return responseList;
-  }
-
-  /**
-   * Deletes a list of blobs asynchronously. This method will block for now until classes like
-   * {@link com.github.ambry.cloud.CloudDestination} are refactored to handle responses asynchronously.
-   * @param batchOfBlobs {@link List} of {@link CloudBlobMetadata} objects.
-   * @param timeout An optional timeout value beyond which a {@link RuntimeException} will be raised.
-   * @return {@link List} of {@link Response}s for the blobs in the batch.
-   * @throws RuntimeException If the {@code timeout} duration completes before a response is returned.
-   * @throws BlobStorageException If the batch request is malformed.
-   * @throws BlobBatchStorageException If {@code throwOnAnyFailure} is {@code true} and any request in the
-   * {@link BlobBatch} failed.
-   */
-  public List<Response<Void>> deleteBatchAsync(List<CloudBlobMetadata> batchOfBlobs, Duration timeout) {
-    List<Response<Void>> responseList = new ArrayList<>();
-    doStorageClientOperation(() -> {
+  public CompletableFuture<List<Response<Void>>> deleteBatch(List<CloudBlobMetadata> batchOfBlobs) {
+    return FutureUtils.retry(() -> {
+      List<Response<Void>> responseList = new ArrayList<>();
       BlobBatch blobBatch = blobBatchAsyncClientRef.get().getBlobBatch();
       for (CloudBlobMetadata blobMetadata : batchOfBlobs) {
         AzureBlobLayoutStrategy.BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobMetadata);
         responseList.add(blobBatch.deleteBlob(blobLayout.containerName, blobLayout.blobFilePath));
       }
-      blobBatchAsyncClientRef.get()
+      return blobBatchAsyncClientRef.get()
           .submitBatchWithResponse(blobBatch, false)
           .toFuture()
-          .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-      return null;
-    });
-    return responseList;
-  }
-
-  /**
-   * Get the block blob client for the supplied blobid.
-   * @param blobId id of the blob for which {@code BlockBlobClient} is needed.
-   * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
-   * @return {@code BlockBlobClient} reference.
-   */
-  private BlockBlobClient getBlockBlobClient(BlobId blobId, boolean autoCreateContainer) {
-    AzureBlobLayoutStrategy.BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobId);
-    return getBlockBlobClient(blobLayout.containerName, blobLayout.blobFilePath, autoCreateContainer);
-  }
-
-  /**
-   * Get the block blob client for the supplied Azure container and blob name.
-   * @param containerName name of the Azure container where the blob lives.
-   * @param blobName name of the blob.
-   * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
-   * @return {@code BlockBlobClient} reference.
-   */
-  BlockBlobClient getBlockBlobClient(String containerName, String blobName, boolean autoCreateContainer) {
-    BlobContainerClient containerClient = getContainer(containerName, autoCreateContainer);
-    return containerClient.getBlobClient(blobName).getBlockBlobClient();
+          .thenApply(response -> responseList);
+    }, retries, retryPredicate, this::onRetriableError, this::onError);
   }
 
   /**
@@ -515,8 +300,7 @@ public abstract class StorageClient {
    * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
    * @return {@code BlockBlobClient} reference.
    */
-  private BlockBlobAsyncClient getBlockBlobAsyncClient(BlobId blobId, boolean autoCreateContainer)
-      throws ExecutionException, InterruptedException {
+  private BlockBlobAsyncClient getBlockBlobAsyncClient(BlobId blobId, boolean autoCreateContainer) {
     AzureBlobLayoutStrategy.BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobId);
     return getBlockBlobAsyncClient(blobLayout.containerName, blobLayout.blobFilePath, autoCreateContainer);
   }
@@ -528,37 +312,9 @@ public abstract class StorageClient {
    * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
    * @return {@code BlockBlobClient} reference.
    */
-  BlockBlobAsyncClient getBlockBlobAsyncClient(String containerName, String blobName, boolean autoCreateContainer)
-      throws ExecutionException, InterruptedException {
+  BlockBlobAsyncClient getBlockBlobAsyncClient(String containerName, String blobName, boolean autoCreateContainer) {
     BlobContainerAsyncClient containerAsyncClient = getAsyncContainerClient(containerName, autoCreateContainer);
     return containerAsyncClient.getBlobAsyncClient(blobName).getBlockBlobAsyncClient();
-  }
-
-  /**
-   * Get a reference to an Azure container, creating it if necessary.
-   * @param containerName the container name.
-   * @param autoCreate flag indicating whether to create the container if it does not exist.
-   * @return the created {@link BlobContainerClient}.
-   */
-  private BlobContainerClient getContainer(String containerName, boolean autoCreate) {
-    BlobContainerClient containerClient = storageClientRef.get().getBlobContainerClient(containerName);
-    if (autoCreate) {
-      if (!knownContainers.contains(containerName)) {
-        try {
-          if (!containerClient.exists()) {
-            containerClient.create();
-            logger.info("Created container {}", containerName);
-          }
-        } catch (BlobStorageException ex) {
-          if (ex.getErrorCode() != BlobErrorCode.CONTAINER_ALREADY_EXISTS) {
-            logger.error("Failed to create container {}", containerName);
-            throw ex;
-          }
-        }
-        knownContainers.add(containerName);
-      }
-    }
-    return containerClient;
   }
 
   /**
@@ -567,19 +323,21 @@ public abstract class StorageClient {
    * @param autoCreate flag indicating whether to create the container if it does not exist.
    * @return the created {@link BlobContainerClient}.
    */
-  private BlobContainerAsyncClient getAsyncContainerClient(String containerName, boolean autoCreate)
-      throws ExecutionException, InterruptedException {
+  private BlobContainerAsyncClient getAsyncContainerClient(String containerName, boolean autoCreate) {
     BlobContainerAsyncClient containerAsyncClient =
         storageAsyncClientRef.get().getBlobContainerAsyncClient(containerName);
     if (autoCreate) {
       if (!knownContainers.contains(containerName)) {
         try {
-          if (!containerAsyncClient.exists().toFuture().get()) {
-            containerAsyncClient.create().block();
+          if (!containerAsyncClient.exists().toFuture().join()) {
+            //TODO: Can make checking of container and its creation to async as well.
+            containerAsyncClient.create().toFuture().join();
             logger.info("Created container {}", containerName);
           }
-        } catch (BlobStorageException ex) {
-          if (ex.getErrorCode() != BlobErrorCode.CONTAINER_ALREADY_EXISTS) {
+        } catch (CompletionException ex) {
+          Exception e = Utils.extractFutureExceptionCause(ex);
+          if (e instanceof BlobStorageException
+              && ((BlobStorageException) e).getErrorCode() != BlobErrorCode.CONTAINER_ALREADY_EXISTS) {
             logger.error("Failed to create container {}", containerName);
             throw ex;
           }
@@ -591,36 +349,7 @@ public abstract class StorageClient {
   }
 
   /**
-   * Create the {@link BlobServiceClient} object.
-   * @param {@link CloudConfig} object.
-   * @param {@link AzureCloudConfig} object.
-   * @return {@link BlobServiceClient} object.
-   */
-  protected BlobServiceClient createBlobStorageClient() {
-    validateABSAuthConfigs(azureCloudConfig);
-    Configuration storageConfiguration = new Configuration();
-    // Check for network proxy
-    ProxyOptions proxyOptions = (cloudConfig.vcrProxyHost == null) ? null : new ProxyOptions(ProxyOptions.Type.HTTP,
-        new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
-    if (proxyOptions != null) {
-      logger.info("Using proxy: {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
-    }
-    HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
-
-    // Note: retry decisions are made at CloudBlobStore level.  Configure storageClient with no retries.
-    RequestRetryOptions noRetries = new RequestRetryOptions(RetryPolicyType.FIXED, 1, (Integer) null, null, null, null);
-    try {
-      return buildBlobServiceClient(client, storageConfiguration, noRetries, azureCloudConfig);
-    } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
-      logger.error("Error building ABS blob service client: {}", ex.getMessage());
-      throw new IllegalStateException(ex);
-    }
-  }
-
-  /**
    * Create the {@link BlobServiceAsyncClient} object.
-   * @param {@link CloudConfig} object.
-   * @param {@link AzureCloudConfig} object.
    * @return {@link BlobServiceAsyncClient} object.
    */
   protected BlobServiceAsyncClient createBlobStorageAsyncClient() {
@@ -645,16 +374,6 @@ public abstract class StorageClient {
   }
 
   /**
-   * Set the references for storage and blob clients atomically. Note this method is not thread safe and must always be
-   * called within a thread safe context.
-   * @param blobServiceClient {@link BlobServiceClient} object.
-   */
-  protected void setClientReferences(BlobServiceClient blobServiceClient) {
-    storageClientRef.set(blobServiceClient);
-    blobBatchClientRef.set(new BlobBatchClientBuilder(storageClientRef.get()).buildClient());
-  }
-
-  /**
    * Set the references for storage and blob async clients atomically. Note this method is not thread safe and must always be
    * called within a thread safe context.
    * @param blobServiceAsyncClient {@link BlobServiceClient} object.
@@ -665,62 +384,16 @@ public abstract class StorageClient {
   }
 
   /**
-   * Execute the storage client operation represented by {@code operation}
-   * @param operation {@link Callable} representing the operation.
-   * @param <T> type of return value.
-   * @return the return value of the operation.
-   * @throws BlobStorageException
-   */
-  private <T> T doStorageClientOperation(Callable<T> operation) {
-    int attempts = 0;
-    T result = null;
-    while (attempts <= 1) {
-      attempts++;
-      try {
-        result = operation.call();
-        break;
-      } catch (BlobStorageException bsEx) {
-        if (attempts == 1 && handleExceptionAndHintRetry(bsEx)) {
-          logger.info("Retrying blob store operation due to exception: " + bsEx.toString());
-          azureMetrics.storageClientOperationRetryCount.inc();
-          continue;
-        }
-        throw bsEx;
-      } catch (Exception ex) {
-        // this should never happen.
-        azureMetrics.storageClientOperationExceptionCount.inc();
-        if (attempts == 1) {
-          azureMetrics.storageClientFailureAfterRetryCount.inc();
-        }
-        throw new IllegalStateException("Unknown blob storage exception", ex);
-      }
-    }
-    return result;
-  }
-
-  /**
    * Validate that all the required configs for ABS authentication are present.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
   protected abstract void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig);
 
   /**
-   * Build {@link BlobServiceClient}.
-   * @param httpClient {@link HttpClient} object.
-   * @param configuration {@link Configuration} object.
-   * @param retryOptions {@link RetryOptions} object.
-   * @param azureCloudConfig {@link AzureCloudConfig} object.
-   * @return {@link BlobServiceClient} object.
-   */
-  protected abstract BlobServiceClient buildBlobServiceClient(HttpClient httpClient, Configuration configuration,
-      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
-      throws MalformedURLException, InterruptedException, ExecutionException;
-
-  /**
    * Build {@link BlobServiceAsyncClient}.
    * @param httpClient {@link HttpClient} object.
    * @param configuration {@link Configuration} object.
-   * @param retryOptions {@link RetryOptions} object.
+   * @param retryOptions {@link RequestRetryOptions} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @return {@link BlobServiceAsyncClient} object.
    */
@@ -735,4 +408,24 @@ public abstract class StorageClient {
    * @return true if the operation can be retried. false otherwise.
    */
   protected abstract boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException);
+
+  /**
+   * Handle any errors. For now, we update the error metrics.
+   * @param throwable associated with this error.
+   */
+  private void onError(Throwable throwable) {
+    logger.error("Blob store operation failed due to exception: " + throwable.toString());
+    azureMetrics.storageClientOperationExceptionCount.inc();
+    // All retries must have been completed internally by now.
+    azureMetrics.storageClientFailureAfterRetryCount.inc();
+  }
+
+  /**
+   * Handle any retriable errors. For now, we update the error metrics.
+   * @param throwable associated with this error.
+   */
+  private void onRetriableError(Throwable throwable) {
+    logger.info("Retrying blob store operation due to exception: " + throwable.toString());
+    azureMetrics.storageClientOperationRetryCount.inc();
+  }
 }

@@ -25,13 +25,13 @@ import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.models.CosmosStoredProcedureResponse;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.util.CosmosPagedFlux;
-import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.batch.BlobBatch;
-import com.azure.storage.blob.batch.BlobBatchClient;
-import com.azure.storage.blob.models.BlobDownloadResponse;
+import com.azure.storage.blob.batch.BlobBatchAsyncClient;
+import com.azure.storage.blob.models.BlobDownloadAsyncResponse;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
-import com.azure.storage.blob.specialized.BlockBlobClient;
+import com.azure.storage.blob.specialized.BlockBlobAsyncClient;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudStorageException;
@@ -40,7 +40,8 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
-import java.io.OutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -54,6 +55,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import static com.github.ambry.cloud.azure.AzureTestUtils.*;
 import static org.junit.Assert.*;
@@ -76,25 +78,25 @@ public class AzureStorageCompactorTest {
   private final Properties configProps = new Properties();
   private final List<CloudBlobMetadata> blobMetadataList = new ArrayList<>(numBlobsPerQuery);
   private AzureStorageCompactor azureStorageCompactor;
-  private BlobServiceClient mockServiceClient;
-  private BlockBlobClient mockBlockBlobClient;
-  private BlobBatchClient mockBlobBatchClient;
   private CosmosAsyncClient mockCosmosAsyncClient;
   private CosmosAsyncDatabase mockCosmosAsyncDatabase;
   private CosmosAsyncContainer mockCosmosAsyncContainer;
   private CosmosAsyncStoredProcedure cosmosAsyncStoredProcedure;
+  private BlobServiceAsyncClient mockServiceAsyncClient;
+  private BlockBlobAsyncClient mockBlockBlobAsyncClient;
+  private BlobBatchAsyncClient mockBlobBatchAsyncClient;
   private AzureMetrics azureMetrics;
   private AzureBlobDataAccessor azureBlobDataAccessor;
   private CosmosDataAccessor cosmosDataAccessor;
 
   @Before
   public void setup() throws Exception {
-    mockServiceClient = mock(BlobServiceClient.class);
-    mockBlockBlobClient = AzureBlobDataAccessorTest.setupMockBlobClient(mockServiceClient);
-    mockBlobBatchClient = mock(BlobBatchClient.class);
     mockCosmosAsyncClient = mock(CosmosAsyncClient.class);
     mockCosmosAsyncDatabase = mock(CosmosAsyncDatabase.class);
     mockCosmosAsyncContainer = mock(CosmosAsyncContainer.class);
+    mockServiceAsyncClient = mock(BlobServiceAsyncClient.class);
+    mockBlockBlobAsyncClient = AzureBlobDataAccessorTest.setupMockBlobAsyncClient(mockServiceAsyncClient);
+    mockBlobBatchAsyncClient = mock(BlobBatchAsyncClient.class);
     azureMetrics = new AzureMetrics(new MetricRegistry());
 
     int lookbackDays =
@@ -108,11 +110,12 @@ public class AzureStorageCompactorTest {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     String clusterName = "main";
-    azureBlobDataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBlobBatchClient, clusterName, azureMetrics,
-        new AzureCloudConfig(new VerifiableProperties(configProps)));
     String cosmosDatabaseName = "ambry";
     String containerForMetadata = "metadata";
     String containerForAmbryDeletedContainers = "deletedContainer";
+    azureBlobDataAccessor =
+        new AzureBlobDataAccessor(mockServiceAsyncClient, mockBlobBatchAsyncClient, clusterName, azureMetrics,
+            new AzureCloudConfig(new VerifiableProperties(configProps)), cloudConfig);
     cosmosDataAccessor =
         new CosmosDataAccessor(mockCosmosAsyncClient, mockCosmosAsyncDatabase, mockCosmosAsyncContainer,
             cosmosDatabaseName, containerForMetadata, containerForAmbryDeletedContainers, vcrMetrics, azureMetrics);
@@ -146,11 +149,12 @@ public class AzureStorageCompactorTest {
 
     // Mocks for purge
     BlobBatch mockBatch = mock(BlobBatch.class);
-    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    when(mockBlobBatchAsyncClient.getBlobBatch()).thenReturn(mockBatch);
     Response<Void> okResponse = mock(Response.class);
     when(okResponse.getStatusCode()).thenReturn(202);
     when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
-
+    when(mockBlobBatchAsyncClient.submitBatchWithResponse(any(), anyBoolean())).thenReturn(
+        Mono.just(mock(Response.class)));
     String checkpointJson = objectMapper.writeValueAsString(AzureStorageCompactor.emptyCheckpoints);
     mockCheckpointDownload(true, checkpointJson);
   }
@@ -170,8 +174,8 @@ public class AzureStorageCompactorTest {
     assertEquals(expectedPurged, azureStorageCompactor.compactPartition(partitionPath));
     verify(mockCosmosAsyncContainer, times(expectedNumQueries)).queryItems((SqlQuerySpec) any(), any(), any());
     verify(cosmosAsyncStoredProcedure, times(expectedNumQueries)).execute(any(), any());
-    verify(mockBlobBatchClient, times(expectedNumQueries)).submitBatchWithResponse(any(BlobBatch.class), anyBoolean(),
-        any(), any());
+    verify(mockBlobBatchAsyncClient, times(expectedNumQueries)).submitBatchWithResponse(any(BlobBatch.class),
+        anyBoolean());
   }
 
   /** Test compaction on checkpoint not found. */
@@ -188,8 +192,7 @@ public class AzureStorageCompactorTest {
   @Test
   public void testCompactionFailsOnCheckpointReadError() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.INTERNAL_ERROR);
-    when(mockBlockBlobClient.downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any())).thenThrow(
-        ex);
+    when(mockBlockBlobAsyncClient.downloadWithResponse(any(), any(), any(), anyBoolean())).thenReturn(Mono.error(ex));
     try {
       azureStorageCompactor.compactPartition(partitionPath);
       fail("Expected compaction to fail");
@@ -244,7 +247,7 @@ public class AzureStorageCompactorTest {
     BlobBatch mockBatch = mock(BlobBatch.class);
     Response<Void> mockResponse = mock(Response.class);
     when(mockResponse.getStatusCode()).thenThrow(ex);
-    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    when(mockBlobBatchAsyncClient.getBlobBatch()).thenReturn(mockBatch);
     when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(mockResponse);
     try {
       AzureCompactionUtil.purgeBlobs(blobMetadataList, azureBlobDataAccessor, azureMetrics, cosmosDataAccessor);
@@ -273,6 +276,8 @@ public class AzureStorageCompactorTest {
   /** Test compaction progress methods, normal cases */
   @Test
   public void testCheckpoints() throws Exception {
+    when(mockBlockBlobAsyncClient.uploadWithResponse(any(), anyLong(), any(), any(), any(), any(), any())).thenReturn(
+        Mono.just(mock(Response.class)));
     // Existing checkpoint
     Map<String, Long> realCheckpoints = new HashMap<>();
     long now = System.currentTimeMillis();
@@ -307,8 +312,8 @@ public class AzureStorageCompactorTest {
     // Upload error
     mockCheckpointDownload(false, null);
     BlobStorageException ex = mockStorageException(BlobErrorCode.CONTAINER_DISABLED);
-    when(mockBlockBlobClient.uploadWithResponse(any(), anyLong(), any(), any(), any(), any(), any(), any(),
-        any())).thenThrow(ex);
+    when(mockBlockBlobAsyncClient.uploadWithResponse(any(), anyLong(), any(), any(), any(), any(), any())).thenReturn(
+        Mono.error(ex));
     long now = System.currentTimeMillis();
     azureStorageCompactor.updateCompactionProgress(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, now);
     assertEquals(1, azureMetrics.compactionProgressWriteErrorCount.getCount());
@@ -347,22 +352,16 @@ public class AzureStorageCompactorTest {
     verify(compactorSpy).updateCompactionProgress(eq(partitionPath), eq(fieldName), eq(endTime));
   }
 
-  private void mockCheckpointDownload(boolean exists, String checkpointValue) {
-    when(mockBlockBlobClient.exists()).thenReturn(exists);
+  private void mockCheckpointDownload(boolean exists, String checkpointValue) throws IOException {
+    when(mockBlockBlobAsyncClient.exists()).thenReturn(Mono.just(exists));
     if (exists) {
-      BlobDownloadResponse mockResponse = mock(BlobDownloadResponse.class);
-      when(mockBlockBlobClient.downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any())).thenAnswer(
-          invocation -> {
-            OutputStream outputStream = invocation.getArgument(0);
-            if (outputStream != null) {
-              outputStream.write(checkpointValue.getBytes());
-            }
-            return mockResponse;
-          });
+      BlobDownloadAsyncResponse response = mock(BlobDownloadAsyncResponse.class);
+      when(response.getValue()).thenReturn(Flux.just(ByteBuffer.wrap(checkpointValue.getBytes())));
+      when(mockBlockBlobAsyncClient.downloadWithResponse(any(), any(), any(), anyBoolean())).thenReturn(
+          Mono.just(response));
     } else {
       BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
-      doThrow(ex).when(mockBlockBlobClient)
-          .downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
+      when(mockBlockBlobAsyncClient.downloadWithResponse(any(), any(), any(), anyBoolean())).thenReturn(Mono.error(ex));
     }
   }
 
