@@ -96,19 +96,15 @@ public class AmbryCUQuotaSource implements QuotaSource {
     checkSupported(quotaName, quotaResource);
 
     String resourceId = quotaResource.getResourceId();
-    if (cuQuota.containsKey(resourceId)) {
-      return new Quota<>(quotaName, cuQuota.get(resourceId).getQuotaValue(quotaName), quotaResource);
-    }
-    throw new QuotaException(String.format("Couldn't find quota for resource %s", quotaResource), true);
+    assertResourceId(resourceId);
+    return new Quota<>(quotaName, cuQuota.get(resourceId).getQuotaValue(quotaName), quotaResource);
   }
 
   @Override
   public float getUsage(QuotaResource quotaResource, QuotaName quotaName) throws QuotaException {
     checkSupported(quotaName, quotaResource);
     String resourceId = quotaResource.getResourceId();
-    if (!cuQuota.containsKey(resourceId)) {
-      throw new QuotaException(String.format("Couldn't find quota for resource %s", quotaResource), true);
-    }
+    assertResourceId(resourceId);
     double usage = 0;
     if (cuUsage.containsKey(resourceId)) {
       usage = cuUsage.get(resourceId).getQuotaValue(quotaName);
@@ -120,9 +116,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   public void chargeUsage(QuotaResource quotaResource, QuotaName quotaName, double usageCost) throws QuotaException {
     checkSupported(quotaName, quotaResource);
     String resourceId = quotaResource.getResourceId();
-    if (!cuQuota.containsKey(resourceId)) {
-      throw new QuotaException(String.format("Couldn't find quota for resource %s", quotaResource), true);
-    }
+    assertResourceId(resourceId);
     if (quotaName == QuotaName.READ_CAPACITY_UNIT) {
       cuUsage.get(resourceId).incrementRcu((long) Math.ceil(usageCost));
     } else {
@@ -200,6 +194,17 @@ public class AmbryCUQuotaSource implements QuotaSource {
     }
     if (!SUPPORTED_QUOTA_RESOURCE_TYPES.contains(quotaResource.getQuotaResourceType())) {
       throw new QuotaException("Unsupported quota resource type: " + quotaResource.getQuotaResourceType(), false);
+    }
+  }
+
+  /**
+   * Assert that the quota for the specified resourceId is present in this quota source.
+   * @param resourceId resource id to check.
+   * @throws QuotaException in case quota for the resource is not present in this quota source.
+   */
+  private void assertResourceId(String resourceId) throws QuotaException {
+    if (!cuQuota.containsKey(resourceId)) {
+      throw new QuotaException(String.format("Couldn't find quota for resource: %s", resourceId), true);
     }
   }
 }
