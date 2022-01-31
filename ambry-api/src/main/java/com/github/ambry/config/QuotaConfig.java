@@ -37,6 +37,7 @@ public class QuotaConfig {
   public static final String FRONTEND_CU_CAPACITY_IN_JSON = QUOTA_CONFIG_PREFIX + "frontend.cu.capacity.in.json";
   public static final String BANDWIDTH_THROTTLING_FEATURE_ENABLED =
       QUOTA_CONFIG_PREFIX + "bandwidth.throttling.feature.enabled";
+  public static final String CU_QUOTA_AGGREGATION_WINDOW_IN_SECS = QUOTA_CONFIG_PREFIX + "cu.quota.aggregation.windows.in.secs";
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
@@ -44,6 +45,7 @@ public class QuotaConfig {
   public static final String DEFAULT_CU_QUOTA_IN_JSON = "{}";
   public static final String DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON = "{}";
   public static final boolean DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED = false;
+  public static final long DEFAULT_CU_QUOTA_AGGREGATION_WINDOW_IN_SECS = 10;
   public StorageQuotaConfig storageQuotaConfig;
 
   /**
@@ -151,6 +153,12 @@ public class QuotaConfig {
   public boolean bandwidthThrottlingFeatureEnabled;
 
   /**
+   * Aggregation window for CU quotas.
+   */
+  @Config(CU_QUOTA_AGGREGATION_WINDOW_IN_SECS)
+  public long cuQuotaAggregationWindowInSecs;
+
+  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
@@ -170,6 +178,8 @@ public class QuotaConfig {
         verifiableProperties.getString(FRONTEND_CU_CAPACITY_IN_JSON, DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON);
     bandwidthThrottlingFeatureEnabled = verifiableProperties.getBoolean(BANDWIDTH_THROTTLING_FEATURE_ENABLED,
         DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED);
+    cuQuotaAggregationWindowInSecs = verifiableProperties.getLongInRange(CU_QUOTA_AGGREGATION_WINDOW_IN_SECS,
+        DEFAULT_CU_QUOTA_AGGREGATION_WINDOW_IN_SECS, 1, Long.MAX_VALUE);
   }
 
   /**
