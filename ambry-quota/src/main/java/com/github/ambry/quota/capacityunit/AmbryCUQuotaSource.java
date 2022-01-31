@@ -58,7 +58,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   private final ScheduledExecutorService usageRefresher;
   private final long aggregationWindowsInSecs;
   private final AtomicBoolean isReady;
-  protected AtomicReference<CapacityUnit> feUsage; // Ambry frontend's CU usage.
+  protected final AtomicReference<CapacityUnit> feUsage; // Ambry frontend's CU usage.
 
   /**
    * Constructor for {@link AmbryCUQuotaSource}.
@@ -74,6 +74,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
     usageRefresher = Utils.newScheduler(1, REFRESHER_THREAD_NAME_PREFIX, true);
     aggregationWindowsInSecs = quotaConfig.cuQuotaAggregationWindowInSecs;
     isReady = new AtomicBoolean(false);
+    feUsage = new AtomicReference<>(null);
   }
 
   @Override
