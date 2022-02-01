@@ -13,10 +13,13 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.github.ambry.account.Account;
 import com.github.ambry.quota.Quota;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.quota.QuotaUtils;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -34,8 +37,8 @@ public class UnlimitedQuotaSource implements QuotaSource {
   }
 
   @Override
-  public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
-    quotaResourceList.addAll(quotaResources);
+  public void updateNewQuotaResources(Collection<Account> accounts) {
+    quotaResourceList.addAll(QuotaUtils.getQuotaResourcesFromAccounts(accounts));
   }
 
   /**
@@ -43,5 +46,40 @@ public class UnlimitedQuotaSource implements QuotaSource {
    */
   public Set<QuotaResource> getQuotaResourceList() {
     return quotaResourceList;
+  }
+
+  @Override
+  public void init() throws QuotaException {
+
+  }
+
+  @Override
+  public boolean isReady() {
+    return false;
+  }
+
+  @Override
+  public float getUsage(QuotaResource quotaResource, QuotaName quotaName) throws QuotaException {
+    return 0;
+  }
+
+  @Override
+  public void chargeUsage(QuotaResource quotaResource, QuotaName quotaName, double usageCost) throws QuotaException {
+
+  }
+
+  @Override
+  public float getSystemResourceUsage(QuotaName quotaName) throws QuotaException {
+    return 0;
+  }
+
+  @Override
+  public void chargeSystemResourceUsage(QuotaName quotaName, double usageCost) throws QuotaException {
+
+  }
+
+  @Override
+  public void shutdown() {
+
   }
 }

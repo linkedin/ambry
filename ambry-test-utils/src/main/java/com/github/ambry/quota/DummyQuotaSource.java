@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.account.Account;
 import java.util.Collection;
 
 
@@ -27,6 +28,41 @@ public class DummyQuotaSource implements QuotaSource {
   }
 
   @Override
-  public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
+  public void updateNewQuotaResources(Collection<Account> accounts) {
+  }
+
+  @Override
+  public void init() throws QuotaException {
+
+  }
+
+  @Override
+  public boolean isReady() {
+    return false;
+  }
+
+  @Override
+  public float getUsage(QuotaResource quotaResource, QuotaName quotaName) throws QuotaException {
+    return 0;
+  }
+
+  @Override
+  public void chargeUsage(QuotaResource quotaResource, QuotaName quotaName, double usageCost) throws QuotaException {
+
+  }
+
+  @Override
+  public float getSystemResourceUsage(QuotaName quotaName) throws QuotaException {
+    return 0;
+  }
+
+  @Override
+  public void chargeSystemResourceUsage(QuotaName quotaName, double usageCost) throws QuotaException {
+
+  }
+
+  @Override
+  public void shutdown() {
+
   }
 }

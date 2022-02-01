@@ -169,19 +169,10 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param updatedAccounts {@link Collection} of {@link Account}s updated.
    */
   protected void onAccountUpdateNotification(Collection<Account> updatedAccounts) {
-    Set<QuotaResource> updatedQuotaResources = new HashSet<>();
-    updatedAccounts.forEach(account -> {
-      if (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
-        updatedQuotaResources.add(QuotaResource.fromAccount(account));
-      } else {
-        account.getAllContainers()
-            .forEach(container -> updatedQuotaResources.add(QuotaResource.fromContainer(container)));
-      }
-    });
     requestQuotaEnforcers.stream()
         .map(QuotaEnforcer::getQuotaSource)
         .filter(Objects::nonNull)
-        .forEach(quotaSource -> quotaSource.updateNewQuotaResources(updatedQuotaResources));
+        .forEach(quotaSource -> quotaSource.updateNewQuotaResources(updatedAccounts));
   }
 
   /**

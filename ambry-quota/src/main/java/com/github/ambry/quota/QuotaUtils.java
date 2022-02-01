@@ -22,6 +22,9 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -139,5 +142,34 @@ public class QuotaUtils {
    */
   public static double calculateStorageCost(RestRequest restRequest, long size) {
     return RestUtils.isUploadRequest(restRequest) ? size / (double) QuotaUtils.BYTES_IN_GB : 0;
+  }
+
+  /**
+   * Calculate percentage usage based on specified limit and usage values. A limit of less than or equal to 0 is assumed
+   * to denote 100% usage.
+   *
+   * @param limit max allowed usage.
+   * @param usage actual usage value.
+   * @return percentage of usage.
+   */
+  public static float getUsagePercentage(double limit, double usage) {
+    return (float) ((limit <= 0) ? 100 : ((usage * 100) / limit));
+  }
+
+  /**
+   * Convert a {@link Collection} of {@link Account}s to {@link Collection} of {@link QuotaResource} objects.
+   * @param accounts {@link Collection} of account objects to be converted.
+   * @return Collection of {@link QuotaResource} objects.
+   */
+  public static Collection<QuotaResource> getQuotaResourcesFromAccounts(Collection<Account> accounts) {
+    Set<QuotaResource> quotaResources = new HashSet<>();
+    accounts.forEach(account -> {
+      if (account.getQuotaResourceType() == QuotaResourceType.ACCOUNT) {
+        quotaResources.add(QuotaResource.fromAccount(account));
+      } else {
+        account.getAllContainers().forEach(container -> quotaResources.add(QuotaResource.fromContainer(container)));
+      }
+    });
+    return quotaResources;
   }
 }

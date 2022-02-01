@@ -22,6 +22,7 @@ import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaEnforcer;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
@@ -303,12 +304,15 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
    * @return The storage quota value (in bytes)
    */
   protected long getQuotaValueForResource(QuotaResource resource) {
+    long quotaValue = -1;
+    try {
     Quota quota = quotaSource.getQuota(resource, QuotaName.STORAGE_IN_GB);
-    if (quota != null) {
-      return (long) quota.getQuotaValue() * BYTES_IN_GB;
-    } else {
-      return -1;
+    quotaValue = (long) quota.getQuotaValue() * BYTES_IN_GB;
+    } catch (QuotaException quotaException) {
+      logger.warn("Quota not found for resource id: {}, type: {}", resource.getResourceId(),
+          resource.getQuotaResourceType());
     }
+    return quotaValue;
   }
 
   /**

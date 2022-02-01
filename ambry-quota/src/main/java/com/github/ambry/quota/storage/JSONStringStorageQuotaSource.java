@@ -96,6 +96,15 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
   }
 
   @Override
+  public void init() {
+  }
+
+  @Override
+  public boolean isReady() {
+    return true;
+  }
+
+  @Override
   public Quota getQuota(QuotaResource quotaResource, QuotaName quotaName) {
     if (quotaName != QuotaName.STORAGE_IN_GB) {
       return null;
@@ -114,13 +123,38 @@ public class JSONStringStorageQuotaSource implements QuotaSource, StorageQuotaEn
   }
 
   @Override
-  public void updateNewQuotaResources(Collection<QuotaResource> quotaResources) {
+  public void updateNewQuotaResources(Collection<Account> accounts) {
     // no-op
   }
 
   @Override
   public AccountService getAccountService() {
     return accountService;
+  }
+
+  @Override
+  public float getUsage(QuotaResource quotaResource, QuotaName quotaName) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void chargeUsage(QuotaResource quotaResource, QuotaName quotaName, double usageCost) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public float getSystemResourceUsage(QuotaName quotaName) {
+    return -1;
+  }
+
+  @Override
+  public void chargeSystemResourceUsage(QuotaName quotaName, double usageCost) {
+    // no op for storage quota.
+  }
+
+  @Override
+  public void shutdown() {
+    // no op
   }
 
   /**

@@ -37,6 +37,16 @@ public class CapacityUnit {
     wcu = new AtomicLong(0);
   }
 
+  /**
+   * Constructor for {@link CapacityUnit} that sets the specified values for rcu and wcu.
+   * @param rcu value for {@link CapacityUnit#rcu}.
+   * @param wcu value for {@link CapacityUnit#wcu}.
+   */
+  public CapacityUnit(long rcu, long wcu) {
+    this.rcu = new AtomicLong(rcu);
+    this.wcu = new AtomicLong(wcu);
+  }
+
   @JsonIgnore
   public CapacityUnit(JsonNode jsonNode) {
     this.rcu = new AtomicLong(jsonNode.get(RCU_FIELD_NAME).asLong());
@@ -86,5 +96,21 @@ public class CapacityUnit {
    */
   public void setWcu(long wcu) {
     this.wcu.set(wcu);
+  }
+
+  /**
+   * Atomically adds the specified delta to {@link CapacityUnit#rcu}.
+   * @param delta the value to add.
+   */
+  public void incrementRcu(long delta) {
+    this.rcu.addAndGet(delta);
+  }
+
+  /**
+   * Atomically adds the specified delta to {@link CapacityUnit#wcu}.
+   * @param delta the value to add.
+   */
+  public void incrementWcu(long delta) {
+    this.wcu.addAndGet(delta);
   }
 }
