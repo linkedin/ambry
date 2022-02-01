@@ -33,6 +33,8 @@ public class QuotaConfig {
       QUOTA_CONFIG_PREFIX + "request.enforcer.source.pair.info.json";
   public static final String QUOTA_MANAGER_FACTORY = QUOTA_CONFIG_PREFIX + "manager.factory";
   public static final String QUOTA_ACCOUNTING_UNIT = QUOTA_CONFIG_PREFIX + "accounting.unit";
+  public static final String MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED =
+      QUOTA_CONFIG_PREFIX + "max.frontend.cu.usage.to.allow.exceed";
   public static final String RESOURCE_CU_QUOTA_IN_JSON = QUOTA_CONFIG_PREFIX + "resource.cu.quota.in.json";
   public static final String FRONTEND_CU_CAPACITY_IN_JSON = QUOTA_CONFIG_PREFIX + "frontend.cu.capacity.in.json";
   public static final String BANDWIDTH_THROTTLING_FEATURE_ENABLED =
@@ -46,6 +48,7 @@ public class QuotaConfig {
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
   public static final long DEFAULT_QUOTA_ACCOUNTING_UNIT = 1024; //1kb
+  public static final float DEFAULT_MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED = 80.0f;
   public static final String DEFAULT_CU_QUOTA_IN_JSON = "{}";
   public static final String DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON = "{}";
   public static final boolean DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED = false;
@@ -165,10 +168,15 @@ public class QuotaConfig {
 
   /**
    * Quota usage threshold in percentage at which Ambry will generate usage warning in response headers.
-   * @param verifiableProperties
    */
   @Config(QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE)
   public int quotaUsageWarningThresholdInPercentage;
+
+  /*
+   * Threshold of CU usage percentage of frontend to allow requests to exceed quota.
+   */
+  @Config(MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED)
+  public float maxFrontendCuUsageToAllowExceed;
 
   /**
    * Constructor for {@link QuotaConfig}.
@@ -195,6 +203,8 @@ public class QuotaConfig {
     quotaUsageWarningThresholdInPercentage =
         verifiableProperties.getIntInRange(QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE,
             DEFAULT_QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE, 0, 100);
+    maxFrontendCuUsageToAllowExceed = verifiableProperties.getFloatInRange(MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED,
+        DEFAULT_MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED, 0.0f, 100.0f);
   }
 
   /**

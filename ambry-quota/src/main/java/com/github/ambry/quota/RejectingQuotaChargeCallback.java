@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * A {@link QuotaChargeCallback} implementation that will reject requests that exceed their quota.
  */
 public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
-  private static Logger LOGGER = LoggerFactory.getLogger(QuotaChargeCallback.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(QuotaChargeCallback.class);
   private final QuotaManager quotaManager;
   private final RestRequest restRequest;
   private final RequestQuotaCostPolicy requestCostPolicy;
@@ -88,7 +88,7 @@ public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
 
   @Override
   public QuotaResource getQuotaResource() throws QuotaException {
-    return QuotaUtils.getQuotaResource(restRequest);
+    return QuotaResource.fromRestRequest(restRequest);
   }
 
   @Override

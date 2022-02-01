@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +13,9 @@
  */
 package com.github.ambry.quota;
 
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 
@@ -23,7 +24,6 @@ import java.util.Map;
  */
 public class RejectRequestQuotaEnforcer implements QuotaEnforcer {
   private static final float DUMMY_REJECTABLE_USAGE_PERCENTAGE = 101;
-  private static final int REJECT_HTTP_STATUS = 429;
   private static final boolean SHOULD_THROTTLE = true;
   private final QuotaSource quotaSource;
 
@@ -40,16 +40,22 @@ public class RejectRequestQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap) {
-    return new QuotaRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE, QuotaName.READ_CAPACITY_UNIT,
-        1);
+  public void charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) {
   }
 
   @Override
   public QuotaRecommendation recommend(RestRequest restRequest) {
-    return new QuotaRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE, QuotaName.READ_CAPACITY_UNIT,
-        1);
+    return new QuotaRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE, QuotaName.READ_CAPACITY_UNIT, 1);
+  }
+
+  @Override
+  public boolean isQuotaExceedAllowed(RestRequest restRequest) {
+    return false;
+  }
+
+  @Override
+  public List<QuotaName> supportedQuotaNames() {
+    return new ArrayList<>();
   }
 
   @Override

@@ -22,6 +22,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -30,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -57,9 +57,9 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
    * @throws ReflectiveOperationException in case of any exception.
    */
-  public AmbryQuotaManager(QuotaConfig quotaConfig,
-      QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
-      AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
+  public AmbryQuotaManager(QuotaConfig quotaConfig, QuotaRecommendationMergePolicy quotaRecommendationMergePolicy,
+      AccountService accountService, AccountStatsStore accountStatsStore, MetricRegistry metricRegistry)
+      throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
@@ -104,11 +104,16 @@ public class AmbryQuotaManager implements QuotaManager {
     ThrottlingRecommendation throttlingRecommendation;
     Timer.Context timer = quotaMetrics.quotaEnforcementTime.time();
     try {
-      List<QuotaRecommendation> quotaRecommendations = requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.recommend(restRequest))
-          .filter(Objects::nonNull)
-          .collect(Collectors.toList());
-      if (quotaRecommendations.size() == 0) {
+      List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
+      for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+        try {
+          quotaRecommendations.add(quotaEnforcer.recommend(restRequest));
+        } catch (QuotaException quotaException) {
+          logger.warn("Could not get recommendation for quota {} due to exception: {}",
+              quotaEnforcer.supportedQuotaNames(), quotaException.getMessage());
+        }
+      }
+      if (quotaRecommendations.isEmpty()) {
         quotaMetrics.quotaNotEnforcedCount.inc();
       }
       throttlingRecommendation = quotaRecommendationMergePolicy.mergeEnforcementRecommendations(quotaRecommendations);
@@ -128,15 +133,22 @@ public class AmbryQuotaManager implements QuotaManager {
       return null;
     }
     ThrottlingRecommendation throttlingRecommendation;
+    List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
     Timer.Context timer = quotaMetrics.quotaChargeTime.time();
     try {
-      throttlingRecommendation = quotaRecommendationMergePolicy.mergeEnforcementRecommendations(requestQuotaEnforcers.stream()
-          .map(quotaEnforcer -> quotaEnforcer.chargeAndRecommend(restRequest, blobInfo, requestCostMap))
-          .filter(Objects::nonNull)
-          .collect(Collectors.toList()));
+      for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
+        try {
+          quotaEnforcer.charge(restRequest, requestCostMap);
+          quotaRecommendations.add(quotaEnforcer.recommend(restRequest));
+        } catch (QuotaException quotaException) {
+          logger.warn("Could not charge quota {} due to exception: {}", quotaEnforcer.supportedQuotaNames(),
+              quotaException.getMessage());
+        }
+      }
     } finally {
       timer.stop();
     }
+    throttlingRecommendation = quotaRecommendationMergePolicy.mergeEnforcementRecommendations(quotaRecommendations);
     return throttlingRecommendation;
   }
 
@@ -153,13 +165,13 @@ public class AmbryQuotaManager implements QuotaManager {
   }
 
   @Override
-  public void setQuotaMode(QuotaMode mode) {
-    this.quotaMode = mode;
+  public QuotaMode getQuotaMode() {
+    return quotaMode;
   }
 
   @Override
-  public QuotaMode getQuotaMode() {
-    return quotaMode;
+  public void setQuotaMode(QuotaMode mode) {
+    this.quotaMode = mode;
   }
 
   /**
@@ -201,7 +213,7 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    * @return Map of {@link QuotaSourceFactory} class names to {@link QuotaSource} objects.
-   * @throws ReflectiveOperationException
+   * @throws ReflectiveOperationException if the source objects could not be created.
    */
   private Map<String, QuotaSource> buildQuotaSources(Collection<String> quotaSourceFactoryClasses,
       QuotaConfig quotaConfig, AccountService accountService) throws ReflectiveOperationException {
