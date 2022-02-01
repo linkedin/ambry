@@ -215,27 +215,4 @@ public class AmbryQuotaManager implements QuotaManager {
     }
     return quotaSourceObjectMap;
   }
-
-  /**
-   * Metrics class to capture metrics for user quota enforcement.
-   */
-  private static class QuotaMetrics {
-    public final Counter quotaExceededCount;
-    public final Timer quotaEnforcementTime;
-    public final Counter quotaNotEnforcedCount;
-    public final Timer quotaManagerInitTime;
-    public final Timer quotaChargeTime;
-
-    /**
-     * {@link QuotaMetrics} constructor.
-     * @param metricRegistry {@link MetricRegistry} object.
-     */
-    public QuotaMetrics(MetricRegistry metricRegistry) {
-      quotaExceededCount = metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaExceededCount"));
-      quotaEnforcementTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaEnforcementTime"));
-      quotaNotEnforcedCount = metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaNotEnforcedCount"));
-      quotaManagerInitTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaManagerInitTime"));
-      quotaChargeTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaChargeTime"));
-    }
-  }
 }
