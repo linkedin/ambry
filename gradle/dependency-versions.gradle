@@ -9,9 +9,9 @@
 // CONDITIONS OF ANY KIND, either express or implied.
 ext {
     junitVersion = "4.8.1"
-    slf4jVersion = "1.7.5"
+    slf4jVersion = "1.7.35"
     joptSimpleVersion = "4.9"
-    log4jVersion = "1.2.17"
+    log4jVersion = "2.17.1"
     jsonVersion = "20170516"
     metricsVersion = "4.1.2"
     commonsVersion = "1.9"

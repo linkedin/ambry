@@ -94,8 +94,9 @@ subprojects {
 
     dependencies {
         compile "org.slf4j:slf4j-api:$slf4jVersion"
-        testCompile "log4j:log4j:$log4jVersion"
-        testCompile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        testCompile "org.apache.logging.log4j:log4j-core:$log4jVersion"
+        testCompile "org.apache.logging.log4j:log4j-api:$log4jVersion"
+        testCompile "org.apache.logging.log4j:log4j-slf-impl:$log4jVersion"
         testCompile "junit:junit:$junitVersion"
         testCompile "org.mockito:mockito-core:2.+"
         testRuntime project(':log4j-test-config')
@@ -265,8 +266,9 @@ project(':ambry-server') {
                 project(':ambry-mysql')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
-        runtimeOnly "log4j:log4j:$log4jVersion"
-        runtimeOnly "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        runtimeOnly "org.apache.logging.log4j:log4j-core:$log4jVersion"
+        runtimeOnly "org.apache.logging.log4j:log4j-api:$log4jVersion"
+        runtimeOnly "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
         testCompile project(':ambry-router')
         testCompile project(':ambry-cloud')
         testCompile project(':ambry-test-utils')
@@ -376,8 +378,9 @@ project(':ambry-rest') {
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
         compile "io.netty:netty-transport-native-epoll:$nettyVersion"
         compile "javax.servlet:javax.servlet-api:$javaxVersion"
-        runtimeOnly "log4j:log4j:$log4jVersion"
-        runtimeOnly "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        runtimeOnly "org.apache.logging.log4j:log4j-core:$log4jVersion"
+        runtimeOnly "org.apache.logging.log4j:log4j-api:$log4jVersion"
+        runtimeOnly "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')
         testCompile project(path: ':ambry-account', configuration: 'testArchives')
