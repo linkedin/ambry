@@ -53,12 +53,12 @@ public class AmbryCUQuotaSource implements QuotaSource {
   private static final long DEFAULT_RCU_FOR_NEW_RESOURCE = 0;
   private static final long DEFAULT_WCU_FOR_NEW_RESOURCE = 0;
   protected final CapacityUnit feQuota; // Ambry frontend's CU capacity.
+  protected final AtomicReference<CapacityUnit> feUsage; // Ambry frontend's CU usage.
   private final ConcurrentMap<String, CapacityUnit> cuQuota; // in memory quota for all resources.
   private final ConcurrentMap<String, CapacityUnit> cuUsage; // in memory quota usage for all resources.
   private final ScheduledExecutorService usageRefresher;
   private final long aggregationWindowsInSecs;
   private final AtomicBoolean isReady;
-  protected final AtomicReference<CapacityUnit> feUsage; // Ambry frontend's CU usage.
 
   /**
    * Constructor for {@link AmbryCUQuotaSource}.
@@ -100,7 +100,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
     checkSupported(quotaName, quotaResource);
 
     final String resourceId = quotaResource.getResourceId();
-    assertResourceId(resourceId);
+    assertResourceId(resourceId, false);
     return new Quota<>(quotaName, cuQuota.get(resourceId).getQuotaValue(quotaName), quotaResource);
   }
 
@@ -108,11 +108,9 @@ public class AmbryCUQuotaSource implements QuotaSource {
   public float getUsage(QuotaResource quotaResource, QuotaName quotaName) throws QuotaException {
     checkSupported(quotaName, quotaResource);
     final String resourceId = quotaResource.getResourceId();
-    assertResourceId(resourceId);
-    double usage = 0;
-    if (cuUsage.containsKey(resourceId)) {
-      usage = cuUsage.get(resourceId).getQuotaValue(quotaName);
-    }
+    assertResourceId(resourceId, true);
+    CapacityUnit cu = cuUsage.get(resourceId);
+    double usage = (cu != null) ? cu.getQuotaValue(quotaName) : 0;
     return QuotaUtils.getUsagePercentage(cuQuota.get(resourceId).getQuotaValue(quotaName), usage);
   }
 
@@ -120,7 +118,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   public void chargeUsage(QuotaResource quotaResource, QuotaName quotaName, double usageCost) throws QuotaException {
     checkSupported(quotaName, quotaResource);
     final String resourceId = quotaResource.getResourceId();
-    assertResourceId(resourceId);
+    assertResourceId(resourceId, true);
     if (quotaName == QuotaName.READ_CAPACITY_UNIT) {
       cuUsage.get(resourceId).incrementRcu((long) Math.ceil(usageCost));
     } else {
@@ -203,13 +201,18 @@ public class AmbryCUQuotaSource implements QuotaSource {
   }
 
   /**
-   * Assert that the quota for the specified resourceId is present in this quota source.
+   * Asserts that the quota for the specified resourceId is present in this quota source. If assertForUsage is set to
+   * true this method also asserts for the presence of usage information of the specified resourceId.
    * @param resourceId resource id to check.
+   * @param assertForUsage if {@code true} then also assert for presence of usage information.
    * @throws QuotaException in case quota for the resource is not present in this quota source.
    */
-  private void assertResourceId(String resourceId) throws QuotaException {
+  private void assertResourceId(String resourceId, boolean assertForUsage) throws QuotaException {
     if (!cuQuota.containsKey(resourceId)) {
       throw new QuotaException(String.format("Couldn't find quota for resource: %s", resourceId), true);
+    }
+    if (assertForUsage && !cuUsage.containsKey(resourceId)) {
+      throw new QuotaException(String.format("Couldn't find usage information for resource: %s", resourceId), true);
     }
   }
 }
