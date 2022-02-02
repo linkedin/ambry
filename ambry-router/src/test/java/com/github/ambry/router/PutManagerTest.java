@@ -40,6 +40,7 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -892,7 +893,7 @@ public class PutManagerTest {
    */
   @Test
   public void testReplPolicyToPartitionClassMapping() throws Exception {
-    Account refAccount = accountService.createAndAddRandomAccount();
+    Account refAccount = accountService.createAndAddRandomAccount(QuotaResourceType.SERVICE);
     Map<Container, String> containerToPartClass = new HashMap<>();
     Iterator<Container> allContainers = refAccount.getAllContainers().iterator();
     Container container = allContainers.next();
