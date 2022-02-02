@@ -39,7 +39,7 @@ public class StorageQuotaEnforcerFactory implements QuotaEnforcerFactory {
   }
 
   @Override
-  public QuotaEnforcer getRequestQuotaEnforcer() {
+  public QuotaEnforcer getQuotaEnforcer() {
     return quotaEnforcer;
   }
 }
