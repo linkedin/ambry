@@ -96,7 +96,7 @@ subprojects {
         compile "org.slf4j:slf4j-api:$slf4jVersion"
         testCompile "org.apache.logging.log4j:log4j-core:$log4jVersion"
         testCompile "org.apache.logging.log4j:log4j-api:$log4jVersion"
-        testCompile "org.apache.logging.log4j:log4j-slf-impl:$log4jVersion"
+        testCompile "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
         testCompile "junit:junit:$junitVersion"
         testCompile "org.mockito:mockito-core:2.+"
         testRuntime project(':log4j-test-config')
