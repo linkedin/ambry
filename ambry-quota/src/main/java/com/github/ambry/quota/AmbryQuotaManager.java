@@ -13,7 +13,6 @@
  */
 package com.github.ambry.quota;
 
-import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Account;
@@ -69,7 +68,7 @@ public class AmbryQuotaManager implements QuotaManager {
     for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
       requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)),
-          accountStatsStore)).getRequestQuotaEnforcer());
+          accountStatsStore)).getQuotaEnforcer());
     }
     this.quotaRecommendationMergePolicy = quotaRecommendationMergePolicy;
     this.quotaConfig = quotaConfig;

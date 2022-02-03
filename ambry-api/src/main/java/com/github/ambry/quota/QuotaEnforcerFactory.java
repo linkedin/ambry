@@ -22,5 +22,5 @@ public interface QuotaEnforcerFactory {
    * Build and return {@link QuotaEnforcer} class.
    * @return QuotaEnforcer object.
    */
-  QuotaEnforcer getRequestQuotaEnforcer();
+  QuotaEnforcer getQuotaEnforcer();
 }

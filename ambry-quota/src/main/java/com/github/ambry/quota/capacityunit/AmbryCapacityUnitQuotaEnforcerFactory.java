@@ -38,7 +38,7 @@ public class AmbryCapacityUnitQuotaEnforcerFactory implements QuotaEnforcerFacto
   }
 
   @Override
-  public QuotaEnforcer getRequestQuotaEnforcer() {
+  public QuotaEnforcer getQuotaEnforcer() {
     return quotaEnforcer;
   }
 }
