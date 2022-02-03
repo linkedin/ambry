@@ -194,9 +194,7 @@ project(':ambry-account') {
                 project(':ambry-utils'),
                 project(':ambry-commons'),
                 project(':ambry-mysql')
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            exclude group: "log4j", module: "log4j"
-        }
+        compile "org.apache.helix:helix-core:$helixVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-test-utils')
@@ -210,14 +208,13 @@ project(':ambry-clustermap') {
         compile project(':ambry-api'),
                 project(':ambry-commons'),
                 project(':ambry-utils')
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            exclude group: "log4j", module: "log4j"
-        }
+        compile "org.apache.helix:helix-core:$helixVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-commons')
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')
+
     }
 }
 
@@ -229,9 +226,7 @@ project(':ambry-commons') {
         compile "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            exclude group: "log4j", module: "log4j"
-        }
+        compile "org.apache.helix:helix-core:$helixVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }
@@ -440,9 +435,7 @@ project(':ambry-cloud') {
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "com.microsoft.azure:azure-cosmosdb:$azureCosmosDbVersion"
         compile "com.microsoft.azure:msal4j:$azureMsal4jVersion"
-        compile ("org.apache.helix:helix-lock:$helixVersion") {
-            exclude group: "log4j", module: "log4j"
-        }
+        compile "org.apache.helix:helix-lock:$helixVersion"
         testCompile project(':ambry-router')
         testCompile project(':ambry-store')
         testCompile project(':ambry-test-utils')
@@ -469,9 +462,7 @@ project(':ambry-quota') {
             project(':ambry-commons'),
             project(':ambry-mysql'),
             project(':ambry-clustermap')
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            exclude group: "log4j", module: "log4j"
-        }
+        compile "org.apache.helix:helix-core:$helixVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(':ambry-account')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
@@ -484,9 +475,7 @@ project(':ambry-mysql') {
         compile project(':ambry-utils')
         compile project(':ambry-commons')
         compile "mysql:mysql-connector-java:$mysqlConnectorVersion"
-        compile ("org.apache.helix:helix-core:$helixVersion") {
-            exclude group: "log4j", module: "log4j"
-        }
+        compile "org.apache.helix:helix-core:$helixVersion"
         compile "com.zaxxer:HikariCP:$hikariVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
