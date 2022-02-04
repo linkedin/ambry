@@ -36,8 +36,8 @@ public class SimpleQuotaRecommendationMergePolicyTest {
   /** Test for {@link SimpleQuotaRecommendationMergePolicy#mergeEnforcementRecommendations}*/
   @Test
   public void testRecommend() {
-    SimpleQuotaRecommendationMergePolicy simpleThrottlePolicy =
-        new SimpleQuotaRecommendationMergePolicy(new QuotaConfig(new VerifiableProperties(new Properties())));
+    QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+    SimpleQuotaRecommendationMergePolicy simpleThrottlePolicy = new SimpleQuotaRecommendationMergePolicy(quotaConfig);
 
     // test for empty quota recommendation list
     ThrottlingRecommendation throttlingRecommendation =
@@ -98,7 +98,8 @@ public class SimpleQuotaRecommendationMergePolicyTest {
     quotaRecommendationList.add(new QuotaRecommendation(false, 81, QuotaName.READ_CAPACITY_UNIT, 5));
     throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
     verifyThrottlingRecommendation(QuotaUsageLevel.WARNING, false,
-        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, (float) 81.0), HttpResponseStatus.OK, 5,
+        Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT,
+            (float) quotaConfig.quotaUsageWarningThresholdInPercentage + 1), HttpResponseStatus.OK, 5,
         throttlingRecommendation);
     quotaRecommendationList.add(new QuotaRecommendation(false, 96, QuotaName.READ_CAPACITY_UNIT, 5));
     throttlingRecommendation = simpleThrottlePolicy.mergeEnforcementRecommendations(quotaRecommendationList);
@@ -218,7 +219,7 @@ public class SimpleQuotaRecommendationMergePolicyTest {
     for (Map.Entry<QuotaName, Float> usageEntry : throttlingRecommendation.getQuotaUsagePercentage().entrySet()) {
       assertEquals(usageEntry.getValue(), quotaUsageMap.get(usageEntry.getKey()));
     }
-    assertTrue(quotaUsageMap.equals(throttlingRecommendation.getQuotaUsagePercentage()));
+    assertEquals(quotaUsageMap, throttlingRecommendation.getQuotaUsagePercentage());
     assertEquals(httpStatus, throttlingRecommendation.getRecommendedHttpStatus());
     assertEquals(retryAfterMs, throttlingRecommendation.getRetryAfterMs());
   }

@@ -36,11 +36,9 @@ public class SimpleQuotaRecommendationMergePolicy implements QuotaRecommendation
   static final QuotaUsageLevel DEFAULT_QUOTA_USAGE_LEVEL = QuotaUsageLevel.HEALTHY;
 
   // Percentage usage at or below this limit is healthy.
-  static final int HEALTHY_USAGE_LEVEL_LIMIT = 80;
-  // Percentage usage level at or below this limit and above healthy limit will generate warning.
-  static final int WARNING_USAGE_LEVEL_LIMIT = 95;
-  // Percentage usage level at or below this limit and above warning limit will generate critical warning. Anything above will be fatal.
-  static final int CRITICAL_USAGE_LEVEL_LIMIT = 100;
+  private final int healthyUsageLevelLimit;
+  // Percentage usage level above which critical warning will be generated.
+  static final int CRITICAL_USAGE_LEVEL_LIMIT = 95;
 
   private final QuotaConfig quotaConfig;
 
@@ -50,6 +48,7 @@ public class SimpleQuotaRecommendationMergePolicy implements QuotaRecommendation
    */
   public SimpleQuotaRecommendationMergePolicy(QuotaConfig quotaConfig) {
     this.quotaConfig = quotaConfig;
+    this.healthyUsageLevelLimit = quotaConfig.quotaUsageWarningThresholdInPercentage;
   }
 
   @Override
@@ -83,13 +82,13 @@ public class SimpleQuotaRecommendationMergePolicy implements QuotaRecommendation
    * @return QuotaWarningLevel object.
    */
   private QuotaUsageLevel computeWarningLevel(float usagePercentage) {
-    if (usagePercentage >= CRITICAL_USAGE_LEVEL_LIMIT) {
+    if (usagePercentage >= 100) {
       return QuotaUsageLevel.EXCEEDED;
     }
-    if (usagePercentage >= WARNING_USAGE_LEVEL_LIMIT) {
+    if (usagePercentage >= CRITICAL_USAGE_LEVEL_LIMIT) {
       return QuotaUsageLevel.CRITICAL;
     }
-    if (usagePercentage >= HEALTHY_USAGE_LEVEL_LIMIT) {
+    if (usagePercentage >= healthyUsageLevelLimit) {
       return QuotaUsageLevel.WARNING;
     }
     return QuotaUsageLevel.HEALTHY;
