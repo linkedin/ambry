@@ -13,10 +13,10 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.commons.Callback;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.server.AmbryStatsReport;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -86,7 +86,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
 
         @Override
         public void participate(List<AmbryStatsReport> ambryHealthReports, AccountStatsStore accountStatsStore,
-            Callback<StatsSnapshot> callback) {
+            Callback<AggregatedAccountStorageStats> callback) {
           for (String partitionName : partitionLeadershipList) {
             for (PartitionStateChangeListener partitionStateChangeListener : registeredPartitionStateChangeListeners.values()) {
               partitionStateChangeListener.onPartitionBecomeLeaderFromStandby(partitionName);

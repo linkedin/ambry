@@ -14,8 +14,6 @@
 
 package com.github.ambry.store;
 
-import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.Pair;
 import java.util.List;
@@ -47,11 +45,10 @@ public interface StoreStats {
   Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException;
 
   /**
-   * Fetches specified types of stats for corresponding {@link Store} as a map whose key is {@link StatsReportType} and
-   * value is {@link StatsSnapshot}.
+   * Fetches storage stats of each account and container from corresponding {@link Store}.
    * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
-   * @param accountIdToExclude the list of account id to exclude from the {@link StatsSnapshot}.
-   * @return a map of {@link StatsReportType} to {@link StatsSnapshot}
+   * @param accountIdToExclude the list of account id to exclude from the {@link ContainerStorageStats}.
+   * @return a map whose key is account id and the value is a map from container id to {@link ContainerStorageStats}
    * @throws StoreException
    */
   Map<Short, Map<Short, ContainerStorageStats>> getContainerStorageStats(long referenceTimeInMs,

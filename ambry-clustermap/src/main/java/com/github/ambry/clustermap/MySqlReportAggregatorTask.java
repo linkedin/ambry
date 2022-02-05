@@ -21,8 +21,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
-import com.github.ambry.server.StorageStatsUtil;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
@@ -57,7 +55,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
   private final MySqlClusterAggregator clusterAggregator;
   private final HelixManager manager;
   private final StatsReportType statsReportType;
-  private final Callback<StatsSnapshot> callback;
+  private final Callback<AggregatedAccountStorageStats> callback;
   private final ClusterMapConfig clusterMapConfig;
   private final AccountStatsStore accountStatsStore;
   private final Metrics metrics;
@@ -100,8 +98,8 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
    * @param registry the {@link MetricRegistry}.
    */
   MySqlReportAggregatorTask(HelixManager manager, long relevantTimePeriodInMs, StatsReportType statsReportType,
-      AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback, ClusterMapConfig clusterMapConfig,
-      MetricRegistry registry) {
+      AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback,
+      ClusterMapConfig clusterMapConfig, MetricRegistry registry) {
     this.manager = manager;
     clusterAggregator = new MySqlClusterAggregator(relevantTimePeriodInMs);
     this.statsReportType = statsReportType;
@@ -121,7 +119,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
         statsReportType == StatsReportType.ACCOUNT_REPORT ? metrics.accountStatsAggregationTimeMs
             : metrics.partitionClassStatsAggregationTimeMs;
     long startTimeMs = System.currentTimeMillis();
-    StatsSnapshot accountPhysicalStorageSnapshot = null;
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = null;
     try {
       List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
       if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
@@ -135,8 +133,7 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
           removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
         }
         accountStatsStore.storeAggregatedAccountStorageStats(results.getSecond());
-        accountPhysicalStorageSnapshot =
-            StorageStatsUtil.convertAggregatedAccountStorageStatsToStatsSnapshot(results.getFirst(), true);
+        aggregatedAccountStorageStats = results.getFirst();
       } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
         Map<String, HostPartitionClassStorageStatsWrapper> statsWrappers =
             fetchPartitionClassStorageStatsWrapperForInstances(instanceNames);
@@ -175,8 +172,8 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
     } finally {
       if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null
-          && accountPhysicalStorageSnapshot != null && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
-        callback.onCompletion(accountPhysicalStorageSnapshot, exception);
+          && aggregatedAccountStorageStats != null && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
+        callback.onCompletion(aggregatedAccountStorageStats, exception);
       }
     }
   }

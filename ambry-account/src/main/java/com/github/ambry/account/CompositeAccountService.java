@@ -14,7 +14,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.config.CompositeAccountServiceConfig;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.Collection;
@@ -148,9 +148,9 @@ public class CompositeAccountService implements AccountService {
   }
 
   @Override
-  public void selectInactiveContainersAndMarkInStore(StatsSnapshot statsSnapshot) {
-    primaryAccountService.selectInactiveContainersAndMarkInStore(statsSnapshot);
-    secondaryAccountService.selectInactiveContainersAndMarkInStore(statsSnapshot);
+  public void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
+    primaryAccountService.selectInactiveContainersAndMarkInStore(aggregatedAccountStorageStats);
+    secondaryAccountService.selectInactiveContainersAndMarkInStore(aggregatedAccountStorageStats);
   }
 
   @Override

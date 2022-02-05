@@ -21,8 +21,8 @@ import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
-import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StorageStatsUtilTest;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.AccountTestUtils;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -212,8 +212,9 @@ public class HelixAccountServiceTest {
     //generates store stats
     int accountCount = 1;
     int containerCount = 3;
-    StatsSnapshot statsSnapshot =
-        generateStoreStats(accountCount, containerCount, random, StatsReportType.ACCOUNT_REPORT);
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(
+        StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 0, accountCount, containerCount,
+            10000L, 2, 10));
 
     // a set that records the account ids that have already been taken.
     Set<Short> accountIdSet = new HashSet<>();
@@ -247,7 +248,7 @@ public class HelixAccountServiceTest {
       accountId++;
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 4, true);
-    Set<Container> inactiveContainerSet = AccountUtils.selectInactiveContainerCandidates(statsSnapshot,
+    Set<Container> inactiveContainerSet = AccountUtils.selectInactiveContainerCandidates(aggregatedAccountStorageStats,
         accountService.getContainersByStatus(ContainerStatus.DELETE_IN_PROGRESS));
     assertEquals("Mismatch in container Set after detect", expectContainerSet, inactiveContainerSet);
     ((HelixAccountService) accountService).markContainersInactive(inactiveContainerSet);

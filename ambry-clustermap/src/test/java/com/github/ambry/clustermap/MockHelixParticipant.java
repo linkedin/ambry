@@ -18,7 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryStatsReport;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
@@ -95,7 +95,7 @@ public class MockHelixParticipant extends HelixParticipant {
 
   @Override
   public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-      Callback<StatsSnapshot> callback) throws IOException {
+      Callback<AggregatedAccountStorageStats> callback) throws IOException {
     // no op
   }
 

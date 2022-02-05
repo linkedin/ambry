@@ -70,6 +70,7 @@ import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.rest.ServerSecurityService;
 import com.github.ambry.rest.ServerSecurityServiceFactory;
 import com.github.ambry.rest.StorageServerNettyFactory;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -332,7 +333,7 @@ public class AmbryServer {
       if (vcrClusterSpectator != null) {
         vcrClusterSpectator.spectate();
       }
-      Callback<StatsSnapshot> accountServiceCallback = new AccountServiceCallback(accountService);
+      Callback<AggregatedAccountStorageStats> accountServiceCallback = new AccountServiceCallback(accountService);
       for (ClusterParticipant clusterParticipant : clusterParticipants) {
         clusterParticipant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
       }

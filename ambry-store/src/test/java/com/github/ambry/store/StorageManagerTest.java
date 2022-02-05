@@ -40,7 +40,7 @@ import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -1358,7 +1358,7 @@ public class StorageManagerTest {
 
     @Override
     public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-        Callback<StatsSnapshot> callback) throws IOException {
+        Callback<AggregatedAccountStorageStats> callback) throws IOException {
       // no op
     }
 
