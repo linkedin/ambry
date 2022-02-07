@@ -383,12 +383,12 @@ public class AccountStatsMySqlStoreIntegrationTest {
       currentAggregatedStats = mySqlStore.queryAggregatedAccountStorageStats();
     }
 
-    // fetch the month and it should return emtpy string
+    // fetch the month and it should return empty string
     Assert.assertEquals("", mySqlStore.queryRecordedMonth());
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
     AggregatedAccountStorageStats monthlyAggregatedAccountStorageStats =
         mySqlStore.queryMonthlyAggregatedAccountStorageStats();
-    assertEquals(currentAggregatedStats, monthlyAggregatedAccountStorageStats);
+    assertEquals(currentAggregatedStats.getStorageStats(), monthlyAggregatedAccountStorageStats.getStorageStats());
     String obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 
@@ -399,13 +399,13 @@ public class AccountStatsMySqlStoreIntegrationTest {
     mySqlStore.storeAggregatedAccountStorageStats(currentAggregatedStats);
     mySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(monthValue);
     monthlyAggregatedAccountStorageStats = mySqlStore.queryMonthlyAggregatedAccountStorageStats();
-    assertEquals(currentAggregatedStats, monthlyAggregatedAccountStorageStats);
+    assertEquals(currentAggregatedStats.getStorageStats(), monthlyAggregatedAccountStorageStats.getStorageStats());
     obtainedMonthValue = mySqlStore.queryRecordedMonth();
     assertTrue(obtainedMonthValue.equals(monthValue));
 
     // Delete the snapshots
     mySqlStore.deleteSnapshotOfAggregatedAccountStats();
-    assertNull(mySqlStore.queryMonthlyAggregatedAccountStorageStats().getStorageStats());
+    assertEquals(0, mySqlStore.queryMonthlyAggregatedAccountStorageStats().getStorageStats().size());
   }
 
   /**
