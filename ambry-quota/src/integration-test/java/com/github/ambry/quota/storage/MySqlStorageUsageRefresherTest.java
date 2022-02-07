@@ -294,7 +294,7 @@ public class MySqlStorageUsageRefresherTest {
       String notCurrentMonth = "1970-01";
       AggregatedAccountStorageStats newAggregatedAccountStorageStats = new AggregatedAccountStorageStats(
           StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 0, 10, 10, 10000L, 2, 10));
-      accountStatsMySqlStore.storeAggregatedAccountStorageStats(aggregatedAccountStorageStats);
+      accountStatsMySqlStore.storeAggregatedAccountStorageStats(newAggregatedAccountStorageStats);
       accountStatsMySqlStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(notCurrentMonth);
       refresher.fetchStorageUsageMonthlyBase();
       // Monthly storage usage still the old one

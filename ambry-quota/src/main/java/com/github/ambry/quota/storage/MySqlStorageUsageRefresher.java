@@ -261,7 +261,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
         long startTimeMs = System.currentTimeMillis();
         Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
         Map<String, Map<String, Long>> storageUsage =
-            convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryMonthlyAggregatedAccountStorageStats(),
+            convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryAggregatedAccountStorageStats(),
                 config.usePhysicalStorage);
         if (storageUsage != null) {
           subtract(storageUsage, base);
