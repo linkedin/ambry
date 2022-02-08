@@ -37,7 +37,11 @@ public class QuotaConfig {
   public static final String FRONTEND_CU_CAPACITY_IN_JSON = QUOTA_CONFIG_PREFIX + "frontend.cu.capacity.in.json";
   public static final String BANDWIDTH_THROTTLING_FEATURE_ENABLED =
       QUOTA_CONFIG_PREFIX + "bandwidth.throttling.feature.enabled";
-  public static final String CU_QUOTA_AGGREGATION_WINDOW_IN_SECS = QUOTA_CONFIG_PREFIX + "cu.quota.aggregation.windows.in.secs";
+  public static final String CU_QUOTA_AGGREGATION_WINDOW_IN_SECS =
+      QUOTA_CONFIG_PREFIX + "cu.quota.aggregation.windows.in.secs";
+  public static final String QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE =
+      QUOTA_CONFIG_PREFIX + "usage.warning.threshold.in.precentage";
+
   public static final String DEFAULT_QUOTA_MANAGER_FACTORY = "com.github.ambry.quota.AmbryQuotaManagerFactory";
   public static final String DEFAULT_QUOTA_THROTTLING_MODE = QuotaMode.TRACKING.name();
   public static final boolean DEFAULT_THROTTLE_IN_PROGRESS_REQUESTS = false;
@@ -46,6 +50,7 @@ public class QuotaConfig {
   public static final String DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON = "{}";
   public static final boolean DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED = false;
   public static final long DEFAULT_CU_QUOTA_AGGREGATION_WINDOW_IN_SECS = 10;
+  public static final int DEFAULT_QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE = 80;
   public StorageQuotaConfig storageQuotaConfig;
 
   /**
@@ -159,6 +164,13 @@ public class QuotaConfig {
   public long cuQuotaAggregationWindowInSecs;
 
   /**
+   * Quota usage threshold in percentage at which Ambry will generate usage warning in response headers.
+   * @param verifiableProperties
+   */
+  @Config(QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE)
+  public int quotaUsageWarningThresholdInPercentage;
+
+  /**
    * Constructor for {@link QuotaConfig}.
    * @param verifiableProperties {@link VerifiableProperties} object.
    */
@@ -180,6 +192,9 @@ public class QuotaConfig {
         DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED);
     cuQuotaAggregationWindowInSecs = verifiableProperties.getLongInRange(CU_QUOTA_AGGREGATION_WINDOW_IN_SECS,
         DEFAULT_CU_QUOTA_AGGREGATION_WINDOW_IN_SECS, 1, Long.MAX_VALUE);
+    quotaUsageWarningThresholdInPercentage =
+        verifiableProperties.getIntInRange(QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE,
+            DEFAULT_QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE, 0, 100);
   }
 
   /**
