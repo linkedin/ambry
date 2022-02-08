@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
@@ -22,24 +23,46 @@ import com.codahale.metrics.Timer;
  * Metrics class to capture metrics for request quota enforcement.
  */
 public class QuotaMetrics {
-  public final Counter quotaExceededCount;
-  public final Timer quotaEnforcementTime;
-  public final Counter quotaNotEnforcedCount;
+  public final Meter quotaExceedRecommendationRate;
+  public final Timer quotaRecommendationTime;
+  public final Meter quotaNotChargedRate;
   public final Timer quotaManagerInitTime;
   public final Timer quotaChargeTime;
   public final Counter quotaResourceInvalidUnlockAttemptCount;
+  public final Meter quotaExceedAllowedRate;
+  public final Meter partialChargeRate;
+  public final Meter partialQuotaRecommendationRate;
+  public final Meter forcedChargeRate;
+  public final Meter throttleRate;
+  public final Meter noQuotaRecommendationRate;
+  public final Meter recommendRate;
+  public final Meter chargeAndRecommendRate;
+  public final Counter accountUpdateNotificationCount;
 
   /**
    * {@link QuotaMetrics} constructor.
    * @param metricRegistry {@link MetricRegistry} object.
    */
   public QuotaMetrics(MetricRegistry metricRegistry) {
-    quotaExceededCount = metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaExceededCount"));
-    quotaEnforcementTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaEnforcementTime"));
-    quotaNotEnforcedCount = metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaNotEnforcedCount"));
+    quotaExceedRecommendationRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaMetrics.class, "QuotaExceedRecommendationRate"));
+    quotaRecommendationTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaRecommendationTime"));
+    quotaNotChargedRate = metricRegistry.meter(MetricRegistry.name(QuotaMetrics.class, "QuotaNotChargedRate"));
     quotaManagerInitTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaManagerInitTime"));
     quotaChargeTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaChargeTime"));
     quotaResourceInvalidUnlockAttemptCount =
         metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaResourceInvalidUnlockAttemptCount"));
+    quotaExceedAllowedRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "QuotaExceedAllowedRate"));
+    partialChargeRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "PartialChargeRate"));
+    partialQuotaRecommendationRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "PartialQuotaRecommendationRate"));
+    forcedChargeRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "ForcedChargeRate"));
+    throttleRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "ThrottleRate"));
+    noQuotaRecommendationRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoQuotaRecommendationRate"));
+    recommendRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "RecommendRate"));
+    chargeAndRecommendRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "ChargeAndRecommendRate"));
+    accountUpdateNotificationCount =
+        metricRegistry.counter(MetricRegistry.name(QuotaManager.class, "AccountUpdateNotificationCount"));
   }
 }

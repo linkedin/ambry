@@ -165,7 +165,11 @@ class FrontendRestRequestService implements RestRequestService {
       throw new InstantiationException("ResponseHandler is not set.");
     }
     long startupBeginTime = System.currentTimeMillis();
-    quotaManager.init();
+    try {
+      quotaManager.init();
+    } catch (Exception e) {
+      throw new InstantiationException("FrontendRestRequestService Instantiation failed due to: " + e.getMessage());
+    }
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);

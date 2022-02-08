@@ -74,7 +74,7 @@ public class AmbryQuotaManagerUpdateNotificationTest {
    * @throws Exception
    */
   private QuotaSource getQuotaSourceMember(AmbryQuotaManager ambryQuotaManager) throws Exception {
-    Field field = ambryQuotaManager.getClass().getDeclaredField("requestQuotaEnforcers");
+    Field field = ambryQuotaManager.getClass().getDeclaredField("quotaEnforcers");
     field.setAccessible(true);
     return new ArrayList<>((Set<QuotaEnforcer>) field.get(ambryQuotaManager)).get(0).getQuotaSource();
   }

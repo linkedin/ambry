@@ -60,16 +60,6 @@ public class QuotaUtils {
   }
 
   /**
-   * Returns recommended {@link HttpResponseStatus} by quota manager based on throttling recommendation.
-   * @param shouldThrottle throttling recommendation.
-   * @return ThrottlePolicy.THROTTLE_HTTP_STATUS if shouldThrottle is {@code true}. ThrottlePolicy.ACCEPT_HTTP_STATUS otherwise.
-   */
-  public static HttpResponseStatus quotaRecommendedHttpResponse(boolean shouldThrottle) {
-    return shouldThrottle ? QuotaRecommendationMergePolicy.THROTTLE_HTTP_STATUS
-        : QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS;
-  }
-
-  /**
    * @return {@code true} if the request is a read request. {@code false} otherwise.
    */
   private static boolean isReadRequest(RestRequest restRequest) {
@@ -144,5 +134,14 @@ public class QuotaUtils {
       }
     });
     return quotaResources;
+  }
+
+  /**
+   * Returns {@code true} if request should be throttled. {@code false} otherwise.
+   * @param quotaAction {@link QuotaAction} specifying the action to take for quota compliance.
+   * @return {@code true} if request should be throttled. {@code false} otherwise.
+   */
+  public static boolean shouldThrottle(QuotaAction quotaAction) {
+    return quotaAction != QuotaAction.ALLOW;
   }
 }

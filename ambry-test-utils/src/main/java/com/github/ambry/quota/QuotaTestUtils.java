@@ -64,13 +64,7 @@ public class QuotaTestUtils {
       }
 
       @Override
-      public ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest) {
-        return null;
-      }
-
-      @Override
-      public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
-          Map<QuotaName, Double> requestCostMap) {
+      public ThrottlingRecommendation recommend(RestRequest restRequest) {
         return null;
       }
 
@@ -90,6 +84,12 @@ public class QuotaTestUtils {
       }
 
       @Override
+      public QuotaAction chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
+          Map<QuotaName, Double> requestCostMap, boolean checkQuotaExceedAllowed, boolean forceCharge) {
+        return null;
+      }
+
+      @Override
       public void shutdown() {
 
       }
@@ -99,7 +99,7 @@ public class QuotaTestUtils {
   public static QuotaChargeCallback createDummyQuotaChargeEventListener() {
     return new QuotaChargeCallback() {
       @Override
-      public void charge(long chunkSize){
+      public void charge(long chunkSize) {
       }
 
       @Override
