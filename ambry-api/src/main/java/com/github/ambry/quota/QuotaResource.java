@@ -133,4 +133,9 @@ public class QuotaResource {
   public int hashCode() {
     return 89 * quotaResourceType.hashCode() + resourceId.hashCode();
   }
+
+  @Override
+  public String toString() {
+    return String.format("QuotaResource: [resourceId: %s, resourceType: %s]", resourceId, quotaResourceType);
+  }
 }
