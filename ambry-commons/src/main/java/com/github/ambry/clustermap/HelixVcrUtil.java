@@ -63,8 +63,8 @@ public class HelixVcrUtil {
     clusterSetup.addCluster(destClusterName, true);
 
     // set ALLOW_PARTICIPANT_AUTO_JOIN
-    HelixConfigScope configScope = new HelixConfigScopeBuilder(HelixConfigScope.ConfigScopeProperty.CLUSTER).
-        forCluster(destClusterName).build();
+    HelixConfigScope configScope =
+        new HelixConfigScopeBuilder(HelixConfigScope.ConfigScopeProperty.CLUSTER).forCluster(destClusterName).build();
     Map<String, String> helixClusterProperties = new HashMap<>();
     helixClusterProperties.put(ZKHelixManager.ALLOW_PARTICIPANT_AUTO_JOIN,
         String.valueOf(config.getClusterConfigFields().isAllowAutoJoin()));
@@ -178,7 +178,8 @@ public class HelixVcrUtil {
       }
     }
     for (String resource : srcResources) {
-      if (ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
+      String resourceLowercase = resource.toLowerCase();
+      if (ignoreResourceKeyWords.stream().anyMatch(resourceLowercase::contains)) {
         logger.info("Resource {} from src cluster is ignored", resource);
         continue;
       }
@@ -283,7 +284,8 @@ public class HelixVcrUtil {
   /**
    * A method to verify resources and partitions in src cluster and dest cluster are same.
    */
-  public static boolean isSrcDestSync(String srcZkString, String srcClusterName, String destZkString, String destClusterName) {
+  public static boolean isSrcDestSync(String srcZkString, String srcClusterName, String destZkString,
+      String destClusterName) {
 
     HelixAdmin srcAdmin = new ZKHelixAdmin(srcZkString);
     Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
@@ -291,7 +293,8 @@ public class HelixVcrUtil {
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
 
     for (String resource : srcResources) {
-      if (HelixVcrUtil.ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
+      String resourceLowercase = resource.toLowerCase();
+      if (HelixVcrUtil.ignoreResourceKeyWords.stream().anyMatch(resourceLowercase::contains)) {
         System.out.println("Resource " + resource + " from src cluster is ignored");
         continue;
       }

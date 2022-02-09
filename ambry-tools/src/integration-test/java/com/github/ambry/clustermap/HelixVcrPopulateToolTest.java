@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.utils.TestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -23,13 +24,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.tools.ClusterSetup;
 import org.apache.helix.zookeeper.api.client.HelixZkClient;
 import org.apache.helix.zookeeper.impl.factory.SharedZkClientFactory;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -146,7 +145,7 @@ public class HelixVcrPopulateToolTest {
 
     // add one more partition to src cluster resource 1 and add one more resource to src cluster
     srcHelixAdmin.dropResource(SRC_CLUSTER_NAME, "1");
-    String[] resourceNames = {"1", "2"};
+    String[] resourceNames = {"1", "2", "mysqlTriggerRecurrent"};
     Set<String> partitionSet = new HashSet<>();
     for (int i = 0; i < 101; i++) {
       partitionSet.add(Integer.toString(i));
@@ -169,5 +168,4 @@ public class HelixVcrPopulateToolTest {
 
     destZkInfo.shutdown();
   }
-
 }
