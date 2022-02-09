@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A {@link QuotaSource} implementation that keeps the quota and usage values in memory, and treats Ambry frontend's
- * Read and Write Capacity Units as system resources for handling quota exceeded requests.
+ * read and write bandwidth capacity as system resources.
  */
 public class AmbryCUQuotaSource implements QuotaSource {
   static final String REFRESHER_THREAD_NAME_PREFIX = "inmem-quota-source-refresher";
@@ -55,7 +55,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   protected final CapacityUnit feQuota; // Ambry frontend's CU capacity.
   protected final AtomicReference<CapacityUnit> feUsage; // Ambry frontend's CU usage.
   private final ConcurrentMap<String, CapacityUnit> cuQuota; // in memory quota for all resources.
-  private final ConcurrentMap<String, CapacityUnit> cuUsage; // in memory quota usage for all resources.
+  protected final ConcurrentMap<String, CapacityUnit> cuUsage; // in memory quota usage for all resources.
   private final ScheduledExecutorService usageRefresher;
   private final long aggregationWindowsInSecs;
   private final AtomicBoolean isReady;
@@ -119,6 +119,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
     checkSupported(quotaName, quotaResource);
     final String resourceId = quotaResource.getResourceId();
     assertResourceId(resourceId, true);
+    chargeSystemResourceUsage(quotaName, usageCost);
     if (quotaName == QuotaName.READ_CAPACITY_UNIT) {
       cuUsage.get(resourceId).incrementRcu((long) Math.ceil(usageCost));
     } else {
@@ -154,7 +155,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   }
 
   @Override
-  public void shutdown() throws InterruptedException {
+  public void shutdown() {
     usageRefresher.shutdownNow();
     isReady.compareAndSet(true, false);
   }
@@ -179,9 +180,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
    * Atomically resets the usage of all the resources.
    */
   private synchronized void resetQuotaUsage() {
-    for (String resourceId : cuUsage.keySet()) {
-      cuUsage.put(resourceId, new CapacityUnit());
-    }
+    cuUsage.replaceAll((k,v) -> new CapacityUnit());
     feUsage.set(new CapacityUnit());
   }
 

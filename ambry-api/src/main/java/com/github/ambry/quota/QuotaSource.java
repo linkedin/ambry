@@ -14,13 +14,16 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.rest.RestRequest;
 import java.util.Collection;
 import java.util.List;
 
 
 /**
- * Interface representing the backend source from which quota for a resource can be fetched, and to which the current
- * usage of a resource can be saved.
+ * QuotaSource is the source of truth of quota for resources. It also tracks the usage of those resources. Resources could
+ * be classified into two types: Ambry's Accounts, Containers or Services as represented by {@link QuotaResource}, or system
+ * resources like a node's bandwidth.
+ * Some implementations might not need to track any system resource. Check {@link QuotaEnforcer} for more details.
  */
 public interface QuotaSource {
 
@@ -63,8 +66,8 @@ public interface QuotaSource {
 
   /**
    * Get the percent usage of system resources relevant to the {@link QuotaName} specified. The exact definition of
-   * system resource is left for the source and enforcer to determine based on the type of quota. Return {@literal -1}
-   * if system resource usage doesn't make sense for a combination of quota, source or enforcer.
+   * system resource is left for the implementation to determine.
+   * Return {@literal -1} if the implementation doesn't need to track any system resource.
    * @param quotaName {@link QuotaName} object.
    * @return usage of relevant system resources in percentage.
    * @throws QuotaException in case of any exception.
@@ -72,8 +75,7 @@ public interface QuotaSource {
   float getSystemResourceUsage(QuotaName quotaName) throws QuotaException;
 
   /**
-   * Charge the specified cost against system resources relevant to the {@link QuotaName} specified. If system resource
-   * usage doesn't make sense for a combination of quota, source or enforcer, this method would do nothing.
+   * Charge the specified cost against system resources relevant to the {@link QuotaName} specified.
    * @param quotaName {@link QuotaName} object.
    * @param usageCost of relevant system resources.
    * @throws QuotaException in case of any exception.

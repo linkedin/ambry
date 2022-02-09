@@ -297,6 +297,7 @@ public class AmbryCUQuotaSourceTest {
         ambryCUQuotaSource.getUsage(QuotaResource.fromContainer(container), QuotaName.READ_CAPACITY_UNIT), 0.01);
     Assert.assertEquals(0.0,
         ambryCUQuotaSource.getUsage(QuotaResource.fromContainer(container), QuotaName.WRITE_CAPACITY_UNIT), 0.01);
+    Assert.assertEquals(4, ambryCUQuotaSource.getAllQuotaUsage().size());
   }
 
   @Test

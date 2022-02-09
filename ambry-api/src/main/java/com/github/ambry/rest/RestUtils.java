@@ -1158,6 +1158,9 @@ public class RestUtils {
    * @return String representation of the {@link RestRequest} object.
    */
   public static String convertToStr(RestRequest restRequest) {
+    if (Objects.isNull(restRequest)) {
+      return "RestRequest: null";
+    }
     StringBuilder sb = new StringBuilder();
     sb.append("RestRequest: [");
     sb.append("Method: " + ((restRequest.getRestMethod() == null) ? "null" : restRequest.getRestMethod().name()));
