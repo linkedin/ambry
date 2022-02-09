@@ -58,7 +58,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public void charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) throws QuotaException {
+  public QuotaRecommendation charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) throws QuotaException {
     final QuotaName quotaName = QuotaUtils.getCUQuotaName(restRequest);
     if (requestCostMap.isEmpty() || !requestCostMap.containsKey(quotaName)) {
       String errorMessage = String.format("No %s cost provided for request %s. Nothing to charge", quotaName.name(),
@@ -71,6 +71,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
       quotaSource.chargeUsage(quotaResource, quotaName, requestCostMap.get(quotaName));
       return null;
     }, String.format("Could not charge for request %s due to", restRequest));
+    return recommend(restRequest);
   }
 
   @Override

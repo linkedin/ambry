@@ -114,18 +114,19 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public void charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) {
+  public QuotaRecommendation charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) {
     if (!RestUtils.isUploadRequest(restRequest)) {
-      return;
+      return null;
     }
     if (!requestCostMap.containsKey(QuotaName.STORAGE_IN_GB)) {
       // No cost for the desired QuotaName, then just call recommend
-      return;
+      return null;
     }
 
     // The cost is number of bytes in GB. Convert it back to raw number.
     long cost = (long) (requestCostMap.get(QuotaName.STORAGE_IN_GB).doubleValue() * BYTES_IN_GB);
     Pair<Long, Long> pair = charge(restRequest, cost);
+    return recommendBasedOnQuotaAndUsage(pair);
   }
 
   @Override
