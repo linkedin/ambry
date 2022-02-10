@@ -138,8 +138,10 @@ public class AmbryQuotaManager implements QuotaManager {
     try {
       for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
         try {
-          quotaEnforcer.charge(restRequest, requestCostMap);
-          quotaRecommendations.add(quotaEnforcer.recommend(restRequest));
+          QuotaRecommendation quotaRecommendation = quotaEnforcer.charge(restRequest, requestCostMap);
+          if(Objects.nonNull(quotaRecommendation)) {
+            quotaRecommendations.add(quotaRecommendation);
+          }
         } catch (QuotaException quotaException) {
           logger.warn("Could not charge quota {} due to exception: {}", quotaEnforcer.supportedQuotaNames(),
               quotaException.getMessage());

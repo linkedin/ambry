@@ -35,11 +35,12 @@ public interface QuotaEnforcer {
   void init() throws Exception;
 
   /**
-   * Charges the request cost against the quota.
+   * Charges the request cost against the quota and returns the {@link QuotaRecommendation} after charging.
    * @param restRequest {@link RestRequest} object.
    * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
+   * @return QuotaRecommendation object with the recommendation after charging is done.
    */
-  void charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap)
+  QuotaRecommendation charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap)
       throws QuotaException;
 
   /**

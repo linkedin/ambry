@@ -50,7 +50,8 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public void charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) {
+  public QuotaRecommendation charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) {
+    return null;
   }
 
   @Override
