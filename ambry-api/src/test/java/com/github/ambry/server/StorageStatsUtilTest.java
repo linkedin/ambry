@@ -20,7 +20,7 @@ import java.util.Random;
 
 
 /**
- * Unit tests for {@link StorageStatsUtil}.
+ * Utils functions for any tests related to storage stats.
  */
 public class StorageStatsUtilTest {
   private static final Random random = new Random();
