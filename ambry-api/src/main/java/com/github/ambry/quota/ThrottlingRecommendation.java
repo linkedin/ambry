@@ -13,7 +13,6 @@
  */
 package com.github.ambry.quota;
 
-import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,25 +23,22 @@ import java.util.Map;
  */
 public class ThrottlingRecommendation {
   public static final long NO_RETRY_AFTER_MS = -1; // No retry needed when request is not throttled.
-  private final boolean throttle;
+  private final QuotaAction quotaAction;
   private final Map<QuotaName, Float> quotaUsagePercentage;
-  private final HttpResponseStatus recommendedHttpStatus;
   private final long retryAfterMs;
   private final QuotaUsageLevel quotaUsageLevel;
 
   /**
    * Constructor for {@link ThrottlingRecommendation}.
-   * @param throttle flag indicating if request should be throttled.
+   * @param quotaAction {@link QuotaAction} object as the recommended action to take.
    * @param quotaUsagePercentage A {@link Map} of {@link QuotaName} to usage percentage.
-   * @param recommendedHttpStatus {@link HttpResponseStatus} representing overall recommended http status.
    * @param retryAfterMs time in ms after which request should be retried. -1 if request is not throttled.
    * @param quotaUsageLevel {@link QuotaUsageLevel} object.
    */
-  public ThrottlingRecommendation(boolean throttle, Map<QuotaName, Float> quotaUsagePercentage,
-      HttpResponseStatus recommendedHttpStatus, long retryAfterMs, QuotaUsageLevel quotaUsageLevel) {
-    this.throttle = throttle;
+  public ThrottlingRecommendation(QuotaAction quotaAction, Map<QuotaName, Float> quotaUsagePercentage,
+      long retryAfterMs, QuotaUsageLevel quotaUsageLevel) {
+    this.quotaAction = quotaAction;
     this.quotaUsagePercentage = new HashMap<>(quotaUsagePercentage);
-    this.recommendedHttpStatus = recommendedHttpStatus;
     this.retryAfterMs = retryAfterMs;
     this.quotaUsageLevel = quotaUsageLevel;
   }
@@ -51,7 +47,21 @@ public class ThrottlingRecommendation {
    * @return true if recommendation is to throttle. false otherwise.
    */
   public boolean shouldThrottle() {
-    return this.throttle;
+    return this.quotaAction == QuotaAction.REJECT || this.quotaAction == QuotaAction.DELAY;
+  }
+
+  /**
+   * @return true if recommendation is to delay request. false otherwise.
+   */
+  public boolean shouldDelay() {
+    return this.quotaAction == QuotaAction.DELAY;
+  }
+
+  /**
+   * @return true if recommendation is to reject request. false otherwise.
+   */
+  public boolean shouldReject() {
+    return this.quotaAction == QuotaAction.REJECT;
   }
 
   /**
@@ -59,13 +69,6 @@ public class ThrottlingRecommendation {
    */
   public Map<QuotaName, Float> getQuotaUsagePercentage() {
     return Collections.unmodifiableMap(this.quotaUsagePercentage);
-  }
-
-  /**
-   * @return http status recommended.
-   */
-  public HttpResponseStatus getRecommendedHttpStatus() {
-    return this.recommendedHttpStatus;
   }
 
   /**
@@ -80,5 +83,12 @@ public class ThrottlingRecommendation {
    */
   public QuotaUsageLevel getQuotaUsageLevel() {
     return quotaUsageLevel;
+  }
+
+  /**
+   * @return QuotaAction object.
+   */
+  public QuotaAction getQuotaAction() {
+    return quotaAction;
   }
 }

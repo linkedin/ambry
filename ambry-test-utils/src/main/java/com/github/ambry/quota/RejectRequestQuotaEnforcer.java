@@ -24,7 +24,6 @@ import java.util.Map;
  */
 public class RejectRequestQuotaEnforcer implements QuotaEnforcer {
   private static final float DUMMY_REJECTABLE_USAGE_PERCENTAGE = 101;
-  private static final boolean SHOULD_THROTTLE = true;
   private final QuotaSource quotaSource;
 
   /**
@@ -46,7 +45,7 @@ public class RejectRequestQuotaEnforcer implements QuotaEnforcer {
 
   @Override
   public QuotaRecommendation recommend(RestRequest restRequest) {
-    return new QuotaRecommendation(SHOULD_THROTTLE, DUMMY_REJECTABLE_USAGE_PERCENTAGE, QuotaName.READ_CAPACITY_UNIT, 1);
+    return new QuotaRecommendation(QuotaAction.REJECT, DUMMY_REJECTABLE_USAGE_PERCENTAGE, QuotaName.READ_CAPACITY_UNIT, 1);
   }
 
   @Override

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
@@ -41,8 +42,8 @@ public class AmbryCapacityUnitQuotaEnforcer implements QuotaEnforcer {
    */
   public AmbryCapacityUnitQuotaEnforcer(QuotaSource quotaSource) {
     this.quotaSource = quotaSource;
-    this.allowReadRecommendation = new QuotaRecommendation(false, 0, QuotaName.READ_CAPACITY_UNIT, 0);
-    this.allowWriteRecommendation = new QuotaRecommendation(false, 0, QuotaName.WRITE_CAPACITY_UNIT, 0);
+    this.allowReadRecommendation = new QuotaRecommendation(QuotaAction.ALLOW, 0, QuotaName.READ_CAPACITY_UNIT, 0);
+    this.allowWriteRecommendation = new QuotaRecommendation(QuotaAction.ALLOW, 0, QuotaName.WRITE_CAPACITY_UNIT, 0);
   }
 
   @Override

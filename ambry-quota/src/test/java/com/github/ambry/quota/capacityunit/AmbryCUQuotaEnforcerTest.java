@@ -19,9 +19,8 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.Quota;
+import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
@@ -76,8 +75,6 @@ public class AmbryCUQuotaEnforcerTest {
   @Test
   public void testCharge() throws Exception {
     Container container = ACCOUNT.getAllContainers().iterator().next();
-    BlobProperties blobProperties = new BlobProperties(10, "test", ACCOUNT.getId(), container.getId(), false);
-    BlobInfo blobInfo = new BlobInfo(blobProperties, new byte[10]);
     Map<QuotaName, Double> readRequestCostMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 9.0);
     Map<QuotaName, Double> writeRequestCostMap = Collections.singletonMap(QuotaName.WRITE_CAPACITY_UNIT, 9.0);
     Map<String, CapacityUnit> usageMap = QUOTA_SOURCE.getAllQuotaUsage();
@@ -88,7 +85,7 @@ public class AmbryCUQuotaEnforcerTest {
     QuotaRecommendation quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(quotaRecommendation.getQuotaName(), QuotaName.READ_CAPACITY_UNIT);
     assertEquals(quotaRecommendation.getQuotaUsagePercentage(), 90, 0.1);
-    assertFalse(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.ALLOW);
     assertEquals(usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu(), 0); // make sure that correct quota is charged.
 
     restRequest = QuotaTestUtils.createRestRequest(ACCOUNT, container, RestMethod.POST);
@@ -97,7 +94,7 @@ public class AmbryCUQuotaEnforcerTest {
     assertEquals(quotaRecommendation.getQuotaName(), QuotaName.WRITE_CAPACITY_UNIT);
     assertEquals(quotaRecommendation.getQuotaUsagePercentage(), 90, 0.1);
 
-    assertFalse(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.ALLOW);
     assertEquals(usageMap.get(String.valueOf(ACCOUNT.getId())).getRcu(), 9); // make sure that correct quota is charged.
 
     // 2. Test that retryable quota exception is thrown when quota not found.
@@ -128,7 +125,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.READ_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(180, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertTrue(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
     assertEquals(9, usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getRcu()); // make sure that correct quota is charged.
@@ -138,7 +135,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(180, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertTrue(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
     assertEquals(18,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
@@ -149,7 +146,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(270, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertTrue(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
     assertEquals(27,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
@@ -160,7 +157,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(360, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertTrue(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
     assertEquals(36,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
@@ -174,25 +171,25 @@ public class AmbryCUQuotaEnforcerTest {
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.GET));
     assertEquals(QuotaName.READ_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(0, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertFalse(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.ALLOW);
 
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.POST));
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(0, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertFalse(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.ALLOW);
 
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.PUT));
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(0, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertFalse(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.ALLOW);
 
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.DELETE));
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(0, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertFalse(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.ALLOW);
 
     // 2. Test that retryable QuotaException is thrown when quota not found.
     Account newAccount = ACCOUNT_SERVICE.generateRandomAccount(QuotaResourceType.ACCOUNT);
@@ -226,7 +223,7 @@ public class AmbryCUQuotaEnforcerTest {
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.GET));
     assertEquals(QuotaName.READ_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(usagePercentage, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertTrue(quotaRecommendation.shouldThrottle());
+    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
   }
 
   @Test
@@ -270,8 +267,8 @@ public class AmbryCUQuotaEnforcerTest {
 
   static class ExceptionQuotaSource extends AmbryCUQuotaSource {
     private boolean throwException = false;
-    private boolean throwSystemResourceChargeException = false;
-    private boolean throwResourceChargeException = false;
+    private final boolean throwSystemResourceChargeException = false;
+    private final boolean throwResourceChargeException = false;
 
     public ExceptionQuotaSource(QuotaConfig config, AccountService accountService) throws IOException {
       super(config, accountService);

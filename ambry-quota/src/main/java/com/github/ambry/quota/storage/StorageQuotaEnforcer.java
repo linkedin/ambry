@@ -20,6 +20,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.quota.Quota;
+import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaName;
@@ -56,7 +57,7 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   private static final long BYTES_IN_GB = 1024 * 1024 * 1024;
   // The quota recommendation returned when there is no quota found for the given account/container.
   private static final QuotaRecommendation NO_QUOTA_VALUE_RECOMMENDATION =
-      new QuotaRecommendation(false, 0.0f, QuotaName.STORAGE_IN_GB, NO_RETRY);
+      new QuotaRecommendation(QuotaAction.ALLOW, 0.0f, QuotaName.STORAGE_IN_GB, NO_RETRY);
   protected final StorageUsageRefresher storageUsageRefresher;
   protected final QuotaSource quotaSource;
   protected final StorageQuotaConfig config;
@@ -150,9 +151,9 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
       // There is no quota set for the given account/container
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
-    boolean shouldThrottle = currentUsage >= quotaValue;
+    QuotaAction quotaAction = (currentUsage >= quotaValue) ? QuotaAction.REJECT : QuotaAction.ALLOW;
     float usagePercentage = currentUsage >= quotaValue ? 100f : ((float) currentUsage) / quotaValue * 100f;
-    return new QuotaRecommendation(shouldThrottle, usagePercentage, QuotaName.STORAGE_IN_GB, NO_RETRY);
+    return new QuotaRecommendation(quotaAction, usagePercentage, QuotaName.STORAGE_IN_GB, NO_RETRY);
   }
 
   @Override
