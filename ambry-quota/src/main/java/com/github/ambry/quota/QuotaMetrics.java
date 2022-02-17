@@ -27,6 +27,7 @@ public class QuotaMetrics {
   public final Counter quotaNotEnforcedCount;
   public final Timer quotaManagerInitTime;
   public final Timer quotaChargeTime;
+  public final Counter quotaResourceInvalidUnlockAttemptCount;
 
   /**
    * {@link QuotaMetrics} constructor.
@@ -38,5 +39,7 @@ public class QuotaMetrics {
     quotaNotEnforcedCount = metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaNotEnforcedCount"));
     quotaManagerInitTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaManagerInitTime"));
     quotaChargeTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaChargeTime"));
+    quotaResourceInvalidUnlockAttemptCount =
+        metricRegistry.counter(MetricRegistry.name(QuotaMetrics.class, "QuotaResourceInvalidUnlockAttemptCount"));
   }
 }
