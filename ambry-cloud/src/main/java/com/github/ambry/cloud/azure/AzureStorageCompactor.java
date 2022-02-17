@@ -22,7 +22,6 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Pair;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -258,12 +257,7 @@ public class AzureStorageCompactor {
    */
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
       int maxEntries) throws CloudStorageException {
-    try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
-    } catch (DocumentClientException dex) {
-      throw AzureCloudDestination.toCloudStorageException(
-          "Failed to query deleted blobs for partition " + partitionPath, dex, azureMetrics);
-    }
+    return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
   }
 
   /**

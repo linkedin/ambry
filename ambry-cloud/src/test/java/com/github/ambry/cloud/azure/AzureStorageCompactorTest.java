@@ -14,6 +14,12 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.rest.Response;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosAsyncDatabase;
+import com.azure.cosmos.models.FeedResponse;
+import com.azure.cosmos.models.SqlQuerySpec;
+import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatch;
 import com.azure.storage.blob.batch.BlobBatchClient;
@@ -29,18 +35,10 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.FeedOptions;
-import com.microsoft.azure.cosmosdb.FeedResponse;
-import com.microsoft.azure.cosmosdb.RequestOptions;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
-import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
-import com.microsoft.azure.cosmosdb.internal.HttpConstants;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +50,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
+import reactor.core.publisher.Flux;
 import rx.Observable;
 
 import static com.github.ambry.cloud.azure.AzureTestUtils.*;
@@ -67,8 +66,9 @@ public class AzureStorageCompactorTest {
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
   private final String storageConnection =
       "DefaultEndpointsProtocol=https;AccountName=ambry;AccountKey=" + base64key + ";EndpointSuffix=core.windows.net";
-  private final String collectionLink = "ambry/metadata";
-  private final String cosmosDeletedContainerCollectionLink = "ambry/deletedContainer";
+  private final String cosmosDatabaseName = "ambry";
+  private final String containerForMetadata = "metadata";
+  private final String containerForAmbryDeletedContainers = "deletedContainer";
   private final String clusterName = "main";
   private final int blobSize = 1024;
   private final String partitionPath = String.valueOf(partition);
@@ -81,7 +81,9 @@ public class AzureStorageCompactorTest {
   private BlobServiceClient mockServiceClient;
   private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBlobBatchClient;
-  private AsyncDocumentClient mockumentClient;
+  private CosmosAsyncClient mockCosmosAsyncClient;
+  private CosmosAsyncDatabase mockCosmosAsyncDatabase;
+  private CosmosAsyncContainer mockCosmosAsyncContainer;
   private AzureMetrics azureMetrics;
   private AzureBlobDataAccessor azureBlobDataAccessor;
   private CosmosDataAccessor cosmosDataAccessor;
@@ -91,7 +93,9 @@ public class AzureStorageCompactorTest {
     mockServiceClient = mock(BlobServiceClient.class);
     mockBlockBlobClient = AzureBlobDataAccessorTest.setupMockBlobClient(mockServiceClient);
     mockBlobBatchClient = mock(BlobBatchClient.class);
-    mockumentClient = mock(AsyncDocumentClient.class);
+    mockCosmosAsyncClient = mock(CosmosAsyncClient.class);
+    mockCosmosAsyncDatabase = mock(CosmosAsyncDatabase.class);
+    mockCosmosAsyncContainer = mock(CosmosAsyncContainer.class);
     azureMetrics = new AzureMetrics(new MetricRegistry());
 
     int lookbackDays =
@@ -107,24 +111,25 @@ public class AzureStorageCompactorTest {
     azureBlobDataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBlobBatchClient, clusterName, azureMetrics,
         new AzureCloudConfig(new VerifiableProperties(configProps)));
     cosmosDataAccessor =
-        new CosmosDataAccessor(mockumentClient, collectionLink, cosmosDeletedContainerCollectionLink, vcrMetrics,
-            azureMetrics);
+        new CosmosDataAccessor(mockCosmosAsyncClient, mockCosmosAsyncDatabase, mockCosmosAsyncContainer,
+            cosmosDatabaseName, containerForMetadata, containerForAmbryDeletedContainers, vcrMetrics, azureMetrics);
     azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
 
     // Mocks for getDeadBlobs query
-    List<Document> docList = new ArrayList<>();
+    List<CloudBlobMetadata> docList = new ArrayList<>();
     for (int j = 0; j < numBlobsPerQuery; j++) {
       BlobId blobId = generateBlobId();
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, testTime, Utils.Infinite_Time, blobSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       blobMetadataList.add(inputMetadata);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata));
     }
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    mockObservableForQuery(docList, mockResponse);
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
+
+    FeedResponse feedResponse = mock(FeedResponse.class);
+    when(feedResponse.getResults()).thenReturn(Collections.singletonList(docList));
+    CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
+    when(cosmosPagedFlux.byPage()).thenReturn(Flux.just(feedResponse));
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(cosmosPagedFlux);
 
     // Mocks for purge
     BlobBatch mockBatch = mock(BlobBatch.class);
@@ -135,6 +140,7 @@ public class AzureStorageCompactorTest {
     Observable<StoredProcedureResponse> mockBulkDeleteResponse = getMockBulkDeleteResponse(1);
     when(mockumentClient.executeStoredProcedure(anyString(), any(RequestOptions.class), any())).thenReturn(
         mockBulkDeleteResponse);
+
     String checkpointJson = objectMapper.writeValueAsString(AzureStorageCompactor.emptyCheckpoints);
     mockCheckpointDownload(true, checkpointJson);
   }

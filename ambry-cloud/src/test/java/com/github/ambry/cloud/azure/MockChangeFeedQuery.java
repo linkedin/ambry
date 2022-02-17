@@ -13,10 +13,12 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosAsyncDatabase;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.VcrMetrics;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +33,8 @@ public class MockChangeFeedQuery extends CosmosDataAccessor {
   private int continuationTokenCounter = -1;
 
   MockChangeFeedQuery() {
-    super(mock(AsyncDocumentClient.class), "", "", mock(VcrMetrics.class), mock(AzureMetrics.class));
+    super(mock(CosmosAsyncClient.class), mock(CosmosAsyncDatabase.class), mock(CosmosAsyncContainer.class), "", "", "",
+        mock(VcrMetrics.class), mock(AzureMetrics.class));
   }
 
   /**

@@ -13,10 +13,10 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.CosmosException;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
 import java.io.Closeable;
 import java.util.List;
 
@@ -44,8 +44,8 @@ public interface AzureReplicationFeed extends Closeable {
    * @param partitionPath partition of the blobs.
    * @return {@link FindResult} instance that contains updated {@link FindToken} object which can act as a bookmark for
    * subsequent requests, and {@link List} of {@link CloudBlobMetadata} entries.
-   * @throws {@link DocumentClientException}.
+   * @throws {@link CosmosException} if there is an error.
    */
   FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries, String partitionPath)
-      throws DocumentClientException;
+      throws CosmosException;
 }

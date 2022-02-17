@@ -48,6 +48,7 @@ public class CloudBlobMetadata {
   public static final String FIELD_UPLOAD_TIME = "uploadTime";
   public static final String FIELD_DELETION_TIME = "deletionTime";
   public static final String FIELD_EXPIRATION_TIME = "expirationTime";
+  public static final String FIELD_LAST_UPDATED_TIME = "_ts";
   public static final String FIELD_ENCRYPTION_ORIGIN = "encryptionOrigin";
   public static final String FIELD_VCR_KMS_CONTEXT = "vcrKmsContext";
   public static final String FIELD_CRYPTO_AGENT_FACTORY = "cryptoAgentFactory";
@@ -76,6 +77,7 @@ public class CloudBlobMetadata {
   // and hence shouldn't be serializable.
   @JsonIgnore
   private long lastUpdateTime;
+  private long lastUpdatedTime;
 
   /**
    * Possible values of encryption origin for cloud stored blobs.
@@ -404,6 +406,21 @@ public class CloudBlobMetadata {
    */
   public void setLastUpdateTime(long lastUpdateTime) {
     this.lastUpdateTime = lastUpdateTime;
+  }
+
+  /**
+   * @return the last update time of the blob.
+   */
+  public long getLastUpdatedTime() {
+    return lastUpdatedTime;
+  }
+
+  /**
+   * Sets the last update time of the blob.
+   * @param lastUpdatedTime last update time.
+   */
+  public void setLastUpdatedTime(long lastUpdatedTime) {
+    this.lastUpdatedTime = lastUpdatedTime;
   }
 
   /**

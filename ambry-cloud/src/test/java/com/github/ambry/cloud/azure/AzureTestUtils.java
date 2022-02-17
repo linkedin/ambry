@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
@@ -24,11 +23,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.FeedResponse;
-import com.microsoft.azure.cosmosdb.ResourceResponse;
-import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -72,19 +66,6 @@ class AzureTestUtils {
     return document;
   }
 
-  /**
-   * Create {@link Document} object from {@link CloudBlobMetadata} object with specified updateTime.
-   * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
-   * @param uploadTime specified upload time.
-   * @return {@link Document} object.
-   */
-  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime)
-      throws JsonProcessingException {
-    Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
-    document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
-    return document;
-  }
-
   static void setConfigProperties(Properties configProps) {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
@@ -121,23 +102,6 @@ class AzureTestUtils {
   static InputStream getBlobInputStream(int blobSize) {
     byte[] randomBytes = TestUtils.getRandomBytes(blobSize);
     return new ByteArrayInputStream(randomBytes);
-  }
-
-  /**
-   * Utility to mock the call chain to get mocked {@link Observable} for single resource from {@link AsyncDocumentClient}.
-   * @param metadata the {@link CloudBlobMetadata} to return as a document.
-   * @return {@link Observable< ResourceResponse <Document>>} object.
-   */
-  static Observable<ResourceResponse<Document>> getMockedObservableForSingleResource(CloudBlobMetadata metadata)
-      throws IOException {
-    Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
-    BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
-    when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
-    Document metadataDoc = createDocumentFromCloudBlobMetadata(metadata);
-    when(mockResourceResponse.getResource()).thenReturn(metadataDoc);
-    return mockResponse;
   }
 
   static Observable<StoredProcedureResponse> getMockBulkDeleteResponse(int count) {

@@ -28,6 +28,10 @@ public class AzureCloudConfig {
   public static final String COSMOS_ENDPOINT = "cosmos.endpoint";
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
   public static final String COSMOS_DELETED_CONTAINER_COLLECTION_LINK = "cosmos.deleted.container.collection.link";
+  public static final String COSMOS_DATABASE = "cosmos.database";
+  public static final String COSMOS_CONTAINER_FOR_BLOB_METADATA = "cosmos.container.for.blob.metadata";
+  public static final String COSMOS_CONTAINER_FOR_AMBRY_DELETED_CONTAINERS =
+      "cosmos.container.for.ambry.deleted.containers";
   public static final String COSMOS_KEY = "cosmos.key";
   public static final String COSMOS_KEY_SECRET_NAME = "cosmos.key.secret.name";
   public static final String COSMOS_VAULT_URL = "cosmos.vault.url";
@@ -95,6 +99,24 @@ public class AzureCloudConfig {
    */
   @Config(COSMOS_DELETED_CONTAINER_COLLECTION_LINK)
   public final String cosmosDeletedContainerCollectionLink;
+
+  /**
+   * The Cosmos DB database name.
+   */
+  @Config(COSMOS_DATABASE)
+  public final String cosmosDatabase;
+
+  /**
+   * The Cosmos DB container for storing metadata of blobs.
+   */
+  @Config(COSMOS_CONTAINER_FOR_BLOB_METADATA)
+  public final String cosmosContainerForBlobMetadata;
+
+  /**
+   * The Cosmos DB container for storing list of deleted Ambry containers.
+   */
+  @Config(COSMOS_CONTAINER_FOR_AMBRY_DELETED_CONTAINERS)
+  public final String cosmosContainerForAmbryDeletedContainers;
 
   /**
    * The Cosmos DB connection key.
@@ -269,6 +291,10 @@ public class AzureCloudConfig {
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosDeletedContainerCollectionLink = verifiableProperties.getString(COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "");
+    cosmosDatabase = verifiableProperties.getString(COSMOS_DATABASE);
+    cosmosContainerForBlobMetadata = verifiableProperties.getString(COSMOS_CONTAINER_FOR_BLOB_METADATA);
+    cosmosContainerForAmbryDeletedContainers =
+        verifiableProperties.getString(COSMOS_CONTAINER_FOR_AMBRY_DELETED_CONTAINERS, "");
     cosmosKey = verifiableProperties.getString(COSMOS_KEY, "");
     cosmosKeySecretName = verifiableProperties.getString(COSMOS_KEY_SECRET_NAME, "");
     cosmosVaultUrl = verifiableProperties.getString(COSMOS_VAULT_URL, "");
