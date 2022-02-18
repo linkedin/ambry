@@ -255,7 +255,7 @@ public class AzureContainerCompactorIntegrationTest {
         try {
           cloudRequestAgent.doWithRetries(() -> CosmosDataAccessor.executeCosmosAction(
               () -> cosmosAsyncClient.getDatabase(azureCloudConfig.cosmosDatabase)
-                  .getContainer(azureCloudConfig.cosmosContainerForAmbryDeletedContainers)
+                  .getContainer(azureCloudConfig.cosmosDeletedContainerCollection)
                   .deleteItem(entry.getId(), new com.azure.cosmos.models.PartitionKey(entry.getId()))
                   .block(), null), "Test Cleanup", entry.getId());
         } catch (CloudStorageException ex) {

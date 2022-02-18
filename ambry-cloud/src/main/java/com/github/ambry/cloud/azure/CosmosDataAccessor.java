@@ -14,6 +14,8 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.ProxyOptions;
+import com.azure.cosmos.implementation.Document;
+import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.models.CosmosChangeFeedRequestOptions;
 import com.azure.cosmos.models.CosmosContainerResponse;
 import com.azure.cosmos.models.CosmosDatabaseResponse;
@@ -24,14 +26,12 @@ import com.azure.cosmos.models.CosmosStoredProcedureRequestOptions;
 import com.azure.cosmos.models.CosmosStoredProcedureResponse;
 import com.azure.cosmos.models.FeedRange;
 import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.SqlParameter;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.security.keyvault.secrets.SecretClient;
 import com.azure.security.keyvault.secrets.SecretClientBuilder;
 import com.codahale.metrics.Timer;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
@@ -78,7 +78,6 @@ public class CosmosDataAccessor {
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY =
       "SELECT TOP " + LIMIT_PARAM + " * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
-  static final String BULK_DELETE_SPROC = "/sprocs/BulkDelete";
   static final String BULK_DELETE_SPROC_ID = "BulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
@@ -89,8 +88,8 @@ public class CosmosDataAccessor {
   private CosmosAsyncContainer cosmosAsyncContainer;
   private final CloudRequestAgent requestAgent;
   private final String cosmosDatabase;
-  private final String cosmosContainerForMetadata;
-  private final String cosmosContainerForDeletedAmbryContainers;
+  private final String cosmosCollection;
+  private final String cosmosDeletedContainerCollection;
   private final AzureMetrics azureMetrics;
   private Callable<?> updateCallback = null;
   private final int continuationTokenLimitKb;
@@ -129,20 +128,20 @@ public class CosmosDataAccessor {
     this.purgeBatchSize = azureCloudConfig.cosmosPurgeBatchSize;
     this.azureMetrics = azureMetrics;
     this.cosmosDatabase = azureCloudConfig.cosmosDatabase;
-    this.cosmosContainerForMetadata = azureCloudConfig.cosmosContainerForBlobMetadata;
-    this.cosmosContainerForDeletedAmbryContainers = azureCloudConfig.cosmosContainerForAmbryDeletedContainers;
+    this.cosmosCollection = azureCloudConfig.cosmosCollection;
+    this.cosmosDeletedContainerCollection = azureCloudConfig.cosmosDeletedContainerCollection;
   }
 
   /** Test constructor */
   CosmosDataAccessor(CosmosAsyncClient cosmosAsyncClient, CosmosAsyncDatabase cosmosAsyncDatabase,
-      CosmosAsyncContainer cosmosAsyncContainer, String cosmosDatabase, String cosmosContainerForMetadata,
-      String cosmosContainerForDeletedAmbryContainers, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
+      CosmosAsyncContainer cosmosAsyncContainer, String cosmosDatabase, String cosmosCollection,
+      String cosmosDeletedContainerCollection, VcrMetrics vcrMetrics, AzureMetrics azureMetrics) {
     this.cosmosAsyncClient = cosmosAsyncClient;
     this.cosmosAsyncDatabase = cosmosAsyncDatabase;
     this.cosmosAsyncContainer = cosmosAsyncContainer;
     this.cosmosDatabase = cosmosDatabase;
-    this.cosmosContainerForMetadata = cosmosContainerForMetadata;
-    this.cosmosContainerForDeletedAmbryContainers = cosmosContainerForDeletedAmbryContainers;
+    this.cosmosCollection = cosmosCollection;
+    this.cosmosDeletedContainerCollection = cosmosDeletedContainerCollection;
     this.continuationTokenLimitKb = AzureCloudConfig.DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT;
     this.requestChargeThreshold = AzureCloudConfig.DEFAULT_COSMOS_REQUEST_CHARGE_THRESHOLD;
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
@@ -169,19 +168,19 @@ public class CosmosDataAccessor {
         throw new IllegalStateException("CosmosDB Database not found: " + cosmosDatabase);
       }
 
-      cosmosAsyncContainer = cosmosAsyncDatabase.getContainer(cosmosContainerForMetadata);
+      cosmosAsyncContainer = cosmosAsyncDatabase.getContainer(cosmosCollection);
       CosmosContainerResponse cosmosContainerResponse = cosmosAsyncContainer.read().block();
       if (cosmosContainerResponse == null || cosmosContainerResponse.getStatusCode() == STATUS_NOT_FOUND) {
-        throw new IllegalStateException("CosmosDB container not found: " + cosmosContainerForMetadata);
+        throw new IllegalStateException("CosmosDB container not found: " + cosmosCollection);
       }
     } catch (Exception ex) {
       if (ex instanceof CosmosException && ((CosmosException) ex).getStatusCode() == STATUS_NOT_FOUND) {
         //Client-specific errors
         throw new IllegalStateException(
-            "CosmosDB database " + cosmosDatabase + "or container " + cosmosContainerForMetadata + " not found", ex);
+            "CosmosDB database " + cosmosDatabase + "or container " + cosmosCollection + " not found", ex);
       }
       throw new RuntimeException(
-          "Error connecting to cosmos database " + cosmosDatabase + "or container " + cosmosContainerForMetadata, ex);
+          "Error connecting to cosmos database " + cosmosDatabase + "or container " + cosmosCollection, ex);
     }
 
     logger.info("CosmosDB connection test succeeded.");
@@ -228,13 +227,11 @@ public class CosmosDataAccessor {
   /**
    * Delete the blob metadata document in the CosmosDB collection, if it exists.
    * @param blobMetadata the blob metadata document to delete.
-   * @return {@code true} if the record was deleted, {@code false} if it was not found.
    * @throws CosmosException if the operation failed.
    */
-  boolean deleteMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
+  void deleteMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
     // Note: not timing here since bulk deletions are timed.
     cosmosAsyncContainer.deleteItem(blobMetadata.getId(), getPartitionKey(blobMetadata.getPartitionId())).block();
-    return true;
   }
 
   /**
@@ -292,25 +289,20 @@ public class CosmosDataAccessor {
     CosmosStoredProcedureRequestOptions cosmosStoredProcedureRequestOptions = new CosmosStoredProcedureRequestOptions();
     cosmosStoredProcedureRequestOptions.setPartitionKey(getPartitionKey(partitionPath));
 
-    Map<String, Object> map;
-    ObjectMapper mapper = new ObjectMapper();
-
     try {
       while (more) {
         CosmosStoredProcedureResponse cosmosStoredProcedureResponse = cosmosAsyncContainer.getScripts()
             .getStoredProcedure(BULK_DELETE_SPROC_ID)
             .execute(Collections.singletonList(query), cosmosStoredProcedureRequestOptions)
             .block();
-        try {
-          map = mapper.readValue(cosmosStoredProcedureResponse.getResponseAsString(),
-              new TypeReference<Map<String, Object>>() {
-              });
-          more = (boolean) map.get(PROPERTY_CONTINUATION);
-          deleteCount += (int) map.get(PROPERTY_DELETED);
+        Document document;
+        if (cosmosStoredProcedureResponse != null) {
+          document = new Document(cosmosStoredProcedureResponse.getResponseAsString());
+          more = document.getBoolean(PROPERTY_CONTINUATION);
+          deleteCount += document.getInt(PROPERTY_DELETED);
           requestCharge += cosmosStoredProcedureResponse.getRequestCharge();
-        } catch (JsonProcessingException e) {
-          logger.error("Failed to deserialize {} to an stored procedure response",
-              cosmosStoredProcedureResponse.getResponseAsString(), e);
+        } else {
+          more = false;
         }
       }
       if (requestCharge >= requestChargeThreshold) {
@@ -320,7 +312,6 @@ public class CosmosDataAccessor {
       return deleteCount;
     } catch (Exception ex) {
       if (ex instanceof CosmosException) {
-        //Client-specific errors
         throw (CosmosException) ex;
       }
       throw ex;
@@ -344,8 +335,8 @@ public class CosmosDataAccessor {
    * Update the blob metadata document in the CosmosDB collection.
    * @param blobId the {@link BlobId} for which metadata is replaced.
    * @param updateFields Map of field names and new values to update.
-   * @return the {@link CosmosItemResponse} containing {@link CloudBlobMetadata} returned by the operation, if successful.
-   * Returns {@Null} if the field already has the specified value.
+   * @return the {@link CosmosItemResponse} containing {@link CloudBlobMetadata} object returned by the operation, if successful.
+   * Returns Null if the field already has the specified value.
    * @throws CosmosException if the record was not found or if the operation failed.
    */
   CosmosItemResponse<CloudBlobMetadata> updateMetadata(BlobId blobId, Map<String, String> updateFields)
@@ -377,15 +368,24 @@ public class CosmosDataAccessor {
       }
     }
 
-    // Perform the update
+    // Update the modified fields
     fieldsToUpdate.forEach(receivedFields::put);
     // Set condition to ensure we don't clobber a concurrent update
     CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
     requestOptions.setIfMatchETag(cosmosItemResponse.getETag());
-    return executeCosmosAction(
-        () -> cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
-            getPartitionKey(blobId.getPartition().toPathString()), requestOptions).block(),
-        azureMetrics.documentUpdateTime);
+
+    // Replace the record
+    try {
+      return executeCosmosAction(
+          () -> cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
+              getPartitionKey(blobId.getPartition().toPathString()), requestOptions).block(),
+          azureMetrics.documentUpdateTime);
+    } catch (CosmosException e) {
+      if (e.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+        azureMetrics.blobUpdateConflictCount.inc();
+      }
+      throw e;
+    }
   }
 
   /**
@@ -397,7 +397,7 @@ public class CosmosDataAccessor {
    * @param startTime the start of the query time range.
    * @param endTime the end of the query time range.
    * @param maxEntries the max number of metadata records to return.
-   * @return a List of {@link CloudBlobMetadata} referencing the dead blobs found.
+   * @return a List of {@link CloudBlobMetadata} objects referencing the dead blobs found.
    * @throws CosmosException if the operation failed.
    */
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
@@ -412,12 +412,8 @@ public class CosmosDataAccessor {
       throw new IllegalArgumentException("Invalid field: " + fieldName);
     }
 
-    ArrayList<com.azure.cosmos.models.SqlParameter> paramList = new ArrayList<>();
-    paramList.add(new com.azure.cosmos.models.SqlParameter(LIMIT_PARAM, maxEntries));
-    paramList.add(new com.azure.cosmos.models.SqlParameter(START_TIME_PARAM, startTime));
-    paramList.add(new com.azure.cosmos.models.SqlParameter(END_TIME_PARAM, endTime));
-
-    SqlQuerySpec sqlQuerySpec = new SqlQuerySpec(deadBlobsQuery, paramList);
+    SqlQuerySpec sqlQuerySpec = new SqlQuerySpec(deadBlobsQuery, new SqlParameter(LIMIT_PARAM, maxEntries),
+        new SqlParameter(START_TIME_PARAM, startTime), new SqlParameter(END_TIME_PARAM, endTime));
     CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
     queryRequestOptions.setPartitionKey(getPartitionKey(partitionPath));
     queryRequestOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
@@ -459,17 +455,14 @@ public class CosmosDataAccessor {
    * @param accountId account id of the container.
    * @param containerId container id of the container.
    * @param queryLimit max number of blobs to return.
-   * @return a List of {@link CloudBlobMetadata} referencing the blobs belonging to the deprecated containers.
+   * @return a List of {@link CloudBlobMetadata} objects referencing the blobs belonging to the deprecated containers.
    * @throws CosmosException in case of any error.
    */
   List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId, int queryLimit)
       throws CosmosException {
-    ArrayList<com.azure.cosmos.models.SqlParameter> paramList = new ArrayList<>();
-    paramList.add(new com.azure.cosmos.models.SqlParameter(LIMIT_PARAM, queryLimit));
-    paramList.add(new com.azure.cosmos.models.SqlParameter(ACCOUNT_ID_PARAM, accountId));
-    paramList.add(new com.azure.cosmos.models.SqlParameter(CONTAINER_ID_PARAM, containerId));
 
-    SqlQuerySpec sqlQuerySpec = new SqlQuerySpec(CONTAINER_BLOBS_QUERY, paramList);
+    SqlQuerySpec sqlQuerySpec = new SqlQuerySpec(CONTAINER_BLOBS_QUERY, new SqlParameter(LIMIT_PARAM, queryLimit),
+        new SqlParameter(ACCOUNT_ID_PARAM, accountId), new SqlParameter(CONTAINER_ID_PARAM, containerId));
 
     CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
     queryRequestOptions.setPartitionKey(getPartitionKey(partitionPath));
@@ -596,9 +589,8 @@ public class CosmosDataAccessor {
 
     CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions;
     if (Utils.isNullOrEmpty(requestContinuationToken)) {
-      FeedRange feedRange = new FeedRange() {
-      };
-      cosmosChangeFeedRequestOptions = CosmosChangeFeedRequestOptions.createForProcessingFromBeginning(feedRange);
+      cosmosChangeFeedRequestOptions =
+          CosmosChangeFeedRequestOptions.createForProcessingFromBeginning(FeedRange.forFullRange());
     } else {
       cosmosChangeFeedRequestOptions =
           CosmosChangeFeedRequestOptions.createForProcessingFromContinuation(requestContinuationToken);
@@ -634,11 +626,11 @@ public class CosmosDataAccessor {
   public long deprecateContainers(Set<CosmosContainerDeletionEntry> deprecatedContainers) throws CosmosException {
     long latestContainerDeletionTimestamp = -1;
 
-    CosmosAsyncContainer cosmosContainer = cosmosAsyncDatabase.getContainer(cosmosContainerForDeletedAmbryContainers);
+    CosmosAsyncContainer cosmosContainer = cosmosAsyncDatabase.getContainer(cosmosDeletedContainerCollection);
     CosmosContainerResponse cosmosContainerResponse = cosmosContainer.read().block();
     if (cosmosContainerResponse == null) {
       throw new IllegalStateException(
-          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosContainerForMetadata);
+          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosCollection);
     }
 
     for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
@@ -659,15 +651,15 @@ public class CosmosDataAccessor {
    * @throws CosmosException in case of any error.
    */
   public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) throws CosmosException {
-    SqlQuerySpec sqlQuerySpec = new SqlQuerySpec(DEPRECATED_CONTAINERS_QUERY,
-        new com.azure.cosmos.models.SqlParameter(LIMIT_PARAM, maxEntries));
+    SqlQuerySpec sqlQuerySpec =
+        new SqlQuerySpec(DEPRECATED_CONTAINERS_QUERY, new SqlParameter(LIMIT_PARAM, maxEntries));
     Timer timer = new Timer();
     Set<CosmosContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
 
     try {
       // Execute cosmos query
       CosmosPagedFlux<CosmosContainerDeletionEntry> pagedFluxResponse =
-          executeCosmosQuery(cosmosContainerForDeletedAmbryContainers, sqlQuerySpec, new CosmosQueryRequestOptions(),
+          executeCosmosQuery(cosmosDeletedContainerCollection, sqlQuerySpec, new CosmosQueryRequestOptions(),
               CosmosContainerDeletionEntry.class, timer);
       pagedFluxResponse.byPage().flatMapSequential(fluxResponse -> {
         containerDeletionEntries.addAll(fluxResponse.getResults());
@@ -699,11 +691,11 @@ public class CosmosDataAccessor {
   CosmosContainerDeletionEntry updateContainerDeletionEntry(short containerId, short accountId,
       BiConsumer<CosmosContainerDeletionEntry, AtomicBoolean> updateFields) throws CosmosException {
 
-    CosmosAsyncContainer cosmosContainer = cosmosAsyncDatabase.getContainer(cosmosContainerForDeletedAmbryContainers);
+    CosmosAsyncContainer cosmosContainer = cosmosAsyncDatabase.getContainer(cosmosDeletedContainerCollection);
     CosmosContainerResponse cosmosContainerResponse = cosmosContainer.read().block();
     if (cosmosContainerResponse == null) {
       throw new IllegalStateException(
-          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosContainerForMetadata);
+          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosCollection);
     }
 
     // Read the existing record
@@ -776,8 +768,8 @@ public class CosmosDataAccessor {
    */
   private CosmosPagedFlux<CloudBlobMetadata> executeCosmosQuery(SqlQuerySpec sqlQuerySpec,
       CosmosQueryRequestOptions cosmosQueryRequestOptions, Timer timer) {
-    return executeCosmosQuery(cosmosContainerForMetadata, sqlQuerySpec, cosmosQueryRequestOptions,
-        CloudBlobMetadata.class, timer);
+    return executeCosmosQuery(cosmosCollection, sqlQuerySpec, cosmosQueryRequestOptions, CloudBlobMetadata.class,
+        timer);
   }
 
   /**

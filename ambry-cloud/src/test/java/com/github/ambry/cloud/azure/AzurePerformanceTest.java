@@ -56,7 +56,7 @@ public class AzurePerformanceTest {
     }
     props.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, connectionString);
     String[] requiredCosmosProperties =
-        {AzureCloudConfig.COSMOS_ENDPOINT, AzureCloudConfig.COSMOS_COLLECTION_LINK, AzureCloudConfig.COSMOS_KEY};
+        {AzureCloudConfig.COSMOS_ENDPOINT, AzureCloudConfig.COSMOS_COLLECTION, AzureCloudConfig.COSMOS_KEY};
     for (String cosmosProperty : requiredCosmosProperties) {
       props.setProperty(cosmosProperty, "something");
     }

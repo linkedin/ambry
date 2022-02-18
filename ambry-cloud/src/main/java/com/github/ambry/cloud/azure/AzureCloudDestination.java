@@ -121,8 +121,8 @@ class AzureCloudDestination implements CloudDestination {
    * @param cosmosAsyncDatabase the {@link CosmosAsyncDatabase} to use.
    * @param cosmosAsyncContainer the {@link CosmosAsyncContainer} to use.
    * @param cosmosDatabase the cosmos Database to use.
-   * @param cosmosContainerForMetadata the CosmosDB container to use.
-   * @param cosmosContainerForDeletedAmbryContainers the CosmosDB container to use.
+   * @param cosmosCollection the CosmosDB collection to use for blob metadata.
+   * @param cosmosDeletedContainerCollection the CosmosDB collection to use for deleted Containers.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureReplicationFeedType the {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
@@ -131,8 +131,8 @@ class AzureCloudDestination implements CloudDestination {
    */
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
       CosmosAsyncClient cosmosAsyncClient, CosmosAsyncDatabase cosmosAsyncDatabase,
-      CosmosAsyncContainer cosmosAsyncContainer, String cosmosDatabase, String cosmosContainerForMetadata,
-      String cosmosContainerForDeletedAmbryContainers, String clusterName, AzureMetrics azureMetrics,
+      CosmosAsyncContainer cosmosAsyncContainer, String cosmosDatabase, String cosmosCollection,
+      String cosmosDeletedContainerCollection, String clusterName, AzureMetrics azureMetrics,
       AzureReplicationFeed.FeedType azureReplicationFeedType, ClusterMap clusterMap, boolean isVcr,
       Properties configProps) throws CloudStorageException {
     this.azureMetrics = azureMetrics;
@@ -145,7 +145,7 @@ class AzureCloudDestination implements CloudDestination {
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
         new CosmosDataAccessor(cosmosAsyncClient, cosmosAsyncDatabase, cosmosAsyncContainer, cosmosDatabase,
-            cosmosContainerForMetadata, cosmosContainerForDeletedAmbryContainers, vcrMetrics, azureMetrics);
+            cosmosCollection, cosmosDeletedContainerCollection, vcrMetrics, azureMetrics);
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =
