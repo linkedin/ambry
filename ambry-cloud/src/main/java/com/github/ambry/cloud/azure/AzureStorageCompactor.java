@@ -253,10 +253,9 @@ public class AzureStorageCompactor {
    * @param endTime the end of the query time range.
    * @param maxEntries the max number of metadata records to return.
    * @return a List of {@link CloudBlobMetadata} referencing the deleted blobs found.
-   * @throws CloudStorageException if the query fails.
    */
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
-      int maxEntries) throws CloudStorageException {
+      int maxEntries) {
     return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
   }
 

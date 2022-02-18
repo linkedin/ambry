@@ -334,8 +334,8 @@ class AzureCloudDestination implements CloudDestination {
       throws CloudStorageException {
     try {
       return azureReplicationFeed.getNextEntriesAndUpdatedToken(findToken, maxTotalSizeOfEntries, partitionPath);
-    } catch (CosmosException cosmosException) {
-      throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, cosmosException);
+    } catch (CosmosException cex) {
+      throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, cex);
     }
   }
 
@@ -389,19 +389,19 @@ class AzureCloudDestination implements CloudDestination {
 
       // Note: even if nothing changed in blob storage, still attempt to update Cosmos since this could be a retry
       // of a request where ABS was updated but Cosmos update failed.
-      boolean updatedCosmos = false;
+      boolean updatedCosmos;
       try {
         CosmosItemResponse<CloudBlobMetadata> response = cosmosDataAccessor.updateMetadata(blobId, metadataMap);
         updatedCosmos = response.getItem() != null;
-      } catch (CosmosException cosmosException) {
-        if (cosmosException.getStatusCode() == com.azure.cosmos.implementation.HttpConstants.StatusCodes.NOTFOUND) {
+      } catch (CosmosException cex) {
+        if (cex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
           // blob exists in ABS but not Cosmos - inconsistent state
           // Recover by inserting the updated map into cosmos
           cosmosDataAccessor.upsertMetadata(CloudBlobMetadata.fromMap(metadataMap));
           azureMetrics.blobUpdateRecoverCount.inc();
           updatedCosmos = true;
         } else {
-          throw cosmosException;
+          throw cex;
         }
       }
 

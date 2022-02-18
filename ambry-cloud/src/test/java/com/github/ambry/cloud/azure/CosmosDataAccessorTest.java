@@ -33,7 +33,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -57,7 +56,7 @@ public class CosmosDataAccessorTest {
   private CosmosAsyncContainer mockCosmosAsyncContainer;
   private AzureMetrics azureMetrics;
   private BlobId blobId;
-  private int blobSize = 1024;
+  private final int blobSize = 1024;
   private CloudBlobMetadata blobMetadata;
 
   @Before
@@ -91,6 +90,9 @@ public class CosmosDataAccessorTest {
     CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
     when(cosmosPagedFlux.byPage()).thenReturn(Flux.just(feedResponse));
     when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(cosmosPagedFlux);
+
+    // Mock querying change feed
+    when(mockCosmosAsyncContainer.queryChangeFeed(any(), any())).thenReturn(cosmosPagedFlux);
 
     cosmosAccessor =
         new CosmosDataAccessor(mockCosmosAsyncClient, mockCosmosAsyncDatabase, mockCosmosAsyncContainer, "ambry",
@@ -148,34 +150,24 @@ public class CosmosDataAccessorTest {
   /** Test change feed query. Ignoring for now since {@link CosmosChangeFeedRequestOptions} instance needed for change
    * feed query might also need to be mocked in some way before executing the query */
   @Test
-  @Ignore
   public void testQueryChangeFeedNormal() {
-    // test with non null requestContinuationToken
-    List<CloudBlobMetadata> metadataList = doQueryChangeFeed("test");
+    List<CloudBlobMetadata> metadataList = doQueryChangeFeed();
     assertEquals("Expected single entry", 1, metadataList.size());
     CloudBlobMetadata outputMetadata = metadataList.get(0);
     assertEquals("Returned metadata does not match original", blobMetadata, outputMetadata);
     assertEquals(1, azureMetrics.changeFeedQueryCount.getCount());
     assertEquals(0, azureMetrics.changeFeedQueryFailureCount.getCount());
 
-    // test with a null continuation token
-    metadataList = doQueryChangeFeed(null);
-    assertEquals("Expected single entry", 1, metadataList.size());
-    outputMetadata = metadataList.get(0);
-    assertEquals("Returned metadata does not match original", blobMetadata, outputMetadata);
-    assertEquals(2, azureMetrics.changeFeedQueryCount.getCount());
-    assertEquals(0, azureMetrics.changeFeedQueryFailureCount.getCount());
-
     // test when queryChangeFeed throws exception
-    CosmosException cosmosException = mock(CosmosException.class);
-    when(cosmosException.getStatusCode()).thenReturn(NOTFOUND);
-    when(mockCosmosAsyncContainer.queryChangeFeed(any(), any())).thenReturn(
-        (CosmosPagedFlux<Object>) Flux.error(cosmosException));
+    CosmosPagedFlux mockCosmosPagedFlux = mock(CosmosPagedFlux.class);
+    when(mockCosmosPagedFlux.byPage()).thenReturn(Flux.error(mock(CosmosException.class)));
+    when(mockCosmosAsyncContainer.queryChangeFeed(any(), any())).thenReturn(mockCosmosPagedFlux);
+
     try {
-      doQueryChangeFeed(null);
+      doQueryChangeFeed();
     } catch (CosmosException e) {
     }
-    assertEquals(3, azureMetrics.changeFeedQueryCount.getCount());
+    assertEquals(2, azureMetrics.changeFeedQueryCount.getCount());
     assertEquals(1, azureMetrics.changeFeedQueryFailureCount.getCount());
   }
 
@@ -186,10 +178,10 @@ public class CosmosDataAccessorTest {
   }
 
   /** Utility method to run metadata query with default parameters. */
-  private List<CloudBlobMetadata> doQueryChangeFeed(String continuationToken) {
+  private List<CloudBlobMetadata> doQueryChangeFeed() {
     List<CloudBlobMetadata> changeFeed = new ArrayList<>();
-    cosmosAccessor.queryChangeFeed(continuationToken, 1000, changeFeed, blobId.getPartition().toPathString(),
-        azureMetrics.changeFeedQueryTime);
+    CosmosChangeFeedRequestOptions mockFeedRequestOptions = mock(CosmosChangeFeedRequestOptions.class);
+    cosmosAccessor.queryChangeFeed(mockFeedRequestOptions, changeFeed, azureMetrics.changeFeedQueryTime);
     return changeFeed;
   }
 }

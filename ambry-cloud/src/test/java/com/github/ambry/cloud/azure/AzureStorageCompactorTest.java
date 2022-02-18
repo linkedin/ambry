@@ -23,7 +23,6 @@ import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.Document;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.models.CosmosStoredProcedureResponse;
-import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.storage.blob.BlobServiceClient;
@@ -41,10 +40,8 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,7 +53,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import static com.github.ambry.cloud.azure.AzureTestUtils.*;
@@ -124,7 +120,6 @@ public class AzureStorageCompactorTest {
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
 
     // Mocks for getDeadBlobs query
-    List<CloudBlobMetadata> docList = new ArrayList<>();
     for (int j = 0; j < numBlobsPerQuery; j++) {
       BlobId blobId = generateBlobId();
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, testTime, Utils.Infinite_Time, blobSize,
@@ -134,20 +129,8 @@ public class AzureStorageCompactorTest {
 
     when(mockCosmosAsyncDatabase.getContainer(anyString())).thenReturn(mockCosmosAsyncContainer);
 
-    FeedResponse feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getResults()).thenReturn(Collections.singletonList(docList));
-    when(feedResponse.getRequestCharge()).thenReturn(10.0);
-    CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
-    when(cosmosPagedFlux.byPage()).thenReturn(Flux.just(feedResponse));
-    when(cosmosPagedFlux.byPage(anyInt())).thenReturn(Flux.just(feedResponse));
-    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(cosmosPagedFlux);
-
-    // Mocks for purge
-    BlobBatch mockBatch = mock(BlobBatch.class);
-    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
-    Response<Void> okResponse = mock(Response.class);
-    when(okResponse.getStatusCode()).thenReturn(202);
-    when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
+    CosmosPagedFlux mockCosmosPagedFlux = getMockPagedFluxForQueryOrChangeFeed(blobMetadataList);
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(mockCosmosPagedFlux);
 
     Document responseDoc = new Document();
     responseDoc.set(CosmosDataAccessor.PROPERTY_CONTINUATION, "false");
@@ -161,12 +144,19 @@ public class AzureStorageCompactorTest {
     when(cosmosAsyncScripts.getStoredProcedure(anyString())).thenReturn(cosmosAsyncStoredProcedure);
     when(mockCosmosAsyncContainer.getScripts()).thenReturn(cosmosAsyncScripts);
 
+    // Mocks for purge
+    BlobBatch mockBatch = mock(BlobBatch.class);
+    when(mockBlobBatchClient.getBlobBatch()).thenReturn(mockBatch);
+    Response<Void> okResponse = mock(Response.class);
+    when(okResponse.getStatusCode()).thenReturn(202);
+    when(mockBatch.deleteBlob(anyString(), anyString())).thenReturn(okResponse);
+
     String checkpointJson = objectMapper.writeValueAsString(AzureStorageCompactor.emptyCheckpoints);
     mockCheckpointDownload(true, checkpointJson);
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
     if (azureStorageCompactor != null) {
       azureStorageCompactor.shutdown();
     }
@@ -175,12 +165,12 @@ public class AzureStorageCompactorTest {
   /** Test compaction method */
   @Test
   public void testCompaction() throws Exception {
-    int expectedNumQUeries = numQueryBuckets * 2;
-    int expectedPurged = numBlobsPerQuery * expectedNumQUeries;
+    int expectedNumQueries = numQueryBuckets * 2;
+    int expectedPurged = numBlobsPerQuery * expectedNumQueries;
     assertEquals(expectedPurged, azureStorageCompactor.compactPartition(partitionPath));
-    verify(mockCosmosAsyncContainer, times(expectedNumQUeries)).queryItems((SqlQuerySpec) any(), any(), any());
-    verify(cosmosAsyncStoredProcedure, times(expectedNumQUeries)).execute(any(), any());
-    verify(mockBlobBatchClient, times(expectedNumQUeries)).submitBatchWithResponse(any(BlobBatch.class), anyBoolean(),
+    verify(mockCosmosAsyncContainer, times(expectedNumQueries)).queryItems((SqlQuerySpec) any(), any(), any());
+    verify(cosmosAsyncStoredProcedure, times(expectedNumQueries)).execute(any(), any());
+    verify(mockBlobBatchClient, times(expectedNumQueries)).submitBatchWithResponse(any(BlobBatch.class), anyBoolean(),
         any(), any());
   }
 
@@ -196,7 +186,7 @@ public class AzureStorageCompactorTest {
 
   /** Test compaction on error reading checkpoint. */
   @Test
-  public void testCompactionFailsOnCheckpointReadError() throws Exception {
+  public void testCompactionFailsOnCheckpointReadError() {
     BlobStorageException ex = mockStorageException(BlobErrorCode.INTERNAL_ERROR);
     when(mockBlockBlobClient.downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any())).thenThrow(
         ex);
@@ -220,9 +210,9 @@ public class AzureStorageCompactorTest {
 
   /** Test getDeadBlobs method */
   @Test
-  public void testGetDeadBlobs() throws Exception {
-    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(
-        getMockedPagedFluxForQueryWithNoResults());
+  public void testGetDeadBlobs() {
+    CosmosPagedFlux mockCosmosPagedFlux = getMockedPagedFluxForQueryWithNoResults();
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(mockCosmosPagedFlux);
     long now = System.currentTimeMillis();
     List<CloudBlobMetadata> metadataList =
         azureStorageCompactor.getDeadBlobs(partitionPath, CloudBlobMetadata.FIELD_DELETION_TIME, 1, now, 10);
@@ -334,7 +324,6 @@ public class AzureStorageCompactorTest {
     long endTime = testTime;
 
     // When dead blobs query returns results, progress gets updated to last record's dead time
-    List<CloudBlobMetadata> docList = new ArrayList<>();
     long lastDeadTime = 0;
     for (int j = 0; j < numBlobsPerQuery; j++) {
       BlobId blobId = generateBlobId();
@@ -343,23 +332,22 @@ public class AzureStorageCompactorTest {
       lastDeadTime = startTime + TimeUnit.HOURS.toMillis(j);
       inputMetadata.setDeletionTime(lastDeadTime);
       blobMetadataList.add(inputMetadata);
-      docList.add(inputMetadata);
     }
 
-    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(
-        getMockPagedFluxForQueryOrChangeFeed(docList));
+    CosmosPagedFlux mockCosmosPagedFlux = getMockPagedFluxForQueryOrChangeFeed(blobMetadataList);
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(mockCosmosPagedFlux);
     compactorSpy.compactPartition(partitionPath, fieldName, startTime, endTime);
     verify(compactorSpy, atLeastOnce()).updateCompactionProgress(eq(partitionPath), eq(fieldName), eq(lastDeadTime));
     verify(compactorSpy, never()).updateCompactionProgress(eq(partitionPath), eq(fieldName), eq(endTime));
 
     // When dead blobs query returns no results, progress gets updated to queryEndtime
-    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(
-        getMockedPagedFluxForQueryWithNoResults());
+    mockCosmosPagedFlux = getMockedPagedFluxForQueryWithNoResults();
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(mockCosmosPagedFlux);
     compactorSpy.compactPartition(partitionPath, fieldName, startTime, endTime);
     verify(compactorSpy).updateCompactionProgress(eq(partitionPath), eq(fieldName), eq(endTime));
   }
 
-  private void mockCheckpointDownload(boolean exists, String checkpointValue) throws IOException {
+  private void mockCheckpointDownload(boolean exists, String checkpointValue) {
     when(mockBlockBlobClient.exists()).thenReturn(exists);
     if (exists) {
       BlobDownloadResponse mockResponse = mock(BlobDownloadResponse.class);

@@ -220,18 +220,31 @@ public class CosmosDataAccessor {
    */
   CosmosItemResponse<CloudBlobMetadata> upsertMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
     return executeCosmosAction(
-        () -> cosmosAsyncContainer.upsertItem(blobMetadata, getPartitionKey(blobMetadata.getPartitionId()),
+        () -> cosmosAsyncContainer.upsertItem(blobMetadata, new PartitionKey(blobMetadata.getPartitionId()),
             new CosmosItemRequestOptions()).block(), azureMetrics.documentCreateTime);
   }
 
   /**
    * Delete the blob metadata document in the CosmosDB collection, if it exists.
    * @param blobMetadata the blob metadata document to delete.
+   * @return {@code true} if the record was deleted, {@code false} if it was not found.
    * @throws CosmosException if the operation failed.
    */
-  void deleteMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
+  boolean deleteMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
     // Note: not timing here since bulk deletions are timed.
-    cosmosAsyncContainer.deleteItem(blobMetadata.getId(), getPartitionKey(blobMetadata.getPartitionId())).block();
+    try {
+      executeCosmosAction(
+          () -> cosmosAsyncContainer.deleteItem(blobMetadata.getId(), new PartitionKey(blobMetadata.getPartitionId()))
+              .block(), null);
+      return true;
+    } catch (CosmosException cex) {
+      if (cex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
+        // Can happen on retry
+        logger.debug("Could not find metadata for blob {} to delete", blobMetadata.getId());
+        return false;
+      }
+      throw cex;
+    }
   }
 
   /**
@@ -248,9 +261,9 @@ public class CosmosDataAccessor {
           requestAgent.doWithRetries(() -> {
             try {
               return bulkDeleteMetadata(batchOfBlobs);
-            } catch (CosmosException cosmosException) {
-              throw new CloudStorageException("BulkDelete failed", cosmosException, cosmosException.getStatusCode(),
-                  true, cosmosException.getRetryAfterDuration().toMillis());
+            } catch (CosmosException cex) {
+              throw new CloudStorageException("BulkDelete failed", cex, cex.getStatusCode(), true,
+                  cex.getRetryAfterDuration().toMillis());
             }
           }, "BulkDelete", partitionPath);
         } catch (CloudStorageException cse) {
@@ -287,7 +300,7 @@ public class CosmosDataAccessor {
     double requestCharge = 0;
 
     CosmosStoredProcedureRequestOptions cosmosStoredProcedureRequestOptions = new CosmosStoredProcedureRequestOptions();
-    cosmosStoredProcedureRequestOptions.setPartitionKey(getPartitionKey(partitionPath));
+    cosmosStoredProcedureRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
 
     try {
       while (more) {
@@ -325,10 +338,17 @@ public class CosmosDataAccessor {
    * @throws CosmosException on any other error.
    */
   CloudBlobMetadata getMetadataOrNull(BlobId blobId) throws CosmosException {
-    CosmosItemResponse<CloudBlobMetadata> readResponse = executeCosmosAction(
-        () -> cosmosAsyncContainer.readItem(blobId.getID(), getPartitionKey(blobId.getPartition().toPathString()),
-            CloudBlobMetadata.class).block(), azureMetrics.documentReadTime);
-    return readResponse.getItem();
+    try {
+      CosmosItemResponse<CloudBlobMetadata> readResponse = executeCosmosAction(
+          () -> cosmosAsyncContainer.readItem(blobId.getID(), new PartitionKey(blobId.getPartition().toPathString()),
+              CloudBlobMetadata.class).block(), azureMetrics.documentReadTime);
+      return readResponse.getItem();
+    } catch (CosmosException cex) {
+      if (cex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
+        return null;
+      }
+      throw cex;
+    }
   }
 
   /**
@@ -344,7 +364,7 @@ public class CosmosDataAccessor {
 
     // Read the existing record
     CosmosItemResponse<CloudBlobMetadata> cosmosItemResponse = executeCosmosAction(
-        () -> cosmosAsyncContainer.readItem(blobId.getID(), getPartitionKey(blobId.getPartition().toPathString()),
+        () -> cosmosAsyncContainer.readItem(blobId.getID(), new PartitionKey(blobId.getPartition().toPathString()),
             CloudBlobMetadata.class).block(), azureMetrics.documentReadTime);
     CloudBlobMetadata receivedMetadata = cosmosItemResponse.getItem();
 
@@ -378,13 +398,13 @@ public class CosmosDataAccessor {
     try {
       return executeCosmosAction(
           () -> cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
-              getPartitionKey(blobId.getPartition().toPathString()), requestOptions).block(),
+              new PartitionKey(blobId.getPartition().toPathString()), requestOptions).block(),
           azureMetrics.documentUpdateTime);
-    } catch (CosmosException e) {
-      if (e.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+    } catch (CosmosException cex) {
+      if (cex.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
         azureMetrics.blobUpdateConflictCount.inc();
       }
-      throw e;
+      throw cex;
     }
   }
 
@@ -415,7 +435,7 @@ public class CosmosDataAccessor {
     SqlQuerySpec sqlQuerySpec = new SqlQuerySpec(deadBlobsQuery, new SqlParameter(LIMIT_PARAM, maxEntries),
         new SqlParameter(START_TIME_PARAM, startTime), new SqlParameter(END_TIME_PARAM, endTime));
     CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
-    queryRequestOptions.setPartitionKey(getPartitionKey(partitionPath));
+    queryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
     queryRequestOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
 
     try {
@@ -440,10 +460,9 @@ public class CosmosDataAccessor {
     } catch (Exception ex) {
       if (ex instanceof CosmosException) {
         //Client-specific errors
-        CosmosException cosmosException = (CosmosException) ex;
-        logger.warn("Dead blobs query {} partition {} got {}", deadBlobsQuery, partitionPath,
-            cosmosException.getStatusCode());
-        throw cosmosException;
+        CosmosException cex = (CosmosException) ex;
+        logger.warn("Dead blobs query {} partition {} got {}", deadBlobsQuery, partitionPath, cex.getStatusCode());
+        throw cex;
       }
       throw ex;
     }
@@ -465,7 +484,7 @@ public class CosmosDataAccessor {
         new SqlParameter(ACCOUNT_ID_PARAM, accountId), new SqlParameter(CONTAINER_ID_PARAM, containerId));
 
     CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
-    queryRequestOptions.setPartitionKey(getPartitionKey(partitionPath));
+    queryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
     queryRequestOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
 
     try {
@@ -490,10 +509,10 @@ public class CosmosDataAccessor {
     } catch (Exception ex) {
       if (ex instanceof CosmosException) {
         //Client-specific errors
-        CosmosException cosmosException = (CosmosException) ex;
+        CosmosException cex = (CosmosException) ex;
         logger.warn("Container blobs query {} partition {} got {}", sqlQuerySpec.getQueryText(), partitionPath,
-            cosmosException.getStatusCode());
-        throw cosmosException;
+            cex.getStatusCode());
+        throw cex;
       }
       throw ex;
     }
@@ -536,7 +555,7 @@ public class CosmosDataAccessor {
       throws CosmosException {
 
     CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
-    queryRequestOptions.setPartitionKey(getPartitionKey(partitionPath));
+    queryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
     queryRequestOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
 
     try {
@@ -561,10 +580,9 @@ public class CosmosDataAccessor {
     } catch (Exception ex) {
       if (ex instanceof CosmosException) {
         //Client-specific errors
-        CosmosException cosmosException = (CosmosException) ex;
-        logger.warn("Query {} on partition {} got {}", sqlQuerySpec.getQueryText(), partitionPath,
-            cosmosException.getStatusCode());
-        throw cosmosException;
+        CosmosException cex = (CosmosException) ex;
+        logger.warn("Query {} on partition {} got {}", sqlQuerySpec.getQueryText(), partitionPath, cex.getStatusCode());
+        throw cex;
       }
       throw ex;
     }
@@ -584,9 +602,6 @@ public class CosmosDataAccessor {
    */
   public String queryChangeFeed(String requestContinuationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
       String partitionPath, Timer timer) throws CosmosException {
-
-    azureMetrics.changeFeedQueryCount.inc();
-
     CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions;
     if (Utils.isNullOrEmpty(requestContinuationToken)) {
       cosmosChangeFeedRequestOptions =
@@ -596,12 +611,26 @@ public class CosmosDataAccessor {
           CosmosChangeFeedRequestOptions.createForProcessingFromContinuation(requestContinuationToken);
     }
     cosmosChangeFeedRequestOptions.setMaxItemCount(maxFeedSize);
+    return queryChangeFeed(cosmosChangeFeedRequestOptions, changeFeed, timer);
+  }
+
+  /**
+   * Query Cosmos change feed to get the next set of {@code CloudBlobMetadata} objects.
+   * @param cosmosChangeFeedRequestOptions {@link CosmosChangeFeedRequestOptions} containing the options for the change feed request.
+   * @param changeFeed {@link CloudBlobMetadata} {@code List} to be populated with the next set of entries returned by change feed query.
+   * @param timer the {@link Timer} to use to record query time (excluding waiting).
+   * @return timer the {@link Timer} to use to record query time (excluding waiting).
+   */
+  String queryChangeFeed(CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions,
+      List<CloudBlobMetadata> changeFeed, Timer timer) {
+
+    azureMetrics.changeFeedQueryCount.inc();
     AtomicReference<String> continuationToken = new AtomicReference<>();
 
     try {
       CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
           executeCosmosChangeFeedQuery(cosmosChangeFeedRequestOptions, timer);
-      pagedFluxResponse.byPage().concatMap(fluxResponse -> {
+      pagedFluxResponse.byPage().flatMapSequential(fluxResponse -> {
         changeFeed.addAll(fluxResponse.getResults());
         continuationToken.set(fluxResponse.getContinuationToken());
         return Flux.empty();
@@ -635,7 +664,7 @@ public class CosmosDataAccessor {
 
     for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
       executeCosmosAction(
-          () -> cosmosContainer.createItem(containerDeletionEntry, getPartitionKey(containerDeletionEntry.getId()),
+          () -> cosmosContainer.createItem(containerDeletionEntry, new PartitionKey(containerDeletionEntry.getId()),
               new CosmosItemRequestOptions()).block(), azureMetrics.containerDeprecationDocumentCreateTime);
       if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
         latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
@@ -668,10 +697,9 @@ public class CosmosDataAccessor {
     } catch (Exception ex) {
       if (ex instanceof CosmosException) {
         //Client-specific errors
-        CosmosException cosmosException = (CosmosException) ex;
-        logger.warn("Get deprecated containers query {} got {}", sqlQuerySpec.getQueryText(),
-            cosmosException.getStatusCode());
-        throw cosmosException;
+        CosmosException cex = (CosmosException) ex;
+        logger.warn("Get deprecated containers query {} got {}", sqlQuerySpec.getQueryText(), cex.getStatusCode());
+        throw cex;
       }
       throw ex;
     }
@@ -701,7 +729,7 @@ public class CosmosDataAccessor {
     // Read the existing record
     String id = CosmosContainerDeletionEntry.generateContainerDeletionEntryId(accountId, containerId);
     CosmosItemResponse<CosmosContainerDeletionEntry> cosmosItemResponse = executeCosmosAction(
-        () -> cosmosContainer.readItem(id, getPartitionKey(id), CosmosContainerDeletionEntry.class).block(),
+        () -> cosmosContainer.readItem(id, new PartitionKey(id), CosmosContainerDeletionEntry.class).block(),
         azureMetrics.continerDeletionEntryReadTime);
     CosmosContainerDeletionEntry containerDeletionEntry = cosmosItemResponse.getItem();
 
@@ -726,8 +754,8 @@ public class CosmosDataAccessor {
     CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
     requestOptions.setIfMatchETag(cosmosItemResponse.getETag());
     return executeCosmosAction(
-        () -> cosmosAsyncContainer.replaceItem(containerDeletionEntry, id, getPartitionKey(id), requestOptions).block(),
-        azureMetrics.documentUpdateTime).getItem();
+        () -> cosmosAsyncContainer.replaceItem(containerDeletionEntry, id, new PartitionKey(id), requestOptions)
+            .block(), azureMetrics.documentUpdateTime).getItem();
   }
 
   /**
@@ -815,10 +843,6 @@ public class CosmosDataAccessor {
     } finally {
       operationTimer.stop();
     }
-  }
-
-  private PartitionKey getPartitionKey(String partitionPath) {
-    return new PartitionKey(partitionPath);
   }
 
   /**

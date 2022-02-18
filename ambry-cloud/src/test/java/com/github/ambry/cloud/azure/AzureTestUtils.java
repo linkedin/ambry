@@ -14,7 +14,6 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.cosmos.CosmosAsyncContainer;
-import com.azure.cosmos.implementation.Document;
 import com.azure.cosmos.models.CosmosChangeFeedRequestOptions;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.FeedResponse;
@@ -106,9 +105,9 @@ class AzureTestUtils {
    */
   static CosmosPagedFlux getMockPagedFluxForQueryOrChangeFeed(List<CloudBlobMetadata> documentList) {
     FeedResponse feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getResults()).thenReturn(Collections.singletonList(documentList));
+    when(feedResponse.getResults()).thenReturn(documentList);
     CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
-    when(cosmosPagedFlux.byPage()).thenReturn(Flux.just(feedResponse));
+    when(cosmosPagedFlux.byPage(anyInt())).thenReturn(Flux.just(feedResponse));
     return cosmosPagedFlux;
   }
 
@@ -118,9 +117,9 @@ class AzureTestUtils {
    */
   static CosmosPagedFlux getMockedPagedFluxForQueryWithNoResults() {
     FeedResponse feedResponse = mock(FeedResponse.class);
-    when(feedResponse.getResults()).thenReturn(Collections.singletonList(Collections.EMPTY_LIST));
+    when(feedResponse.getResults()).thenReturn(Collections.EMPTY_LIST);
     CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
-    when(cosmosPagedFlux.byPage()).thenReturn(Flux.just(feedResponse));
+    when(cosmosPagedFlux.byPage(anyInt())).thenReturn(Flux.just(feedResponse));
     return cosmosPagedFlux;
   }
 
