@@ -14,6 +14,7 @@
 package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaName;
@@ -31,14 +32,16 @@ import java.util.concurrent.Callable;
 
 
 /**
- * Implementation of {@link QuotaEnforcer} for CU quota of Ambry's {@link QuotaResource}s.
- * Note that this implementation is not thread safe or atomic. The caller should take care of thread safety guarantees
+ * Implementation of {@link QuotaEnforcer} for CU quota of Ambry's {@link QuotaResource}s. It recommends out of quota
+ * requests to be delayed to bring them under quota.
+ *
+ * This implementation is not thread safe or atomic. The caller should take care of thread safety guarantees
  * where needed.
  */
 public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   private final static List<QuotaName> SUPPORTED_QUOTA_NAMES =
       Collections.unmodifiableList(Arrays.asList(QuotaName.READ_CAPACITY_UNIT, QuotaName.WRITE_CAPACITY_UNIT));
-  private final static long NO_THROTTLE_RETRY_AFTER_MS = -1;
+  private final static int MAX_USAGE_PERCENTAGE_ALLOWED = 100;
   private final QuotaSource quotaSource;
   private final float maxFrontendCuUsageToAllowExceed;
   private final long throttleRetryAfterMs;
@@ -58,7 +61,8 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public QuotaRecommendation charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) throws QuotaException {
+  public QuotaRecommendation charge(RestRequest restRequest, Map<QuotaName, Double> requestCostMap)
+      throws QuotaException {
     final QuotaName quotaName = QuotaUtils.getCUQuotaName(restRequest);
     if (requestCostMap.isEmpty() || !requestCostMap.containsKey(quotaName)) {
       String errorMessage = String.format("No %s cost provided for request %s. Nothing to charge", quotaName.name(),
@@ -113,9 +117,9 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
    * @return QuotaRecommendation object.
    */
   private QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName) {
-    boolean shouldThrottle = (usage >= 100);
-    return new QuotaRecommendation(shouldThrottle, usage, quotaName,
-        shouldThrottle ? throttleRetryAfterMs : NO_THROTTLE_RETRY_AFTER_MS);
+    QuotaAction quotaAction = (usage >= MAX_USAGE_PERCENTAGE_ALLOWED) ? QuotaAction.DELAY : QuotaAction.ALLOW;
+    return new QuotaRecommendation(quotaAction, usage, quotaName,
+        (quotaAction == QuotaAction.DELAY) ? throttleRetryAfterMs : QuotaRecommendation.NO_THROTTLE_RETRY_AFTER_MS);
   }
 
   /**

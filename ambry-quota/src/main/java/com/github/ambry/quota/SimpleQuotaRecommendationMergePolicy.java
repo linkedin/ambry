@@ -15,7 +15,6 @@ package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.StorageQuotaConfig;
-import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -23,23 +22,25 @@ import java.util.Map;
 
 
 /**
- * An implementation of {@link QuotaRecommendationMergePolicy} that creates a {@link ThrottlingRecommendation} to throttle if any one of
- * {@link QuotaRecommendation} recommendation is to throttle, and takes the max of retry after time interval. Also
- * groups the quota usage for all the quotas.
+ * An implementation of {@link QuotaRecommendationMergePolicy} that merges a list of {@link QuotaRecommendation}s to
+ * create a resultant {@link ThrottlingRecommendation}. This {@link ThrottlingRecommendation}
+ * object will be used by rest of Ambry as the overall recommendation to ensure quota compliance of a request.
  *
- * This Policy also respect the settings in the {@link QuotaConfig}. If the {@link QuotaConfig#requestThrottlingEnabled} is
- * false, we don't throttle on {@link QuotaName#READ_CAPACITY_UNIT} and {@link QuotaName#WRITE_CAPACITY_UNIT}. If the
- * {@link StorageQuotaConfig#shouldThrottle} is false, we don't throttle on {@link QuotaName#STORAGE_IN_GB}.
+ * This implementation merges the {@link QuotaRecommendation}s into the most severe {@link QuotaRecommendation}.
+ * {@link QuotaRecommendation#quotaAction} is used to determine severity. For more details about severity and
+ * ordering check {@link QuotaAction}.
+ *
+ * This Policy also respects the settings in the {@link QuotaConfig}. If the {@link QuotaConfig#requestThrottlingEnabled}
+ * is false, it doesn't throttle on Capacity Unit quotas. If the {@link StorageQuotaConfig#shouldThrottle} is false, it
+ * doesn't throttle on {@link QuotaName#STORAGE_IN_GB}.
  */
 public class SimpleQuotaRecommendationMergePolicy implements QuotaRecommendationMergePolicy {
   static final long DEFAULT_RETRY_AFTER_MS = ThrottlingRecommendation.NO_RETRY_AFTER_MS;
   static final QuotaUsageLevel DEFAULT_QUOTA_USAGE_LEVEL = QuotaUsageLevel.HEALTHY;
-
-  // Percentage usage at or below this limit is healthy.
-  private final int healthyUsageLevelLimit;
   // Percentage usage level above which critical warning will be generated.
   static final int CRITICAL_USAGE_LEVEL_LIMIT = 95;
-
+  // Percentage usage at or below this limit is healthy.
+  private final int healthyUsageLevelLimit;
   private final QuotaConfig quotaConfig;
 
   /**
@@ -53,27 +54,24 @@ public class SimpleQuotaRecommendationMergePolicy implements QuotaRecommendation
 
   @Override
   public ThrottlingRecommendation mergeEnforcementRecommendations(List<QuotaRecommendation> quotaRecommendations) {
-    boolean shouldThrottle = false;
+    QuotaAction mergedQuotaAction = QuotaAction.ALLOW;
     Map<QuotaName, Float> quotaUsagePercentage = new HashMap<>();
-    HttpResponseStatus recommendedHttpStatus = QuotaRecommendationMergePolicy.ACCEPT_HTTP_STATUS;
     long retryAfterMs = DEFAULT_RETRY_AFTER_MS;
     for (QuotaRecommendation recommendation : quotaRecommendations) {
-      boolean currentQuotaShouldThrottle = recommendation.shouldThrottle();
+      QuotaAction currentQuotaAction = recommendation.getQuotaAction();
       if (recommendation.getQuotaName() == QuotaName.READ_CAPACITY_UNIT
           || recommendation.getQuotaName() == QuotaName.WRITE_CAPACITY_UNIT) {
-        currentQuotaShouldThrottle &= quotaConfig.requestThrottlingEnabled;
+        currentQuotaAction = quotaConfig.requestThrottlingEnabled ? currentQuotaAction : QuotaAction.ALLOW;
       } else if (recommendation.getQuotaName() == QuotaName.STORAGE_IN_GB) {
-        currentQuotaShouldThrottle &= quotaConfig.storageQuotaConfig.shouldThrottle;
+        currentQuotaAction = quotaConfig.storageQuotaConfig.shouldThrottle ? currentQuotaAction : QuotaAction.ALLOW;
       }
-      shouldThrottle = shouldThrottle | currentQuotaShouldThrottle;
+      mergedQuotaAction = mergeQuotaAction(mergedQuotaAction, currentQuotaAction);
       quotaUsagePercentage.put(recommendation.getQuotaName(), recommendation.getQuotaUsagePercentage());
-      recommendedHttpStatus = QuotaUtils.quotaRecommendedHttpResponse(shouldThrottle);
       retryAfterMs = Math.max(recommendation.getRetryAfterMs(), retryAfterMs);
     }
     QuotaUsageLevel quotaUsageLevel = quotaUsagePercentage.isEmpty() ? DEFAULT_QUOTA_USAGE_LEVEL
         : computeWarningLevel(Collections.max(quotaUsagePercentage.values()));
-    return new ThrottlingRecommendation(shouldThrottle, quotaUsagePercentage, recommendedHttpStatus, retryAfterMs,
-        quotaUsageLevel);
+    return new ThrottlingRecommendation(mergedQuotaAction, quotaUsagePercentage, retryAfterMs, quotaUsageLevel);
   }
 
   /**
@@ -92,5 +90,19 @@ public class SimpleQuotaRecommendationMergePolicy implements QuotaRecommendation
       return QuotaUsageLevel.WARNING;
     }
     return QuotaUsageLevel.HEALTHY;
+  }
+
+  /**
+   * Merge the {@link QuotaAction} objects into one by picking the more severe of the specified {@link QuotaAction}
+   * objects. For more details about severity check {@link QuotaAction}.
+   * @param quotaAction1 {@link QuotaAction} object.
+   * @param quotaAction2 {@link QuotaAction} object.
+   * @return QuotaAction which is the more severe {@link QuotaAction} in the pair.
+   */
+  private QuotaAction mergeQuotaAction(QuotaAction quotaAction1, QuotaAction quotaAction2) {
+    if (quotaAction1.compareTo(quotaAction2) > 0) {
+      return quotaAction1;
+    }
+    return quotaAction2;
   }
 }

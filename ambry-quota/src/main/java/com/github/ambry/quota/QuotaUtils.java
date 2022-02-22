@@ -87,13 +87,14 @@ public class QuotaUtils {
    * Build {@link QuotaChargeCallback} to handle quota compliance of requests.
    * @param restRequest {@link RestRequest} for which quota is being charged.
    * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
-   * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
+   * @param isQuotaEnforcedOnRequest flag indicating if request quota should be enforced after charging. Requests like
+   *                                 updatettl, delete etc are charged, but quota is not enforced on them.
    * @return QuotaChargeCallback object.
    */
   public static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
-      boolean shouldThrottle) {
+      boolean isQuotaEnforcedOnRequest) {
     if (!quotaManager.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
-      return new RejectingQuotaChargeCallback(quotaManager, restRequest, shouldThrottle);
+      return new RejectingQuotaChargeCallback(quotaManager, restRequest, isQuotaEnforcedOnRequest);
     } else {
       throw new UnsupportedOperationException("Not implemented yet.");
     }

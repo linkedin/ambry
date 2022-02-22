@@ -30,19 +30,21 @@ public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
   private final QuotaManager quotaManager;
   private final RestRequest restRequest;
   private final RequestQuotaCostPolicy requestCostPolicy;
-  private final boolean shouldThrottle;
+  private final boolean isQuotaEnforcedOnRequest;
 
   /**
    * Constructor for {@link RejectingQuotaChargeCallback}.
    * @param quotaManager {@link QuotaManager} object responsible for charging the quota.
    * @param restRequest {@link RestRequest} for which quota is being charged.
-   * @param shouldThrottle flag indicating if request should be throttled after charging. Requests like updatettl, delete etc need not be throttled.
+   * @param isQuotaEnforcedOnRequest flag indicating if request quota should be enforced after charging. Requests like
+   *                                 update ttl, delete etc are charged, but quota is not enforced on them.
    */
-  public RejectingQuotaChargeCallback(QuotaManager quotaManager, RestRequest restRequest, boolean shouldThrottle) {
+  public RejectingQuotaChargeCallback(QuotaManager quotaManager, RestRequest restRequest,
+      boolean isQuotaEnforcedOnRequest) {
     this.quotaManager = quotaManager;
     requestCostPolicy = new SimpleRequestQuotaCostPolicy(quotaManager.getQuotaConfig());
     this.restRequest = restRequest;
-    this.shouldThrottle = shouldThrottle;
+    this.isQuotaEnforcedOnRequest = isQuotaEnforcedOnRequest;
   }
 
   @Override
@@ -53,7 +55,7 @@ public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
           .stream()
           .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), Map.Entry::getValue));
       ThrottlingRecommendation throttlingRecommendation = quotaManager.charge(restRequest, null, requestCost);
-      if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle() && shouldThrottle) {
+      if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle() && isQuotaEnforcedOnRequest) {
         if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING
             && quotaManager.getQuotaConfig().throttleInProgressRequests) {
           throw new QuotaException("Exception while charging quota",
