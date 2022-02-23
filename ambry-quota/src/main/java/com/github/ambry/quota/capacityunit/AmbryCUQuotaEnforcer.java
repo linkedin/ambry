@@ -49,6 +49,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   /**
    * Constructor for {@link AmbryCapacityUnitQuotaEnforcer}.
    * @param quotaSource {@link QuotaSource} where the quota limit and usage will be saved and retrieved from.
+   * @param quotaConfig {@link QuotaConfig} object.
    */
   public AmbryCUQuotaEnforcer(QuotaSource quotaSource, QuotaConfig quotaConfig) {
     this.quotaSource = quotaSource;
