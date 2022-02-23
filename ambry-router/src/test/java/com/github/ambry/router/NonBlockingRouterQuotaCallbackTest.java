@@ -27,6 +27,7 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMethod;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendationMergePolicy;
@@ -313,7 +314,8 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
         QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
         AccountStatsStore accountStatsStore, MetricRegistry metricRegistry, AtomicInteger chargeCalledCount)
         throws ReflectiveOperationException {
-      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, metricRegistry);
+      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore,
+          new QuotaMetrics(metricRegistry));
       this.chargeCalledCount = chargeCalledCount;
     }
 

@@ -37,7 +37,7 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
       QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
       AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
     quotaManager = new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore,
-        metricRegistry);
+        new QuotaMetrics(metricRegistry));
   }
 
   @Override
