@@ -20,6 +20,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -59,15 +61,15 @@ public class AmbryQuotaManager implements QuotaManager {
   public AmbryQuotaManager(QuotaConfig quotaConfig, QuotaRecommendationMergePolicy quotaRecommendationMergePolicy,
       AccountService accountService, AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics)
       throws ReflectiveOperationException {
-    Map<String, String> quotaEnforcerSourceMap =
+    List<Pair<String, String>> quotaEnforcerSourcePairs =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
-        buildQuotaSources(quotaEnforcerSourceMap.values(), quotaConfig, accountService);
+        buildQuotaSources(quotaEnforcerSourcePairs.stream().map(pair -> pair.getSecond()).collect(Collectors.toList()),
+            quotaConfig, accountService);
     requestQuotaEnforcers = new HashSet<>();
-    for (String quotaEnforcerFactory : quotaEnforcerSourceMap.keySet()) {
-      requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerFactory, quotaConfig,
-          quotaSourceObjectMap.get(quotaEnforcerSourceMap.get(quotaEnforcerFactory)),
-          accountStatsStore)).getQuotaEnforcer());
+    for (Pair<String, String> quotaEnforcerSourcePair : quotaEnforcerSourcePairs) {
+      requestQuotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerSourcePair.getFirst(), quotaConfig,
+          quotaSourceObjectMap.get(quotaEnforcerSourcePair.getSecond()), accountStatsStore)).getQuotaEnforcer());
     }
     this.quotaRecommendationMergePolicy = quotaRecommendationMergePolicy;
     this.quotaConfig = quotaConfig;
@@ -138,7 +140,7 @@ public class AmbryQuotaManager implements QuotaManager {
       for (QuotaEnforcer quotaEnforcer : requestQuotaEnforcers) {
         try {
           QuotaRecommendation quotaRecommendation = quotaEnforcer.charge(restRequest, requestCostMap);
-          if(Objects.nonNull(quotaRecommendation)) {
+          if (Objects.nonNull(quotaRecommendation)) {
             quotaRecommendations.add(quotaRecommendation);
           }
         } catch (QuotaException quotaException) {
@@ -190,22 +192,22 @@ public class AmbryQuotaManager implements QuotaManager {
   /**
    * Parse the json config for {@link QuotaEnforcer} and {@link QuotaSource} factory pair and return them in a {@link Map}.
    * @param quotaEnforcerSourceJson json config string.
-   * @return Map of {@link QuotaEnforcer} and {@link QuotaSource} factory pair.
+   * @return List of {@link QuotaEnforcer} and {@link QuotaSource} factory {@link Pair}s.
    */
-  private Map<String, String> parseQuotaEnforcerAndSourceInfo(String quotaEnforcerSourceJson) {
+  private List<Pair<String, String>> parseQuotaEnforcerAndSourceInfo(String quotaEnforcerSourceJson) {
     if (quotaEnforcerSourceJson.isEmpty()) {
-      return Collections.emptyMap();
+      return Collections.emptyList();
     }
-    Map<String, String> quotaEnforcerSourceMap = new HashMap<>();
+    List<Pair<String, String>> quotaEnforcerSourcePairs = new ArrayList<>();
     JSONObject root = new JSONObject(quotaEnforcerSourceJson);
     JSONArray all = root.getJSONArray(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR);
     for (int i = 0; i < all.length(); i++) {
       JSONObject entry = all.getJSONObject(i);
       String enforcer = entry.getString(QuotaConfig.ENFORCER_STR);
       String source = entry.getString(QuotaConfig.SOURCE_STR);
-      quotaEnforcerSourceMap.put(enforcer, source);
+      quotaEnforcerSourcePairs.add(new Pair<>(enforcer, source));
     }
-    return quotaEnforcerSourceMap;
+    return quotaEnforcerSourcePairs;
   }
 
   /**
