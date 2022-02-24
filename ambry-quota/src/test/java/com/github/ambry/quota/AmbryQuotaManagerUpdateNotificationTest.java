@@ -53,7 +53,8 @@ public class AmbryQuotaManagerUpdateNotificationTest {
         new AccountServiceForConsumerTest(new AccountServiceConfig(verifiableProperties),
             new AccountServiceMetrics(metricRegistry), null);
     AmbryQuotaManager ambryQuotaManager =
-        new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, null, metricRegistry);
+        new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, null,
+            new QuotaMetrics(metricRegistry));
     UnlimitedQuotaSource quotaSource = (UnlimitedQuotaSource) getQuotaSourceMember(ambryQuotaManager);
     assertTrue("updated accounts should be empty", quotaSource.getQuotaResourceList().isEmpty());
 

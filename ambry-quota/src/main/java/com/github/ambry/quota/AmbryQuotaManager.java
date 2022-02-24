@@ -13,7 +13,6 @@
  */
 package com.github.ambry.quota;
 
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
@@ -54,11 +53,11 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param quotaRecommendationMergePolicy {@link QuotaRecommendationMergePolicy} object that makes the overall recommendation.
    * @param accountService {@link AccountService} object to get all the accounts and container information.
    * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
-   * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
+   * @param quotaMetrics {@link QuotaMetrics} object.
    * @throws ReflectiveOperationException in case of any exception.
    */
   public AmbryQuotaManager(QuotaConfig quotaConfig, QuotaRecommendationMergePolicy quotaRecommendationMergePolicy,
-      AccountService accountService, AccountStatsStore accountStatsStore, MetricRegistry metricRegistry)
+      AccountService accountService, AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics)
       throws ReflectiveOperationException {
     Map<String, String> quotaEnforcerSourceMap =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
@@ -72,7 +71,7 @@ public class AmbryQuotaManager implements QuotaManager {
     }
     this.quotaRecommendationMergePolicy = quotaRecommendationMergePolicy;
     this.quotaConfig = quotaConfig;
-    this.quotaMetrics = new QuotaMetrics(metricRegistry);
+    this.quotaMetrics = quotaMetrics;
     this.quotaMode = quotaConfig.throttlingMode;
     accountService.addAccountUpdateConsumer(this::onAccountUpdateNotification);
   }

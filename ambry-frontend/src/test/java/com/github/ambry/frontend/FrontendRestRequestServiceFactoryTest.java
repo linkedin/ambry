@@ -23,6 +23,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
@@ -50,7 +51,7 @@ public class FrontendRestRequestServiceFactoryTest {
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER =
           new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig), Mockito.mock(AccountService.class),
-              null, new MetricRegistry());
+              null, new QuotaMetrics(new MetricRegistry()));
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
