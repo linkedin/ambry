@@ -128,16 +128,20 @@ public class AmbryQuotaManager implements QuotaManager {
     try {
       List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
       boolean partialRecommendation = false;
+      boolean noRecommendation = true;
       for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
         try {
           quotaRecommendations.add(quotaEnforcer.recommend(restRequest));
+          noRecommendation = false;
         } catch (QuotaException quotaException) {
           LOGGER.warn("Could not get recommendation for quota {} due to exception: {}",
               quotaEnforcer.supportedQuotaNames(), quotaException.getMessage());
           partialRecommendation = true;
         }
       }
-      if (partialRecommendation) {
+      if (noRecommendation) {
+        quotaMetrics.noRecommendationRate.mark();
+      } else if (partialRecommendation) {
         quotaMetrics.partialQuotaRecommendationRate.mark();
       }
       throttlingRecommendation = quotaRecommendationMergePolicy.mergeEnforcementRecommendations(quotaRecommendations);
@@ -254,15 +258,19 @@ public class AmbryQuotaManager implements QuotaManager {
    */
   protected void chargeQuotaUsage(RestRequest restRequest, Map<QuotaName, Double> requestCostMap) {
     boolean partialCharge = false;
+    boolean noCharge = true;
     for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
       try {
         quotaEnforcer.charge(restRequest, requestCostMap);
+        noCharge = false;
       } catch (QuotaException quotaException) {
         LOGGER.warn("Exception {} while charging for {} quotas.", quotaException, quotaEnforcer.supportedQuotaNames());
         partialCharge = true;
       }
     }
-    if (partialCharge) {
+    if (noCharge) {
+      quotaMetrics.noChargeRate.mark();
+    } else if (partialCharge) {
       quotaMetrics.partialChargeRate.mark();
     }
   }

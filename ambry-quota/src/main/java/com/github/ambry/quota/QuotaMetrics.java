@@ -31,7 +31,9 @@ public class QuotaMetrics {
   public final Counter quotaResourceInvalidUnlockAttemptCount;
   public final Meter quotaExceedAllowedRate;
   public final Meter partialChargeRate;
+  public final Meter noChargeRate;
   public final Meter partialQuotaRecommendationRate;
+  public final Meter noRecommendationRate;
   public final Meter forcedChargeRate;
   public final Meter throttleRate;
   public final Meter noQuotaRecommendationRate;
@@ -64,5 +66,7 @@ public class QuotaMetrics {
     chargeAndRecommendRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "ChargeAndRecommendRate"));
     accountUpdateNotificationCount =
         metricRegistry.counter(MetricRegistry.name(QuotaManager.class, "AccountUpdateNotificationCount"));
+    noChargeRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoChargeRate"));
+    noRecommendationRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoRecommendationRate"));
   }
 }
