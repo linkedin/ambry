@@ -47,7 +47,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   private final long throttleRetryAfterMs;
 
   /**
-   * Constructor for {@link AmbryCapacityUnitQuotaEnforcer}.
+   * Constructor for {@link AmbryCUQuotaEnforcer}.
    * @param quotaSource {@link QuotaSource} where the quota limit and usage will be saved and retrieved from.
    * @param quotaConfig {@link QuotaConfig} object.
    */
