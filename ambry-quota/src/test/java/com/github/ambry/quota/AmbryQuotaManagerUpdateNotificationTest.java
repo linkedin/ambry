@@ -21,7 +21,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.AccountServiceConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.quota.capacityunit.UnlimitedQuotaSource;
+import com.github.ambry.quota.capacityunit.AmbryCUQuotaSource;
 import com.github.ambry.utils.AccountTestUtils;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -55,8 +55,8 @@ public class AmbryQuotaManagerUpdateNotificationTest {
     AmbryQuotaManager ambryQuotaManager =
         new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, null,
             new QuotaMetrics(metricRegistry));
-    UnlimitedQuotaSource quotaSource = (UnlimitedQuotaSource) getQuotaSourceMember(ambryQuotaManager);
-    assertTrue("updated accounts should be empty", quotaSource.getQuotaResourceList().isEmpty());
+    AmbryCUQuotaSource quotaSource = (AmbryCUQuotaSource) getQuotaSourceMember(ambryQuotaManager);
+    assertTrue("updated accounts should be empty", quotaSource.getAllQuota().isEmpty());
 
     Set<Short> accountIdSet = new HashSet<>();
     accountIdSet.add((short) 1);
@@ -64,7 +64,7 @@ public class AmbryQuotaManagerUpdateNotificationTest {
     Map<Short, Account> idToRefAccountMap = new HashMap<>();
     AccountTestUtils.generateRefAccounts(idToRefAccountMap, new HashMap<>(), accountIdSet, 2, 3);
     accountService.notifyAccountUpdateConsumers(idToRefAccountMap.values());
-    assertEquals("Invalid size of updated accounts", quotaSource.getQuotaResourceList().size(), 2);
+    assertEquals("Invalid size of updated accounts", quotaSource.getAllQuota().size(), 2);
   }
 
   /**
