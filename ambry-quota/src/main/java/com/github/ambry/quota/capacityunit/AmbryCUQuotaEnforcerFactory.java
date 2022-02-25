@@ -30,7 +30,7 @@ public class AmbryCUQuotaEnforcerFactory implements QuotaEnforcerFactory {
   private final AmbryCUQuotaEnforcer ambryCUQuotaEnforcer;
 
   /**
-   * Constructor for {@link AmbryCapacityUnitQuotaEnforcerFactory}.
+   * Constructor for {@link AmbryCUQuotaEnforcerFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param quotaSource {@link QuotaSource} object.
    * @param accountStatsStore the {@link AccountStatsStore}.
