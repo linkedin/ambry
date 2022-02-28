@@ -92,6 +92,7 @@ class SimpleOperationTracker implements OperationTracker {
   protected int diskReplicaInPoolOrFlightCount = 0;
   protected int cloudReplicaInPoolOrFlightCount = 0;
   protected int failedCount = 0;
+  protected boolean quotaRejected = false;
   protected int disabledCount = 0;
   protected int originatingDcNotFoundCount = 0;
   protected int totalNotFoundCount = 0;
@@ -410,6 +411,9 @@ class SimpleOperationTracker implements OperationTracker {
       case REQUEST_DISABLED:
         disabledCount++;
         break;
+      case QUOTA_REJECTED:
+        quotaRejected = true;
+        break;
       default:
         failedCount++;
         // NOT_FOUND is a special error. When tracker sees >= numReplicasInOriginatingDc - 1 "NOT_FOUND" from the
@@ -485,6 +489,9 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   public boolean hasFailed() {
+    if (quotaRejected) {
+      return true;
+    }
     if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget
         && diskReplicasPresent) {
       return totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,

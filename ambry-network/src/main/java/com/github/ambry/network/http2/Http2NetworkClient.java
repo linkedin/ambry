@@ -197,7 +197,7 @@ public class Http2NetworkClient implements NetworkClient {
                 successCount.incrementAndGet();
               } else {
                 failCount.incrementAndGet();
-                responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId));
+                responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId, false));
                 logger.error("Couldn't acquire stream channel to {}:{} . Cause: {}.", dataNodeId.getHostname(),
                     dataNodeId.getHttp2Port(), future.cause());
               }

@@ -205,6 +205,9 @@ public class RouterUtils {
       NonBlockingRouterMetrics routerMetrics, ResponseInfo responseInfo, Deserializer<R> deserializer,
       Function<R, ServerErrorCode> errorExtractor) {
     R response = null;
+    if (responseInfo.isQuotaRejected()) {
+      return response;
+    }
     ReplicaId replicaId = responseInfo.getRequestInfo().getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {

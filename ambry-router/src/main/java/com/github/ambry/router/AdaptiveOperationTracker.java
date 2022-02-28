@@ -96,6 +96,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   @Override
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     super.onResponse(replicaId, trackedRequestFinalState);
+    if (trackedRequestFinalState == TrackedRequestFinalState.QUOTA_REJECTED) {
+      return;
+    }
     long elapsedTime;
     if (unexpiredRequestSendTimes.containsKey(replicaId)) {
       elapsedTime = time.milliseconds() - unexpiredRequestSendTimes.remove(replicaId).getSecond();
@@ -107,8 +110,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       getLatencyHistogram(replicaId).update(elapsedTime);
       if (routerConfig.routerOperationTrackerMetricScope != OperationTrackerScope.Datacenter) {
         // This is only used to report whole datacenter histogram for monitoring purpose
-        Histogram histogram =
-            replicaId.getDataNodeId().getDatacenterName().equals(datacenterName) ? localDcHistogram : crossDcHistogram;
+        Histogram histogram = replicaId.getDataNodeId().getDatacenterName().equals(datacenterName) ? localDcHistogram
+            : crossDcHistogram;
         histogram.update(elapsedTime);
       }
     }

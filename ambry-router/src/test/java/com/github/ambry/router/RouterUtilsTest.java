@@ -25,6 +25,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;
@@ -151,5 +152,11 @@ public class RouterUtilsTest {
     accountContainer = RouterUtils.getAccountContainer(accountService, accountId, containerId);
     Assert.assertEquals("Account doesn't match", account, accountContainer.getFirst());
     Assert.assertEquals("Container doesn't match", container, accountContainer.getSecond());
+  }
+
+  @Test
+  public void testExtractResponseAndNotifyResponseHandler() {
+    ResponseInfo responseInfo = new ResponseInfo(null, true);
+    assertNull(RouterUtils.extractResponseAndNotifyResponseHandler(null, null, responseInfo, null, null));
   }
 }

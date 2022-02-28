@@ -351,7 +351,7 @@ public class SocketNetworkClient implements NetworkClient {
               connId, dataNodeId);
           // Explicitly set requestInfo = null in ResponseInfo, the OperationController should detect this and directly
           // notify ResponseHandler without handing it over to PutManager/GetManager/DeleteManager/TtlUpdateManager.
-          responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId));
+          responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId, false));
           // No need to call pendingRequests.remove() because it has been removed due to connection unavailability in prepareSends()
         }
       }
