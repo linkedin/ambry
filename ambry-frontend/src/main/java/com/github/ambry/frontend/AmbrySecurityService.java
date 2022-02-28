@@ -21,9 +21,9 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
-import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RequestPath;
@@ -45,6 +45,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.router.GetBlobOptions.*;
@@ -55,6 +57,7 @@ import static com.github.ambry.router.GetBlobOptions.*;
  * sets the respective headers on response.
  */
 class AmbrySecurityService implements SecurityService {
+  private static final Logger LOGGER = LoggerFactory.getLogger(AmbrySecurityService.class);
   static final Set<String> OPERATIONS = Collections.unmodifiableSet(
       Utils.getStaticFieldValuesAsStrings(Operations.class)
           .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
@@ -131,7 +134,7 @@ class AmbrySecurityService implements SecurityService {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else {
         if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
-          ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
+          ThrottlingRecommendation throttlingRecommendation = quotaManager.recommend(restRequest);
           if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
               && quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
             Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
@@ -163,7 +166,12 @@ class AmbrySecurityService implements SecurityService {
     Map<String, Double> requestCost = ambryCostModelPolicy.calculateRequestCost(restRequest, responseChannel, blobInfo);
     setRequestCostHeader(requestCost, responseChannel);
     if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
-      ThrottlingRecommendation throttlingRecommendation = quotaManager.getThrottleRecommendation(restRequest);
+      ThrottlingRecommendation throttlingRecommendation = null;
+      try {
+        throttlingRecommendation = quotaManager.recommend(restRequest);
+      } catch (QuotaException quotaException) {
+        LOGGER.warn("Exception {} in while processing request charges.", quotaException);
+      }
       if (throttlingRecommendation != null) {
         RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation)
             .entrySet()

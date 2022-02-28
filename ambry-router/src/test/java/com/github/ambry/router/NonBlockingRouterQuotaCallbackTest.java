@@ -19,10 +19,10 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
@@ -34,7 +34,6 @@ import com.github.ambry.quota.QuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
-import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -268,7 +267,7 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
       QuotaManager quotaManager =
           new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
-              accountService, null, new MetricRegistry(), listenerCalledCount);
+              accountService, null, new QuotaMetrics(new MetricRegistry()), listenerCalledCount);
       QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(null, quotaManager, true);
 
       int blobSize = 3000;
@@ -307,26 +306,22 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
      * @param quotaRecommendationMergePolicy {@link QuotaRecommendationMergePolicy} object that makes the overall recommendation.
      * @param accountService {@link AccountService} object to get all the accounts and container information.
      * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
-     * @param metricRegistry {@link MetricRegistry} object for creating quota metrics.
+     * @param quotaMetrics {@link QuotaMetrics} object.
      * @throws ReflectiveOperationException in case of any exception.
      */
     public ChargeTesterQuotaManager(QuotaConfig quotaConfig,
         QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
-        AccountStatsStore accountStatsStore, MetricRegistry metricRegistry, AtomicInteger chargeCalledCount)
+        AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics, AtomicInteger chargeCalledCount)
         throws ReflectiveOperationException {
-      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore,
-          new QuotaMetrics(metricRegistry));
+      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, quotaMetrics);
       this.chargeCalledCount = chargeCalledCount;
     }
 
     @Override
-    public ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo,
-        Map<QuotaName, Double> requestCostMap) {
-      ThrottlingRecommendation throttlingRecommendation = super.charge(restRequest, blobInfo, requestCostMap);
-      if (throttlingRecommendation != null) {
-        chargeCalledCount.incrementAndGet();
-      }
-      return throttlingRecommendation;
+    public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
+        boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException {
+      chargeCalledCount.incrementAndGet();
+      return super.chargeAndRecommend(restRequest, requestCostMap, shouldCheckIfQuotaExceedAllowed, forceCharge);
     }
   }
 }

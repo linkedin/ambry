@@ -14,40 +14,56 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import java.util.Map;
 
 
 /**
- * Interface for the class that acts as the manager of all the quotas in Ambry. Implementations of this interface
- * should take care of initializing all the various type of quota enforcements and getting the overall quota
- * recommendation for each request.
+ * Interface that rest of Ambry relies on, for ensuring quota compliance. Defines methods to conditionally charge usage
+ * and provide quota compliance recommendations.
+ *
+ * In order to ensure compliance for each type of Quota, a {@link QuotaManager} relies on {@link QuotaEnforcer}s and
+ * corresponding {@link QuotaSource}s. As such, a {@link QuotaManager} implementation must take care of initializing all
+ * the {@link QuotaEnforcer}s. {@link QuotaName} specifies all the quota types that Ambry enforces.
+ *
+ * The recommendations provided by individual {@link QuotaEnforcer}s are merged using
+ * {@link QuotaRecommendationMergePolicy} implementation to provide a unified recommendation to the caller.
  */
 public interface QuotaManager {
 
   /**
    * Method to initialize the {@link QuotaManager}.
+   * @throws Exception if the initialization fails due to any exception.
    */
-  void init() throws InstantiationException;
+  void init() throws Exception;
 
   /**
-   * Computes the overall boolean recommendation to throttle a request or not for all the types of request quotas supported.
-   * This method does not charge the requestCost against the quota.
+   * Computes the overall quota compliance recommendation for all the types of request quotas supported.
    * @param restRequest {@link RestRequest} object.
    * @return ThrottlingRecommendation object that captures the overall recommendation.
+   * @throws QuotaException in case of any exception.
    */
-  ThrottlingRecommendation getThrottleRecommendation(RestRequest restRequest);
+  ThrottlingRecommendation recommend(RestRequest restRequest) throws QuotaException;
 
   /**
-   * Charges the requestCost against the quota for the specified restRequest and blobInfo.
+   * Checks if the specified request should be throttled, and charges the specified requestCost against the
+   * quota for the {@link QuotaResource}. Charging is done if it is determined that the request should not be throttled,
+   * or if the argument forceCharge is set to true. The {@link QuotaResource} to be charged is inferred from the
+   * specified restRequest.
+   *
+   * This method also looks at checkQuotaExceedAllowed argument to check if usage is allowed to exceed quota for the
+   * {@link QuotaResource} and makes the check and charge decisions accordingly.
+   *
    * @param restRequest {@link RestRequest} object.
-   * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
-   *                                 determined by enforcers.
    * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
-   * @return ThrottlingRecommendation object that captures the overall recommendation.
+   * @param shouldCheckIfQuotaExceedAllowed if set to {@code true} check if {@link QuotaResource}'s request is allowed
+   *                                        to exceed its quota.
+   * @param forceCharge if set to {@code true} usage is charged without checking for quota compliance.
+   * @return QuotaAction object containing the recommendation for handling the restRequest.
+   * @throws QuotaException in case of any exception.
    */
-  ThrottlingRecommendation charge(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap);
+  QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
+      boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException;
 
   /**
    * @return QuotaConfig object.
@@ -55,17 +71,16 @@ public interface QuotaManager {
   QuotaConfig getQuotaConfig();
 
   /**
-   * Set {@link QuotaMode} for {@link QuotaManager}.
-   * @param mode The mode to set
-   */
-  void setQuotaMode(QuotaMode mode);
-
-  /**
-   * Use this method to get the {@link QuotaMode} rather than {@link QuotaConfig#throttlingMode} since the {@link QuotaMode}
-   * might be updated by {@link #setQuotaMode}.
-   * @return the {@link QuotaMode}. By default, it will return the {@link QuotaMode} from {@link QuotaConfig}.
+   * @return the {@link QuotaMode} object.
+   * Unless modified using the setter, {@link QuotaMode} is determined by {@link QuotaConfig#throttlingMode}.
    */
   QuotaMode getQuotaMode();
+
+  /**
+   * Set {@link QuotaMode} for {@link QuotaManager}.
+   * @param mode The {@link QuotaMode} object to set.
+   */
+  void setQuotaMode(QuotaMode mode);
 
   /**
    * Method to shutdown the {@link QuotaManager} and cleanup if required.

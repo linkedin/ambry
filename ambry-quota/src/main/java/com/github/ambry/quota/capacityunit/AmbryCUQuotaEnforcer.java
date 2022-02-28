@@ -58,7 +58,8 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   }
 
   @Override
-  public void init() {
+  public void init() throws QuotaException {
+    quotaSource.init();
   }
 
   @Override
