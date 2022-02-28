@@ -14,6 +14,8 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.models.SqlParameter;
+import com.azure.cosmos.models.SqlQuerySpec;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.FindResult;
@@ -63,10 +65,9 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
     try {
       CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
 
-      com.azure.cosmos.models.SqlQuerySpec sqlQuerySpec =
-          new com.azure.cosmos.models.SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
-              new com.azure.cosmos.models.SqlParameter(LIMIT_PARAM, queryBatchSize),
-              new com.azure.cosmos.models.SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime()));
+      SqlQuerySpec sqlQuerySpec =
+          new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE, new SqlParameter(LIMIT_PARAM, queryBatchSize),
+              new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime()));
 
       List<CloudBlobMetadata> queryResults =
           cosmosDataAccessor.queryMetadata(partitionPath, sqlQuerySpec, azureMetrics.findSinceQueryTime);

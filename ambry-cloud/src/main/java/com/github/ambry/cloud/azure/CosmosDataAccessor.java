@@ -14,6 +14,15 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.ProxyOptions;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosAsyncDatabase;
+import com.azure.cosmos.CosmosAsyncStoredProcedure;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.DirectConnectionConfig;
+import com.azure.cosmos.GatewayConnectionConfig;
+import com.azure.cosmos.ThrottlingRetryOptions;
 import com.azure.cosmos.implementation.Document;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.models.CosmosChangeFeedRequestOptions;
@@ -41,7 +50,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
-import com.azure.cosmos.*;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -108,6 +116,14 @@ public class CosmosDataAccessor {
         .key(getCosmosKey(azureCloudConfig))
         .throttlingRetryOptions(throttlingRetryOptions)
         .consistencyLevel(com.azure.cosmos.ConsistencyLevel.SESSION);
+
+    // It looks like we can no longer configure request timeouts on GateWayConnection mode
+    // since cosmos team has hidden them in latest versions. (https://github.com/Azure/azure-sdk-for-java/pull/11702).
+    // Default value seems to be 60 seconds. For DirectConnection (which uses TCP to talk directly to cosmos storage nodes),
+    // the value can be configured but has lower limit of 5 seconds and upper limit of 10 seconds.
+    // We can probably reach out to them if we see requests taking longer than these defaults.
+    // For reference, here is difference between Gateway and direct connection modes -
+    // https://docs.microsoft.com/en-us/azure/cosmos-db/sql/sql-sdk-connection-modes
     GatewayConnectionConfig gatewayConnectionConfig = new GatewayConnectionConfig();
     if (cloudConfig.vcrProxyHost != null) {
       gatewayConnectionConfig.setProxy(new ProxyOptions(ProxyOptions.Type.HTTP,
@@ -445,6 +461,8 @@ public class CosmosDataAccessor {
       // Execute cosmos query
       CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
           executeCosmosQuery(sqlQuerySpec, queryRequestOptions, azureMetrics.deadBlobsQueryTime);
+
+      //Set the maximum entries to be as returned in each page. There seems to be no way to set maximum number of entries across all pages.
       pagedFluxResponse.byPage(maxEntries).flatMapSequential(fluxResponse -> {
         requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
         deadBlobsList.addAll(fluxResponse.getResults());
@@ -494,6 +512,8 @@ public class CosmosDataAccessor {
       // Execute cosmos query
       CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
           executeCosmosQuery(sqlQuerySpec, queryRequestOptions, azureMetrics.deletedContainerBlobsQueryTime);
+
+      //Set the queryLimit as preferred number of items to be fetched in each page. There seems to be no way to set limit across all pages.
       pagedFluxResponse.byPage(queryLimit).flatMapSequential(fluxResponse -> {
         requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
         containerBlobsList.addAll(fluxResponse.getResults());
@@ -560,11 +580,14 @@ public class CosmosDataAccessor {
 
     try {
       List<CloudBlobMetadata> metadataList = new ArrayList<>();
+
+      // Since the requestCharge is being used inside lambda expression below, it needs to be atomic.
       AtomicReference<Double> requestCharge = new AtomicReference<>(0.0);
 
       // Execute cosmos query
       CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
           executeCosmosQuery(sqlQuerySpec, queryRequestOptions, timer);
+
       pagedFluxResponse.byPage().flatMapSequential(fluxResponse -> {
         requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
         metadataList.addAll(fluxResponse.getResults());
@@ -610,6 +633,7 @@ public class CosmosDataAccessor {
       cosmosChangeFeedRequestOptions =
           CosmosChangeFeedRequestOptions.createForProcessingFromContinuation(requestContinuationToken);
     }
+    // Set the maximum number of items to be returned in this change feed request.
     cosmosChangeFeedRequestOptions.setMaxItemCount(maxFeedSize);
     return queryChangeFeed(cosmosChangeFeedRequestOptions, changeFeed, timer);
   }
@@ -625,11 +649,14 @@ public class CosmosDataAccessor {
       List<CloudBlobMetadata> changeFeed, Timer timer) {
 
     azureMetrics.changeFeedQueryCount.inc();
+
+    // Since the requestCharge is being used inside lambda expression below, it needs to be atomic.
     AtomicReference<String> continuationToken = new AtomicReference<>();
 
     try {
       CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
           executeCosmosChangeFeedQuery(cosmosChangeFeedRequestOptions, timer);
+
       pagedFluxResponse.byPage().flatMapSequential(fluxResponse -> {
         changeFeed.addAll(fluxResponse.getResults());
         continuationToken.set(fluxResponse.getContinuationToken());
