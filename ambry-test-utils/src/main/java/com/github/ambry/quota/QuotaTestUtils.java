@@ -17,7 +17,6 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -84,8 +83,7 @@ public class QuotaTestUtils {
       }
 
       @Override
-      public QuotaAction chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-          Map<QuotaName, Double> requestCostMap, boolean checkQuotaExceedAllowed, boolean forceCharge) {
+      public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap, boolean checkQuotaExceedAllowed, boolean forceCharge) {
         return null;
       }
 

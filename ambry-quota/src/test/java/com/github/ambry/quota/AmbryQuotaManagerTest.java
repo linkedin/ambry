@@ -209,7 +209,7 @@ public class AmbryQuotaManagerTest {
   }
 
   /**
-   * Test {@link AmbryQuotaManager#chargeAndRecommend} when quota exceed check and force charge are set to false.
+   * Test {@link QuotaManager#chargeAndRecommend} when quota exceed check and force charge are set to false.
    * @throws Exception in case of any exception.
    */
   private void testChargeAndRecommendForNoExceedNoForce() throws Exception {
@@ -219,7 +219,7 @@ public class AmbryQuotaManagerTest {
     ambryQuotaManager.init();
 
     // 1. test that chargeAndRecommend returns ALLOW with not enforcers.
-    QuotaAction quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, null, null, false, false);
+    QuotaAction quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, null, false, false);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
 
     // 2. test that enforcers are called.
@@ -227,7 +227,7 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer.resetDefaults();
     ambryQuotaManager.init();
     Map<QuotaName, Double> costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 11.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -239,7 +239,7 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer.resetDefaults();
     ambryQuotaManager.init();
     costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 1.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
     Assert.assertEquals(QuotaAction.DELAY, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -260,7 +260,7 @@ public class AmbryQuotaManagerTest {
 
     testAmbryCUQuotaEnforcer1.recommendReturnVal =
         TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer.REJECT_QUOTA_RECOMMENDATION;
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
     Assert.assertEquals(QuotaAction.REJECT, quotaAction);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer1.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer1.recommendCallCount);
@@ -276,7 +276,7 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer2.resetDefaults();
     testAmbryCUQuotaEnforcer2.recommendReturnVal =
         TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer.REJECT_QUOTA_RECOMMENDATION;
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
     Assert.assertEquals(QuotaAction.REJECT, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer1.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer1.recommendCallCount);
@@ -294,7 +294,7 @@ public class AmbryQuotaManagerTest {
         TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer.REJECT_QUOTA_RECOMMENDATION;
     testAmbryCUQuotaEnforcer2.recommendReturnVal =
         TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer.DELAY_QUOTA_RECOMMENDATION;
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
     Assert.assertEquals(QuotaAction.REJECT, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer1.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer1.recommendCallCount);
@@ -312,7 +312,7 @@ public class AmbryQuotaManagerTest {
         TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer.DELAY_QUOTA_RECOMMENDATION;
     testAmbryCUQuotaEnforcer2.recommendReturnVal =
         TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer.REJECT_QUOTA_RECOMMENDATION;
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
     Assert.assertEquals(QuotaAction.REJECT, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer1.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer1.recommendCallCount);
@@ -328,7 +328,7 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer2.resetDefaults();
     testAmbryCUQuotaEnforcer1.throwException = true;
     try {
-      ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+      ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
       Assert.fail("If any enforcer's recommend throws exception, then chargeAndRecommend should throw exception.");
     } catch (QuotaException ignored) {
     }
@@ -346,7 +346,7 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer2.resetDefaults();
     testAmbryCUQuotaEnforcer2.throwException = true;
     try {
-      ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, false, false);
+      ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
       Assert.fail("If any enforcer's recommend throws exception, then chargeAndRecommend should throw exception.");
     } catch (QuotaException ignored) {
     }
@@ -361,7 +361,7 @@ public class AmbryQuotaManagerTest {
   }
 
   /**
-   * Test {@link AmbryQuotaManager#chargeAndRecommend} when quota exceed check is set to true and force charge is set to false.
+   * Test {@link QuotaManager#chargeAndRecommend} when quota exceed check is set to true and force charge is set to false.
    * @throws Exception in case of any exception.
    */
   private void testChargeAndRecommendForExceeds() throws Exception {
@@ -371,7 +371,7 @@ public class AmbryQuotaManagerTest {
     ambryQuotaManager.init();
 
     // 1. test that chargeAndRecommend returns ALLOW with not enforcers.
-    QuotaAction quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, null, null, true, false);
+    QuotaAction quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, null, true, false);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
 
     // 2. test that enforcers are called and usage is charged if usage is within quota limits.
@@ -379,7 +379,7 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer.resetDefaults();
     ambryQuotaManager.init();
     Map<QuotaName, Double> costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 11.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, true, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, false);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -392,7 +392,7 @@ public class AmbryQuotaManagerTest {
     // 3. test that enforcers are called and usage is charged if usage is outside quota limits, but quota exceed is allowed.
     testAmbryCUQuotaEnforcer.resetDefaults();
     costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 100.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, true, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, false);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -405,7 +405,7 @@ public class AmbryQuotaManagerTest {
     // 4. test that enforcers are called and usage is not charged if usage is outside quota limits and quota exceed is not allowed.
     testAmbryCUQuotaEnforcer.resetDefaults();
     costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 100.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, true, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, false);
     Assert.assertEquals(QuotaAction.DELAY, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -421,7 +421,7 @@ public class AmbryQuotaManagerTest {
     restRequest =
         QuotaTestUtils.createRestRequest(ANOTHER_ACCOUNT, ANOTHER_ACCOUNT.getAllContainers().iterator().next(),
             RestMethod.GET);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, true, false);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, false);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -433,7 +433,7 @@ public class AmbryQuotaManagerTest {
   }
 
   /**
-   * Test {@link AmbryQuotaManager#chargeAndRecommend} when quota exceed check is set to true and force charge is set to true.
+   * Test {@link QuotaManager#chargeAndRecommend} when quota exceed check is set to true and force charge is set to true.
    * @throws Exception in case of any exception.
    */
   private void testChargeAndRecommendForForcedCharge() throws Exception {
@@ -443,7 +443,7 @@ public class AmbryQuotaManagerTest {
     ambryQuotaManager.init();
 
     // 1. test that chargeAndRecommend returns ALLOW if there are no enforcers.
-    QuotaAction quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, null, null, true, true);
+    QuotaAction quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, null, true, true);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
 
     // 2. test that enforcers are called and usage is charged.
@@ -451,7 +451,7 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer.resetDefaults();
     ambryQuotaManager.init();
     Map<QuotaName, Double> costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 11.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, true, true);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, true);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -464,7 +464,7 @@ public class AmbryQuotaManagerTest {
     // 3. test that enforcers are called and usage is charged even if usage is outside quota limits.
     testAmbryCUQuotaEnforcer.resetDefaults();
     costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 100.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, true, true);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, true);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.recommendCallCount);
@@ -477,7 +477,7 @@ public class AmbryQuotaManagerTest {
     // 3. test that enforcers are called and usage is charged even if usage is outside quota limits and exceed is not allowed.
     testAmbryCUQuotaEnforcer.resetDefaults();
     costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 100.0);
-    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, BLOB_INFO, costMap, true, true);
+    quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, true);
     Assert.assertEquals(QuotaAction.ALLOW, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.recommendCallCount);

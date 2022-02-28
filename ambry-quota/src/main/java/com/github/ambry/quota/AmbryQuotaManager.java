@@ -18,7 +18,6 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -80,6 +79,9 @@ public class AmbryQuotaManager implements QuotaManager {
       quotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerSourcePair.getFirst(), quotaConfig,
           quotaSourceObjectMap.get(quotaEnforcerSourcePair.getSecond()), accountStatsStore)).getQuotaEnforcer());
     }
+    if (quotaEnforcers.isEmpty()) {
+      LOGGER.warn("No quota enforcers in AmbryQuotaManager. No quota will be tracked or enforced.");
+    }
     this.quotaRecommendationMergePolicy = quotaRecommendationMergePolicy;
     this.quotaConfig = quotaConfig;
     this.quotaMetrics = quotaMetrics;
@@ -119,7 +121,6 @@ public class AmbryQuotaManager implements QuotaManager {
   public ThrottlingRecommendation recommend(RestRequest restRequest) throws QuotaException {
     quotaMetrics.recommendRate.mark();
     if (quotaEnforcers.isEmpty()) {
-      LOGGER.warn("No quota enforcers in AmbryQuotaManager. Returning null recommendation.");
       quotaMetrics.noQuotaRecommendationRate.mark();
       return null;
     }
@@ -127,21 +128,17 @@ public class AmbryQuotaManager implements QuotaManager {
     Timer.Context timer = quotaMetrics.quotaRecommendationTime.time();
     try {
       List<QuotaRecommendation> quotaRecommendations = new ArrayList<>();
-      boolean partialRecommendation = false;
-      boolean noRecommendation = true;
       for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
         try {
           quotaRecommendations.add(quotaEnforcer.recommend(restRequest));
-          noRecommendation = false;
         } catch (QuotaException quotaException) {
           LOGGER.warn("Could not get recommendation for quota {} due to exception: {}",
               quotaEnforcer.supportedQuotaNames(), quotaException.getMessage());
-          partialRecommendation = true;
         }
       }
-      if (noRecommendation) {
+      if (quotaRecommendations.isEmpty()) {
         quotaMetrics.noRecommendationRate.mark();
-      } else if (partialRecommendation) {
+      } else if (quotaRecommendations.size() < quotaEnforcers.size()) {
         quotaMetrics.partialQuotaRecommendationRate.mark();
       }
       throttlingRecommendation = quotaRecommendationMergePolicy.mergeEnforcementRecommendations(quotaRecommendations);
@@ -169,9 +166,8 @@ public class AmbryQuotaManager implements QuotaManager {
    * {@link QuotaEnforcer}s. As such, there is a potential for partial charge to happen in this implementation.
    */
   @Override
-  public QuotaAction chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap, boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge)
-      throws QuotaException {
+  public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
+      boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException {
     quotaMetrics.chargeAndRecommendRate.mark();
     if (quotaEnforcers.isEmpty()) {
       // If there are no enforcers that means quota is not enforced, which is treated as usage within quota.

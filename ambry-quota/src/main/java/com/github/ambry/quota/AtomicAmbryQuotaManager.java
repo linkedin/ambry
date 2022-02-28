@@ -16,7 +16,6 @@ package com.github.ambry.quota;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import java.util.Map;
 
@@ -70,14 +69,12 @@ public class AtomicAmbryQuotaManager extends AmbryQuotaManager {
   }
 
   @Override
-  public QuotaAction chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-      Map<QuotaName, Double> requestCostMap, boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge)
-      throws QuotaException {
+  public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
+      boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException {
     QuotaResource quotaResource = QuotaResource.fromRestRequest(restRequest);
     try {
       quotaResourceSynchronizer.lock(quotaResource);
-      return super.chargeAndRecommend(restRequest, blobInfo, requestCostMap, shouldCheckIfQuotaExceedAllowed,
-          forceCharge);
+      return super.chargeAndRecommend(restRequest, requestCostMap, shouldCheckIfQuotaExceedAllowed, forceCharge);
     } finally {
       quotaResourceSynchronizer.unlock(quotaResource);
     }

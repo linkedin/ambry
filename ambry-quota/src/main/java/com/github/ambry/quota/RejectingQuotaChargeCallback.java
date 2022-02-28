@@ -54,7 +54,7 @@ public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
           .entrySet()
           .stream()
           .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), Map.Entry::getValue));
-      QuotaAction quotaAction = quotaManager.chargeAndRecommend(restRequest, null, requestCost, false, true);
+      QuotaAction quotaAction = quotaManager.chargeAndRecommend(restRequest, requestCost, false, true);
       if (QuotaUtils.shouldThrottle(quotaAction) && isQuotaEnforcedOnRequest) {
         if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING
             && quotaManager.getQuotaConfig().throttleInProgressRequests) {

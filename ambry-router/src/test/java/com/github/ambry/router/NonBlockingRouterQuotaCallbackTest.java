@@ -19,7 +19,6 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
@@ -319,11 +318,10 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
     }
 
     @Override
-    public QuotaAction chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo,
-        Map<QuotaName, Double> requestCostMap, boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge)
-        throws QuotaException {
+    public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
+        boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException {
       chargeCalledCount.incrementAndGet();
-      return super.chargeAndRecommend(restRequest, blobInfo, requestCostMap, shouldCheckIfQuotaExceedAllowed, forceCharge);
+      return super.chargeAndRecommend(restRequest, requestCostMap, shouldCheckIfQuotaExceedAllowed, forceCharge);
     }
   }
 }

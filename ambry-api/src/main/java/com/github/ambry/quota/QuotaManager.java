@@ -14,7 +14,6 @@
 package com.github.ambry.quota;
 
 import com.github.ambry.config.QuotaConfig;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import java.util.Map;
 
@@ -56,8 +55,6 @@ public interface QuotaManager {
    * {@link QuotaResource} and makes the check and charge decisions accordingly.
    *
    * @param restRequest {@link RestRequest} object.
-   * @param blobInfo {@link BlobInfo} object representing the blob characteristics using which request cost can be
-   *                                 determined by enforcers.
    * @param requestCostMap {@link Map} of {@link QuotaName} to the cost incurred to handle the request.
    * @param shouldCheckIfQuotaExceedAllowed if set to {@code true} check if {@link QuotaResource}'s request is allowed
    *                                        to exceed its quota.
@@ -65,7 +62,7 @@ public interface QuotaManager {
    * @return QuotaAction object containing the recommendation for handling the restRequest.
    * @throws QuotaException in case of any exception.
    */
-  QuotaAction chargeAndRecommend(RestRequest restRequest, BlobInfo blobInfo, Map<QuotaName, Double> requestCostMap,
+  QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
       boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException;
 
   /**
