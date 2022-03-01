@@ -100,7 +100,7 @@ public class GetBlobInfoOperationTest {
   private final byte[] putContent;
   private final boolean testEncryption;
   private final String operationTrackerType;
-  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeCallback();
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToGetOperation);
   private final GetBlobOptionsInternal options;
