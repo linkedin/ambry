@@ -61,8 +61,7 @@ public class PutOperationTest {
   private final MockServer mockServer = new MockServer(mockClusterMap, "");
   private final RequestRegistrationCallback<PutOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToPutOperation);
-  private final QuotaChargeCallback quotaChargeCallback =
-      QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeCallback();
   private final int chunkSize = 10;
   private final int requestParallelism = 3;
   private final int successTarget = 1;

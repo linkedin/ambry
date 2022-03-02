@@ -56,6 +56,10 @@ public class QuotaTestUtils {
     return new QuotaConfig(new VerifiableProperties(properties));
   }
 
+  /**
+   * Create a dummy {@link QuotaManager} object, that does nothing, for test.
+   * @return QuotaManager object.
+   */
   public static QuotaManager createDummyQuotaManager() {
     return new QuotaManager() {
       @Override
@@ -94,7 +98,11 @@ public class QuotaTestUtils {
     };
   }
 
-  public static QuotaChargeCallback createDummyQuotaChargeEventListener() {
+  /**
+   * Create a dummy {@link QuotaChargeCallback} object, that does nothing, for test.
+   * @return QuotaChargeCallback object.
+   */
+  public static QuotaChargeCallback createDummyQuotaChargeCallback() {
     return new QuotaChargeCallback() {
       @Override
       public void charge(long chunkSize) {
@@ -116,7 +124,7 @@ public class QuotaTestUtils {
 
       @Override
       public QuotaResource getQuotaResource() {
-        return null;
+        return new QuotaResource("test", QuotaResourceType.ACCOUNT);
       }
 
       @Override

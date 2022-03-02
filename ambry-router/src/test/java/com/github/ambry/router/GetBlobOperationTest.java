@@ -156,7 +156,7 @@ public class GetBlobOperationTest {
 
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToGetOperation);
-  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeCallback();
 
   /**
    * A checker that either asserts that a get operation succeeds or returns the specified error code.

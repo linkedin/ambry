@@ -76,8 +76,7 @@ public class UndeleteManagerTest {
   private static final String LOCAL_DC = "DC1";
   private final NonBlockingRouter router;
   private final RouterConfig routerConfig;
-  private final QuotaChargeCallback quotaChargeCallback =
-      QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeCallback();
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   private final MockClusterMap clusterMap = new MockClusterMap();
   private final MockServerLayout serverLayout = new MockServerLayout(clusterMap);

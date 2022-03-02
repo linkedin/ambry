@@ -86,8 +86,7 @@ public class TtlUpdateManagerTest {
   private final TtlUpdateNotificationSystem notificationSystem = new TtlUpdateNotificationSystem();
   private final int serverCount = serverLayout.getMockServers().size();
   private final AccountService accountService = new InMemAccountService(true, false);
-  private final QuotaChargeCallback quotaChargeCallback =
-      QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeCallback();
   private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   /**
