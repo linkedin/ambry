@@ -18,8 +18,6 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcer;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -47,9 +45,6 @@ public class AmbryQuotaManagerTest {
   private final static InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
   private final static Account ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
   private final static Account ANOTHER_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
-  private final static BlobInfo BLOB_INFO = new BlobInfo(
-      new BlobProperties(2, "test", ACCOUNT.getId(), ACCOUNT.getAllContainers().iterator().next().getId(), false),
-      new byte[2]);
   private final TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy testQuotaRecommendationMergePolicy =
       new TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy(
           new QuotaConfig(new VerifiableProperties(new Properties())));
