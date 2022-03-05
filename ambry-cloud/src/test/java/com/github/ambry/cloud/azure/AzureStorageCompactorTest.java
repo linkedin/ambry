@@ -210,7 +210,7 @@ public class AzureStorageCompactorTest {
 
   /** Test getDeadBlobs method */
   @Test
-  public void testGetDeadBlobs() {
+  public void testGetDeadBlobs() throws CloudStorageException {
     CosmosPagedFlux mockCosmosPagedFlux = getMockedPagedFluxForQueryWithNoResults();
     when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(mockCosmosPagedFlux);
     long now = System.currentTimeMillis();
