@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.CosmosException;
 import com.azure.storage.blob.BlobContainerClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -255,8 +256,13 @@ public class AzureStorageCompactor {
    * @return a List of {@link CloudBlobMetadata} referencing the deleted blobs found.
    */
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
-      int maxEntries) {
-    return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
+      int maxEntries) throws CloudStorageException {
+    try {
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
+    } catch (CosmosException cex) {
+      throw AzureCloudDestination.toCloudStorageException(
+          "Failed to query deleted blobs for partition " + partitionPath, cex, azureMetrics);
+    }
   }
 
   /**

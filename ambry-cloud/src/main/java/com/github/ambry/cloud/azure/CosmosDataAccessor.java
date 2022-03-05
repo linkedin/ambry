@@ -86,7 +86,7 @@ public class CosmosDataAccessor {
   private static final String BULK_DELETE_QUERY = "SELECT c._self FROM c WHERE c.id IN (%s)";
   private static final String DEPRECATED_CONTAINERS_QUERY =
       "SELECT TOP " + LIMIT_PARAM + " * from c WHERE c.deleted=false order by c.deleteTriggerTimestamp";
-  static final String BULK_DELETE_SPROC_ID = "BulkDelete";
+  static final String BULK_DELETE_SPROC_ID = "bulkDelete";
   static final String PROPERTY_CONTINUATION = "continuation";
   static final String PROPERTY_DELETED = "deleted";
   static final int STATUS_NOT_FOUND = 404;
