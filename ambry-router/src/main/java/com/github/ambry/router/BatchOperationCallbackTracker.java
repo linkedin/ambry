@@ -17,6 +17,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaUtils;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -87,7 +88,7 @@ class BatchOperationCallbackTracker {
    */
   private void complete(Exception e) {
     if (completed.compareAndSet(false, true)) {
-      if (quotaChargeCallback != null) {
+      if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
           quotaChargeCallback.charge();
         } catch (QuotaException quotaException) {

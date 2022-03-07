@@ -43,6 +43,7 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
@@ -909,14 +910,14 @@ class GetBlobOperation extends GetOperation {
         chunkCompleted = true;
       }
       if (chunkCompleted) {
-        if (state != ChunkState.Complete && quotaChargeCallback != null && chunkException == null) {
+        if (state != ChunkState.Complete && QuotaUtils.postProcessCharge(quotaChargeCallback)
+            && chunkException == null) {
           try {
             if (chunkSize != -1) {
               quotaChargeCallback.charge(chunkSize);
             } else {
-              if (this instanceof FirstGetChunk && ((FirstGetChunk) this).blobType == BlobType.DataBlob
-                  && blobInfo != null) {
-                quotaChargeCallback.charge(blobInfo.getBlobProperties().getBlobSize());
+              if (this instanceof FirstGetChunk && ((FirstGetChunk) this).blobType == BlobType.DataBlob) {
+                quotaChargeCallback.charge(totalSize);
               }
               // other cases mean that either this was a metadata blob, or there was an error.
             }
