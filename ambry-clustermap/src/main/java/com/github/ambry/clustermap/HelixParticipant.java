@@ -21,7 +21,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -127,7 +127,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   @Override
   public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-      Callback<StatsSnapshot> callback) throws IOException {
+      Callback<AggregatedAccountStorageStats> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
@@ -447,7 +447,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
   private void registerStatsReportAggregationTasks(StateMachineEngine engine, List<AmbryStatsReport> statsReports,
-      AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback) {
+      AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryStatsReport statsReport : statsReports) {
       if (statsReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {

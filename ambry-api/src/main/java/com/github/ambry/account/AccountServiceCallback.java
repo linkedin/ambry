@@ -14,12 +14,12 @@
 package com.github.ambry.account;
 
 import com.github.ambry.commons.Callback;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class AccountServiceCallback implements Callback<StatsSnapshot> {
+public class AccountServiceCallback implements Callback<AggregatedAccountStorageStats> {
   private final AccountService accountService;
   private static final Logger logger = LoggerFactory.getLogger(AccountServiceCallback.class);
 
@@ -38,7 +38,7 @@ public class AccountServiceCallback implements Callback<StatsSnapshot> {
    * @param exception Exception occurred when updating Helix property store, not in aggregation phase, the result is still solid.
    */
   @Override
-  public void onCompletion(StatsSnapshot results, Exception exception) {
+  public void onCompletion(AggregatedAccountStorageStats results, Exception exception) {
     if (exception != null) {
       logger.info(
           "Aggregator task encountered an exception but result is not null. Processing the result as aggregation is complete.");

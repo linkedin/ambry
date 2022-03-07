@@ -21,10 +21,11 @@ import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.commons.Callback;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -179,7 +180,7 @@ public class ParticipantsConsistencyTest {
 
     @Override
     public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
-        Callback<StatsSnapshot> callback) {
+        Callback<AggregatedAccountStorageStats> callback) {
     }
 
     @Override

@@ -17,7 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.AccountServiceConfig;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -302,9 +302,10 @@ public abstract class AbstractAccountService implements AccountService {
   /**
    * Selects {@link Container}s to be marked as INACTIVE and marked in underlying account store.
    */
-  public void selectInactiveContainersAndMarkInStore(StatsSnapshot statsSnapshot) {
-    Set<Container> inactiveContainerCandidateSet = AccountUtils.selectInactiveContainerCandidates(statsSnapshot,
-        getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS));
+  public void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
+    Set<Container> inactiveContainerCandidateSet =
+        AccountUtils.selectInactiveContainerCandidates(aggregatedAccountStorageStats,
+            getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS));
     try {
       markContainersInactive(inactiveContainerCandidateSet);
     } catch (InterruptedException e) {
