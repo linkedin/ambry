@@ -397,7 +397,7 @@ public class PutManagerTest {
         router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
           callbackCalled.countDown();
           throw new RuntimeException("Throwing an exception in the user callback");
-        }, QuotaTestUtils.createDummyQuotaChargeCallback());
+        }, QuotaTestUtils.createTestQuotaChargeCallback());
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
     future.get();
