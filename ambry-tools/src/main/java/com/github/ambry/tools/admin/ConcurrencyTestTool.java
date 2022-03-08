@@ -21,6 +21,7 @@ import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
@@ -132,6 +133,11 @@ public class ConcurrencyTestTool {
     @Override
     public QuotaMethod getQuotaMethod() {
       return null;
+    }
+
+    @Override
+    public QuotaConfig getQuotaConfig() {
+      return new QuotaConfig(new VerifiableProperties(new Properties()));
     }
   };
 

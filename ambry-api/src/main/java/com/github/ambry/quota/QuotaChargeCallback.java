@@ -13,6 +13,9 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
+
+
 /**
  * Callback for charging request cost against quota. Used by {@link QuotaEnforcer}s to charge quota for a request.
  */
@@ -54,4 +57,9 @@ public interface QuotaChargeCallback {
    * @return QuotaMethod object.
    */
   QuotaMethod getQuotaMethod();
+
+  /**
+   * @return QuotaConfig object.
+   */
+  QuotaConfig getQuotaConfig();
 }
