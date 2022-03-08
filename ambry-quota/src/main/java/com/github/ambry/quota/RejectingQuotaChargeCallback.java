@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
@@ -96,5 +97,10 @@ public class RejectingQuotaChargeCallback implements QuotaChargeCallback {
   @Override
   public QuotaMethod getQuotaMethod() {
     return QuotaUtils.getQuotaMethod(restRequest);
+  }
+
+  @Override
+  public QuotaConfig getQuotaConfig() {
+    return quotaManager.getQuotaConfig();
   }
 }

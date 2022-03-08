@@ -27,6 +27,7 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -41,6 +42,7 @@ import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -395,35 +397,7 @@ public class PutManagerTest {
         router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, req.options, (result, exception) -> {
           callbackCalled.countDown();
           throw new RuntimeException("Throwing an exception in the user callback");
-        }, new QuotaChargeCallback() {
-          @Override
-          public void charge(long chunkSize) {
-          }
-
-          @Override
-          public void charge() {
-          }
-
-          @Override
-          public boolean check() {
-            return false;
-          }
-
-          @Override
-          public boolean quotaExceedAllowed() {
-            return false;
-          }
-
-          @Override
-          public QuotaResource getQuotaResource() throws QuotaException {
-            return null;
-          }
-
-          @Override
-          public QuotaMethod getQuotaMethod() {
-            return null;
-          }
-        });
+        }, QuotaTestUtils.createDummyQuotaChargeCallback());
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
     future.get();

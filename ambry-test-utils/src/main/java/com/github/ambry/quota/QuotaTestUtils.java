@@ -131,6 +131,11 @@ public class QuotaTestUtils {
       public QuotaMethod getQuotaMethod() {
         return null;
       }
+
+      @Override
+      public QuotaConfig getQuotaConfig() {
+        return new QuotaConfig(new VerifiableProperties(new Properties()));
+      }
     };
   }
 
