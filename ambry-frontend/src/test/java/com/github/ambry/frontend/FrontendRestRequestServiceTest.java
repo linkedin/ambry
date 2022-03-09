@@ -148,7 +148,7 @@ public class FrontendRestRequestServiceTest {
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
-  private final FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
+  private final FrontendMetrics frontendMetrics;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
   private final FrontendTestResponseHandler responseHandler;
@@ -194,6 +194,7 @@ public class FrontendRestRequestServiceTest {
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
+    frontendMetrics = new FrontendMetrics(metricRegistry, frontendConfig);
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     String endpoint = "http://localhost:1174";
     urlSigningService = new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,

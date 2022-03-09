@@ -15,8 +15,12 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.utils.Pair;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -32,12 +36,13 @@ class RestRequestMetricsGroup {
       new ConcurrentHashMap<>();
   private final String requestType;
   private final boolean encryptedMetricsEnabled;
-  private final boolean containerMetricsEnabled;
   private final MetricRegistry metricRegistry;
   private final RestRequestMetrics nonSslUnencryptedMetrics;
   private final RestRequestMetrics sslUnencryptedMetrics;
   private final RestRequestMetrics nonSslEncryptedMetrics;
   private final RestRequestMetrics sslEncryptedMetrics;
+  private final Set<String> containerMetricsEnabledRequestTypes;
+  private final Set<String> containerMetricsEnabledGetRequestTypes;
 
   /**
    * Instantiates {@link RestRequestMetricsGroup} for the given requestType and resource
@@ -45,14 +50,13 @@ class RestRequestMetricsGroup {
    * @param requestType the type of request for which a group is being created.
    * @param encryptedMetricsEnabled {@code true} if separate {@link RestRequestMetrics} should be used for encrypted
    *                                blob operations.
-   * @param containerMetricsEnabled {@code true} if {@link ContainerMetrics} should be registered for this operation.
    * @param metricRegistry the {@link MetricRegistry} instance.
+   * @param frontendConfig the {@link FrontendConfig}.
    */
   RestRequestMetricsGroup(Class ownerClass, String requestType, boolean encryptedMetricsEnabled,
-      boolean containerMetricsEnabled, MetricRegistry metricRegistry) {
+      MetricRegistry metricRegistry, FrontendConfig frontendConfig) {
     this.requestType = requestType;
     this.encryptedMetricsEnabled = encryptedMetricsEnabled;
-    this.containerMetricsEnabled = containerMetricsEnabled;
     this.metricRegistry = metricRegistry;
     nonSslUnencryptedMetrics = new RestRequestMetrics(ownerClass, requestType, metricRegistry);
     sslUnencryptedMetrics = new RestRequestMetrics(ownerClass, requestType + SSL_SUFFIX, metricRegistry);
@@ -62,6 +66,10 @@ class RestRequestMetricsGroup {
     sslEncryptedMetrics =
         encryptedMetricsEnabled ? new RestRequestMetrics(ownerClass, requestType + SSL_SUFFIX + ENCRYPTED_SUFFIX,
             metricRegistry) : null;
+    this.containerMetricsEnabledRequestTypes =
+        new HashSet<>(Arrays.asList(frontendConfig.containerMetricsEnabledRequestTypes.split(",")));
+    this.containerMetricsEnabledGetRequestTypes =
+        new HashSet<>(Arrays.asList(frontendConfig.containerMetricsEnabledGetRequestTypes.split(",")));
   }
 
   /**
@@ -88,8 +96,9 @@ class RestRequestMetricsGroup {
    *         operation.
    */
   ContainerMetrics getContainerMetrics(String accountName, String containerName) {
-    return containerMetricsEnabled ? instantiatedContainerMetrics.computeIfAbsent(
+    return containerMetricsEnabledRequestTypes.contains(requestType) ? instantiatedContainerMetrics.computeIfAbsent(
         new Pair<>(accountName, containerName),
-        k -> new ContainerMetrics(accountName, containerName, requestType, metricRegistry)) : null;
+        k -> new ContainerMetrics(accountName, containerName, requestType, metricRegistry,
+            containerMetricsEnabledGetRequestTypes.contains(requestType))) : null;
   }
 }

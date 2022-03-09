@@ -17,6 +17,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.utils.AsyncOperationTracker;
 
 
@@ -216,49 +217,57 @@ public class FrontendMetrics {
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+   * @param frontendConfig the {@link FrontendConfig} to use for the metrics.
    */
-  public FrontendMetrics(MetricRegistry metricRegistry) {
+  public FrontendMetrics(MetricRegistry metricRegistry, FrontendConfig frontendConfig) {
     // RestRequestMetricsGroup
     // DELETE
     deleteBlobMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "DeleteBlob", false, true, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "DeleteBlob", false, metricRegistry,
+            frontendConfig);
     // GET
     getBlobMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetBlob", true, true, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetBlob", true, metricRegistry, frontendConfig);
     getBlobInfoMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetBlobInfo", true, true, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetBlobInfo", true, metricRegistry,
+            frontendConfig);
     getUserMetadataMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetUserMetadata", true, false, metricRegistry);
-    getPeersMetricsGroup = new RestRequestMetricsGroup(GetPeersHandler.class, "GetPeers", false, false, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetUserMetadata", true, metricRegistry,
+            frontendConfig);
+    getPeersMetricsGroup =
+        new RestRequestMetricsGroup(GetPeersHandler.class, "GetPeers", false, metricRegistry, frontendConfig);
     getReplicasMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetReplicas", false, false, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetReplicas", false, metricRegistry,
+            frontendConfig);
     getSignedUrlMetricsGroup =
-        new RestRequestMetricsGroup(GetSignedUrlHandler.class, "GetSignedUrl", false, true, metricRegistry);
+        new RestRequestMetricsGroup(GetSignedUrlHandler.class, "GetSignedUrl", false, metricRegistry, frontendConfig);
     getClusterMapSnapshotMetricsGroup =
-        new RestRequestMetricsGroup(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot", false, false,
-            metricRegistry);
+        new RestRequestMetricsGroup(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot",
+            false, metricRegistry, frontendConfig);
     getAccountsMetricsGroup =
-        new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, false, metricRegistry);
+        new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, metricRegistry, frontendConfig);
     getStatsReportMetricsGroup =
-        new RestRequestMetricsGroup(GetStatsReportHandler.class, "GetStatsReport", false, false, metricRegistry);
+        new RestRequestMetricsGroup(GetStatsReportHandler.class, "GetStatsReport", false, metricRegistry,
+            frontendConfig);
     // HEAD
     headBlobMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "HeadBlob", false, false, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "HeadBlob", false, metricRegistry,
+            frontendConfig);
     // OPTIONS
     optionsMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "Options", false, false, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "Options", false, metricRegistry, frontendConfig);
     // POST
     postBlobMetricsGroup =
-        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostBlob", true, true, metricRegistry);
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostBlob", true, metricRegistry, frontendConfig);
     postAccountsMetricsGroup =
-        new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, false, metricRegistry);
+        new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, metricRegistry, frontendConfig);
     // PUT
     updateBlobTtlMetricsGroup =
-        new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, true, metricRegistry);
+        new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, metricRegistry, frontendConfig);
     undeleteBlobMetricsGroup =
-        new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, true, metricRegistry);
+        new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, metricRegistry, frontendConfig);
     putBlobMetricsGroup =
-        new RestRequestMetricsGroup(NamedBlobPutHandler.class, "PutBlob", false, true, metricRegistry);
+        new RestRequestMetricsGroup(NamedBlobPutHandler.class, "PutBlob", false, metricRegistry, frontendConfig);
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessRequest", metricRegistry);

@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -50,7 +51,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       IdSigningService idSigningService, NamedBlobDb namedBlobDb) {
     this.idSigningService = idSigningService;
     this.namedBlobDb = namedBlobDb;
-    frontendMetrics = new FrontendMetrics(metricRegistry);
+    frontendMetrics = new FrontendMetrics(metricRegistry, new FrontendConfig(verifiableProperties));
   }
 
   @Override

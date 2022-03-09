@@ -40,7 +40,7 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
       AccountAndContainerInjector accountAndContainerInjector, QuotaManager quotaManager) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     hostThrottleConfig = new HostThrottleConfig(verifiableProperties);
-    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
+    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry(), frontendConfig);
     this.urlSigningService = urlSigningService;
     this.quotaManager = quotaManager;
   }

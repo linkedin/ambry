@@ -16,6 +16,8 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
@@ -33,6 +35,7 @@ import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingBiConsumer;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -52,7 +55,7 @@ public class GetStatsReportHandlerTest {
   private final AccountStatsStore accountStatsStore;
 
   public GetStatsReportHandlerTest() {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties())));
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     accountStatsStore = mock(AccountStatsStore.class);
     handler = new GetStatsReportHandler(securityServiceFactory.getSecurityService(), metrics, accountStatsStore);

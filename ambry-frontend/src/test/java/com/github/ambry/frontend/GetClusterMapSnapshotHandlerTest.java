@@ -17,6 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
@@ -26,6 +28,7 @@ import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -45,7 +48,8 @@ public class GetClusterMapSnapshotHandlerTest {
   private final GetClusterMapSnapshotHandler handler;
 
   public GetClusterMapSnapshotHandlerTest() throws IOException {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+    FrontendMetrics metrics =
+        new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties())));
     clusterMap = new MockClusterMap();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     handler = new GetClusterMapSnapshotHandler(securityServiceFactory.getSecurityService(), metrics, clusterMap);
