@@ -99,44 +99,11 @@ public class QuotaTestUtils {
   }
 
   /**
-   * Create a dummy {@link QuotaChargeCallback} object, that does nothing, for test.
-   * @return QuotaChargeCallback object.
+   * Create an implementation of {@link QuotaChargeCallback} object for test.
+   * @return TestQuotaChargeCallback object.
    */
-  public static QuotaChargeCallback createDummyQuotaChargeCallback() {
-    return new QuotaChargeCallback() {
-      @Override
-      public void charge(long chunkSize) {
-      }
-
-      @Override
-      public void charge() {
-      }
-
-      @Override
-      public boolean check() {
-        return false;
-      }
-
-      @Override
-      public boolean quotaExceedAllowed() {
-        return false;
-      }
-
-      @Override
-      public QuotaResource getQuotaResource() {
-        return new QuotaResource("test", QuotaResourceType.ACCOUNT);
-      }
-
-      @Override
-      public QuotaMethod getQuotaMethod() {
-        return null;
-      }
-
-      @Override
-      public QuotaConfig getQuotaConfig() {
-        return new QuotaConfig(new VerifiableProperties(new Properties()));
-      }
-    };
+  public static TestQuotaChargeCallback createTestQuotaChargeCallback() {
+    return new TestQuotaChargeCallback();
   }
 
   /**
@@ -157,5 +124,43 @@ public class QuotaTestUtils {
     headers.put(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, container);
     data.put(MockRestRequest.HEADERS_KEY, headers);
     return new MockRestRequest(data, null);
+  }
+
+  /**
+   * An implementation of {@link QuotaChargeCallback} for tests.
+   */
+  public static class TestQuotaChargeCallback implements QuotaChargeCallback {
+    @Override
+    public void charge(long chunkSize) {
+    }
+
+    @Override
+    public void charge() {
+    }
+
+    @Override
+    public boolean check() {
+      return false;
+    }
+
+    @Override
+    public boolean quotaExceedAllowed() {
+      return false;
+    }
+
+    @Override
+    public QuotaResource getQuotaResource() {
+      return new QuotaResource("test", QuotaResourceType.ACCOUNT);
+    }
+
+    @Override
+    public QuotaMethod getQuotaMethod() {
+      return null;
+    }
+
+    @Override
+    public QuotaConfig getQuotaConfig() {
+      return new QuotaConfig(new VerifiableProperties(new Properties()));
+    }
   }
 }

@@ -145,7 +145,7 @@ import static org.junit.Assert.*;
 
 final class ServerTestUtil {
   private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER =
-      QuotaTestUtils.createDummyQuotaChargeCallback();
+      QuotaTestUtils.createTestQuotaChargeCallback();
 
   static byte[] getBlobDataAndRelease(BlobData blobData) {
     byte[] actualBlobData = new byte[(int) blobData.getSize()];
