@@ -28,7 +28,6 @@ import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaMetrics;
-import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaResource;
@@ -60,26 +59,19 @@ import static org.junit.Assert.*;
  * Class to test the {@link NonBlockingRouter} with quota callbacks.
  */
 @RunWith(Parameterized.class)
-public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBase {
-  private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterQuotaCallbackTest.class);
-
-  private final QuotaMode throttlingMode;
-  private final boolean throttleInProgressRequests;
+public class NonBlockingRouterPostProcessQuotaCallbackTest extends NonBlockingRouterTestBase {
+  private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterPostProcessQuotaCallbackTest.class);
   private final long quotaAccountingSize = 1024L;
 
   /**
    * Initialize parameters common to all tests.
    * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise.
    * @param metadataContentVersion the metadata content version to test with.
-   * @param quotaModeStr {@link QuotaMode} for router.
-   * @param throttleInProgressRequests {@code true} if in progress request can be throttled. {@code false} otherwise.
    * @throws Exception if initialization fails.
    */
-  public NonBlockingRouterQuotaCallbackTest(boolean testEncryption, int metadataContentVersion, String quotaModeStr,
-      boolean throttleInProgressRequests) throws Exception {
+  public NonBlockingRouterPostProcessQuotaCallbackTest(boolean testEncryption, int metadataContentVersion)
+      throws Exception {
     super(testEncryption, metadataContentVersion, false);
-    this.throttlingMode = QuotaMode.valueOf(quotaModeStr);
-    this.throttleInProgressRequests = throttleInProgressRequests;
   }
 
   /**
@@ -89,22 +81,10 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), true},
-            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), true},
-            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), true},
-            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), true},
-            {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), true},
-            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), true},
-            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), true},
-            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), true},
-            {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), false},
-            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), false},
-            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING.name(), false},
-            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING.name(), false},
-            {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), false},
-            {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), false},
-            {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING.name(), false},
-            {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING.name(), false}});
+        new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
+            {false, MessageFormatRecord.Metadata_Content_Version_V3},
+            {true, MessageFormatRecord.Metadata_Content_Version_V2},
+            {true, MessageFormatRecord.Metadata_Content_Version_V3}});
   }
 
   /**
@@ -117,10 +97,23 @@ public class NonBlockingRouterQuotaCallbackTest extends NonBlockingRouterTestBas
       assertExpectedThreadCounts(2, 1);
       AtomicLong listenerCalledCount = new AtomicLong(0);
       int expectedChargeCallbackCount = 0;
-      // create a quota charge listener that increments an atomic counter everytime its called.
+      // create a quota charge callback that increments an atomic counter everytime its called.
       // Also tests that in case quota if charged in tracking mode with throttleInProgress config set to false
       // then the requests go through even in case of exception.
       QuotaChargeCallback quotaChargeCallback = new QuotaChargeCallback() {
+        @Override
+        public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge, long chunkSize)
+            throws QuotaException {
+          listenerCalledCount.addAndGet(chunkSize);
+          throw new QuotaException("exception during check and charge",
+              new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests), false);
+        }
+
+        @Override
+        public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge) throws QuotaException {
+          return checkAndCharge(shouldCheckExceedAllowed, forceCharge, quotaAccountingSize);
+        }
+
         @Override
         public void charge(long chunkSize) throws QuotaException {
           listenerCalledCount.addAndGet(chunkSize);

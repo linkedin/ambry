@@ -131,6 +131,16 @@ public class QuotaTestUtils {
    */
   public static class TestQuotaChargeCallback implements QuotaChargeCallback {
     @Override
+    public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge, long chunkSize) {
+      return QuotaAction.ALLOW;
+    }
+
+    @Override
+    public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge) {
+      return QuotaAction.ALLOW;
+    }
+
+    @Override
     public void charge(long chunkSize) {
     }
 

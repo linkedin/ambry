@@ -25,7 +25,7 @@ import io.netty.util.ReferenceCountUtil;
  * Request associated with this response.
  * Either a non-null exception if there was an error sending the request or a non-null ByteBuffer containing the
  * successful response received for this request.
- * A flag to indicate if this request was rejected due quota non-compliance.
+ * A flag to indicate if this request was rejected due to quota non-compliance.
  * The {@link DataNodeId} to which the request is issued.
  */
 public class ResponseInfo extends AbstractByteBufHolder<ResponseInfo> {
@@ -46,7 +46,7 @@ public class ResponseInfo extends AbstractByteBufHolder<ResponseInfo> {
   /**
    * Constructs a ResponseInfo with the given parameters.
    * @param requestInfo the {@link RequestInfo} associated with this response.
-   * @param quotaRejected {@code true} if this request was rejected due quota non-compliance. {@code false} otherwise.
+   * @param quotaRejected {@code true} if this request was rejected due to quota non-compliance. {@code false} otherwise.
    */
   public ResponseInfo(RequestInfo requestInfo, boolean quotaRejected) {
     this(requestInfo, null, null, requestInfo == null ? null : requestInfo.getReplicaId().getDataNodeId(), quotaRejected);

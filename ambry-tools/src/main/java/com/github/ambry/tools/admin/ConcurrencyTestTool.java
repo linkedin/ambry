@@ -25,6 +25,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
@@ -105,6 +106,16 @@ public class ConcurrencyTestTool {
   private static final AtomicBoolean putComplete = new AtomicBoolean(false);
   private static final Random random = new Random();
   private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = new QuotaChargeCallback() {
+    @Override
+    public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge, long chunkSize) {
+      return QuotaAction.ALLOW;
+    }
+
+    @Override
+    public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge) {
+      return QuotaAction.ALLOW;
+    }
+
     @Override
     public void charge(long chunkSize) {
 

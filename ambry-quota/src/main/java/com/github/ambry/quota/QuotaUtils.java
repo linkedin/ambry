@@ -15,15 +15,12 @@ package com.github.ambry.quota;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.frontend.Operations;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
-import io.netty.handler.codec.http.HttpResponseStatus;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
@@ -84,7 +81,7 @@ public class QuotaUtils {
   public static QuotaChargeCallback buildQuotaChargeCallback(RestRequest restRequest, QuotaManager quotaManager,
       boolean isQuotaEnforcedOnRequest) {
     if (!quotaManager.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
-      return new RejectingQuotaChargeCallback(quotaManager, restRequest, isQuotaEnforcedOnRequest);
+      return new PostProcessQuotaChargeCallback(quotaManager, restRequest, isQuotaEnforcedOnRequest);
     } else {
       throw new UnsupportedOperationException("Not implemented yet.");
     }
