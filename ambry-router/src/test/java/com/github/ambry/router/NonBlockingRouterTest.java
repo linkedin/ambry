@@ -1236,7 +1236,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       doNothing().when(mockNetworkClient).close();
       List<ResponseInfo> responseInfoList = new ArrayList<>();
       MockDataNodeId testDataNode = (MockDataNodeId) mockClusterMap.getDataNodeIds().get(0);
-      responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, testDataNode));
+      responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, testDataNode, false));
       // By default, there are 1 operation controller and 1 background deleter thread. We set CountDownLatch to 3 so that
       // at least one thread has completed calling onResponse() and test node's state has been updated in ResponseHandler
       CountDownLatch invocationLatch = new CountDownLatch(3);
