@@ -22,7 +22,7 @@ ext {
     helixVersion = "1.0.1"
     jacksonVersion = "2.10.2"
     jaydioVersion = "0.1"
-    azureStorageBlobVersion = "12.14.0"
+    azureStorageBlobVersion = "12.15.0"
     azureStorageBlobBatchVersion = "12.11.0"
     azureCosmosDbVersion = "2.6.3"
     azureMsal4jVersion="1.7.1"
