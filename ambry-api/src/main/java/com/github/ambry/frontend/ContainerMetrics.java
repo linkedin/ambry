@@ -50,6 +50,8 @@ public class ContainerMetrics {
   // 410
   private final Counter goneCount;
 
+  private final Counter totalCount;
+
   /**
    * Metric names will be in the following format:
    * {@code com.github.ambry.frontend.ContainerMetrics.{accountName}___{containerName}___{operationType}{metric}}
@@ -59,8 +61,10 @@ public class ContainerMetrics {
    * @param containerName the container name to use for naming metrics.
    * @param operationType the operation type to use for naming metrics.
    * @param metricRegistry the {@link MetricRegistry}.
+   * @param isGetRequest the request operationType is get.
    */
-  ContainerMetrics(String accountName, String containerName, String operationType, MetricRegistry metricRegistry) {
+  ContainerMetrics(String accountName, String containerName, String operationType, MetricRegistry metricRegistry,
+      boolean isGetRequest) {
     String metricPrefix = accountName + SEPARATOR + containerName + SEPARATOR + operationType;
     roundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "RoundTripTimeInMs"));
@@ -81,6 +85,8 @@ public class ContainerMetrics {
         metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "ForbiddenCount"));
     notFoundCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "NotFoundCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "GoneCount"));
+    String qpsMetricPrefix = accountName + SEPARATOR + containerName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
+    totalCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, qpsMetricPrefix + "totalCount"));
   }
 
   /**
@@ -90,7 +96,7 @@ public class ContainerMetrics {
    */
   public void recordMetrics(long roundTripTimeInMs, ResponseStatus responseStatus) {
     this.roundTripTimeInMs.update(roundTripTimeInMs);
-
+    totalCount.inc();
     if (responseStatus.isSuccess()) {
       successCount.inc();
     } else if (responseStatus.isRedirection()) {

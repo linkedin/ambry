@@ -60,11 +60,12 @@ public class PostAccountContainersHandlerTest {
   private final Account theAccount;
 
   public PostAccountContainersHandlerTest() {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+    FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(new Properties()));
+    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     accountService = new InMemAccountService(false, true);
-    handler = new PostAccountsHandler(securityServiceFactory.getSecurityService(), accountService,
-        new FrontendConfig(new VerifiableProperties(new Properties())), metrics);
+    handler =
+        new PostAccountsHandler(securityServiceFactory.getSecurityService(), accountService, frontendConfig, metrics);
     theAccount = accountService.createAndAddRandomAccount();
   }
 

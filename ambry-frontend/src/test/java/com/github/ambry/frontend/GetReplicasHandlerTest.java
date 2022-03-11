@@ -21,6 +21,8 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestResponseChannel;
@@ -31,6 +33,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.util.List;
+import java.util.Properties;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -46,7 +49,9 @@ public class GetReplicasHandlerTest {
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
-      getReplicasHandler = new GetReplicasHandler(new FrontendMetrics(new MetricRegistry()), CLUSTER_MAP);
+      getReplicasHandler = new GetReplicasHandler(
+          new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties()))),
+          CLUSTER_MAP);
     } catch (IOException e) {
       throw new IllegalStateException(e);
     }

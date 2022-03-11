@@ -73,8 +73,8 @@ public class GetSignedUrlHandlerTest {
   private final GetSignedUrlHandler getSignedUrlHandler;
 
   public GetSignedUrlHandlerTest() {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
     FrontendConfig config = new FrontendConfig(new VerifiableProperties(new Properties()));
+    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), config);
     AccountAndContainerInjector accountAndContainerInjector =
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     getSignedUrlHandler = new GetSignedUrlHandler(urlSigningServiceFactory.getUrlSigningService(),

@@ -67,7 +67,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
+    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry(), frontendConfig);
     logger.trace("Instantiated FrontendRestRequestServiceFactory");
   }
 

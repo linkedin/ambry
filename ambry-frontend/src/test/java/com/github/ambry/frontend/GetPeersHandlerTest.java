@@ -23,6 +23,8 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.rest.MockRestRequest;
@@ -45,6 +47,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -66,7 +69,8 @@ public class GetPeersHandlerTest {
   private final GetPeersHandler getPeersHandler;
 
   public GetPeersHandlerTest() {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+    FrontendMetrics metrics =
+        new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties())));
     clusterMap = new TailoredPeersClusterMap();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     getPeersHandler = new GetPeersHandler(clusterMap, securityServiceFactory.getSecurityService(), metrics);

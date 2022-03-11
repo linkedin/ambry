@@ -106,7 +106,7 @@ public class AmbrySecurityServiceTest {
       new FrontendTestUrlSigningServiceFactory();
 
   private final SecurityService securityService =
-      new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
+      new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry(), FRONTEND_CONFIG),
           URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, QUOTA_MANAGER);
 
   static {
@@ -170,7 +170,7 @@ public class AmbrySecurityServiceTest {
     properties.setProperty("frontend.attach.tracking.info", "false");
     FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(properties));
     SecurityService securityServiceWithTrackingDisabled =
-        new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry()),
+        new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry(), frontendConfig),
             URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, QUOTA_MANAGER);
     restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
@@ -235,10 +235,10 @@ public class AmbrySecurityServiceTest {
   @Test
   public void postProcessQuotaManagerTest() throws Exception {
     HostLevelThrottler quotaManager = Mockito.mock(HostLevelThrottler.class);
+    FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(new Properties()));
     AmbrySecurityService ambrySecurityService =
-        new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
-            new FrontendMetrics(new MetricRegistry()), URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager,
-            QUOTA_MANAGER);
+        new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry(), frontendConfig),
+            URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), quotaManager, QUOTA_MANAGER);
     // Everything should be good.
     Mockito.when(quotaManager.shouldThrottle(any())).thenReturn(false);
     for (int i = 0; i < 100; i++) {

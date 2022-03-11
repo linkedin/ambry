@@ -84,8 +84,8 @@ public class UndeleteHandlerTest {
   private String blobId;
 
   public UndeleteHandlerTest() {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
     FrontendConfig config = new FrontendConfig(new VerifiableProperties(new Properties()));
+    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), config);
     AccountAndContainerInjector accountAndContainerInjector =
         new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     undeleteHandler =

@@ -20,6 +20,8 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -37,6 +39,7 @@ import com.github.ambry.utils.ThrowingConsumer;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
@@ -55,7 +58,8 @@ public class GetAccountsHandlerTest {
   private final GetAccountsHandler handler;
 
   public GetAccountsHandlerTest() {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+    FrontendMetrics metrics =
+        new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties())));
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     accountService = new InMemAccountService(false, true);
     handler = new GetAccountsHandler(securityServiceFactory.getSecurityService(), accountService, metrics);
