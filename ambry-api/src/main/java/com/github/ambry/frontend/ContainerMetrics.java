@@ -50,7 +50,7 @@ public class ContainerMetrics {
   // 410
   private final Counter goneCount;
 
-  private final Counter totalQpsCount;
+  private final Counter totalCount;
 
   /**
    * Metric names will be in the following format:
@@ -85,8 +85,8 @@ public class ContainerMetrics {
         metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "ForbiddenCount"));
     notFoundCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "NotFoundCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, metricPrefix + "GoneCount"));
-    String qpsMetricPrefix = accountName + SEPARATOR + containerName + SEPARATOR + (isGetRequest ? "GetRequestQps" : "PutRequestQps");
-    totalQpsCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, qpsMetricPrefix + "totalQpsCount"));
+    String qpsMetricPrefix = accountName + SEPARATOR + containerName + SEPARATOR + (isGetRequest ? "GetRequest" : "PutRequest");
+    totalCount = metricRegistry.counter(MetricRegistry.name(ContainerMetrics.class, qpsMetricPrefix + "totalCount"));
   }
 
   /**
@@ -96,7 +96,7 @@ public class ContainerMetrics {
    */
   public void recordMetrics(long roundTripTimeInMs, ResponseStatus responseStatus) {
     this.roundTripTimeInMs.update(roundTripTimeInMs);
-    totalQpsCount.inc();
+    totalCount.inc();
     if (responseStatus.isSuccess()) {
       successCount.inc();
     } else if (responseStatus.isRedirection()) {
