@@ -122,14 +122,19 @@ class CloudBlobStore implements Store {
     }
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
 
-    String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
-    try {
-      cryptoAgentFactory = Utils.getObj(cryptoAgentFactoryClass, properties, clusterMapConfig.clusterMapClusterName,
-          vcrMetrics.getMetricRegistry());
-    } catch (ReflectiveOperationException e) {
-      throw new IllegalStateException("Unable to construct factory " + cryptoAgentFactoryClass, e);
+    if (requireEncryption) {
+      String cryptoAgentFactoryClass = cloudConfig.cloudBlobCryptoAgentFactoryClass;
+      try {
+        cryptoAgentFactory = Utils.getObj(cryptoAgentFactoryClass, properties, clusterMapConfig.clusterMapClusterName,
+            vcrMetrics.getMetricRegistry());
+      } catch (ReflectiveOperationException e) {
+        throw new IllegalStateException("Unable to construct factory " + cryptoAgentFactoryClass, e);
+      }
+      this.cryptoAgent = cryptoAgentFactory.getCloudBlobCryptoAgent();
+    } else {
+      this.cryptoAgent = null;
+      this.cryptoAgentFactory = null;
     }
-    this.cryptoAgent = cryptoAgentFactory.getCloudBlobCryptoAgent();
   }
 
   @Override
@@ -292,7 +297,8 @@ class CloudBlobStore implements Store {
       } else {
         // PutRequest lifeVersion from frontend is -1. Should set to 0. (0 is the starting life version number for any data).
         // Put from replication or recovery should use liferVersion as it's.
-        short lifeVersion = messageInfo.hasLifeVersion(messageInfo.getLifeVersion()) ? messageInfo.getLifeVersion() : (short) 0;
+        short lifeVersion =
+            messageInfo.hasLifeVersion(messageInfo.getLifeVersion()) ? messageInfo.getLifeVersion() : (short) 0;
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), encryptionOrigin, lifeVersion);
