@@ -309,7 +309,7 @@ class DeleteOperation {
     if (operationTracker.isDone() || operationCompleted) {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
-      } else if(operationTracker.maybeFailedDueToOfflineReplicas()) {
+      } else if (operationTracker.maybeFailedDueToOfflineReplicas()) {
         operationException.set(
             new RouterException("DeleteOperation failed possibly because some replicas are unavailable",
                 RouterErrorCode.AmbryUnavailable));
