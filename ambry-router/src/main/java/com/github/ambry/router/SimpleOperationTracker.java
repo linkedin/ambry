@@ -21,6 +21,7 @@ import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -105,6 +106,7 @@ class SimpleOperationTracker implements OperationTracker {
   private int originatingDcTotalReplicaCount = 0;
   private int totalOfflineReplicaCount = 0;
   private int allReplicaCount = 0;
+  private Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
 
   /**
    * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
@@ -151,10 +153,14 @@ class SimpleOperationTracker implements OperationTracker {
     datacenterName = routerConfig.routerDatacenterName;
     cloudReplicaSuccessTarget = routerConfig.routerCloudSuccessTarget;
     cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
+    // Note that we get a snapshot of replicas by state only once in this class, and use the same snapshot everywhere
+    // to avoid the case where a replica state might change in between an operation.
+    allDcReplicasByState =
+        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(EnumSet.of(ReplicaState.BOOTSTRAP,
+            ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE, ReplicaState.OFFLINE), null);
     List<ReplicaId> eligibleReplicas;
     List<ReplicaId> offlineReplicas = new ArrayList<>();
-    totalOfflineReplicaCount =
-        getReplicasByState(partitionId, null, EnumSet.of(ReplicaState.OFFLINE))
+    totalOfflineReplicaCount = getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE))
             .getOrDefault(ReplicaState.OFFLINE, Collections.emptyList()).size();
     allReplicaCount = partitionId.getReplicaIds().size();
 
@@ -164,7 +170,7 @@ class SimpleOperationTracker implements OperationTracker {
         diskReplicaSuccessTarget = routerConfig.routerGetSuccessTarget;
         diskReplicaParallelism = routerConfig.routerGetRequestParallelism;
         crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
-        Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(partitionId, null,
+        Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE,
                 ReplicaState.OFFLINE));
         offlineReplicas = replicasByState.getOrDefault(ReplicaState.OFFLINE, new ArrayList<>());
@@ -175,8 +181,7 @@ class SimpleOperationTracker implements OperationTracker {
         eligibleReplicas.removeAll(offlineReplicas);
         break;
       case PutOperation:
-        eligibleReplicas =
-            getEligibleReplicas(partitionId, datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
+        eligibleReplicas = getEligibleReplicas(datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
         diskReplicaSuccessTarget =
             routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
                 routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
@@ -189,20 +194,20 @@ class SimpleOperationTracker implements OperationTracker {
         diskReplicaSuccessTarget = routerConfig.routerDeleteSuccessTarget;
         diskReplicaParallelism = routerConfig.routerDeleteRequestParallelism;
         crossColoEnabled = true;
-        eligibleReplicas = getEligibleReplicas(partitionId, null,
+        eligibleReplicas = getEligibleReplicas(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case TtlUpdateOperation:
         diskReplicaSuccessTarget = routerConfig.routerTtlUpdateSuccessTarget;
         diskReplicaParallelism = routerConfig.routerTtlUpdateRequestParallelism;
         crossColoEnabled = true;
-        eligibleReplicas = getEligibleReplicas(partitionId, null,
+        eligibleReplicas = getEligibleReplicas(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case UndeleteOperation:
         diskReplicaParallelism = routerConfig.routerUndeleteRequestParallelism;
         crossColoEnabled = true;
-        eligibleReplicas = getEligibleReplicas(partitionId, null,
+        eligibleReplicas = getEligibleReplicas(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         // Undelete operation need to get global quorum. It will require a different criteria for success.
         // Here set the success target to the number of eligible replicas.
@@ -310,7 +315,7 @@ class SimpleOperationTracker implements OperationTracker {
     cloudReplicasPresent = cloudReplicaInPoolOrFlightCount > 0;
     diskReplicasPresent = diskReplicaInPoolOrFlightCount > 0;
     originatingDcOfflineReplicaCount =
-        getReplicasByState(partitionId, originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
+        getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
     originatingDcTotalReplicaCount =
         partitionId.getReplicaIds().stream().filter(replicaId -> replicaId.getDataNodeId().getDatacenterName()
             .equals(this.originatingDcName)).collect(Collectors.toList()).size();
@@ -525,16 +530,14 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * Get eligible replicas by states for given partition from specified data center. If dcName is null, it gets all eligible
+   * Get eligible replicas by states for the specified data center. If dcName is null, it gets all eligible
    * replicas from all data centers.
-   * @param partitionId the {@link PartitionId} that replicas belong to.
    * @param dcName the name of data center from which the replicas should come from. This can be {@code null}.
    * @param states a set of {@link ReplicaState}(s) that replicas should match.
    * @return a list of eligible replicas that are in specified states.
    */
-  private List<ReplicaId> getEligibleReplicas(PartitionId partitionId, String dcName, EnumSet<ReplicaState> states) {
-    Map<ReplicaState, List<ReplicaId>> replicasByState =
-        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(states, dcName);
+  private List<ReplicaId> getEligibleReplicas(String dcName, EnumSet<ReplicaState> states) {
+    Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(dcName, states);
     List<ReplicaId> eligibleReplicas = new ArrayList<>();
     for (List<ReplicaId> replicas : replicasByState.values()) {
       eligibleReplicas.addAll(replicas);
@@ -543,15 +546,24 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * Get replicas in required states from given partition.
-   * @param partitionId the {@link PartitionId} the replicas belong to.
+   * Get replicas in required states for the specified datacenter.
    * @param dcName the name of data center from which the replicas should come from. This can be {@code null}.
    * @param states a set of {@link ReplicaState}(s) that replicas should match.
    * @return a map whose key is {@link ReplicaState} and value is a list of {@link ReplicaId}(s) in that state.
    */
-  private Map<ReplicaState, List<ReplicaId>> getReplicasByState(PartitionId partitionId, String dcName,
-      EnumSet<ReplicaState> states) {
-    return (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(states, dcName);
+  Map<ReplicaState, List<ReplicaId>> getReplicasByState(String dcName, EnumSet<ReplicaState> states) {
+    Map<ReplicaState, List<ReplicaId>> map = new HashMap<>();
+    for (ReplicaState replicaState : states) {
+      if (allDcReplicasByState.containsKey(replicaState)) {
+        for (ReplicaId replicaId : allDcReplicasByState.get(replicaState)) {
+          if (dcName == null || replicaId.getDataNodeId().getDatacenterName().equals(dcName)) {
+            map.putIfAbsent(replicaState, new ArrayList<>());
+            map.get(replicaState).add(replicaId);
+          }
+        }
+      }
+    }
+    return map;
   }
 
   public boolean hasFailed() {

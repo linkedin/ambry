@@ -1257,6 +1257,117 @@ public class OperationTrackerTest {
     failedDueToOfflineReplicaTest(RouterOperation.DeleteOperation);
   }
 
+  @Test
+  public void getReplicasByStateTest() {
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
+    int totalReplicaCount = 9;
+    for (int bootStrapCount = 0; bootStrapCount < totalReplicaCount; bootStrapCount++) {
+      int remainingCount = totalReplicaCount - bootStrapCount;
+      for (int standByCount = 0; standByCount < remainingCount; standByCount++) {
+        remainingCount = totalReplicaCount - standByCount - bootStrapCount;
+        for (int leaderCount = 0; leaderCount < remainingCount; leaderCount++) {
+          remainingCount = totalReplicaCount - leaderCount - standByCount - bootStrapCount;
+          for (int inactiveCount = 0; inactiveCount < remainingCount; inactiveCount++) {
+            remainingCount = totalReplicaCount - leaderCount - standByCount - bootStrapCount - inactiveCount;
+            for (int offlineCount = 0; offlineCount < remainingCount; offlineCount++) {
+              List<Pair<Integer, ReplicaState>> replicaStateCountPairList =
+                  fillMapWithReplicaState(bootStrapCount, standByCount, leaderCount, inactiveCount, offlineCount);
+              populateReplicaList(replicaStateCountPairList);
+              datanodes = new ArrayList<>(Arrays.asList(new MockDataNodeId(portList, mountPaths, "dc-0"),
+                  new MockDataNodeId(portList, mountPaths, "dc-1"), new MockDataNodeId(portList, mountPaths, "dc-2"),
+                  new MockDataNodeId(portList, mountPaths, "dc-3")));
+              localDcName = datanodes.get(0).getDatacenterName();
+              mockPartition = new MockPartitionId();
+              mockClusterMap =
+                  new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+              SimpleOperationTracker ot = null;
+              try {
+                ot = (SimpleOperationTracker) getOperationTrackerForGetOrPut(true, 1, 3, RouterOperation.PutOperation,
+                    true);
+              } catch (IllegalArgumentException exception) {
+                continue;
+              }
+              assertEquals(bootStrapCount, ot.getReplicasByState(null, EnumSet.of(ReplicaState.BOOTSTRAP))
+                  .values()
+                  .stream()
+                  .mapToInt(l -> l.size())
+                  .sum());
+              assertEquals(standByCount, ot.getReplicasByState(null, EnumSet.of(ReplicaState.STANDBY))
+                  .values()
+                  .stream()
+                  .mapToInt(l -> l.size())
+                  .sum());
+              assertEquals(leaderCount, ot.getReplicasByState(null, EnumSet.of(ReplicaState.LEADER))
+                  .values()
+                  .stream()
+                  .mapToInt(l -> l.size())
+                  .sum());
+              assertEquals(inactiveCount, ot.getReplicasByState(null, EnumSet.of(ReplicaState.INACTIVE))
+                  .values()
+                  .stream()
+                  .mapToInt(l -> l.size())
+                  .sum());
+              assertEquals(offlineCount, ot.getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE))
+                  .values()
+                  .stream()
+                  .mapToInt(l -> l.size())
+                  .sum());
+              assertEquals(bootStrapCount + standByCount,
+                  ot.getReplicasByState(null, EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY))
+                      .values()
+                      .stream()
+                      .mapToInt(l -> l.size())
+                      .sum());
+              assertEquals(bootStrapCount + standByCount + leaderCount, ot.getReplicasByState(null,
+                  EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER))
+                  .values()
+                  .stream()
+                  .mapToInt(l -> l.size())
+                  .sum());
+              assertEquals(bootStrapCount + standByCount + leaderCount + inactiveCount, ot.getReplicasByState(null,
+                  EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE))
+                  .values()
+                  .stream()
+                  .mapToInt(l -> l.size())
+                  .sum());
+              assertEquals(bootStrapCount + standByCount + leaderCount + inactiveCount + offlineCount,
+                  ot.getReplicasByState(null,
+                      EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
+                          ReplicaState.INACTIVE, ReplicaState.OFFLINE))
+                      .values()
+                      .stream()
+                      .mapToInt(l -> l.size())
+                      .sum());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Create a {@link List} of {@link Pair} of {@link ReplicaState} with their counts, as specified by counts in the
+   * parameters.
+   * @param bootstrapCount count of replicas in {@link ReplicaState#BOOTSTRAP}.
+   * @param standbyCount count of replicas in {@link ReplicaState#STANDBY}.
+   * @param leaderCount count of replicas in {@link ReplicaState#LEADER}.
+   * @param inactiveCount count of replicas in {@link ReplicaState#INACTIVE}.
+   * @param offlineCount count of replicas in {@link ReplicaState#OFFLINE}.
+   * @return
+   */
+  private List<Pair<Integer, ReplicaState>> fillMapWithReplicaState(int bootstrapCount, int standbyCount,
+      int leaderCount, int inactiveCount, int offlineCount) {
+    List<Pair<Integer, ReplicaState>> list = new ArrayList<>();
+    list.add(new Pair<>(bootstrapCount, ReplicaState.BOOTSTRAP));
+    list.add(new Pair<>(standbyCount, ReplicaState.STANDBY));
+    list.add(new Pair<>(leaderCount, ReplicaState.LEADER));
+    list.add(new Pair<>(inactiveCount, ReplicaState.INACTIVE));
+    list.add(new Pair<>(offlineCount, ReplicaState.OFFLINE));
+    return list;
+  }
+
   /**
    * Test {@link OperationTracker} fail logic for the specified {@link RouterOperation}.
    * @param routerOperation {@link RouterOperation} to test.
@@ -1294,12 +1405,14 @@ public class OperationTrackerTest {
           OperationTracker ot;
           switch (routerOperation) {
             case DeleteOperation:
-              ot = getOperationTrackerForDelete(true, successTarget, requestParallelism, RouterOperation.DeleteOperation,
-                  true);
+              ot =
+                  getOperationTrackerForDelete(true, successTarget, requestParallelism, RouterOperation.DeleteOperation,
+                      true);
               break;
             case TtlUpdateOperation:
-              ot = getOperationTrackerForTtl(true, successTarget, requestParallelism, RouterOperation.TtlUpdateOperation,
-                  true);
+              ot =
+                  getOperationTrackerForTtl(true, successTarget, requestParallelism, RouterOperation.TtlUpdateOperation,
+                      true);
               break;
             default:
               fail(String.format("Operation %s not supported", routerOperation.name()));
@@ -1309,8 +1422,7 @@ public class OperationTrackerTest {
           int notFoundCounter = 0;
           int foundCounter = 0;
           while (sentRequestCount < replicaCount - offlineCount) {
-            int requestsToSend =
-                Math.min((replicaCount - offlineCount - sentRequestCount), requestParallelism);
+            int requestsToSend = Math.min((replicaCount - offlineCount - sentRequestCount), requestParallelism);
             sentRequestCount += requestsToSend;
             sendRequests(ot, requestsToSend, false);
             while (requestsToSend > 0) {
