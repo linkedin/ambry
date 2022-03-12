@@ -21,6 +21,7 @@ import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -80,12 +81,12 @@ class SimpleOperationTracker implements OperationTracker {
   protected final int originatingDcNotFoundFailureThreshold;
   protected final int totalReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
+  protected final NonBlockingRouterMetrics routerMetrics;
   private final OpTrackerIterator otIterator;
   private final RouterOperation routerOperation;
   private final PartitionId partitionId;
   private final RouterConfig routerConfig;
   private final boolean crossColoEnabled;
-  protected final NonBlockingRouterMetrics routerMetrics;
   protected int inflightCount = 0;
   protected int diskReplicaSuccessCount = 0;
   protected int cloudReplicaSuccessCount = 0;
@@ -101,6 +102,11 @@ class SimpleOperationTracker implements OperationTracker {
   protected ReplicaType inFlightReplicaType;
   private Iterator<ReplicaId> replicaIterator;
   private String reassignedOriginDc = null;
+  private int originatingDcOfflineReplicaCount = 0;
+  private int originatingDcTotalReplicaCount = 0;
+  private int totalOfflineReplicaCount = 0;
+  private int allReplicaCount = 0;
+  private Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
 
   /**
    * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
@@ -147,15 +153,24 @@ class SimpleOperationTracker implements OperationTracker {
     datacenterName = routerConfig.routerDatacenterName;
     cloudReplicaSuccessTarget = routerConfig.routerCloudSuccessTarget;
     cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
+    // Note that we get a snapshot of replicas by state only once in this class, and use the same snapshot everywhere
+    // to avoid the case where a replica state might change in between an operation.
+    allDcReplicasByState =
+        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(EnumSet.of(ReplicaState.BOOTSTRAP,
+            ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE, ReplicaState.OFFLINE), null);
     List<ReplicaId> eligibleReplicas;
     List<ReplicaId> offlineReplicas = new ArrayList<>();
+    totalOfflineReplicaCount = getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE))
+            .getOrDefault(ReplicaState.OFFLINE, Collections.emptyList()).size();
+    allReplicaCount = partitionId.getReplicaIds().size();
+
     switch (routerOperation) {
       case GetBlobOperation:
       case GetBlobInfoOperation:
         diskReplicaSuccessTarget = routerConfig.routerGetSuccessTarget;
         diskReplicaParallelism = routerConfig.routerGetRequestParallelism;
         crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
-        Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(partitionId, null,
+        Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE,
                 ReplicaState.OFFLINE));
         offlineReplicas = replicasByState.getOrDefault(ReplicaState.OFFLINE, new ArrayList<>());
@@ -166,8 +181,7 @@ class SimpleOperationTracker implements OperationTracker {
         eligibleReplicas.removeAll(offlineReplicas);
         break;
       case PutOperation:
-        eligibleReplicas =
-            getEligibleReplicas(partitionId, datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
+        eligibleReplicas = getEligibleReplicas(datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
         diskReplicaSuccessTarget =
             routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
                 routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
@@ -180,20 +194,20 @@ class SimpleOperationTracker implements OperationTracker {
         diskReplicaSuccessTarget = routerConfig.routerDeleteSuccessTarget;
         diskReplicaParallelism = routerConfig.routerDeleteRequestParallelism;
         crossColoEnabled = true;
-        eligibleReplicas = getEligibleReplicas(partitionId, null,
+        eligibleReplicas = getEligibleReplicas(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case TtlUpdateOperation:
         diskReplicaSuccessTarget = routerConfig.routerTtlUpdateSuccessTarget;
         diskReplicaParallelism = routerConfig.routerTtlUpdateRequestParallelism;
         crossColoEnabled = true;
-        eligibleReplicas = getEligibleReplicas(partitionId, null,
+        eligibleReplicas = getEligibleReplicas(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case UndeleteOperation:
         diskReplicaParallelism = routerConfig.routerUndeleteRequestParallelism;
         crossColoEnabled = true;
-        eligibleReplicas = getEligibleReplicas(partitionId, null,
+        eligibleReplicas = getEligibleReplicas(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         // Undelete operation need to get global quorum. It will require a different criteria for success.
         // Here set the success target to the number of eligible replicas.
@@ -300,6 +314,11 @@ class SimpleOperationTracker implements OperationTracker {
     totalReplicaCount = replicaPool.size();
     cloudReplicasPresent = cloudReplicaInPoolOrFlightCount > 0;
     diskReplicasPresent = diskReplicaInPoolOrFlightCount > 0;
+    originatingDcOfflineReplicaCount =
+        getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
+    originatingDcTotalReplicaCount =
+        partitionId.getReplicaIds().stream().filter(replicaId -> replicaId.getDataNodeId().getDatacenterName()
+            .equals(this.originatingDcName)).collect(Collectors.toList()).size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
@@ -358,14 +377,49 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
+  public boolean maybeFailedDueToOfflineReplicas() {
+    if(!routerConfig.routerUnavailableDueToOfflineReplicas) {
+      return false;
+    }
+    // We mark the failure as due to offline replicas when we know that we couldn't find the blob in eligible replicas,
+    // and remaining replicas are enough to make the request successful, and there is atleast one offline replica in the
+    // remaining set of replicas. The offline replicas can come back up in future to make the request successful, and
+    // hence such a failure should be deemed as retryable.
+    if (hasFailedOnOriginatingDcNotFound()
+        && originatingDcTotalReplicaCount - originatingDcNotFoundCount >= diskReplicaSuccessTarget
+        && originatingDcOfflineReplicaCount > 0) {
+      logger.info(
+          "Terminating {} on {} due to Not_Found failure on some originatingDc replicas and some other originatingDc"
+              + "replicas being offline. Originating Not_Found count: {}, failure threshold: {},"
+              + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
+              + "diskReplicaSuccessTarget: {}", routerOperation.name(), partitionId, originatingDcNotFoundCount,
+          originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount, originatingDcTotalReplicaCount,
+          diskReplicaSuccessTarget);
+      routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
+      return true;
+    }
+    if (hasFailedOnCrossColoNotFound() && allReplicaCount - totalNotFoundCount >= diskReplicaSuccessTarget
+        && totalOfflineReplicaCount > 0) {
+      logger.info(
+          "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
+              + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
+              + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {}",
+          routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
+          diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount);
+      routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
+      return true;
+    }
+    return false;
+  }
+
+  @Override
   public boolean hasFailedOnNotFound() {
     if (routerOperation == RouterOperation.PutOperation) {
       return false;
     }
-    if (originatingDcNotFoundFailureThreshold > 0
-        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) {
+    if (hasFailedOnOriginatingDcNotFound()) {
       logger.info(
-          "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {}",
+          "Terminating {} on {} due to Not_Found failure. OriginatingDC Not_Found count: {}, failure threshold: {}",
           routerOperation, partitionId, originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold);
       routerMetrics.failedOnOriginatingDcNotFoundCount.inc();
       return true;
@@ -373,8 +427,7 @@ class SimpleOperationTracker implements OperationTracker {
     // To account for GET operation, the threshold should be  >= totalReplicaCount - (success target - 1)
     // Right now, this only applies for disk replica only partitions and may not be completely accurate if there are
     // failures responses other than not found.
-    if (crossColoEnabled
-        && (diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget)) {
+    if (hasFailedOnCrossColoNotFound()) {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count. DiskDownCount: {}, TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}",
           routerOperation, partitionId, diskDownCount, totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget);
@@ -459,16 +512,32 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * Get eligible replicas by states for given partition from specified data center. If dcName is null, it gets all eligible
+   * Check if not found count in originating datacenter exceeds threshold.
+   * @return {@code true} if not found count in originating datacenter exceeds threshold, {@code false} otherwise.
+   */
+  private boolean hasFailedOnOriginatingDcNotFound() {
+    return originatingDcNotFoundFailureThreshold > 0
+        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold;
+  }
+
+  /**
+   * Check if its not possible to get enough successful responses due to not found count.
+   * @return {@code true} if its not possible to get enough successful responses due to not found count.
+   * {@code false} otherwise.
+   */
+  private boolean hasFailedOnCrossColoNotFound() {
+    return (crossColoEnabled && (diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget));
+  }
+
+  /**
+   * Get eligible replicas by states for the specified data center. If dcName is null, it gets all eligible
    * replicas from all data centers.
-   * @param partitionId the {@link PartitionId} that replicas belong to.
    * @param dcName the name of data center from which the replicas should come from. This can be {@code null}.
    * @param states a set of {@link ReplicaState}(s) that replicas should match.
    * @return a list of eligible replicas that are in specified states.
    */
-  private List<ReplicaId> getEligibleReplicas(PartitionId partitionId, String dcName, EnumSet<ReplicaState> states) {
-    Map<ReplicaState, List<ReplicaId>> replicasByState =
-        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(states, dcName);
+  private List<ReplicaId> getEligibleReplicas(String dcName, EnumSet<ReplicaState> states) {
+    Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(dcName, states);
     List<ReplicaId> eligibleReplicas = new ArrayList<>();
     for (List<ReplicaId> replicas : replicasByState.values()) {
       eligibleReplicas.addAll(replicas);
@@ -477,15 +546,24 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * Get replicas in required states from given partition.
-   * @param partitionId the {@link PartitionId} the replicas belong to.
+   * Get replicas in required states for the specified datacenter.
    * @param dcName the name of data center from which the replicas should come from. This can be {@code null}.
    * @param states a set of {@link ReplicaState}(s) that replicas should match.
    * @return a map whose key is {@link ReplicaState} and value is a list of {@link ReplicaId}(s) in that state.
    */
-  private Map<ReplicaState, List<ReplicaId>> getReplicasByState(PartitionId partitionId, String dcName,
-      EnumSet<ReplicaState> states) {
-    return (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(states, dcName);
+  Map<ReplicaState, List<ReplicaId>> getReplicasByState(String dcName, EnumSet<ReplicaState> states) {
+    Map<ReplicaState, List<ReplicaId>> map = new HashMap<>();
+    for (ReplicaState replicaState : states) {
+      if (allDcReplicasByState.containsKey(replicaState)) {
+        for (ReplicaId replicaId : allDcReplicasByState.get(replicaState)) {
+          if (dcName == null || replicaId.getDataNodeId().getDatacenterName().equals(dcName)) {
+            map.putIfAbsent(replicaState, new ArrayList<>());
+            map.get(replicaState).add(replicaId);
+          }
+        }
+      }
+    }
+    return map;
   }
 
   public boolean hasFailed() {
@@ -505,7 +583,7 @@ class SimpleOperationTracker implements OperationTracker {
           return true;
         }
       }
-      return hasFailedOnNotFound();
+      return maybeFailedDueToOfflineReplicas() || hasFailedOnNotFound();
     }
   }
 

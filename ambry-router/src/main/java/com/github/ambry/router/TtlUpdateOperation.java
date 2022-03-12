@@ -331,6 +331,10 @@ class TtlUpdateOperation {
     if (operationTracker.isDone() || operationCompleted) {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
+      } else if (operationTracker.maybeFailedDueToOfflineReplicas()) {
+        operationException.set(
+            new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
+                RouterErrorCode.AmbryUnavailable));
       } else if (operationTracker.hasFailedOnNotFound()) {
         operationException.set(
             new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
