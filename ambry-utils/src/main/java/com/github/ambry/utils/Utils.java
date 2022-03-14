@@ -53,6 +53,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.RandomAccess;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -432,6 +433,19 @@ public class Utils {
       }
     }
     return throwable instanceof Exception ? (Exception) throwable : new Exception(throwable);
+  }
+
+  /**
+   * Returns an exceptionally completed {@link CompletableFuture}.
+   * @param cause to complete the future with
+   * @param <T> type of the future
+   * @return An exceptionally completed CompletableFuture
+   */
+  public static <T> CompletableFuture<T> completedExceptionally(Throwable cause) {
+    CompletableFuture<T> result = new CompletableFuture<>();
+    result.completeExceptionally(cause);
+
+    return result;
   }
 
   /**

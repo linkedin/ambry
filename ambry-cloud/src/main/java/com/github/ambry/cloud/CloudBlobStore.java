@@ -53,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -187,6 +188,20 @@ class CloudBlobStore implements Store {
   }
 
   /**
+   * Returns the store info for the given ids asynchronously
+   * @param ids The list of ids whose messages need to be retrieved
+   * @param storeGetOptions A set of additional options that the store needs to use while getting the message
+   * @return a {@link CompletableFuture} that will eventually contain the {@link StoreInfo} for the given ids or the
+   *         {@link StoreException} if an error occurred
+   */
+  public CompletableFuture<StoreInfo> getAsync(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) {
+
+    // TODO: Read both the metadata and data from Azure asynchronously and complete the future only after the blobs and
+    //  their information are stored in the CloudMessageReadSet
+    return Utils.completedExceptionally(new UnsupportedOperationException("Async get operation to be implemented"));
+  }
+
+  /**
    * Download the blob corresponding to the {@code blobId} from the {@code CloudDestination} to the given {@code outputStream}
    * If the blob was encrypted by vcr during upload, then this method also decrypts it.
    * @param cloudBlobMetadata blob metadata to determine if the blob was encrypted by vcr during upload.
@@ -255,6 +270,20 @@ class CloudBlobStore implements Store {
   }
 
   /**
+   * Puts a set of messages into the store asynchronously. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND},
+   * this method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
+   * @param messageSetToWrite The message set to write to the store. Only the StoreKey, OperationTime, ExpirationTime,
+   *                          LifeVersion should be used in this method.
+   * @return a {@link CompletableFuture} that will eventually complete successfully when the messages are written to
+   *         store or will contain the {@link StoreException} if an error occurred
+   */
+  public CompletableFuture<Void> putAsync(MessageWriteSet messageSetToWrite) {
+
+    // TODO: Write the blobs in the message set asynchronously using MessageWriteSet#writeAsyncTo method.
+    return Utils.completedExceptionally(new UnsupportedOperationException("Async put operation to be implemented"));
+  }
+
+  /**
    * Upload the blob to the cloud destination.
    * @param messageInfo the {@link MessageInfo} containing blob metadata.
    * @param messageBuf the bytes to be uploaded.
@@ -292,7 +321,8 @@ class CloudBlobStore implements Store {
       } else {
         // PutRequest lifeVersion from frontend is -1. Should set to 0. (0 is the starting life version number for any data).
         // Put from replication or recovery should use liferVersion as it's.
-        short lifeVersion = messageInfo.hasLifeVersion(messageInfo.getLifeVersion()) ? messageInfo.getLifeVersion() : (short) 0;
+        short lifeVersion =
+            messageInfo.hasLifeVersion(messageInfo.getLifeVersion()) ? messageInfo.getLifeVersion() : (short) 0;
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
                 messageInfo.getSize(), encryptionOrigin, lifeVersion);
@@ -394,6 +424,21 @@ class CloudBlobStore implements Store {
   }
 
   /**
+   * Deletes all the messages in the list from the store asynchronously. When the lifeVersion is
+   * {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this method is invoked by the responding to the frontend request.
+   * Otherwise, it's invoked in the replication thread.
+   * @param infosToDelete The list of messages that need to be deleted. Only the StoreKey, OperationTime, LifeVersion
+   *                      should be used in this method.
+   * @return a {@link CompletableFuture} that will eventually complete successfully when all the messages are deleted
+   *         from store or will contain the {@link StoreException} if an error occurred
+   */
+  public CompletableFuture<Void> deleteAsync(List<MessageInfo> infosToDelete) {
+
+    // TODO: Delete the messages from cloud asynchronously by using the async APIs of CloudDestination
+    return Utils.completedExceptionally(new UnsupportedOperationException("Async delete operation to be implemented"));
+  }
+
+  /**
    * Delete the specified blob if needed depending on the cache state.
    * @param blobId the blob to delete
    * @param deletionTime the deletion time
@@ -437,6 +482,21 @@ class CloudBlobStore implements Store {
           (cex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
       throw new StoreException(cex, errorCode);
     }
+  }
+
+  /**
+   * Undelete the blob identified by {@code id} in the store asynchronously. When the lifeVersion is
+   * {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this method is invoked by the responding to the frontend request.
+   * Otherwise, it's invoked in the replication thread.
+   * @param info The {@link MessageInfo} that carries some basic information about this operation. Only the StoreKey,
+   *             OperationTime, LifeVersion should be used in this method.
+   * @return a {@link CompletableFuture} that will eventually contain the lifeVersion of the undeleted blob or the
+   *         {@link StoreException} if an error occurred.
+   */
+  public CompletableFuture<Short> undeleteAsync(MessageInfo info) {
+    // TODO: Undelete the messages from cloud asynchronously by using the async APIs of CloudDestination
+    return Utils.completedExceptionally(
+        new UnsupportedOperationException("Async undelete operation to be implemented"));
   }
 
   /**
@@ -497,6 +557,21 @@ class CloudBlobStore implements Store {
           (ex.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
       throw new StoreException(ex, errorCode);
     }
+  }
+
+  /**
+   * Updates the TTL of all the messages in the list in the store asynchronously. When the lifeVersion is
+   * {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this method is invoked by the responding to the frontend request.
+   * Otherwise, it's invoked in the replication thread.
+   * @param infosToUpdate The list of messages that need to be updated. Only the StoreKey, OperationTime,
+   *                      ExpirationTime, LifeVersion should be used in this method.
+   * @return a {@link CompletableFuture} that will eventually complete successfully when all the TTL of all messages are
+   *         updated successfully or will contain the {@link StoreException} if an error occurred.
+   */
+  public CompletableFuture<Void> updateTtlAsync(List<MessageInfo> infosToUpdate) {
+    // TODO: Update the TTL of messages from cloud asynchronously by using the async APIs of CloudDestination
+    return Utils.completedExceptionally(
+        new UnsupportedOperationException("Async updateTTL operation to be implemented"));
   }
 
   /**
@@ -1020,7 +1095,7 @@ class CloudBlobStore implements Store {
   }
 
   /** A {@link Write} implementation used by this store to write data. */
-  private class CloudWriteChannel implements Write {
+  class CloudWriteChannel implements Write {
     private final CloudBlobStore cloudBlobStore;
     private final List<MessageInfo> messageInfoList;
     private int messageIndex = 0;
@@ -1060,6 +1135,35 @@ class CloudBlobStore implements Store {
       } catch (IOException | CloudStorageException e) {
         throw new StoreException(e, StoreErrorCodes.IOError);
       }
+    }
+
+    /**
+     * Appends the buffer into the underlying write interface (eg: file) asynchronously. Returns the number of bytes
+     * successfully written
+     * @param buffer The buffer from which data needs to be written from
+     * @return a {@link CompletableFuture} that will eventually contain the number of bytes written to the write interface
+     *         or the {@link StoreException} if an error occurred
+     */
+    public CompletableFuture<Integer> appendAsyncFrom(ByteBuffer buffer) {
+      return Utils.completedExceptionally(
+          new UnsupportedOperationException("Async append operation yet to be supported"));
+    }
+
+    /**
+     * Appends the channel to the underlying write interface. Writes "size" number of bytes
+     * to the interface asynchronously.
+     * @param channel The channel from which data needs to be written from
+     * @param size The amount of data in bytes to be written from the channel
+     * @return a {@link CompletableFuture} that will eventually complete when all the bytes are written successfully. In
+     *         case of error, it will contain the {@link StoreException}.
+     */
+    public CompletableFuture<Void> appendAsyncFrom(ReadableByteChannel channel, long size) {
+
+      // TODO: Use the async upload operations provided by CloudDestination and return a future that will only complete once
+      //  we get success response from remote cloud destination
+
+      return Utils.completedExceptionally(
+          new UnsupportedOperationException("Async append operation yet to be supported"));
     }
   }
 

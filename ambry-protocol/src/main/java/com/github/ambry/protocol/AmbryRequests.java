@@ -158,7 +158,6 @@ public class AmbryRequests implements RequestAPI {
   public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
     PutRequest receivedRequest;
     if (request instanceof LocalChannelRequest) {
-
       // This is a case where handlePutRequest is called when frontends are writing to Azure. In this case, this method
       // is called by request handler threads running within the frontend router itself. So, the request can be directly
       // referenced as java objects without any need for deserialization.
@@ -180,6 +179,7 @@ public class AmbryRequests implements RequestAPI {
       DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
       receivedRequest = PutRequest.readFrom(dis, clusterMap);
     }
+
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -193,24 +193,9 @@ public class AmbryRequests implements RequestAPI {
         logger.error("Validating put request failed with error {} for request {}", error, receivedRequest);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(), error);
       } else {
-        MessageFormatInputStream stream =
-            new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobEncryptionKey(),
-                receivedRequest.getBlobProperties(), receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(),
-                receivedRequest.getBlobSize(), receivedRequest.getBlobType());
-        BlobProperties properties = receivedRequest.getBlobProperties();
-        long expirationTime = Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
-            properties.getTimeToLiveInSeconds());
-        MessageInfo info =
-            new MessageInfo.Builder(receivedRequest.getBlobId(), stream.getSize(), properties.getAccountId(),
-                properties.getContainerId(), properties.getCreationTimeInMs()).expirationTimeInMs(expirationTime)
-                .crc(receivedRequest.getCrc())
-                .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
-                .build();
-        ArrayList<MessageInfo> infoList = new ArrayList<>();
-        infoList.add(info);
-        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
+        MessageFormatWriteSet writeSet = getMessageFormatWriteSet(receivedRequest);
         Store storeToPut = storeManager.getStore(receivedRequest.getBlobId().getPartition());
-        storeToPut.put(writeset);
+        storeToPut.put(writeSet);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
             ServerErrorCode.No_Error);
         metrics.blobSizeInBytes.update(receivedRequest.getBlobSize());
@@ -321,18 +306,7 @@ public class AmbryRequests implements RequestAPI {
         } else {
           try {
             Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
-            EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
-            // Currently only one option is supported.
-            if (getRequest.getGetOption() == GetOption.Include_Expired_Blobs) {
-              storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Expired);
-            }
-            if (getRequest.getGetOption() == GetOption.Include_Deleted_Blobs) {
-              storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
-            }
-            if (getRequest.getGetOption() == GetOption.Include_All) {
-              storeGetOptions =
-                  EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
-            }
+            EnumSet<StoreGetOptions> storeGetOptions = getStoreGetOptions(getRequest);
             List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(partitionRequestInfo.getBlobIds());
             List<StoreKey> dedupedStoreKeys =
                 convertedStoreKeys.size() > 1 ? convertedStoreKeys.stream().distinct().collect(Collectors.toList())
@@ -797,6 +771,50 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.undeleteBlobResponseQueueTimeInMs, metrics.undeleteBlobSendTimeInMs,
             metrics.undeleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  /**
+   * Get the formatted messages which needs to be written to Store.
+   * @param receivedRequest received Put Request
+   * @return {@link MessageFormatWriteSet} that contains the formatted messages which needs to be written to store.
+   */
+  protected MessageFormatWriteSet getMessageFormatWriteSet(PutRequest receivedRequest)
+      throws MessageFormatException, IOException {
+    MessageFormatInputStream stream =
+        new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobEncryptionKey(),
+            receivedRequest.getBlobProperties(), receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(),
+            receivedRequest.getBlobSize(), receivedRequest.getBlobType());
+    BlobProperties properties = receivedRequest.getBlobProperties();
+    long expirationTime = Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
+        properties.getTimeToLiveInSeconds());
+    MessageInfo info = new MessageInfo.Builder(receivedRequest.getBlobId(), stream.getSize(), properties.getAccountId(),
+        properties.getContainerId(), properties.getCreationTimeInMs()).expirationTimeInMs(expirationTime)
+        .crc(receivedRequest.getCrc())
+        .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+        .build();
+    ArrayList<MessageInfo> infoList = new ArrayList<>();
+    infoList.add(info);
+    return new MessageFormatWriteSet(stream, infoList, false);
+  }
+
+  /**
+   *
+   * @param getRequest
+   * @return
+   */
+  protected EnumSet<StoreGetOptions> getStoreGetOptions(GetRequest getRequest) {
+    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
+    // Currently only one option is supported.
+    if (getRequest.getGetOption() == GetOption.Include_Expired_Blobs) {
+      storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Expired);
+    }
+    if (getRequest.getGetOption() == GetOption.Include_Deleted_Blobs) {
+      storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
+    }
+    if (getRequest.getGetOption() == GetOption.Include_All) {
+      storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
+    }
+    return storeGetOptions;
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response,
