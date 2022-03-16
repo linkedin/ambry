@@ -83,7 +83,7 @@ public class QuotaUtils {
     if (!quotaManager.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
       return new PostProcessQuotaChargeCallback(quotaManager, restRequest, isQuotaEnforcedOnRequest);
     } else {
-      throw new UnsupportedOperationException("Not implemented yet.");
+      return new PreProcessQuotaChargeCallback(quotaManager, restRequest);
     }
   }
 
