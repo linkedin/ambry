@@ -25,6 +25,7 @@ import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
@@ -366,7 +367,7 @@ public class UndeleteOperation {
         operationException.set(
             new RouterException("UndeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
       }
-      if (quotaChargeCallback != null) {
+      if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
           quotaChargeCallback.charge();
         } catch (QuotaException quotaException) {

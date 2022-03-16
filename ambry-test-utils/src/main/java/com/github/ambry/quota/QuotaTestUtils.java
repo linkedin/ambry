@@ -107,6 +107,15 @@ public class QuotaTestUtils {
   }
 
   /**
+   * Create an implementation of {@link QuotaChargeCallback} object for test.
+   * @param quotaConfig for the {@link QuotaChargeCallback} implementation.
+   * @return TestQuotaChargeCallback object.
+   */
+  public static TestQuotaChargeCallback createTestQuotaChargeCallback(QuotaConfig quotaConfig) {
+    return new TestQuotaChargeCallback(quotaConfig);
+  }
+
+  /**
    * Create {@link MockRestRequest} object using the specified {@link Account}, {@link Container} and {@link RestMethod}.
    * @param account {@link Account} object.
    * @param container {@link Container} object.
@@ -130,6 +139,25 @@ public class QuotaTestUtils {
    * An implementation of {@link QuotaChargeCallback} for tests.
    */
   public static class TestQuotaChargeCallback implements QuotaChargeCallback {
+    public int numChargeCalls = 0;
+    private final QuotaConfig quotaConfig;
+
+    /**
+     * Default constructor for {@link TestQuotaChargeCallback}.
+     */
+    public TestQuotaChargeCallback() {
+      this.quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+    }
+
+    /**
+     * Constructor for {@link TestQuotaChargeCallback} with the specified {@link QuotaConfig}.
+     * @param quotaConfig {@link QuotaConfig} object.
+     */
+    public TestQuotaChargeCallback(QuotaConfig quotaConfig) {
+      this.quotaConfig = quotaConfig;
+    }
+
+
     @Override
     public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge, long chunkSize) {
       return QuotaAction.ALLOW;
@@ -142,10 +170,12 @@ public class QuotaTestUtils {
 
     @Override
     public void charge(long chunkSize) {
+      numChargeCalls++;
     }
 
     @Override
     public void charge() {
+      charge(quotaConfig.quotaAccountingUnit);
     }
 
     @Override
@@ -170,7 +200,7 @@ public class QuotaTestUtils {
 
     @Override
     public QuotaConfig getQuotaConfig() {
-      return new QuotaConfig(new VerifiableProperties(new Properties()));
+      return quotaConfig;
     }
   }
 }

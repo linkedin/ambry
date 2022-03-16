@@ -42,6 +42,7 @@ import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
@@ -1453,7 +1454,8 @@ class PutOperation {
       }
       if (done) {
         // the chunk is complete now. We can charge against quota for the chunk if its not a metadata chunk.
-        if (quotaChargeCallback != null && !(this instanceof MetadataPutChunk) && chunkException == null) {
+        if (QuotaUtils.postProcessCharge(quotaChargeCallback) && !(this instanceof MetadataPutChunk)
+            && chunkException == null) {
           try {
             quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
           } catch (QuotaException quotaException) {

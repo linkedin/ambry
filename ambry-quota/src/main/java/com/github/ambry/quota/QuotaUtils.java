@@ -87,6 +87,16 @@ public class QuotaUtils {
     }
   }
 
+  /**
+   * @param quotaChargeCallback {@link QuotaChargeCallback} object.
+   * @return {@code true} if the charge needs to happen AFTER a request is processed. {@code false} otherwise.
+   */
+  public static boolean postProcessCharge(QuotaChargeCallback quotaChargeCallback) {
+    // Bandwidth throttling based implementation of quota enforcement will need ensure quota compliance BEFORE sending
+    // the chunk request to server. Hence return false if bandwidth throttling feature is enabled.
+    return quotaChargeCallback != null && !quotaChargeCallback.getQuotaConfig().bandwidthThrottlingFeatureEnabled;
+  }
+
   /*
    * @return QuotaName of the CU quota associated with {@link RestRequest}.
    */

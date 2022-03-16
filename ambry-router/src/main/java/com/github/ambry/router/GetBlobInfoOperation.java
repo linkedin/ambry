@@ -33,6 +33,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
@@ -447,7 +448,7 @@ class GetBlobInfoOperation extends GetOperation {
     }
 
     if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
-      if (quotaChargeCallback != null) {
+      if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
           quotaChargeCallback.charge();
         } catch (QuotaException quotaException) {
