@@ -28,16 +28,21 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.Resource;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.network.RequestInfo;
+import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.utils.CachedHistogram;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -220,6 +225,16 @@ public class NonBlockingRouterMetrics {
   // Crypto job metrics
   public final CryptoJobMetrics encryptJobMetrics;
   public final CryptoJobMetrics decryptJobMetrics;
+
+  // Quota handling related metrics
+  public final Meter requestsWithUnknownQuotaResourceRate;
+  public final Meter nonQuotaCompliantRequestRate;
+  public final Meter unknownExceptionInChargeableRate;
+  public Gauge<Integer> operationControllerReadQueueSize;
+  public Gauge<Integer> operationControllerWriteQueueSize;
+  public Gauge<Integer> operationControllerQueueSize;
+  public Gauge<Integer> readQueuedQuotaResourceCount;
+  public Gauge<Integer> writeQueuedQuotaResourceCount;
 
   // Resource to latency histogram map. Here resource can be DataNode, Partition, Disk, Replica etc.
   Map<Resource, CachedHistogram> getBlobLocalDcResourceToLatency = new HashMap<>();
@@ -537,6 +552,14 @@ public class NonBlockingRouterMetrics {
       scheduler.scheduleAtFixedRate(histogramDumper, 0, routerConfig.routerOperationTrackerHistogramDumpPeriod,
           TimeUnit.SECONDS);
     }
+
+    requestsWithUnknownQuotaResourceRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class,
+            "RequestsWithUnknownQuotaResourceRate"));
+    nonQuotaCompliantRequestRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "NonQuotaCompliantRequestRate"));
+    unknownExceptionInChargeableRate =
+        metricRegistry.meter(MetricRegistry.name(OperationQuotaCharger.class, "UnknownExceptionInChargeableRate"));
   }
 
   /**
@@ -651,6 +674,22 @@ public class NonBlockingRouterMetrics {
     metricRegistry.register(
         MetricRegistry.name(NonBlockingRouter.class, requestResponseHandlerThread.getName() + "Running"),
         requestResponseHandlerThreadRunning);
+  }
+
+  /**
+   * Initialize metrics related to read and write queue size of {@link QuotaAwareOperationController}.
+   * @param readQueue {@link Map} of {@link LinkedList} of {@link RequestInfo} representing read queue.
+   * @param writeQueue {@link Map} of {@link LinkedList} of {@link RequestInfo} representing write queue.
+   */
+  public void initializeRequestQueueMetrics(Map<QuotaResource, LinkedList<RequestInfo>> readQueue,
+      Map<QuotaResource, LinkedList<RequestInfo>> writeQueue) {
+    Supplier<Integer> readQueueSizeSupplier = () -> readQueue.entrySet().stream().flatMap(entry -> Stream.of(entry.getValue())).map(l-> l.size()).reduce(0, Integer::sum);
+    Supplier<Integer> writeQueueSizeSupplier = () -> writeQueue.entrySet().stream().flatMap(entry -> Stream.of(entry.getValue())).map(l-> l.size()).reduce(0, Integer::sum);
+    operationControllerReadQueueSize = () -> readQueueSizeSupplier.get();
+    operationControllerWriteQueueSize = () -> writeQueueSizeSupplier.get();
+    operationControllerQueueSize = () -> Math.addExact(readQueueSizeSupplier.get(), writeQueueSizeSupplier.get());
+    readQueuedQuotaResourceCount = () -> readQueue.size();
+    writeQueuedQuotaResourceCount = () -> writeQueue.size();
   }
 
   /**

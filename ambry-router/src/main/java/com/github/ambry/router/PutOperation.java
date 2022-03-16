@@ -37,11 +37,8 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
-import com.github.ambry.quota.QuotaMethod;
-import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
@@ -996,7 +993,7 @@ class PutOperation {
    * handles a chunk of data and takes it to completion, and once done, moves on to handle more chunks of data. This
    * why there is a reference to the "current chunk" in the comments.
    */
-  class PutChunk implements Chargeable {
+  class PutChunk {
     // the position of the current chunk in the overall blob.
     private int chunkIndex;
     // the blobId of the current chunk.
@@ -1039,8 +1036,8 @@ class PutOperation {
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
-    // whether the quota is already charged for this chunk.
-    private boolean isCharged;
+    // Tracks quota charging for this chunk.
+    private OperationQuotaCharger operationQuotaCharger;
 
     /**
      * Construct a PutChunk
@@ -1068,7 +1065,8 @@ class PutOperation {
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
-      isCharged = false;
+      operationQuotaCharger =
+          new OperationQuotaCharger(quotaChargeCallback, PutOperation.class.getSimpleName(), routerMetrics);
     }
 
     /**
@@ -1159,59 +1157,6 @@ class PutOperation {
      */
     OperationTracker getOperationTrackerInUse() {
       return operationTracker;
-    }
-
-    @Override
-    public boolean check() {
-      if (quotaChargeCallback == null || isCharged) {
-        return true;
-      }
-
-      return quotaChargeCallback.check();
-    }
-
-    @Override
-    public boolean charge() {
-      if (quotaChargeCallback == null || isCharged) {
-        return true;
-      }
-      try {
-        quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
-        isCharged = true;
-      } catch (QuotaException quotaException) {
-        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob %s due to %s ", blobId.toString(),
-            quotaException.toString()));
-      }
-      return isCharged;
-    }
-
-    @Override
-    public boolean quotaExceedAllowed() {
-      if (quotaChargeCallback == null) {
-        return true;
-      }
-      return quotaChargeCallback.quotaExceedAllowed();
-    }
-
-    @Override
-    public QuotaResource getQuotaResource() {
-      if (quotaChargeCallback == null) {
-        return null;
-      }
-      try {
-        return quotaChargeCallback.getQuotaResource();
-      } catch (QuotaException quotaException) {
-        logger.error(String.format(
-            "Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
-            blobId.toString(), quotaException.toString()));
-      }
-      // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
-      return null;
-    }
-
-    @Override
-    public QuotaMethod getQuotaMethod() {
-      return quotaChargeCallback.getQuotaMethod();
     }
 
     /**
@@ -1524,7 +1469,7 @@ class PutOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         PutRequest putRequest = createPutRequest();
-        RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId, null);
+        RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId, prepareQuotaCharger());
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo.put(correlationId,
             new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
@@ -1726,6 +1671,18 @@ class PutOperation {
         this.putRequest = putRequest;
         this.startTimeMs = startTimeMs;
       }
+    }
+
+    /**
+     * Set the blobId and chunkSize in the operationQuotaCharger, and return the {@link OperationQuotaCharger} object.
+     * Note that this method might set the blobId and chunkSize for the same chunk multiple times. This is ok because
+     * these are idempotent operation for the same chunk.
+     * @return OperationQuotaCharger object.
+     */
+    private OperationQuotaCharger prepareQuotaCharger() {
+      operationQuotaCharger.setBlobId(chunkBlobId);
+      operationQuotaCharger.setChunkSize(chunkBlobSize);
+      return operationQuotaCharger;
     }
   }
 

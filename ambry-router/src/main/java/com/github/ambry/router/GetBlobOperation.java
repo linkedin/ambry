@@ -38,11 +38,8 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
-import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
-import com.github.ambry.quota.QuotaMethod;
-import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -585,7 +582,7 @@ class GetBlobOperation extends GetOperation {
    * to retrieve one data chunk at a time. Once the associated chunk is successfully retrieved, this object can be
    * reinitialized and used to retrieve a subsequent chunk.
    */
-  private class GetChunk implements Chargeable {
+  private class GetChunk {
     // map of correlation id to the request metadata for every request issued for this operation.
     protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
@@ -617,8 +614,8 @@ class GetBlobOperation extends GetOperation {
     private long chunkSize;
     // whether the operation on the current chunk has completed.
     private boolean chunkCompleted;
-    // whether the quota is already charged for this chunk.
-    private boolean isCharged;
+    // Tracks quota charging for this chunk.
+    private OperationQuotaCharger operationQuotaCharger;
 
     /**
      * Construct a GetChunk
@@ -673,7 +670,8 @@ class GetBlobOperation extends GetOperation {
       decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
       correlationIdToGetRequestInfo.clear();
       state = ChunkState.Free;
-      isCharged = false;
+      operationQuotaCharger =
+          new OperationQuotaCharger(quotaChargeCallback, GetBlobOperation.class.getSimpleName(), routerMetrics);
     }
 
     /**
@@ -733,58 +731,6 @@ class GetBlobOperation extends GetOperation {
       if (!isComplete()) {
         fetchRequests(requestRegistrationCallback);
       }
-    }
-
-    @Override
-    public boolean check() {
-      if (quotaChargeCallback == null || isCharged) {
-        return true;
-      }
-      return quotaChargeCallback.check();
-    }
-
-    @Override
-    public boolean charge() {
-      if (quotaChargeCallback == null || isCharged) {
-        return true;
-      }
-      try {
-        quotaChargeCallback.charge(chunkSize);
-        isCharged = true;
-      } catch (QuotaException quotaException) {
-        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob {} due to {} ", blobId.toString(),
-            quotaException.toString()));
-      }
-      return isCharged;
-    }
-
-    @Override
-    public boolean quotaExceedAllowed() {
-      if(quotaChargeCallback == null) {
-        return true;
-      }
-      return quotaChargeCallback.quotaExceedAllowed();
-    }
-
-    @Override
-    public QuotaResource getQuotaResource() {
-      if(quotaChargeCallback == null) {
-        return null;
-      }
-      try {
-        return quotaChargeCallback.getQuotaResource();
-      } catch (QuotaException quotaException) {
-        logger.error(
-            String.format("Could create QuotaResource object during GetBlobOperation for the chunk {} due to {}. This should never happen.",
-                blobId.toString(), quotaException.toString()));
-      }
-      // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
-      return null;
-    }
-
-    @Override
-    public QuotaMethod getQuotaMethod() {
-      return quotaChargeCallback.getQuotaMethod();
     }
 
     /**
@@ -877,7 +823,7 @@ class GetBlobOperation extends GetOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
-        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, this);
+        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, prepareQuotaCharger());
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
         correlationIdToGetChunk.put(correlationId, this);
@@ -1258,6 +1204,18 @@ class GetBlobOperation extends GetOperation {
      */
     private RouterException buildChunkException(String message, RouterErrorCode errorCode) {
       return new RouterException(message + ". Chunk ID: " + chunkBlobId, errorCode);
+    }
+
+    /**
+     * Set the blobId and chunkSize in the operationQuotaCharger, and return the {@link OperationQuotaCharger} object.
+     * Note that this method might set the blobId and chunkSize for the same chunk multiple times. This is ok because
+     * these are idempotent operation for the same chunk.
+     * @return OperationQuotaCharger object.
+     */
+    private OperationQuotaCharger prepareQuotaCharger() {
+      operationQuotaCharger.setBlobId(chunkBlobId);
+      operationQuotaCharger.setChunkSize(chunkSize);
+      return operationQuotaCharger;
     }
   }
 

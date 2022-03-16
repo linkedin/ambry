@@ -13,31 +13,31 @@
  */
 package com.github.ambry.quota;
 
+import com.github.ambry.config.RouterConfig;
+
+
 /**
- * A {@link Chargeable} is an operation that can be charged against quota.
+ * The {@link Chargeable} interface provides methods to charge against quota for operations.
+ * Implementations of this interface should ensure that when multiple parallel requests are sent for the same chunk
+ * (due to configs like {@link RouterConfig#routerGetRequestParallelism}), then each chunk is charged only once.
+ * If any quota compliance operation fails due to {@link QuotaException}, implementations should factor in
+ * {@link QuotaException#isRetryable()} to decide if the quota operation should be tried again.
+ *
+ * In order to do quota compliance operations, the implementations will typically use {@link QuotaChargeCallback}.
  */
 public interface Chargeable {
 
   /**
-   * Check if the usage is within quota for the quota resource of this operation.
+   * Charges the cost for this operation against quota of the quota resource of this operation, if checks to allow the
+   * request are successful. See {@link QuotaChargeCallback#checkAndCharge} for an explanation of various ways in which
+   * quota checks can be successful.
+   * Cost is calculated by the implementations, typically based on the size and type of the request. For example, for
+   * put and get requests, cost depends on the size of data. For delete request, there is a fixed cost.
    *
-   * @return {@code true} if usage is within quota. {@code false} otherwise.
+   * @param shouldCheckExceedAllowed if {@code true} then it should be checked if usage is allowed to exceed quota.
+   * @return QuotaAction representing the recommended action to take.
    */
-  boolean check();
-
-  /**
-   * Charge the request cost for this operation against quota of the quota resource of this operation.
-   *
-   * @return {@code true} if quota was charged. {@code false} otherwise.
-   */
-  boolean charge();
-
-  /**
-   * Check if usage allowed to exceed quota.
-   *
-   * @return {@code true} if usage is allowed to exceed quota. {@code false} otherwise.
-   */
-  boolean quotaExceedAllowed();
+  QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed);
 
   /**
    * @return the {@link QuotaResource} whose operation is being charged.

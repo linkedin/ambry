@@ -102,7 +102,8 @@ class GetBlobInfoOperation extends GetOperation {
     operationTracker =
         getOperationTracker(blobId.getPartition(), blobId.getDatacenterId(), RouterOperation.GetBlobInfoOperation);
     progressTracker = new ProgressTracker(operationTracker);
-    operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName());
+    operationQuotaCharger =
+        new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
   }
 
   @Override

@@ -465,9 +465,11 @@ public class OperationController implements Runnable {
           DataNodeId dataNodeId = responseInfo.getDataNode();
           responseHandler.onConnectionTimeout(dataNodeId);
         } else {
-          long responseReceiveTime = requestInfo.getStreamHeaderFrameReceiveTime();
-          if (responseReceiveTime != -1) {
-            routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
+          if (!responseInfo.isQuotaRejected()) {
+            long responseReceiveTime = requestInfo.getStreamHeaderFrameReceiveTime();
+            if (responseReceiveTime != -1) {
+              routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
+            }
           }
           RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
           logger.debug("Handling response of type {} for {}", type, requestInfo.getRequest().getCorrelationId());
@@ -499,6 +501,13 @@ public class OperationController implements Runnable {
   }
 
   /**
+   * @return a {@link List} of {@link ResponseInfo} objects corresponding to non quota compliant requests.
+   */
+  protected List<ResponseInfo> getNonQuotaCompliantResponses() {
+    return Collections.emptyList();
+  }
+
+  /**
    * The RequestResponseHandler thread simply runs in a loop polling the OperationController for any
    * requests to be sent, and notifies it about network events.
    */
@@ -518,6 +527,7 @@ public class OperationController implements Runnable {
         List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestsToSend,
             routerConfig.routerDropRequestOnTimeout ? requestsToDrop : Collections.emptySet(),
             NETWORK_CLIENT_POLL_TIMEOUT);
+        responseInfoList.addAll(getNonQuotaCompliantResponses());
         onResponse(responseInfoList);
         responseInfoList.forEach(ResponseInfo::release);
       }
