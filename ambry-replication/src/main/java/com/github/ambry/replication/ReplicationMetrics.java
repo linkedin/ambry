@@ -393,8 +393,8 @@ public class ReplicationMetrics {
   void trackLiveThreadsCount(final List<ReplicaThread> replicaThreads, String datacenter) {
     Gauge<Integer> liveThreadsPerDatacenter = () -> getLiveThreads(replicaThreads);
 
-    registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfReplicaThreadsIn" + datacenter),
-        liveThreadsPerDatacenter);
+    registry.gauge(MetricRegistry.name(ReplicaThread.class, "NumberOfReplicaThreadsIn" + datacenter),
+        () -> liveThreadsPerDatacenter);
   }
 
   private int getLiveThreads(List<ReplicaThread> replicaThreads) {
@@ -423,8 +423,8 @@ public class ReplicationMetrics {
         }
         return replicationDisabledPartitions.size();
       };
-      registry.register(MetricRegistry.name(ReplicaThread.class, "ReplicationDisabledPartitions-" + datacenter),
-          disabledCount);
+      registry.gauge(MetricRegistry.name(ReplicaThread.class, "ReplicationDisabledPartitions-" + datacenter),
+          () -> disabledCount);
     }
   }
 
@@ -458,8 +458,9 @@ public class ReplicationMetrics {
       // Set up metrics if and only if no mapping for this partition before.
       if (enableEmmitMetricForReplicaLag) {
         Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
-        registry.register(MetricRegistry.name(ReplicaThread.class,
-            String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())), replicaLag);
+        registry.gauge(MetricRegistry.name(ReplicaThread.class,
+            String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())),
+            () -> replicaLag);
       }
     }
   }
@@ -473,8 +474,8 @@ public class ReplicationMetrics {
       cloudReplicaCatchUpPoint.put(partitionId, 0L);
       // Set up metrics if and only if no mapping for this partition before.
       Gauge<Long> catchUpPoint = () -> cloudReplicaCatchUpPoint.get(partitionId);
-      registry.register(MetricRegistry.name(ReplicaThread.class,
-          String.format(CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE, partitionId.toPathString())), catchUpPoint);
+      registry.gauge(MetricRegistry.name(ReplicaThread.class,
+          String.format(CATCH_POINT_FROM_CLOUD_METRIC_NAME_TEMPLATE, partitionId.toPathString())), () -> catchUpPoint);
     }
   }
 
@@ -526,27 +527,27 @@ public class ReplicationMetrics {
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
     Gauge<Long> replicaLag = remoteReplicaInfo::getRemoteLagFromLocalInBytes;
-    registry.register(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"), replicaLag);
+    registry.gauge(MetricRegistry.name(ReplicaThread.class, metricNamePrefix + "-remoteLagInBytes"), () -> replicaLag);
     if (trackPerDatacenterLag) {
       String remoteReplicaDc = remoteReplicaInfo.getReplicaId().getDataNodeId().getDatacenterName();
       remoteReplicaInfosByDc.computeIfAbsent(remoteReplicaDc, k -> {
         Gauge<Double> avgReplicaLag = () -> getAvgLagFromDc(remoteReplicaDc);
-        registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-avgReplicaLagFromLocalInBytes"),
-            avgReplicaLag);
+        registry.gauge(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-avgReplicaLagFromLocalInBytes"),
+            () -> avgReplicaLag);
         Gauge<Long> maxReplicaLag = () -> {
           LongSummaryStatistics statistics =
               dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
           return statistics.getMax() == Long.MIN_VALUE ? -1 : statistics.getMax();
         };
-        registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-maxReplicaLagFromLocalInBytes"),
-            maxReplicaLag);
+        registry.gauge(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-maxReplicaLagFromLocalInBytes"),
+            () -> maxReplicaLag);
         Gauge<Long> minReplicaLag = () -> {
           LongSummaryStatistics statistics =
               dcToReplicaLagStats.getOrDefault(remoteReplicaDc, new LongSummaryStatistics());
           return statistics.getMin() == Long.MAX_VALUE ? -1 : statistics.getMin();
         };
-        registry.register(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
-            minReplicaLag);
+        registry.gauge(MetricRegistry.name(ReplicaThread.class, remoteReplicaDc + "-minReplicaLagFromLocalInBytes"),
+            () -> minReplicaLag);
         return ConcurrentHashMap.newKeySet();
       }).add(remoteReplicaInfo);
     }
