@@ -17,25 +17,19 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.mysql.MySqlDataAccessor;
-import com.github.ambry.mysql.MySqlMetrics;
-import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.StatsHeader;
-import com.github.ambry.server.StatsSnapshot;
-import com.github.ambry.server.StatsWrapper;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.server.StorageStatsUtilTest;
+import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.Driver;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
+import javax.sql.DataSource;
+import junit.framework.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -46,43 +40,29 @@ import static org.mockito.Mockito.*;
  * Unit test for {@link AccountStatsMySqlStore}.
  */
 public class AccountStatsMySqlStoreTest {
-  private final Connection mockConnection;
-  private final MySqlDataAccessor dataAccessor;
-  private final MySqlMetrics metrics;
+  private final DataSource mockDataSource;
   private static final String clusterName = "Ambry-test";
   private static final String hostname = "test1.ambry_1300";
-  private static final long MAX_CONTAINER_USAGE = 100000;
-  private static final long MIN_CONTAINER_USAGE = 1000;
-  private static final long DEFAULT_CONTAINER_USAGE = 5000;
-  private static final int BASE_PARTITION_ID = 100;
-  private static final int BASE_ACCOUNT_ID = 1000;
-  private static final int BASE_CONTAINER_ID = 1;
-  private static AccountStatsMySqlConfig config =
-      new AccountStatsMySqlConfig(new VerifiableProperties(new Properties()));
 
   public AccountStatsMySqlStoreTest() throws SQLException {
-    mockConnection = mock(Connection.class);
+    Connection mockConnection = mock(Connection.class);
     PreparedStatement mockInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("INSERT"))).thenReturn(mockInsertStatement);
     when(mockInsertStatement.executeUpdate()).thenReturn(1);
 
-    metrics = new MySqlMetrics(AccountStatsMySqlStore.class, new MetricRegistry());
-    dataAccessor = getDataAccessor(mockConnection, metrics);
+    mockDataSource = getDataSource(mockConnection);
   }
 
   /**
-   * Utility to get a {@link MySqlDataAccessor}.
+   * Utility to get a {@link DataSource}.
    * @param mockConnection the connection to use.
-   * @return the {@link MySqlDataAccessor}.
+   * @return the {@link DataSource}.
    * @throws SQLException
    */
-  static MySqlDataAccessor getDataAccessor(Connection mockConnection, MySqlMetrics metrics) throws SQLException {
-    Driver mockDriver = mock(Driver.class);
-    when(mockDriver.connect(anyString(), any(Properties.class))).thenReturn(mockConnection);
-    MySqlUtils.DbEndpoint dbEndpoint =
-        new MySqlUtils.DbEndpoint("jdbc:mysql://localhost/ambry_container_storage_stats", "dc1", true, "ambry",
-            "ambry");
-    return new MySqlDataAccessor(Collections.singletonList(dbEndpoint), mockDriver, metrics);
+  static DataSource getDataSource(Connection mockConnection) throws SQLException {
+    DataSource mockDataSource = mock(DataSource.class);
+    when(mockDataSource.getConnection()).thenReturn(mockConnection);
+    return mockDataSource;
   }
 
   @Test
@@ -90,78 +70,38 @@ public class AccountStatsMySqlStoreTest {
     // First, make sure there is no local backup file.
     Path tempDir = Files.createTempDirectory("AccountStatsMySqlStoreTest");
     Path localBackupFilePath = tempDir.resolve("localbackup");
+    Properties prop = new Properties();
+    prop.setProperty(AccountStatsMySqlConfig.LOCAL_BACKUP_FILE_PATH, localBackupFilePath.toString());
+    AccountStatsMySqlConfig accountStatsMySqlConfig = new AccountStatsMySqlConfig(new VerifiableProperties(prop));
     AccountStatsMySqlStore store =
-        new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
+        new AccountStatsMySqlStore(accountStatsMySqlConfig, mockDataSource, clusterName, hostname, null,
             new MetricRegistry());
-    assertNull(store.getPreviousStats());
+    assertNull(store.getPreviousHostAccountStorageStatsWrapper());
     // Second, save a backup file.
-    StatsSnapshot snapshot = createStatsSnapshot(10, 10, 10, false);
+    HostAccountStorageStats hostAccountStorageStats = new HostAccountStorageStats(
+        StorageStatsUtilTest.generateRandomHostAccountStorageStats(10, 10, 10, 10000L, 2, 10));
     StatsHeader header =
         new StatsHeader(StatsHeader.StatsDescription.STORED_DATA_SIZE, System.currentTimeMillis(), 10, 10, null);
-    StatsWrapper statsWrapper = new StatsWrapper(header, snapshot);
+    HostAccountStorageStatsWrapper statsWrapper = new HostAccountStorageStatsWrapper(header, hostAccountStorageStats);
     ObjectMapper objectMapper = new ObjectMapper();
     objectMapper.writeValue(localBackupFilePath.toFile(), statsWrapper);
-    store =
-        new AccountStatsMySqlStore(config, dataAccessor, clusterName, hostname, localBackupFilePath.toString(), null,
-            new MetricRegistry());
+    store = new AccountStatsMySqlStore(accountStatsMySqlConfig, mockDataSource, clusterName, hostname, null,
+        new MetricRegistry());
 
-    StatsWrapper backupWrapper = store.getPreviousStats();
+    HostAccountStorageStatsWrapper backupWrapper = store.getPreviousHostAccountStorageStatsWrapper();
     assertNotNull(backupWrapper);
     assertStatsHeader(backupWrapper.getHeader(), 10, 10);
-    assertStatsSnapshot(backupWrapper.getSnapshot(), 10, 10, 10);
+    Assert.assertEquals(hostAccountStorageStats.getStorageStats(), backupWrapper.getStats().getStorageStats());
   }
 
-  private StatsSnapshot createStatsSnapshot(int numPartitions, int numAccounts, int numContainers,
-      boolean defaultValue) {
-    Random random = new Random();
-    Map<String, StatsSnapshot> partitionSubMap = new HashMap<>();
-    long allPartitionValue = 0;
-    for (int ip = 0; ip < numPartitions; ip++) {
-      Map<String, StatsSnapshot> accountSubMap = new HashMap<>();
-      long allAccountValue = 0;
-      for (int ia = 0; ia < numAccounts; ia++) {
-        Map<String, StatsSnapshot> containerSubMap = new HashMap<>();
-        long allContainerValue = 0;
-        for (int ic = 0; ic < numContainers; ic++) {
-          long containerUsage = defaultValue ? DEFAULT_CONTAINER_USAGE
-              : Math.abs(random.nextLong()) % (MAX_CONTAINER_USAGE - MIN_CONTAINER_USAGE) + MIN_CONTAINER_USAGE;
-          StatsSnapshot containerStatsSnapshot = new StatsSnapshot(containerUsage, null);
-          containerSubMap.put(Utils.statsContainerKey((short) (BASE_CONTAINER_ID + ic)), containerStatsSnapshot);
-          allContainerValue += containerUsage;
-        }
-        StatsSnapshot accountStatsSnapshot = new StatsSnapshot(allContainerValue, containerSubMap);
-        accountSubMap.put(Utils.statsAccountKey((short) (BASE_ACCOUNT_ID + ia)), accountStatsSnapshot);
-        allAccountValue += allContainerValue;
-      }
-      StatsSnapshot partitionStatsSnapshot = new StatsSnapshot(allAccountValue, accountSubMap);
-      partitionSubMap.put(Utils.statsPartitionKey((short) (BASE_PARTITION_ID + ip)), partitionStatsSnapshot);
-      allPartitionValue += allAccountValue;
-    }
-    return new StatsSnapshot(allPartitionValue, partitionSubMap);
-  }
-
+  /**
+   * Assert given {@link StatsHeader} has proper fields.
+   * @param statsHeader
+   * @param storesContactedCount
+   * @param storesRespondedCount
+   */
   private void assertStatsHeader(StatsHeader statsHeader, int storesContactedCount, int storesRespondedCount) {
     assertEquals(statsHeader.getStoresContactedCount(), storesContactedCount);
     assertEquals(statsHeader.getStoresRespondedCount(), storesRespondedCount);
-  }
-
-  private void assertStatsSnapshot(StatsSnapshot snapshot, int numPartitions, int numAccounts, int numContainers) {
-    Map<String, StatsSnapshot> partitionSubMap = snapshot.getSubMap();
-    assertEquals(partitionSubMap.size(), numPartitions);
-    for (String partitionIdKey : partitionSubMap.keySet()) {
-      Map<String, StatsSnapshot> accountSubMap = partitionSubMap.get(partitionIdKey).getSubMap();
-      assertEquals(accountSubMap.size(), numAccounts);
-      for (String accountIdKey : accountSubMap.keySet()) {
-        Map<String, StatsSnapshot> containerSubMap = accountSubMap.get(accountIdKey).getSubMap();
-        assertEquals(containerSubMap.size(), numContainers);
-        for (String containerIdKey : containerSubMap.keySet()) {
-          long storageUsage = containerSubMap.get(containerIdKey).getValue();
-          assertTrue("Storage usage is " + storageUsage + " at " + partitionIdKey + accountIdKey + containerIdKey
-              + " it should be greater than " + MIN_CONTAINER_USAGE, storageUsage >= MIN_CONTAINER_USAGE);
-          assertTrue("Storage usage is " + storageUsage + " it should be less than " + MAX_CONTAINER_USAGE,
-              storageUsage <= MAX_CONTAINER_USAGE);
-        }
-      }
-    }
   }
 }

@@ -49,7 +49,7 @@ public class SocketRequestResponseChannelTest {
     }
   }
 
-  class MockSend extends AbstractByteBufHolder<MockSend> implements Send {
+  static class MockSend extends AbstractByteBufHolder<MockSend> implements Send {
     public int sendcall = 1;
 
     @Override

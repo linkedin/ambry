@@ -28,11 +28,11 @@ public class HelixVcrClusterMetrics {
 
   public HelixVcrClusterMetrics(MetricRegistry registry, Set<PartitionId> assignedPartitionIds) {
     partitionIdNotInClusterMapOnRemove =
-        registry.counter(MetricRegistry.name(HelixVcrCluster.class, "PartitionIdNotInClusterMapOnRemove"));
+        registry.counter(MetricRegistry.name(HelixVcrClusterParticipant.class, "PartitionIdNotInClusterMapOnRemove"));
     partitionIdNotInClusterMapOnAdd =
-        registry.counter(MetricRegistry.name(HelixVcrCluster.class, "PartitionIdNotInClusterMapOnAdd"));
+        registry.counter(MetricRegistry.name(HelixVcrClusterParticipant.class, "PartitionIdNotInClusterMapOnAdd"));
     numberOfAssignedPartitions = () -> assignedPartitionIds.size();
-    registry.register(MetricRegistry.name(HelixVcrCluster.class, "NumberOfAssignedPartitions"),
+    registry.register(MetricRegistry.name(HelixVcrClusterParticipant.class, "NumberOfAssignedPartitions"),
         numberOfAssignedPartitions);
   }
 }

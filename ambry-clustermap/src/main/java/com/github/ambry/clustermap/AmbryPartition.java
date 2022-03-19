@@ -17,7 +17,10 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONArray;
@@ -39,7 +42,7 @@ public class AmbryPartition implements PartitionId {
   private long lastUpdatedSealedStateChangeCounter = 0;
 
   private static final short VERSION_FIELD_SIZE_IN_BYTES = 2;
-  private static final short CURRENT_VERSION = 1;
+  static final short CURRENT_VERSION = 1;
   private static final int PARTITION_SIZE_IN_BYTES = VERSION_FIELD_SIZE_IN_BYTES + 8;
 
   /**
@@ -64,6 +67,11 @@ public class AmbryPartition implements PartitionId {
   }
 
   @Override
+  public long getId() {
+    return id;
+  }
+
+  @Override
   public List<AmbryReplica> getReplicaIds() {
     return clusterManagerCallback.getReplicaIdsForPartition(this);
   }
@@ -71,6 +79,13 @@ public class AmbryPartition implements PartitionId {
   @Override
   public List<AmbryReplica> getReplicaIdsByState(ReplicaState state, String dcName) {
     return clusterManagerCallback.getReplicaIdsByState(this, state, dcName);
+  }
+
+  @Override
+  public Map<ReplicaState, List<AmbryReplica>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName) {
+    Map<ReplicaState, List<AmbryReplica>> replicasByStates = new HashMap<>();
+    clusterManagerCallback.getReplicaIdsByStates(replicasByStates, this, states, dcName);
+    return replicasByStates;
   }
 
   @Override

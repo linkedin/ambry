@@ -38,7 +38,7 @@ class CloudServiceDataNode extends AmbryDataNode {
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
   CloudServiceDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig) throws Exception {
-    super(dataCenterName, clusterMapConfig, dataCenterName, UNKNOWN_PORT, null, null);
+    super(dataCenterName, clusterMapConfig, dataCenterName, UNKNOWN_PORT, UNKNOWN_PORT, UNKNOWN_PORT);
   }
 
   /**

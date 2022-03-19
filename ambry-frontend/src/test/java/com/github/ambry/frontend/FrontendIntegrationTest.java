@@ -32,12 +32,9 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.QuotaName;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
@@ -65,6 +62,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import io.netty.util.ReferenceCountUtil;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -236,7 +234,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container publicContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     Container privateContainer = refAccount.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
-    int refContentSize = FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
+    int refContentSize = (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
 
     // with valid account and containers
     for (int i = 0; i < 2; i++) {
@@ -255,8 +253,8 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
     doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
     // different sizes
-    for (int contentSize : new int[]{0, FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1,
-        FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, refContentSize}) {
+    for (int contentSize : new int[]{0, (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1,
+        (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes, refContentSize}) {
       doPostGetHeadUpdateDeleteUndeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
@@ -272,7 +270,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     Container refContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     doPostGetHeadUpdateDeleteUndeleteTest(0, refAccount, refContainer, refAccount.getName(),
         !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(), true);
-    doPostGetHeadUpdateDeleteUndeleteTest(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3, refAccount,
+    doPostGetHeadUpdateDeleteUndeleteTest((int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3, refAccount,
         refContainer, refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(),
         true);
 
@@ -491,7 +489,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     Container editedContainer = editedAccount.getAllContainers().stream().findAny().get();
     editedContainer = new ContainerBuilder(editedContainer).setDescription("new description abcdefgh").build();
     editedAccount = new AccountBuilder(editedAccount).addOrUpdateContainer(editedContainer).build();
-    updateAccountsAndVerify(editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
+    updateAccountsAndVerify(ACCOUNT_SERVICE, editedAccount, ACCOUNT_SERVICE.generateRandomAccount());
 
     verifyGetAccountsAndContainer();
 
@@ -703,27 +701,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
         container.getName(), ByteBuffer.wrap(fullContentArray), null);
   }
 
-  // stitchedUploadTest() helpers
-
-  /**
-   * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
-   * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
-   */
-  private void updateAccountsAndVerify(Account... accounts) throws Exception {
-    JSONObject accountUpdateJson = AccountCollectionSerde.accountsToJson(Arrays.asList(accounts));
-    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null,
-        ByteBuffer.wrap(accountUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
-    ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
-    HttpResponse response = getHttpResponse(responseParts);
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
-    verifyTrackingHeaders(response);
-    assertNoContent(responseParts.queue, 1);
-
-    for (Account account : accounts) {
-      assertEquals("Update not reflected in AccountService", account, ACCOUNT_SERVICE.getAccountById(account.getId()));
-    }
-  }
-
   // accountApiTest() helpers
 
   /**
@@ -732,12 +709,12 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
    * @param containers the containers to update.
    */
   private void updateContainersAndVerify(Account account, Container... containers) throws Exception {
-    JSONObject containersUpdateJson = AccountCollectionSerde.containersToJson(Arrays.asList(containers));
+    byte[] containersUpdateJson = AccountCollectionSerde.serializeContainersInJson(Arrays.asList(containers));
     String accountName = account.getName();
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
-    FullHttpRequest request = buildRequest(HttpMethod.POST, Operations.ACCOUNTS_CONTAINERS, headers,
-        ByteBuffer.wrap(containersUpdateJson.toString().getBytes(StandardCharsets.UTF_8)));
+    FullHttpRequest request =
+        buildRequest(HttpMethod.POST, Operations.ACCOUNTS_CONTAINERS, headers, ByteBuffer.wrap(containersUpdateJson));
     ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
     HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
@@ -749,7 +726,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     verifyTrackingHeaders(response);
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     Collection<Container> outputContainers =
-        AccountCollectionSerde.containersFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8)),
+        AccountCollectionSerde.containersFromInputStreamInJson(new ByteArrayInputStream(content.array()),
             account.getId());
 
     for (Container container : outputContainers) {
@@ -799,8 +776,9 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     verifyTrackingHeaders(response);
     short accountId = Short.parseShort(response.headers().get(RestUtils.Headers.TARGET_ACCOUNT_ID));
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
-    return AccountCollectionSerde.containersFromJson(
-        new JSONObject(new String(content.array(), StandardCharsets.UTF_8)), accountId).iterator().next();
+    return AccountCollectionSerde.containersFromInputStreamInJson(new ByteArrayInputStream(content.array()), accountId)
+        .iterator()
+        .next();
   }
 
   /**
@@ -823,6 +801,6 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     verifyTrackingHeaders(response);
     ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
     return new HashSet<>(
-        AccountCollectionSerde.accountsFromJson(new JSONObject(new String(content.array(), StandardCharsets.UTF_8))));
+        AccountCollectionSerde.accountsFromInputStreamInJson(new ByteArrayInputStream(content.array())));
   }
 }

@@ -81,7 +81,9 @@ public class AdaptiveOperationTrackerTest {
   private final Time time = new MockTime();
   private final Histogram localColoTracker;
   private final Histogram crossColoTracker;
+  private final Histogram putLocalColoTracker;
   private final Counter pastDueCounter;
+  private final Counter putPastDueCounter;
   private final long MIN_DATA_POINTS_REQUIRED;
   private NonBlockingRouterMetrics routerMetrics;
   private RouterConfig defaultRouterConfig;
@@ -108,7 +110,9 @@ public class AdaptiveOperationTrackerTest {
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, defaultRouterConfig);
     localColoTracker = routerMetrics.getBlobLocalDcLatencyMs;
     crossColoTracker = routerMetrics.getBlobCrossDcLatencyMs;
+    putLocalColoTracker = routerMetrics.putBlobLatencyMs;
     pastDueCounter = routerMetrics.getBlobPastDueCount;
+    putPastDueCounter = routerMetrics.putBlobPastDueCount;
     MIN_DATA_POINTS_REQUIRED = defaultRouterConfig.routerOperationTrackerMinDataPointsRequired;
     trackerScope = OperationTrackerScope.Datacenter;
   }
@@ -163,6 +167,66 @@ public class AdaptiveOperationTrackerTest {
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     // past due counter should be REPLICA_COUNT - 2 (note that pastDueCounter is updated only when Iterator.remove() is called)
     assertEquals("Past due counter is inconsistent", REPLICA_COUNT - 2, pastDueCounter.getCount());
+  }
+
+  /**
+   * Test that PutOperation can use adaptive operation tracker.
+   * @throws Exception
+   */
+  @Test
+  public void putOperationSuccessTest() throws Exception {
+    primeTracker(putLocalColoTracker, MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    double localColoCutoff = putLocalColoTracker.getSnapshot().getValue(QUANTILE);
+    OperationTracker ot =
+        getOperationTracker(createRouterConfig(true, 2, 2, 6, null, true), mockPartition, RouterOperation.PutOperation);
+    sendRequests(ot, 2);
+    // sleep for less than the cutoff
+    time.sleep((long) localColoCutoff - 2);
+    sendRequests(ot, 0);
+
+    // Acknowledging one success shouldn't change the state of the operation tracker
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.SUCCESS);
+    sendRequests(ot, 0);
+    // push it over the edge
+    time.sleep(5);
+    sendRequests(ot, 1);
+
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.SUCCESS);
+
+    assertTrue("Operation should be done", ot.isDone());
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertEquals("Past due counter is inconsistent", 1, putPastDueCounter.getCount());
+  }
+
+  /**
+   * Test that PutOperation can use adaptive operation tracker when there is a failure response.
+   * @throws Exception
+   */
+  @Test
+  public void putOperationFailureTest() throws Exception {
+    primeTracker(putLocalColoTracker, MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    double localColoCutoff = putLocalColoTracker.getSnapshot().getValue(QUANTILE);
+    OperationTracker ot =
+        getOperationTracker(createRouterConfig(true, 2, 2, 6, null, true), mockPartition, RouterOperation.PutOperation);
+    sendRequests(ot, 2);
+    // sleep for less than the cutoff
+    time.sleep((long) localColoCutoff - 2);
+    sendRequests(ot, 0);
+
+    // Acknowledging one failure would immediately trigger another send
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.FAILURE);
+    sendRequests(ot, 1);
+    // push it over the edge
+    time.sleep(5);
+    // Put only has 3 nodes
+    sendRequests(ot, 0);
+
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.SUCCESS);
+    ot.onResponse(partitionAndInflightReplicas.get(mockPartition).pollLast(), TrackedRequestFinalState.SUCCESS);
+
+    // two success, one failure
+    assertTrue("Operation should be done", ot.isDone());
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
   }
 
   /**
@@ -720,7 +784,7 @@ public class AdaptiveOperationTrackerTest {
         tracker.getResourceToLatencyMap(RouterOperation.GetBlobInfoOperation, false).isEmpty());
     // extra test: invalid router operation
     try {
-      tracker.getResourceToLatencyMap(RouterOperation.PutOperation, true);
+      tracker.getResourceToLatencyMap(RouterOperation.TtlUpdateOperation, true);
       fail("should fail due to invalid router operation");
     } catch (IllegalArgumentException e) {
       //expected
@@ -738,8 +802,19 @@ public class AdaptiveOperationTrackerTest {
    * @return an instance of {@link AdaptiveOperationTracker} with the given parameters.
    */
   private OperationTracker getOperationTracker(RouterConfig routerConfig, PartitionId partitionId) {
-    return new AdaptiveOperationTracker(routerConfig, routerMetrics, RouterOperation.GetBlobOperation, partitionId,
-        null, time);
+    return getOperationTracker(routerConfig, partitionId, RouterOperation.GetBlobOperation);
+  }
+
+  /**
+   * Instantiate an adaptive operation tracker.
+   * @param routerConfig the {@link RouterConfig} to use in adaptive tracker.
+   * @param partitionId the {@link PartitionId} to use in adaptive tracker.
+   * @param operation the {@link RouterOperation} to use in the adaptive tracker.
+   * @return an instance of {@link AdaptiveOperationTracker} with the given parameters.
+   */
+  private OperationTracker getOperationTracker(RouterConfig routerConfig, PartitionId partitionId,
+      RouterOperation operation) {
+    return new AdaptiveOperationTracker(routerConfig, routerMetrics, operation, partitionId, null, time);
   }
 
   /**
@@ -763,10 +838,13 @@ public class AdaptiveOperationTrackerTest {
     props.setProperty("router.get.request.parallelism", Integer.toString(parallelism));
     props.setProperty("router.get.include.non.originating.dc.replicas", "true");
     props.setProperty("router.get.replicas.required", Integer.toString(Integer.MAX_VALUE));
+    props.setProperty("router.put.request.parallelism", Integer.toString(parallelism));
+    props.setProperty("router.put.success.target", Integer.toString(successTarget));
     props.setProperty("router.latency.tolerance.quantile", Double.toString(QUANTILE));
     props.setProperty("router.operation.tracker.metric.scope", trackerScope.toString());
     props.setProperty("router.operation.tracker.max.inflight.requests", Integer.toString(maxInflightNum));
     props.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
+    props.setProperty(RouterConfig.ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE, "true");
     if (customPercentiles != null) {
       props.setProperty("router.operation.tracker.custom.percentiles", customPercentiles);
     }

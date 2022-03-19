@@ -78,7 +78,8 @@ public class CloudTokenPersistorTest {
 
   @Test
   public void basicTest() throws Exception {
-    Properties props = VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "zkConnectString", 12310, 12410, null);
+    Properties props =
+        VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "zkConnectString", 12310, 12410, 12510, null);
     props.setProperty("replication.cloud.token.factory", replicationCloudTokenFactory);
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));

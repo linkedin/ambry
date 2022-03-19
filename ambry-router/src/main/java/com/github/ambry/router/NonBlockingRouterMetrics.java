@@ -202,8 +202,14 @@ public class NonBlockingRouterMetrics {
   public final CachedHistogram getBlobInfoLocalDcLatencyMs;
   public final CachedHistogram getBlobInfoCrossDcLatencyMs;
   public final Counter getBlobInfoPastDueCount;
+
+  public final CachedHistogram putBlobLatencyMs;
+  public final Counter putBlobPastDueCount;
+
   public final Counter failedOnOriginatingDcNotFoundCount;
   public final Counter failedOnTotalNotFoundCount;
+  public final Counter failedMaybeDueToOriginatingDcOfflineReplicasCount;
+  public final Counter failedMaybeDueToTotalOfflineReplicasCount;
 
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
@@ -221,6 +227,8 @@ public class NonBlockingRouterMetrics {
 
   Map<Resource, CachedHistogram> getBlobInfoLocalDcResourceToLatency = new HashMap<>();
   Map<Resource, CachedHistogram> getBlobInfoCrossDcResourceToLatency = new HashMap<>();
+
+  Map<Resource, CachedHistogram> putBlobResourceToLatency = new HashMap<>();
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -477,10 +485,21 @@ public class NonBlockingRouterMetrics {
         (CachedHistogram) metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossDcLatencyMs"),
             () -> createHistogram(routerConfig, true));
     getBlobInfoPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "PastDueCount"));
+
+    putBlobLatencyMs = (CachedHistogram) metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "LatencyMs"),
+        () -> createHistogram(routerConfig, true));
+    putBlobPastDueCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "PastDueCount"));
+
     failedOnOriginatingDcNotFoundCount =
         metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class, "FailedOnOriginatingDcNotFoundCount"));
     failedOnTotalNotFoundCount =
         metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class, "FailedOnTotalNotFoundCount"));
+    failedMaybeDueToTotalOfflineReplicasCount =
+        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class,
+            "FailedMaybeDueToTotalOfflineReplicasCount"));
+    failedMaybeDueToOriginatingDcOfflineReplicasCount =
+        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class,
+            "FailedMaybeDueToOriginatingDcOfflineReplicasCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
@@ -535,6 +554,7 @@ public class NonBlockingRouterMetrics {
           getBlobInfoLocalDcResourceToLatency.put(partitionId, createHistogram(routerConfig, false));
           getBlobCrossDcResourceToLatency.put(partitionId, createHistogram(routerConfig, false));
           getBlobInfoCrossDcResourceToLatency.put(partitionId, createHistogram(routerConfig, false));
+          putBlobResourceToLatency.put(partitionId, createHistogram(routerConfig, false));
         }
         break;
       case DataNode:
@@ -543,6 +563,8 @@ public class NonBlockingRouterMetrics {
           if (dataNodeId.getDatacenterName().equals(localDatacenterName)) {
             getBlobLocalDcResourceToLatency.put(dataNodeId, createHistogram(routerConfig, false));
             getBlobInfoLocalDcResourceToLatency.put(dataNodeId, createHistogram(routerConfig, false));
+            // Put blob only cares abou local db data nodes.
+            putBlobResourceToLatency.put(dataNodeId, createHistogram(routerConfig, false));
           } else {
             getBlobCrossDcResourceToLatency.put(dataNodeId, createHistogram(routerConfig, false));
             getBlobInfoCrossDcResourceToLatency.put(dataNodeId, createHistogram(routerConfig, false));
@@ -560,6 +582,7 @@ public class NonBlockingRouterMetrics {
             if (replicaId.getDataNodeId().getDatacenterName().equals(localDatacenterName)) {
               getBlobLocalDcResourceToLatency.put(diskId, createHistogram(routerConfig, false));
               getBlobInfoLocalDcResourceToLatency.put(diskId, createHistogram(routerConfig, false));
+              putBlobResourceToLatency.put(diskId, createHistogram(routerConfig, false));
             } else {
               getBlobCrossDcResourceToLatency.put(diskId, createHistogram(routerConfig, false));
               getBlobInfoCrossDcResourceToLatency.put(diskId, createHistogram(routerConfig, false));
@@ -657,7 +680,7 @@ public class NonBlockingRouterMetrics {
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
         (Gauge<Integer>) currentBackgroundOperationsCount::get);
     metricRegistry.register(
-        MetricRegistry.name(NonBlockingRouter.BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
+        MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
         (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
   }
 

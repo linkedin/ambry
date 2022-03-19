@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -54,6 +55,13 @@ public class VcrMetrics {
   public final Counter retryWaitTimeMsec;
   /** Number of times operation was retried */
   public final Counter retryCount;
+
+  // VCR Automation
+  public final Counter vcrHelixUpdateFailCount;
+  public final Counter vcrHelixUpdateSuccessCount;
+  public Gauge<Integer> vcrHelixUpdaterGauge;
+  public Gauge<Integer> vcrHelixUpdateInProgressGauge;
+  public final Counter vcrHelixNotOnSync;
   private final MetricRegistry registry;
 
   public VcrMetrics(MetricRegistry registry) {
@@ -90,6 +98,12 @@ public class VcrMetrics {
         registry.counter(MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecatedContainerCount"));
     deprecationSyncTaskRegistrationFailureCount = registry.counter(
         MetricRegistry.name(DeprecatedContainerCloudSyncTask.class, "DeprecationSyncTaskRegistrationFailureCount"));
+    vcrHelixUpdateFailCount =
+        registry.counter(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdateFailCount"));
+    vcrHelixUpdateSuccessCount =
+        registry.counter(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdateSuccessCount"));
+    vcrHelixNotOnSync =
+        registry.counter(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixNotOnSync"));
   }
 
   /**
@@ -97,5 +111,14 @@ public class VcrMetrics {
    */
   public MetricRegistry getMetricRegistry() {
     return registry;
+  }
+
+  public void registerVcrHelixUpdateGauge(Gauge<Integer> updaterGaugeCount,
+      Gauge<Integer> vcrHelixUpdateInProgressGaugeCount) {
+    vcrHelixUpdaterGauge = registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdaterGauge"),
+        () -> updaterGaugeCount);
+    vcrHelixUpdateInProgressGauge =
+        registry.gauge(MetricRegistry.name(VcrReplicationManager.class, "VcrHelixUpdateInProgressGauge"),
+            () -> vcrHelixUpdateInProgressGaugeCount);
   }
 }

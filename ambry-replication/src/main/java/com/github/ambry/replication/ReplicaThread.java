@@ -16,6 +16,7 @@ package com.github.ambry.replication;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -272,7 +273,11 @@ public class ReplicaThread implements Runnable {
       if (!replicasToReplicateGroupedByNode.computeIfAbsent(dataNodeId, key -> new HashSet<>())
           .add(remoteReplicaInfo)) {
         replicationMetrics.remoteReplicaInfoAddError.inc();
-        logger.error("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
+        // Since VCR is also listening Ambry Clustermap change, this may happen if events happens in following order:
+        // 1. VCR in memory ambry-clustermap updated
+        // 2. VcrClusterParticipantListener adds remote replicas for the newly added partition
+        // 3. ClusterMapChangeListener adds remote replicas
+        logger.warn("ReplicaThread: {}, RemoteReplicaInfo {} already exists.", threadName, remoteReplicaInfo);
       }
     } finally {
       lock.unlock();
@@ -630,11 +635,6 @@ public class ReplicaThread implements Runnable {
 
                 replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
                     exchangeMetadataResponse.localLagFromRemoteInBytes);
-                long maxLag =
-                    replicationMetrics.getMaxLagForPartition(remoteReplicaInfo.getReplicaId().getPartitionId());
-                if (remoteReplicaInfo.getLocalStore() instanceof BlobStore) {
-                  ((BlobStore) remoteReplicaInfo.getLocalStore()).setLocalStoreMaxLagFromPeer(maxLag);
-                }
                 if (replicaMetadataResponseInfo.getMessageInfoList().size() > 0) {
                   replicationMetrics.updateCatchupPointMetricForCloudReplica(remoteReplicaInfo,
                       replicaMetadataResponseInfo.getMessageInfoList()
@@ -1049,6 +1049,9 @@ public class ReplicaThread implements Runnable {
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         Set<StoreKey> missingStoreKeys = exchangeMetadataResponse.getMissingStoreKeys();
         if (missingStoreKeys.size() > 0) {
+          if (remoteNode instanceof CloudDataNode) {
+            logger.trace("Replicating blobs from CloudDataNode: {}", missingStoreKeys);
+          }
           ArrayList<BlobId> keysToFetch = new ArrayList<BlobId>();
           for (StoreKey storeKey : missingStoreKeys) {
             keysToFetch.add((BlobId) storeKey);

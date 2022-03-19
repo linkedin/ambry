@@ -13,6 +13,9 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import java.util.Set;
 
 import static com.github.ambry.account.Container.*;
@@ -24,13 +27,15 @@ import static com.github.ambry.account.Container.*;
  * in two ways: 1) from an existing {@link Container} object; and 2) by supplying required fields of a {@link Container}.
  * This class is not thread safe.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonPOJOBuilder(withPrefix = "set")
 public class ContainerBuilder {
   // necessary
-  private short id;
-  private String name;
-  private ContainerStatus status;
-  private String description;
-  private short parentAccountId;
+  private Short id = null;
+  private String name = null;
+  private ContainerStatus status = null;
+  private Short parentAccountId = null;
+  private String description = "";
 
   // optional
   private long deleteTriggerTime = CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE;
@@ -48,6 +53,7 @@ public class ContainerBuilder {
   private boolean backupEnabled = BACKUP_ENABLED_DEFAULT_VALUE;
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
+  private String accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -74,10 +80,17 @@ public class ContainerBuilder {
     securePathRequired = origin.isSecurePathRequired();
     overrideAccountAcl = origin.isAccountAclOverridden();
     namedBlobMode = origin.getNamedBlobMode();
+    accessControlAllowOrigin = origin.getAccessControlAllowOrigin();
     contentTypeWhitelistForFilenamesOnDownload = origin.getContentTypeWhitelistForFilenamesOnDownload();
     backupEnabled = origin.isBackupEnabled();
     lastModifiedTime = origin.getLastModifiedTime();
     snapshotVersion = origin.getSnapshotVersion();
+  }
+
+  /**
+   * Constructor for jackson to deserialize {@link Container}.
+   */
+  public ContainerBuilder() {
   }
 
   /**
@@ -101,6 +114,7 @@ public class ContainerBuilder {
    * @param id The ID to set.
    * @return This builder.
    */
+  @JsonProperty(CONTAINER_ID_KEY)
   public ContainerBuilder setId(short id) {
     this.id = id;
     return this;
@@ -111,6 +125,7 @@ public class ContainerBuilder {
    * @param name The name to set.
    * @return This builder.
    */
+  @JsonProperty(CONTAINER_NAME_KEY)
   public ContainerBuilder setName(String name) {
     this.name = name;
     return this;
@@ -267,6 +282,16 @@ public class ContainerBuilder {
   }
 
   /**
+   * Set the Access-Control-Allow-Origin header field name for this container.
+   * @param accessControlAllowOrigin
+   * @return
+   */
+  public ContainerBuilder setAccessControlAllowOrigin(String accessControlAllowOrigin) {
+    this.accessControlAllowOrigin = accessControlAllowOrigin;
+    return this;
+  }
+
+  /**
    * Sets the created/modified time of the {@link Container}
    * @param lastModifiedTime epoch time in milliseconds.
    * @return This builder.
@@ -293,9 +318,13 @@ public class ContainerBuilder {
    * @throws IllegalStateException If any required fields is not set.
    */
   public Container build() {
+    if (id == null) {
+      throw new IllegalStateException("Container id or container name is not present");
+    }
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
-        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode, parentAccountId,
-        deleteTriggerTime, lastModifiedTime, snapshotVersion);
+        contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
+        parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime,
+        lastModifiedTime, snapshotVersion, accessControlAllowOrigin);
   }
 }

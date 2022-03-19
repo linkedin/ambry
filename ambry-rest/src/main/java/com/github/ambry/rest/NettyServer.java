@@ -14,7 +14,6 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.utils.Utils;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;

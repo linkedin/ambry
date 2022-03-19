@@ -150,6 +150,7 @@ class CloudBlobStore implements Store {
       Map<String, CloudBlobMetadata> cloudBlobMetadataListMap =
           requestAgent.doWithRetries(() -> cloudDestination.getBlobMetadata(blobIdList), "GetBlobMetadata",
               partitionId.toPathString());
+      // Throw StoreException with ID_Not_Found if cloudBlobMetadataListMap size is less than expected.
       if (cloudBlobMetadataListMap.size() < blobIdList.size()) {
         Set<BlobId> missingBlobs = blobIdList.stream()
             .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
@@ -158,6 +159,7 @@ class CloudBlobStore implements Store {
             StoreErrorCodes.ID_Not_Found);
       }
       long currentTimeStamp = System.currentTimeMillis();
+      // Validate cloud meta data, may throw StoreException with ID_Deleted, TTL_Expired and Authorization_Failure
       validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions, currentTimeStamp, ids);
       for (BlobId blobId : blobIdList) {
         CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
@@ -174,7 +176,11 @@ class CloudBlobStore implements Store {
         blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
       }
     } catch (CloudStorageException e) {
-      throw new StoreException(e, StoreErrorCodes.IOError);
+      if (e.getCause() instanceof StoreException) {
+        throw (StoreException) e.getCause();
+      } else {
+        throw new StoreException(e, StoreErrorCodes.IOError);
+      }
     }
     CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, this);
     return new StoreInfo(messageReadSet, messageInfos);
@@ -284,10 +290,12 @@ class CloudBlobStore implements Store {
         long bufferLen = (encryptedSize == -1) ? size : encryptedSize;
         uploaded = uploadWithRetries(blobId, messageBuf, bufferLen, blobMetadata);
       } else {
-        // Upload blob as is
+        // PutRequest lifeVersion from frontend is -1. Should set to 0. (0 is the starting life version number for any data).
+        // Put from replication or recovery should use liferVersion as it's.
+        short lifeVersion = messageInfo.hasLifeVersion(messageInfo.getLifeVersion()) ? messageInfo.getLifeVersion() : (short) 0;
         CloudBlobMetadata blobMetadata =
             new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
-                messageInfo.getSize(), encryptionOrigin, messageInfo.getLifeVersion());
+                messageInfo.getSize(), encryptionOrigin, lifeVersion);
         uploaded = uploadWithRetries(blobId, messageBuf, size, blobMetadata);
       }
       addToCache(blobId.getID(), (short) 0, BlobState.CREATED);

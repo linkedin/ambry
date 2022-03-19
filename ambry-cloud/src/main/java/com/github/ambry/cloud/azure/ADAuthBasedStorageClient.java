@@ -14,10 +14,9 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.credential.AccessToken;
-import com.azure.core.credential.TokenCredential;
-import com.azure.core.credential.TokenRequestContext;
 import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
+import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.batch.BlobBatchClient;
@@ -46,8 +45,9 @@ import reactor.core.publisher.Mono;
  */
 public class ADAuthBasedStorageClient extends StorageClient {
   private static final String AD_AUTH_TOKEN_REFRESHER_PREFIX = "AdAuthTokenRefresher";
-  private ScheduledExecutorService tokenRefreshScheduler;
-  private AtomicReference<ScheduledFuture<?>> scheduledFutureRef;
+  private final ScheduledExecutorService tokenRefreshScheduler =
+      Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
+  private final AtomicReference<ScheduledFuture<?>> scheduledFutureRef = new AtomicReference<>(null);
   private AtomicReference<AccessToken> accessTokenRef;
 
   /**
@@ -60,6 +60,10 @@ public class ADAuthBasedStorageClient extends StorageClient {
   public ADAuthBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
     super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
+    // schedule a task to refresh token and create new storage sync and async clients before it expires.
+    scheduledFutureRef.set(tokenRefreshScheduler.schedule(() -> refreshTokenAndStorageClients(),
+        (long) ((accessTokenRef.get().getExpiresAt().toEpochSecond() - OffsetDateTime.now().toEpochSecond())
+            * azureCloudConfig.azureStorageClientRefreshFactor), TimeUnit.SECONDS));
   }
 
   /**
@@ -68,10 +72,11 @@ public class ADAuthBasedStorageClient extends StorageClient {
    * @param blobBatchClient {@link BlobBatchClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
   public ADAuthBasedStorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
-      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
+    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
   }
 
   /**
@@ -81,42 +86,39 @@ public class ADAuthBasedStorageClient extends StorageClient {
    * @param retryOptions {@link RequestRetryOptions} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @return BlobServiceClient object.
-   * @throws MalformedURLException
-   * @throws InterruptedException
-   * @throws ExecutionException
    */
   @Override
   protected BlobServiceClient buildBlobServiceClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
-      throws MalformedURLException, InterruptedException, ExecutionException {
-    IAuthenticationResult iAuthenticationResult = getAccessTokenByClientCredentialGrant(azureCloudConfig);
-    AccessToken accessToken = new AccessToken(iAuthenticationResult.accessToken(),
-        iAuthenticationResult.expiresOnDate().toInstant().atOffset(OffsetDateTime.now().getOffset()));
-    TokenCredential tokenCredential = new TokenCredential() {
-      @Override
-      public Mono<AccessToken> getToken(TokenRequestContext request) {
-        return Mono.just(accessToken);
-      }
-    };
+      throws MalformedURLException, ExecutionException, InterruptedException {
     if (accessTokenRef == null) {
-      // This means the object is not initialized yet, because this method was called from base class's constructor.
-      accessTokenRef = new AtomicReference<>(accessToken);
-      tokenRefreshScheduler =
-          Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
-      scheduledFutureRef = new AtomicReference<>(null);
-    } else {
-      accessTokenRef.set(accessToken);
+      // This means the token is not yet created because we are building storage client for the first time from
+      //base class's constructor. Create token before building storage client.
+      refreshToken();
     }
-    // schedule a task to refresh token.
-    scheduledFutureRef.set(tokenRefreshScheduler.schedule(() -> refreshStorageClient(),
-        (long) ((accessToken.getExpiresAt().toEpochSecond() - OffsetDateTime.now().toEpochSecond())
-            * azureCloudConfig.azureStorageClientRefreshFactor), TimeUnit.SECONDS));
-    return new BlobServiceClientBuilder().credential(tokenCredential)
+    return new BlobServiceClientBuilder().credential(request -> Mono.just(accessTokenRef.get()))
         .endpoint(azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
         .buildClient();
+  }
+
+  @Override
+  protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
+      throws MalformedURLException, InterruptedException, ExecutionException {
+    if (accessTokenRef == null) {
+      // This means the token is not yet created because we are building storage client for the first time from
+      //base class's constructor. Create token before building storage client.
+      refreshToken();
+    }
+    return new BlobServiceClientBuilder().credential(request -> Mono.just(accessTokenRef.get()))
+        .endpoint(azureCloudConfig.azureStorageEndpoint)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
+        .buildAsyncClient();
   }
 
   @Override
@@ -141,7 +143,8 @@ public class ADAuthBasedStorageClient extends StorageClient {
    */
   private IAuthenticationResult getAccessTokenByClientCredentialGrant(AzureCloudConfig azureCloudConfig)
       throws MalformedURLException, InterruptedException, ExecutionException {
-    //TODO should proxy be specified while building token?
+    // If a proxy is required, properties must either be set at the jvm level,
+    // or ClientSecretCredentialStorageClient should be used
     ConfidentialClientApplication app = ConfidentialClientApplication.builder(azureCloudConfig.azureStorageClientId,
         ClientCredentialFactory.createFromSecret(azureCloudConfig.azureStorageSecret))
         .authority(azureCloudConfig.azureStorageAuthority)
@@ -161,7 +164,7 @@ public class ADAuthBasedStorageClient extends StorageClient {
         // to attempt token refresh at the same time. It is expected that as a result of token refresh, accessTokenRef
         // will updated with the new token.
         if (accessTokenRef.get().isExpired()) {
-          refreshStorageClient();
+          refreshTokenAndStorageClients();
         }
       }
       return true;
@@ -170,17 +173,50 @@ public class ADAuthBasedStorageClient extends StorageClient {
   }
 
   /**
-   * Refreshes AD authentication token and creates a new ABS client with the new token.
+   * Refreshes AD authentication token and creates a new ABS client with the new token. Also, it schedules a task
+   * for repeating this step before the obtained token expires.
    */
-  private synchronized void refreshStorageClient() {
-    // if a task is scheduled to refresh token then remove it.
-    if (scheduledFutureRef.get() != null) {
-      scheduledFutureRef.get().cancel(false);
-      scheduledFutureRef.set(null);
-    }
+  private synchronized void refreshTokenAndStorageClients() {
     azureMetrics.absTokenRefreshAttemptCount.inc();
-    BlobServiceClient blobServiceClient = createBlobStorageClient();
-    setClientReferences(blobServiceClient);
-    logger.info("Token refresh done.");
+    try {
+      // if a task is already scheduled to refresh token then remove it.
+      if (scheduledFutureRef.get() != null) {
+        scheduledFutureRef.get().cancel(false);
+        scheduledFutureRef.set(null);
+      }
+
+      // Refresh Token
+      refreshToken();
+
+      // Create new sync and async storage clients with refreshed token.
+      if (azureCloudConfig.useAsyncAzureAPIs) {
+        BlobServiceAsyncClient blobServiceAsyncClient = createBlobStorageAsyncClient();
+        setAsyncClientReferences(blobServiceAsyncClient);
+      } else {
+        BlobServiceClient blobServiceClient = createBlobStorageClient();
+        setClientReferences(blobServiceClient);
+      }
+
+      logger.info("Token refresh done.");
+
+      // schedule a task to refresh token again and create new storage sync and async clients before it expires.
+      scheduledFutureRef.set(tokenRefreshScheduler.schedule(this::refreshTokenAndStorageClients,
+          (long) ((accessTokenRef.get().getExpiresAt().toEpochSecond() - OffsetDateTime.now().toEpochSecond())
+              * azureCloudConfig.azureStorageClientRefreshFactor), TimeUnit.SECONDS));
+    } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
+      logger.error("Error building ABS blob service client: {}", ex.getMessage());
+      throw new IllegalStateException(ex);
+    }
+  }
+
+  private void refreshToken() throws MalformedURLException, ExecutionException, InterruptedException {
+    IAuthenticationResult iAuthenticationResult = getAccessTokenByClientCredentialGrant(azureCloudConfig);
+    AccessToken accessToken = new AccessToken(iAuthenticationResult.accessToken(),
+        iAuthenticationResult.expiresOnDate().toInstant().atOffset(OffsetDateTime.now().getOffset()));
+    if (accessTokenRef == null) {
+      accessTokenRef = new AtomicReference<>(accessToken);
+    } else {
+      accessTokenRef.set(accessToken);
+    }
   }
 }

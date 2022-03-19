@@ -20,11 +20,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
-import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
-import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaManagerFactory;
 import com.github.ambry.rest.RestRequestService;
@@ -68,7 +67,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
     this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
     clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
+    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry(), frontendConfig);
     logger.trace("Instantiated FrontendRestRequestServiceFactory");
   }
 
@@ -95,12 +94,11 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       AccountStatsStore accountStatsStore =
           Utils.<AccountStatsStoreFactory>getObj(frontendConfig.accountStatsStoreFactory, verifiableProperties,
-              clusterMapConfig, new StatsManagerConfig(verifiableProperties),
-              clusterMap.getMetricRegistry()).getAccountStatsStore();
+              clusterMapConfig, clusterMap.getMetricRegistry()).getAccountStatsStore();
       QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
-      QuotaManager quotaManager =
-          ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig, new MaxThrottlePolicy(),
-              accountService, accountStatsStore, clusterMap.getMetricRegistry())).getQuotaManager();
+      QuotaManager quotaManager = ((QuotaManagerFactory) Utils.getObj(quotaConfig.quotaManagerFactory, quotaConfig,
+          new SimpleQuotaRecommendationMergePolicy(quotaConfig), accountService, accountStatsStore,
+          clusterMap.getMetricRegistry())).getQuotaManager();
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.securityServiceFactory, verifiableProperties, clusterMap, accountService,
               urlSigningService, idSigningService, accountAndContainerInjector, quotaManager);

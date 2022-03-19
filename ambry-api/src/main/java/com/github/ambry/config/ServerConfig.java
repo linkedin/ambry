@@ -45,11 +45,11 @@ public class ServerConfig {
   public final boolean serverStatsPublishLocalEnabled;
 
   /**
-   * The option to enable or disable publishing stats via Health Reports
+   * The option to enable or disable publishing stats reports
    */
-  @Config("server.stats.publish.health.report.enabled")
+  @Config("server.stats.publish.report.enabled")
   @Default("false")
-  public final boolean serverStatsPublishHealthReportEnabled;
+  public final boolean serverStatsPublishReportEnabled;
 
   /**
    * The frequency in mins at which cluster wide quota stats will be aggregated
@@ -118,8 +118,8 @@ public class ServerConfig {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
     serverStatsPublishLocalEnabled = verifiableProperties.getBoolean("server.stats.publish.local.enabled", false);
-    serverStatsPublishHealthReportEnabled =
-        verifiableProperties.getBoolean("server.stats.publish.health.report.enabled", false);
+    serverStatsPublishReportEnabled =
+        verifiableProperties.getBoolean("server.stats.publish.report.enabled", false);
     serverQuotaStatsAggregateIntervalInMinutes =
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
     serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",

@@ -165,9 +165,10 @@ public class StorageManager implements StoreManager {
     /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed.
        We do this by making sure that the retention period for deleted messages (which determines the end point for hard
        deletes) is always greater than the log flush period. */
-    if (storeConfig.storeDeletedMessageRetentionHours
+    if (storeConfig.storeEnableHardDelete && storeConfig.storeDeletedMessageRetentionHours
         < TimeUnit.SECONDS.toHours(storeConfig.storeDataFlushIntervalSeconds) + 1) {
-      throw new StoreException("Message retention hours must be greater than the store flush interval period",
+      throw new StoreException(
+          "Message retention hours must be greater than the store flush interval period when hard delete is enabled",
           StoreErrorCodes.Initialization_Error);
     }
     if (diskManagerConfig.diskManagerReserveFileDirName.length() == 0) {
@@ -565,8 +566,9 @@ public class StorageManager implements StoreManager {
         if (localStore.isDisabled()) {
           // if store is disabled due to disk I/O error or by admin operation, we explicitly throw an exception to mark
           // partition in Helix ERROR state
-          throw new StateTransitionException("Store " + partitionName + " is already disabled due to I/O error or by "
-              + "admin operation", ReplicaOperationFailure);
+          throw new StateTransitionException(
+              "Store " + partitionName + " is already disabled due to I/O error or by " + "admin operation",
+              ReplicaOperationFailure);
         }
         // 0. as long as local replica exists, we create a decommission file in its dir
         File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);

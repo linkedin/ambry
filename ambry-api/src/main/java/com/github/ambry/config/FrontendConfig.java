@@ -41,6 +41,8 @@ public class FrontendConfig {
   public static final String NAMED_BLOB_DB_FACTORY = PREFIX + "named.blob.db.factory";
   public static final String CONTAINER_METRICS_EXCLUDED_ACCOUNTS = PREFIX + "container.metrics.excluded.accounts";
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
+  public static final String CONTAINER_METRICS_ENABLED_REQUEST_TYPES = PREFIX + "container.metrics.enabled.request.types";
+  public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = PREFIX + "container.metrics.enabled.get.request.types";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -49,6 +51,12 @@ public class FrontendConfig {
 
   private static final String DEFAULT_ACCOUNT_STATS_STORE_FACTORY =
       "com.github.ambry.accountstats.InmemoryAccountStatsStoreFactory";
+
+  private static final String DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES =
+      "DeleteBlob,GetBlob,GetBlobInfo,GetSignedUrl,PostBlob,UpdateBlobTtl,UndeleteBlob,PutBlob";
+
+  private static final String DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = "GetBlob,GetBlobInfo,GetSignedUrl";
+
 
   /**
    * Cache validity in seconds for non-private blobs for GET.
@@ -127,7 +135,7 @@ public class FrontendConfig {
    */
   @Config("frontend.chunked.get.response.threshold.in.bytes")
   @Default("8192")
-  public final Integer chunkedGetResponseThresholdInBytes;
+  public final long chunkedGetResponseThresholdInBytes;
 
   /**
    * Boolean indicator to specify if frontend should allow the post requests that carry serviceId used as target
@@ -220,6 +228,20 @@ public class FrontendConfig {
   public final String accountStatsStoreFactory;
 
   /**
+   * The set of container metrics enabled request type.
+   */
+  @Config(CONTAINER_METRICS_ENABLED_REQUEST_TYPES)
+  @Default(DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES)
+  public final String containerMetricsEnabledRequestTypes;
+
+  /**
+   * The set of container metrics enabled get request type.
+   */
+  @Config(CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES)
+  @Default(DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES)
+  public final String containerMetricsEnabledGetRequestTypes;
+
+  /**
    * Can be set to a classname that implements {@link com.github.ambry.named.NamedBlobDbFactory} to enable named blob
    * support.
    */
@@ -258,11 +280,14 @@ public class FrontendConfig {
     pathPrefixesToRemove = Collections.unmodifiableList(
         pathPrefixesFromConfig.stream().map(this::stripLeadingAndTrailingSlash).collect(Collectors.toList()));
     chunkedGetResponseThresholdInBytes =
-        verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
+        verifiableProperties.getLong("frontend.chunked.get.response.threshold.in.bytes", 8192);
     allowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
     attachTrackingInfo = verifiableProperties.getBoolean("frontend.attach.tracking.info", true);
-
+    containerMetricsEnabledRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_REQUEST_TYPES,
+        DEFAULT_CONTAINER_METRICS_ENABLED_REQUEST_TYPES);
+    containerMetricsEnabledGetRequestTypes = verifiableProperties.getString(CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES,
+        DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES);
     urlSignerEndpoints = verifiableProperties.getString(URL_SIGNER_ENDPOINTS, DEFAULT_ENDPOINTS_STRING);
     urlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,

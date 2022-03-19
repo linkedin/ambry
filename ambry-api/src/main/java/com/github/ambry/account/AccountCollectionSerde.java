@@ -13,12 +13,17 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.frontend.Operations;
-import java.util.ArrayList;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.Collections;
-import org.json.JSONArray;
-import org.json.JSONObject;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 
 /**
@@ -27,76 +32,77 @@ import org.json.JSONObject;
  */
 public class AccountCollectionSerde {
   private static final String ACCOUNTS_KEY = Operations.ACCOUNTS;
+  private static final ObjectMapper objectMapper = new ObjectMapper();
+
+  // Use a mix in class to remove containers from serialized bytes
+  @JsonIgnoreProperties({"containers"})
+  abstract class AccountMixIn {
+  }
+
+  private static final ObjectMapper objectMapperWithoutContainer =
+      new ObjectMapper().addMixIn(Account.class, AccountMixIn.class);
 
   /**
-   * Serialize a collection of accounts to a json object that can be used in requests/responses.
+   * Serialize a collection of accounts to json bytes that can be used in requests/responses.
    * @param accounts the {@link Account}s to serialize.
-   * @return the {@link JSONObject}
+   * @return the serialized bytes in json format.
    */
-  public static JSONObject accountsToJson(Collection<Account> accounts) {
-    JSONArray accountArray = new JSONArray();
-    accounts.stream().map(account -> account.toJson(false)).forEach(accountArray::put);
-    return new JSONObject().put(ACCOUNTS_KEY, accountArray);
+  public static byte[] serializeAccountsInJson(Collection<Account> accounts) throws IOException {
+    Map<String, Collection<Account>> resultObj = new HashMap<>();
+    resultObj.put(ACCOUNTS_KEY, accounts);
+    return objectMapper.writeValueAsBytes(resultObj);
   }
 
   /**
-   * Deserialize a json object representing a collection of accounts.
-   * @param json the {@link JSONObject} to deserialize.
+   * Serialize an account to bytes in json, stripping out its containers.
+   * @param account the {@link Account}s to serialize.
+   * @return the serialized bytes in json format.
+   */
+  public static byte[] serializeAccountsInJsonNoContainers(Account account) throws IOException {
+    return objectMapperWithoutContainer.writeValueAsBytes(account);
+  }
+
+  /**
+   * Deserialize a collection of {@link Account} in json from given InputStream.
+   * @param inputStream the {@link InputStream} that contains serialized json bytes.
    * @return a {@link Collection} of {@link Account}s.
    */
-  public static Collection<Account> accountsFromJson(JSONObject json) {
-    JSONArray accountArray = json.optJSONArray(ACCOUNTS_KEY);
-    if (accountArray == null) {
-      return Collections.emptyList();
-    } else {
-      Collection<Account> accounts = new ArrayList<>();
-      for (int i = 0; i < accountArray.length(); i++) {
-        JSONObject accountJson = accountArray.getJSONObject(i);
-        accounts.add(Account.fromJson(accountJson));
-      }
-      return accounts;
-    }
+  public static Collection<Account> accountsFromInputStreamInJson(InputStream inputStream) throws IOException {
+    Map<String, Collection<Account>> map =
+        objectMapper.readValue(inputStream, new TypeReference<Map<String, Collection<Account>>>() {
+        });
+    return map.getOrDefault(ACCOUNTS_KEY, Collections.emptyList());
   }
 
   /**
-   * Serialize an account to a json object, stripping out its containers.
-   * @param account the {@link Account}s to serialize.
-   * @return the {@link JSONObject}
-   */
-  public static JSONObject accountToJsonNoContainers(Account account) {
-    JSONObject jsonObject = account.toJson(false);
-    jsonObject.remove(Account.CONTAINERS_KEY);
-    return jsonObject;
-  }
-
-  /**
-   * Serialize a collection of containers to a json object that can be used in requests/responses.
+   * Serialize a collection of containers to json bytes that can be used in requests/responses.
    * @param containers the {@link Container}s to serialize.
-   * @return the {@link JSONObject}
+   * @return the serialized bytes in json format.
    */
-  public static JSONObject containersToJson(Collection<Container> containers) {
-    JSONArray containerArray = new JSONArray();
-    containers.stream().map(Container::toJson).forEach(containerArray::put);
-    return new JSONObject().put(Account.CONTAINERS_KEY, containerArray);
+  public static byte[] serializeContainersInJson(Collection<Container> containers) throws IOException {
+    Map<String, Collection<Container>> resultObj = new HashMap<>();
+    resultObj.put(Account.CONTAINERS_KEY, containers);
+    return objectMapper.writeValueAsBytes(resultObj);
   }
 
   /**
-   * Deserialize a json object representing a collection of containers.
-   * @param json the {@link JSONObject} to deserialize.
-   * @param accountId  the parent account id of the containers.
+   * Deserialize a collection of {@link Container}s in json from given InputStream.
+   * @param inputStream the {@link InputStream} that contains serialized json bytes.
+   * @param accountId the account id for these containers.
    * @return a {@link Collection} of {@link Container}s.
    */
-  public static Collection<Container> containersFromJson(JSONObject json, short accountId) {
-    JSONArray containerArray = json.optJSONArray(Account.CONTAINERS_KEY);
-    if (containerArray == null) {
+  public static Collection<Container> containersFromInputStreamInJson(InputStream inputStream, short accountId)
+      throws IOException {
+    Map<String, Collection<Container>> map =
+        objectMapper.readValue(inputStream, new TypeReference<Map<String, Collection<Container>>>() {
+        });
+    if (!map.containsKey(Account.CONTAINERS_KEY)) {
       return Collections.emptyList();
     } else {
-      Collection<Container> containers = new ArrayList<>();
-      for (int i = 0; i < containerArray.length(); i++) {
-        JSONObject containerJson = containerArray.getJSONObject(i);
-        containers.add(Container.fromJson(containerJson, accountId));
-      }
-      return containers;
+      Collection<Container> containers = map.get(Account.CONTAINERS_KEY);
+      return containers.stream()
+          .map(c -> new ContainerBuilder(c).setParentAccountId(accountId).build())
+          .collect(Collectors.toList());
     }
   }
 }

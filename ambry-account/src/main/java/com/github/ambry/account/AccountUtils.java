@@ -13,13 +13,15 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.server.StatsSnapshot;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -32,6 +34,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AccountUtils {
   private static final Logger logger = LoggerFactory.getLogger(AccountUtils.class);
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * Checks if there are duplicate accountId or accountName in the given collection of {@link Account}s.
@@ -100,69 +103,72 @@ public class AccountUtils {
 
       StringBuilder accountsInfo = new StringBuilder();
 
-      if (!accountsMissingInSecondary.isEmpty()) {
-        accountsInfo.append("[");
-        for (Account account : accountsMissingInSecondary) {
-          accountsInfo.append(AccountCollectionSerde.accountToJsonNoContainers(account).toString()).append(",");
-        }
-        accountsInfo.append("]");
-        logger.warn("Accounts found in primary and absent in secondary = {}", accountsInfo.toString());
-        mismatchCount += accountsMissingInSecondary.size();
-      }
-
-      if (!accountsDifferentInSecondary.isEmpty()) {
-        accountsInfo.setLength(0);
-        accountsInfo.append("[");
-        for (Account account : accountsDifferentInSecondary) {
-          accountsInfo.append("{Account = ")
-              .append(account.toString())
-              .append(", primary = ")
-              .append(AccountCollectionSerde.accountToJsonNoContainers(account).toString())
-              .append(", secondary = ")
-              .append(AccountCollectionSerde.accountToJsonNoContainers(secondaryAccountMap.get(account.getName()))
-                  .toString());
-
-          Set<Container> containersMissingInSecondary = account.getAllContainers()
-              .stream()
-              .filter(container -> secondaryAccountMap.get(account.getName()).getContainerByName(container.getName())
-                  == null)
-              .collect(Collectors.toSet());
-
-          Set<Container> containersDifferentInSecondary = new HashSet<>(account.getAllContainers());
-          containersDifferentInSecondary.removeAll(secondaryAccountMap.get(account.getName()).getAllContainers());
-          containersDifferentInSecondary.removeAll(containersMissingInSecondary);
-
-          if (!containersMissingInSecondary.isEmpty()) {
-            accountsInfo.append(", Containers missing in secondary: [");
-            for (Container container : containersMissingInSecondary) {
-              accountsInfo.append(container.toJson().toString()).append(",");
-            }
-            accountsInfo.append("]");
-            mismatchCount += containersMissingInSecondary.size();
+      try {
+        if (!accountsMissingInSecondary.isEmpty()) {
+          accountsInfo.append("[");
+          for (Account account : accountsMissingInSecondary) {
+            accountsInfo.append(new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(account)))
+                .append(",");
           }
-
-          if (!containersDifferentInSecondary.isEmpty()) {
-            accountsInfo.append(", Containers different in secondary: [");
-            for (Container container : containersDifferentInSecondary) {
-              accountsInfo.append("{container = ")
-                  .append(container.toString())
-                  .append(", primary = ")
-                  .append(container.toJson().toString())
-                  .append(", secondary = ")
-                  .append(secondaryAccountMap.get(account.getName())
-                      .getContainerByName(container.getName())
-                      .toJson()
-                      .toString())
-                  .append("},");
-            }
-            accountsInfo.append("]");
-            mismatchCount += containersDifferentInSecondary.size();
-          }
-          accountsInfo.append("}");
+          accountsInfo.append("]");
+          logger.warn("Accounts found in primary and absent in secondary = {}", accountsInfo.toString());
+          mismatchCount += accountsMissingInSecondary.size();
         }
-        accountsInfo.append("]");
 
-        logger.warn("Accounts mismatch in primary and secondary = {}", accountsInfo.toString());
+        if (!accountsDifferentInSecondary.isEmpty()) {
+          accountsInfo.setLength(0);
+          accountsInfo.append("[");
+          for (Account account : accountsDifferentInSecondary) {
+            accountsInfo.append("{Account = ")
+                .append(account.toString())
+                .append(", primary = ")
+                .append(new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(account)))
+                .append(", secondary = ")
+                .append(new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(
+                    secondaryAccountMap.get(account.getName()))));
+
+            Set<Container> containersMissingInSecondary = account.getAllContainers()
+                .stream()
+                .filter(container -> secondaryAccountMap.get(account.getName()).getContainerByName(container.getName())
+                    == null)
+                .collect(Collectors.toSet());
+
+            Set<Container> containersDifferentInSecondary = new HashSet<>(account.getAllContainers());
+            containersDifferentInSecondary.removeAll(secondaryAccountMap.get(account.getName()).getAllContainers());
+            containersDifferentInSecondary.removeAll(containersMissingInSecondary);
+
+            if (!containersMissingInSecondary.isEmpty()) {
+              accountsInfo.append(", Containers missing in secondary: [");
+              for (Container container : containersMissingInSecondary) {
+                accountsInfo.append(objectMapper.writeValueAsString(container)).append(",");
+              }
+              accountsInfo.append("]");
+              mismatchCount += containersMissingInSecondary.size();
+            }
+
+            if (!containersDifferentInSecondary.isEmpty()) {
+              accountsInfo.append(", Containers different in secondary: [");
+              for (Container container : containersDifferentInSecondary) {
+                accountsInfo.append("{container = ")
+                    .append(container.toString())
+                    .append(", primary = ")
+                    .append(objectMapper.writeValueAsString(container))
+                    .append(", secondary = ")
+                    .append(objectMapper.writeValueAsString(
+                        secondaryAccountMap.get(account.getName()).getContainerByName(container.getName())))
+                    .append("},");
+              }
+              accountsInfo.append("]");
+              mismatchCount += containersDifferentInSecondary.size();
+            }
+            accountsInfo.append("}");
+          }
+          accountsInfo.append("]");
+
+          logger.warn("Accounts mismatch in primary and secondary = {}", accountsInfo.toString());
+        }
+      } catch (IOException e) {
+        throw new RuntimeException("Fail to serialize accounts", e);
       }
     }
     return mismatchCount;
@@ -170,20 +176,18 @@ public class AccountUtils {
 
   /**
    * Selects {@link Container}s to be marked as INACTIVE. Check the valid data size of each DELETE_IN_PROGRESS container
-   * from {@link StatsSnapshot} and select the ones with zero data size to be marked as INACTIVE.
+   * from {@link AggregatedAccountStorageStats} and select the ones with zero data size to be marked as INACTIVE.
    * @return {@link Set} of inactive {@link Container} candidates.
    */
-  public static Set<Container> selectInactiveContainerCandidates(StatsSnapshot statsSnapshot,
-      Set<Container> deleteInProgressContainerSet) {
+  public static Set<Container> selectInactiveContainerCandidates(
+      AggregatedAccountStorageStats aggregatedAccountStorageStats, Set<Container> deleteInProgressContainers) {
     Set<Container> inactiveContainerCandidateSet = new HashSet<>();
-    if (statsSnapshot != null) {
-      Map<String, Set<String>> nonEmptyContainersByAccount = new HashMap<>();
-      searchNonEmptyContainers(nonEmptyContainersByAccount, statsSnapshot, null);
-      for (Container container : deleteInProgressContainerSet) {
-        String containerIdToString = "C[" + container.getId() + "]";
-        String accountIdToString = "A[" + container.getParentAccountId() + "]";
-        if (nonEmptyContainersByAccount.containsKey(accountIdToString) && nonEmptyContainersByAccount.get(
-            accountIdToString).contains(containerIdToString)) {
+    if (aggregatedAccountStorageStats != null) {
+      Map<Short, Set<Short>> nonEmptyContainersByAccount = new HashMap<>();
+      searchNonEmptyContainers(nonEmptyContainersByAccount, aggregatedAccountStorageStats);
+      for (Container container : deleteInProgressContainers) {
+        if (nonEmptyContainersByAccount.containsKey(container.getParentAccountId()) && nonEmptyContainersByAccount.get(
+            container.getParentAccountId()).contains(container.getId())) {
           logger.debug("Container {} has not been compacted yet", container);
         } else {
           logger.info("Container {} has been compacted already", container);
@@ -197,20 +201,17 @@ public class AccountUtils {
   /**
    * Gets valid data size {@link Container}s. The qualified {@link Container}s' raw valid data size should be larger than zero.
    * @param nonEmptyContainersByAccount it holds a mapping of {@link Account}s to {@link Container}s which raw valid data size larger than zero.
-   * @param statsSnapshot the {@link StatsSnapshot} generated from cluster wide aggregation.
-   * @param keyName the key of subMap for each level of {@link StatsSnapshot}.
+   * @param aggregatedAccountStorageStats the {@link AggregatedAccountStorageStats} generated from cluster wide aggregation.
    */
-  public static void searchNonEmptyContainers(Map<String, Set<String>> nonEmptyContainersByAccount,
-      StatsSnapshot statsSnapshot, String keyName) {
-    if (statsSnapshot.getSubMap() != null && !statsSnapshot.getSubMap().isEmpty()) {
-      for (Map.Entry<String, StatsSnapshot> entry : statsSnapshot.getSubMap().entrySet()) {
-        if (entry.getKey().startsWith("C") && entry.getValue().getValue() > 0) {
-          Objects.requireNonNull(keyName,
-              "keyName should not be null since every container will have it's corresponding accountId");
-          nonEmptyContainersByAccount.getOrDefault(keyName, new HashSet<>()).add(entry.getKey());
-        } else if (entry.getKey().startsWith("A")) {
-          nonEmptyContainersByAccount.putIfAbsent(entry.getKey(), new HashSet<>());
-          searchNonEmptyContainers(nonEmptyContainersByAccount, entry.getValue(), entry.getKey());
+  public static void searchNonEmptyContainers(Map<Short, Set<Short>> nonEmptyContainersByAccount,
+      AggregatedAccountStorageStats aggregatedAccountStorageStats) {
+    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> accountEntry : aggregatedAccountStorageStats.getStorageStats()
+        .entrySet()) {
+      short accountId = accountEntry.getKey();
+      for (Map.Entry<Short, ContainerStorageStats> containerEntry : accountEntry.getValue().entrySet()) {
+        short containerId = containerEntry.getKey();
+        if (containerEntry.getValue().getPhysicalStorageUsage() > 0) {
+          nonEmptyContainersByAccount.computeIfAbsent(accountId, k -> new HashSet<>()).add(containerId);
         }
       }
     }

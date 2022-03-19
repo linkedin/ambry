@@ -36,6 +36,7 @@ import java.security.cert.X509Certificate;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -43,9 +44,12 @@ import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.cert.X509v1CertificateBuilder;
+import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.crypto.params.AsymmetricKeyParameter;
 import org.bouncycastle.crypto.util.PrivateKeyFactory;
@@ -80,10 +84,12 @@ public class TestSSLUtils {
    * @param pair the KeyPair
    * @param days how many days from now the Certificate is valid for
    * @param algorithm the signing algorithm, eg "SHA1withRSA"
+   * @param subjectAltNames the subject alternative names for which the Certificate is valid for
    * @return the self-signed certificate
    * @throws java.security.cert.CertificateException thrown if a security error or an IO error ocurred.
    */
-  public static X509Certificate generateCertificate(String dn, KeyPair pair, int days, String algorithm)
+  public static X509Certificate generateCertificate(String dn, KeyPair pair, int days, String algorithm,
+      Optional<GeneralNames> subjectAltNames)
       throws CertificateException {
     try {
       Security.addProvider(new BouncyCastleProvider());
@@ -97,8 +103,12 @@ public class TestSSLUtils {
       Date to = new Date(from.getTime() + days * 86400000L);
       BigInteger sn = new BigInteger(64, new SecureRandom());
 
-      X509v1CertificateBuilder v1CertGen = new X509v1CertificateBuilder(name, sn, from, to, name, subPubKeyInfo);
-      X509CertificateHolder certificateHolder = v1CertGen.build(sigGen);
+      X509v3CertificateBuilder v3CertGen = new X509v3CertificateBuilder(name, sn, from, to, name, subPubKeyInfo);
+      if (subjectAltNames.isPresent()) {
+        v3CertGen.addExtension(Extension.subjectAlternativeName, true, subjectAltNames.get());
+      }
+      X509CertificateHolder certificateHolder = v3CertGen.build(sigGen);
+
       return new JcaX509CertificateConverter().setProvider("BC").getCertificate(certificateHolder);
     } catch (CertificateException ce) {
       throw ce;
@@ -220,14 +230,16 @@ public class TestSSLUtils {
       password = "UnitTestClientKeyStorePassword";
       keyStoreFile = File.createTempFile("selfsigned-keystore-client", ".jks");
       KeyPair cKP = generateKeyPair("RSA");
-      X509Certificate cCert = generateCertificate("CN=localhost, O=client", cKP, 30, "SHA1withRSA");
+      X509Certificate cCert = generateCertificate("CN=localhost, O=client", cKP, 30, "SHA1withRSA",
+          Optional.empty());
       createKeyStore(keyStoreFile.getPath(), password, password, certAlias, cKP.getPrivate(), cCert);
       certs.put(certAlias, cCert);
     } else {
       password = "UnitTestServerKeyStorePassword";
       keyStoreFile = File.createTempFile("selfsigned-keystore-server", ".jks");
       KeyPair sKP = generateKeyPair("RSA");
-      X509Certificate sCert = generateCertificate("CN=localhost, O=server", sKP, 30, "SHA1withRSA");
+      X509Certificate sCert = generateCertificate("CN=localhost, O=server", sKP, 30, "SHA1withRSA",
+          Optional.empty());
       createKeyStore(keyStoreFile.getPath(), password, password, certAlias, sKP.getPrivate(), sCert);
       certs.put(certAlias, sCert);
     }

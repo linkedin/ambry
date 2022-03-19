@@ -14,7 +14,7 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
-import com.github.ambry.clustermap.ClusterSpectatorFactory;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -45,8 +45,8 @@ public class AmbryMain {
           Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping AmbryServer");
-      ClusterSpectatorFactory clusterSpectatorFactory = Utils.getObj(cloudConfig.vcrClusterSpectatorFactoryClass);
-      ambryServer = new AmbryServer(verifiableProperties, clusterAgentsFactory, clusterSpectatorFactory,
+      VcrClusterAgentsFactory vcrClusterAgentsFactory = Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass);
+      ambryServer = new AmbryServer(verifiableProperties, clusterAgentsFactory, vcrClusterAgentsFactory,
           SystemTime.getInstance());
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {

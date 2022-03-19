@@ -3,7 +3,7 @@
 
 name: Github Actions CI
 
-# Controls when the action will run. 
+# Controls when the action will run.
 on:
   # Triggers the workflow on push or pull request events but only for the master branch
   push:
@@ -14,123 +14,139 @@ on:
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   unit-test:
-  
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
-      
+        # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
+        with:
+          fetch-depth: 0
+
       - name: Set up JDK 11
         uses: actions/setup-java@v2
         with:
           java-version: '11'
           distribution: 'adopt'
-      
-      - name: Cleanup Gradle Cache
-          # Remove some files from the Gradle cache which might have cached by earlier builds.
-        run: |
-          rm -f ~/.gradle/caches/modules-2/modules-2.lock
-          rm -f ~/.gradle/caches/modules-2/gc.properties
-      
-      - name: Cache Gradle packages
-        uses: actions/cache@v2
+
+      - uses: burrunan/gradle-cache-action@v1
+        name: Run unit tests excluding ambry-store
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      
-      - name: Unit Tests excluding ambry-store
-        run: ./travis-unit-test.sh
-        
+          job-id: jdk11
+          arguments: --scan -x :ambry-store:test build codeCoverageReport
+          gradle-version: wrapper
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+
   store-test:
-  
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Ambry
-        uses: actions/checkout@v2     
-      
-      - name: Set up JDK 11
-        uses: actions/setup-java@v2
-        with:
-          java-version: '11'
-          distribution: 'adopt'
-      
-      - name: Cleanup Gradle Cache
-          # Remove some files from the Gradle cache which might have cached by earlier builds.
-        run: |
-          rm -f ~/.gradle/caches/modules-2/modules-2.lock
-          rm -f ~/.gradle/caches/modules-2/gc.properties
-      
-      - name: Cache Gradle packages
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      
-      - name: Unit Tests for ambry-store
-        run: ./travis-store-test.sh  
-  
-  int-test:
-  
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
-      
+        # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
+        with:
+          fetch-depth: 0
+
       - name: Set up JDK 11
         uses: actions/setup-java@v2
         with:
           java-version: '11'
           distribution: 'adopt'
-      
+
+      - uses: burrunan/gradle-cache-action@v1
+        name: Run unit tests for ambry-store
+        with:
+          job-id: jdk11
+          arguments: --scan :ambry-store:test codeCoverageReport
+          gradle-version: wrapper
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+
+  int-test:
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Ambry
+        uses: actions/checkout@v2
+        # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+
       - name: Set up MySQL
         run: |
-          sudo /etc/init.d/mysql start
+          sudo systemctl start mysql.service
           mysql -e 'CREATE DATABASE AccountMetadata;' -uroot -proot
           mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;' -uroot -proot
           mysql -e 'CREATE DATABASE ambry_container_storage_stats;' -uroot -proot
           mysql -e 'USE ambry_container_storage_stats; SOURCE ./ambry-mysql/src/main/resources/AmbryContainerStorageStats.ddl;' -uroot -proot
           mysql -e 'CREATE DATABASE AmbryNamedBlobs;' -uroot -proot
           mysql -e 'USE AmbryNamedBlobs; SOURCE ./ambry-named-mysql/src/main/resources/NamedBlobsSchema.ddl;' -uroot -proot
-      
-      - name: Add custom MySQL user 
-          # Temporary settings to use same username and password as travis ci
+
+      - name: Add custom MySQL user
+        # Temporary settings to use same username and password as travis ci
         run: |
           mysql -e 'CREATE USER 'travis'@'localhost';' -uroot -proot
           mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
           mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
-      
-      - name: Cleanup Gradle Cache
-          # Remove some files from the Gradle cache which might have cached by earlier builds.
-        run: |
-          rm -f ~/.gradle/caches/modules-2/modules-2.lock
-          rm -f ~/.gradle/caches/modules-2/gc.properties
-      
-      - name: Cache Gradle packages
-        uses: actions/cache@v2
+
+      - uses: burrunan/gradle-cache-action@v1
+        name: Run integration tests
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-        
-      - name: Integration Tests
-        run: ./travis-int-test.sh
+          job-id: jdk11
+          arguments: --scan intTest codeCoverageReport
+          gradle-version: wrapper
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+
+  publish:
+
+    runs-on: ubuntu-latest
+    needs: [ unit-test, store-test, int-test ]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    env:
+      ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
+      ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
+      GIT_SECRET: ${{ secrets.GIT_SECRET }}
+    steps:
+      - name: Checkout Ambry
+        uses: actions/checkout@v2
+        # Full fetch depth is used to fetch all existing tags in the repo to assign a version for this build
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+
+      - uses: burrunan/gradle-cache-action@v1
+        name: Build artifacts and create pom files
+        with:
+          job-id: jdk11
+          arguments: --scan assemble publishToMavenLocal
+          gradle-version: wrapper
+
+      - uses: burrunan/gradle-cache-action@v1
+        name: Test publication by uploading in dry run mode
+        with:
+          job-id: jdk11
+          arguments: -i --scan artifactoryPublishAll -Partifactory.dryRun
+          gradle-version: wrapper
+
+      - uses: burrunan/gradle-cache-action@v1
+        name: Tag and upload to JFrog Artifactory
+        with:
+          job-id: jdk11
+          arguments: -i --scan ciPerformRelease
+          gradle-version: wrapper

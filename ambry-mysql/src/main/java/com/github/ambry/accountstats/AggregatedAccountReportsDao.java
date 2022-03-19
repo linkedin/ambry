@@ -14,15 +14,16 @@
 package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
-import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
+import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 
 
 /**
@@ -48,25 +49,32 @@ public class AggregatedAccountReportsDao {
   public static final String ACCOUNT_ID_COLUMN = "accountId";
   public static final String CONTAINER_ID_COLUMN = "containerId";
   public static final String STORAGE_USAGE_COLUMN = "storageUsage";
+  public static final String PHYSICAL_STORAGE_USAGE_COLUMN = "physicalStorageUsage";
+  public static final String NUMBER_OF_BLOBS_COLUMN = "numberOfBlobs";
   public static final String UPDATED_AT_COLUMN = "updatedAt";
   public static final String MONTH_COLUMN = "month";
 
   private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
   private static final String insertSql = String.format(
-      "INSERT INTO %s (%s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
+      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=?, %s=?, %s=NOW()",
       AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
-      STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+      STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN,
+      STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN);
   private static final String queryUsageSqlForCluster =
-      String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
-          STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
+      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
+          STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE,
+          CLUSTER_NAME_COLUMN);
   private static final String queryMonthlyUsageSqlForCluster =
-      String.format("SELECT %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
-          STORAGE_USAGE_COLUMN, MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
-  private static final String copySqlForCluster =
-      String.format("INSERT %s SELECT * FROM %s WHERE %s = ? ON DUPLICATE KEY UPDATE %s=%s.%s, %s=%s.%s",
-          MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
-          STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN,
-          AGGREGATED_ACCOUNT_REPORTS_TABLE, UPDATED_AT_COLUMN);
+      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ?", ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN,
+          STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
+          MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
+  private static final String copySqlForCluster = String.format(
+      "INSERT %s SELECT * FROM %s WHERE %s = ? ON DUPLICATE KEY UPDATE %s=%s.%s, %s=%s.%s, %s=%s.%s, %s=%s.%s",
+      MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
+      STORAGE_USAGE_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN,
+      AGGREGATED_ACCOUNT_REPORTS_TABLE, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
+      AGGREGATED_ACCOUNT_REPORTS_TABLE, NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, AGGREGATED_ACCOUNT_REPORTS_TABLE,
+      UPDATED_AT_COLUMN);
   private static final String deleteMonthlySqlForCluster =
       String.format("DELETE FROM %s WHERE %s=?", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN);
   private static final String queryMonthSqlForCluster =
@@ -79,14 +87,17 @@ public class AggregatedAccountReportsDao {
       String.format("DELETE FROM %s WHERE %s = ? AND %s = ? AND %s = ?", AGGREGATED_ACCOUNT_REPORTS_TABLE,
           CLUSTER_NAME_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
 
-  private final MySqlDataAccessor dataAccessor;
+  private final DataSource dataSource;
+  private final MySqlMetrics metrics;
 
   /**
    * Constructor to create {@link AggregatedAccountReportsDao}.
-   * @param dataAccessor The {@link MySqlDataAccessor}.
+   * @param dataSource The {@link DataSource}.
+   * @param metrics The {@link MySqlMetrics}.
    */
-  AggregatedAccountReportsDao(MySqlDataAccessor dataAccessor) {
-    this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
+  AggregatedAccountReportsDao(DataSource dataSource, MySqlMetrics metrics) {
+    this.dataSource = Objects.requireNonNull(dataSource, "DataSource is empty");
+    this.metrics = Objects.requireNonNull(metrics, "MySqlMetrics is empty");
   }
 
   /**
@@ -99,20 +110,29 @@ public class AggregatedAccountReportsDao {
    */
   void updateStorageUsage(String clusterName, short accountId, short containerId, long storageUsage)
       throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
-      insertStatement.setString(1, clusterName);
-      // The data type of partition id, account id and container id are not SMALLINT, but INT in MySQL, for
-      // future extension
-      insertStatement.setInt(2, accountId);
-      insertStatement.setInt(3, containerId);
-      insertStatement.setLong(4, storageUsage);
-      insertStatement.setLong(5, storageUsage);
-      insertStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    // TODO: adding real physical storage usage and number of blobs here
+    final long physicalStorageUsage = storageUsage;
+    final long numberOfBlobs = 1L;
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        insertStatement.setString(1, clusterName);
+        // The data type of partition id, account id and container id are not SMALLINT, but INT in MySQL, for
+        // future extension
+        insertStatement.setInt(2, accountId);
+        insertStatement.setInt(3, containerId);
+        insertStatement.setLong(4, storageUsage);
+        insertStatement.setLong(5, physicalStorageUsage);
+        insertStatement.setLong(6, numberOfBlobs);
+        insertStatement.setLong(7, storageUsage);
+        insertStatement.setLong(8, physicalStorageUsage);
+        insertStatement.setLong(9, numberOfBlobs);
+        insertStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error(
           String.format("Failed to execute updated on %s, with parameter %d %d %d", AGGREGATED_ACCOUNT_REPORTS_TABLE,
               accountId, containerId, storageUsage), e);
@@ -128,16 +148,18 @@ public class AggregatedAccountReportsDao {
    * @throws SQLException
    */
   void deleteStorageUsage(String clusterName, short accountId, short containerId) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteSql, true);
-      deleteStatement.setString(1, clusterName);
-      deleteStatement.setInt(2, accountId);
-      deleteStatement.setInt(3, containerId);
-      deleteStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.setInt(2, accountId);
+        deleteStatement.setInt(3, containerId);
+        deleteStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute delete {}, with parameter {} {}", AGGREGATED_ACCOUNT_REPORTS_TABLE, accountId,
           containerId, e);
       throw e;
@@ -145,50 +167,57 @@ public class AggregatedAccountReportsDao {
   }
 
   /**
-   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
+   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryContainerUsageForCluster(String clusterName, AggregatedContainerUsageFunction func) throws SQLException {
+  void queryContainerUsageForCluster(String clusterName, AggregatedContainerStorageStatsFunction func)
+      throws SQLException {
     queryContainerUsageForClusterInternal(false, clusterName, func);
   }
 
   /**
-   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
+   * Query container storage usage for given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryMonthlyContainerUsageForCluster(String clusterName, AggregatedContainerUsageFunction func)
+  void queryMonthlyContainerUsageForCluster(String clusterName, AggregatedContainerStorageStatsFunction func)
       throws SQLException {
     queryContainerUsageForClusterInternal(true, clusterName, func);
   }
 
   /**
-   * Query container storage for the given {@code clusterName}. The result will be applied to the {@link AggregatedContainerUsageFunction}.
+   * Query container storage for the given {@code clusterName}. The result will be applied to the {@link AggregatedContainerStorageStatsFunction}.
    * @param forMonthly True to return the monthly snapshot of the container storage usage.
    * @param clusterName The clusterName.
-   * @param func The {@link AggregatedContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link AggregatedContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
   private void queryContainerUsageForClusterInternal(boolean forMonthly, String clusterName,
-      AggregatedContainerUsageFunction func) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
+      AggregatedContainerStorageStatsFunction func) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
       String sqlStatement = forMonthly ? queryMonthlyUsageSqlForCluster : queryUsageSqlForCluster;
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(sqlStatement, false);
-      queryStatement.setString(1, clusterName);
-      ResultSet resultSet = queryStatement.executeQuery();
-      while (resultSet.next()) {
-        int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
-        int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
-        long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-        func.apply((short) accountId, (short) containerId, storageUsage);
+      try (PreparedStatement queryStatement = connection.prepareStatement(sqlStatement)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        try (ResultSet resultSet = queryStatement.executeQuery()) {
+          while (resultSet.next()) {
+            int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
+            int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
+            long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
+            final long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
+            final long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
+            func.apply((short) accountId,
+                new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs));
+          }
+        }
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
       }
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      metrics.readFailureCount.inc();
       logger.error(String.format("Failed to execute query on %s, with parameter %s", AGGREGATED_ACCOUNT_REPORTS_TABLE,
           clusterName), e);
       throw e;
@@ -201,14 +230,16 @@ public class AggregatedAccountReportsDao {
    * @throws SQLException
    */
   void copyAggregatedUsageToMonthlyAggregatedTableForCluster(String clusterName) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(copySqlForCluster, true);
-      queryStatement.setString(1, clusterName);
-      queryStatement.executeUpdate();
-      dataAccessor.onSuccess(Copy, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryStatement = connection.prepareStatement(copySqlForCluster)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        queryStatement.executeUpdate();
+        metrics.copyTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.copySuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Copy);
+      metrics.copyFailureCount.inc();
       logger.error(
           String.format("Failed to execute copy on %s, with parameter %s", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
               clusterName), e);
@@ -222,14 +253,16 @@ public class AggregatedAccountReportsDao {
    * @throws SQLException
    */
   void deleteAggregatedUsageFromMonthlyAggregatedTableForCluster(String clusterName) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteMonthlySqlForCluster, true);
-      deleteStatement.setString(1, clusterName);
-      deleteStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteMonthlySqlForCluster)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute delete on {}, with parameter {}", MONTHLY_AGGREGATED_ACCOUNT_REPORTS_TABLE,
           clusterName, e);
       throw e;
@@ -243,18 +276,21 @@ public class AggregatedAccountReportsDao {
    * @throws SQLException
    */
   String queryMonthForCluster(String clusterName) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(queryMonthSqlForCluster, false);
-      queryStatement.setString(1, clusterName);
-      ResultSet resultSet = queryStatement.executeQuery();
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
-      if (resultSet.next()) {
-        return resultSet.getString(MONTH_COLUMN);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryStatement = connection.prepareStatement(queryMonthSqlForCluster)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        try (ResultSet resultSet = queryStatement.executeQuery()) {
+          metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+          metrics.readSuccessCount.inc();
+          if (resultSet.next()) {
+            return resultSet.getString(MONTH_COLUMN);
+          }
+        }
+        return "";
       }
-      return "";
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      metrics.readFailureCount.inc();
       logger.error(
           String.format("Failed to execute query on %s, with parameter %s", AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
               clusterName), e);
@@ -269,16 +305,18 @@ public class AggregatedAccountReportsDao {
    * @throws SQLException
    */
   void updateMonth(String clusterName, String monthValue) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertMonthSql, true);
-      insertStatement.setString(1, clusterName);
-      insertStatement.setString(2, monthValue);
-      insertStatement.setString(3, monthValue);
-      insertStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement insertStatement = connection.prepareStatement(insertMonthSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        insertStatement.setString(1, clusterName);
+        insertStatement.setString(2, monthValue);
+        insertStatement.setString(3, monthValue);
+        insertStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error(
           String.format("Failed to execute updated on %s, with parameter %s %s", AGGREGATED_ACCOUNT_REPORTS_MONTH_TABLE,
               clusterName, monthValue), e);
@@ -296,24 +334,27 @@ public class AggregatedAccountReportsDao {
      * @throws SQLException
      */
     public AggregatedStorageBatchUpdater(int maxBatchSize) throws SQLException {
-      super(dataAccessor, insertSql, AGGREGATED_ACCOUNT_REPORTS_TABLE, maxBatchSize);
+      super(dataSource.getConnection(), metrics, insertSql, AGGREGATED_ACCOUNT_REPORTS_TABLE, maxBatchSize);
     }
 
     /**
      * Supply values to the prepared statement and add it to the batch updater.
      * @param accountId The account id.
-     * @param containerId The container id.
-     * @param storageUsage The storage usage in bytes.
+     * @param containerStats The {@link ContainerStorageStats}.
      * @throws SQLException
      */
-    public void addUpdateToBatch(String clusterName, short accountId, short containerId, long storageUsage)
+    public void addUpdateToBatch(String clusterName, short accountId, ContainerStorageStats containerStats)
         throws SQLException {
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setInt(2, accountId);
-        statement.setInt(3, containerId);
-        statement.setLong(4, storageUsage);
-        statement.setLong(5, storageUsage);
+        statement.setInt(3, containerStats.getContainerId());
+        statement.setLong(4, containerStats.getLogicalStorageUsage());
+        statement.setLong(5, containerStats.getPhysicalStorageUsage());
+        statement.setLong(6, containerStats.getNumberOfBlobs());
+        statement.setLong(7, containerStats.getLogicalStorageUsage());
+        statement.setLong(8, containerStats.getPhysicalStorageUsage());
+        statement.setLong(9, containerStats.getNumberOfBlobs());
       });
     }
   }

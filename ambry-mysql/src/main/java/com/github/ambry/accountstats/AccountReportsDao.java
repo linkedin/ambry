@@ -14,15 +14,16 @@
 package com.github.ambry.accountstats;
 
 import com.github.ambry.mysql.BatchUpdater;
-import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
+import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 
 
 /**
@@ -36,17 +37,21 @@ public class AccountReportsDao {
   public static final String ACCOUNT_ID_COLUMN = "accountId";
   public static final String CONTAINER_ID_COLUMN = "containerId";
   public static final String STORAGE_USAGE_COLUMN = "storageUsage";
+  public static final String PHYSICAL_STORAGE_USAGE_COLUMN = "physicalStorageUsage";
+  public static final String NUMBER_OF_BLOBS_COLUMN = "numberOfBlobs";
   public static final String UPDATED_AT_COLUMN = "updatedAt";
 
   private static final Logger logger = LoggerFactory.getLogger(AccountReportsDao.class);
   private static final String insertSql = String.format(
-      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=NOW()",
+      "INSERT INTO %s (%s, %s, %s, %s, %s, %s, %s, %s, %s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE %s=?, %s=?, %s=?, %s=NOW()",
       ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
-      CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN);
+      CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
+      UPDATED_AT_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN, NUMBER_OF_BLOBS_COLUMN,
+      UPDATED_AT_COLUMN);
   private static final String querySqlForClusterAndHost =
-      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN,
-          CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
-          HOSTNAME_COLUMN);
+      String.format("SELECT %s, %s, %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN,
+          ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN,
+          NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN);
   private static final String deletePartitionSql =
       String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
           HOSTNAME_COLUMN, PARTITION_ID_COLUMN);
@@ -56,14 +61,17 @@ public class AccountReportsDao {
   private static final String deleteContainerSql =
       String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE,
           CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
-  private final MySqlDataAccessor dataAccessor;
+  private final DataSource dataSource;
+  private final MySqlMetrics metrics;
 
   /**
    * Constructor to create a {@link AccountReportsDao}.
-   * @param dataAccessor The underlying {@link MySqlDataAccessor}.
+   * @param dataSource The {@link DataSource}.
+   * @param metrics The {@link MySqlMetrics}.
    */
-  AccountReportsDao(MySqlDataAccessor dataAccessor) {
-    this.dataAccessor = Objects.requireNonNull(dataAccessor, "MySqlDataAccessor is empty");
+  AccountReportsDao(DataSource dataSource, MySqlMetrics metrics) {
+    this.dataSource = Objects.requireNonNull(dataSource, "DataSource is empty");
+    this.metrics = Objects.requireNonNull(metrics, "MySqlMetrics is empty");
   }
 
   /**
@@ -77,22 +85,31 @@ public class AccountReportsDao {
    */
   void updateStorageUsage(String clusterName, String hostname, int partitionId, short accountId, short containerId,
       long storageUsage) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement insertStatement = dataAccessor.getPreparedStatement(insertSql, true);
-      insertStatement.setString(1, clusterName);
-      insertStatement.setString(2, hostname);
-      // The data type of partition id, account id and container id are not SMALLINT, but INT in MySQL, for
-      // future extension
-      insertStatement.setInt(3, partitionId);
-      insertStatement.setInt(4, accountId);
-      insertStatement.setInt(5, containerId);
-      insertStatement.setLong(6, storageUsage);
-      insertStatement.setLong(7, storageUsage);
-      insertStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    // TODO: adding real physical storage usage and number of blobs here
+    final long physicalStorageUsage = storageUsage;
+    final long numberOfBlobs = 1L;
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        insertStatement.setString(1, clusterName);
+        insertStatement.setString(2, hostname);
+        // The data type of partition id, account id and container id are not SMALLINT, but INT in MySQL, for
+        // future extension
+        insertStatement.setInt(3, partitionId);
+        insertStatement.setInt(4, accountId);
+        insertStatement.setInt(5, containerId);
+        insertStatement.setLong(6, storageUsage);
+        insertStatement.setLong(7, physicalStorageUsage);
+        insertStatement.setLong(8, numberOfBlobs);
+        insertStatement.setLong(9, storageUsage);
+        insertStatement.setLong(10, physicalStorageUsage);
+        insertStatement.setLong(11, numberOfBlobs);
+        insertStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error(String.format("Failed to execute updated on %s, with parameter %d %d %d %d", ACCOUNT_REPORTS_TABLE,
           partitionId, accountId, containerId, storageUsage), e);
       throw e;
@@ -101,30 +118,38 @@ public class AccountReportsDao {
 
   /**
    * Query container storage usage for given {@code clusterName} and {@code hostname}. The result will be applied to the
-   * {@link ContainerUsageFunction}.
+   * {@link ContainerStorageStatsFunction}.
    * @param clusterName The clusterName.
    * @param hostname The hostname.
-   * @param func The {@link ContainerUsageFunction} to call to process each container storage usage.
+   * @param func The {@link ContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryStorageUsageForHost(String clusterName, String hostname, ContainerUsageFunction func) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement queryStatement = dataAccessor.getPreparedStatement(querySqlForClusterAndHost, false);
-      queryStatement.setString(1, clusterName);
-      queryStatement.setString(2, hostname);
-      ResultSet resultSet = queryStatement.executeQuery();
-      while (resultSet.next()) {
-        int partitionId = resultSet.getInt(PARTITION_ID_COLUMN);
-        int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
-        int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
-        long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
-        long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
-        func.apply(partitionId, (short) accountId, (short) containerId, storageUsage, updatedAtMs);
+  void queryStorageUsageForHost(String clusterName, String hostname, ContainerStorageStatsFunction func)
+      throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryStatement = connection.prepareStatement(querySqlForClusterAndHost)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryStatement.setString(1, clusterName);
+        queryStatement.setString(2, hostname);
+        try (ResultSet resultSet = queryStatement.executeQuery()) {
+          while (resultSet.next()) {
+            int partitionId = resultSet.getInt(PARTITION_ID_COLUMN);
+            int accountId = resultSet.getInt(ACCOUNT_ID_COLUMN);
+            int containerId = resultSet.getInt(CONTAINER_ID_COLUMN);
+            long storageUsage = resultSet.getLong(STORAGE_USAGE_COLUMN);
+            final long physicalStorageUsage = resultSet.getLong(PHYSICAL_STORAGE_USAGE_COLUMN);
+            final long numberOfBlobs = resultSet.getLong(NUMBER_OF_BLOBS_COLUMN);
+            long updatedAtMs = resultSet.getTimestamp(UPDATED_AT_COLUMN).getTime();
+            func.apply(partitionId, (short) accountId,
+                new ContainerStorageStats((short) containerId, storageUsage, physicalStorageUsage, numberOfBlobs),
+                updatedAtMs);
+          }
+        }
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
       }
-      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
-      dataAccessor.onException(e, Read);
+      metrics.readFailureCount.inc();
       logger.error(
           String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clusterName,
               hostname), e);
@@ -140,16 +165,18 @@ public class AccountReportsDao {
    * @throws SQLException
    */
   void deleteStorageUsageForPartition(String clusterName, String hostname, int partitionId) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deletePartitionSql, true);
-      deleteStatement.setString(1, clusterName);
-      deleteStatement.setString(2, hostname);
-      deleteStatement.setInt(3, partitionId);
-      deleteStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deletePartitionSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(2, hostname);
+        deleteStatement.setInt(3, partitionId);
+        deleteStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute DELETE on {}, with parameter {}", ACCOUNT_REPORTS_TABLE, partitionId, e);
       throw e;
     }
@@ -165,17 +192,19 @@ public class AccountReportsDao {
    */
   void deleteStorageUsageForAccount(String clusterName, String hostname, int partitionId, int accountId)
       throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteAccountSql, true);
-      deleteStatement.setString(1, clusterName);
-      deleteStatement.setString(2, hostname);
-      deleteStatement.setInt(3, partitionId);
-      deleteStatement.setInt(4, accountId);
-      deleteStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteAccountSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(2, hostname);
+        deleteStatement.setInt(3, partitionId);
+        deleteStatement.setInt(4, accountId);
+        deleteStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute DELETE on {}, with parameter {}, {}", ACCOUNT_REPORTS_TABLE, partitionId,
           accountId, e);
       throw e;
@@ -194,18 +223,20 @@ public class AccountReportsDao {
    */
   void deleteStorageUsageForContainer(String clusterName, String hostname, int partitionId, int accountId,
       int containerId) throws SQLException {
-    try {
-      long startTimeMs = System.currentTimeMillis();
-      PreparedStatement deleteStatement = dataAccessor.getPreparedStatement(deleteContainerSql, true);
-      deleteStatement.setString(1, clusterName);
-      deleteStatement.setString(2, hostname);
-      deleteStatement.setInt(3, partitionId);
-      deleteStatement.setInt(4, accountId);
-      deleteStatement.setInt(5, containerId);
-      deleteStatement.executeUpdate();
-      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteContainerSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(2, hostname);
+        deleteStatement.setInt(3, partitionId);
+        deleteStatement.setInt(4, accountId);
+        deleteStatement.setInt(5, containerId);
+        deleteStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
     } catch (SQLException e) {
-      dataAccessor.onException(e, Write);
+      metrics.writeFailureCount.inc();
       logger.error("Failed to execute DELETE on {}, with parameter {}, {}, {}", ACCOUNT_REPORTS_TABLE, partitionId,
           accountId, containerId, e);
       throw e;
@@ -223,7 +254,7 @@ public class AccountReportsDao {
      * @throws SQLException
      */
     public StorageBatchUpdater(int maxBatchSize) throws SQLException {
-      super(dataAccessor, insertSql, ACCOUNT_REPORTS_TABLE, maxBatchSize);
+      super(dataSource.getConnection(), metrics, insertSql, ACCOUNT_REPORTS_TABLE, maxBatchSize);
     }
 
     /**
@@ -232,20 +263,23 @@ public class AccountReportsDao {
      * @param hostname the hostname
      * @param partitionId The partition id of this account/container usage.
      * @param accountId The account id.
-     * @param containerId The container id.
-     * @param storageUsage The storage usage in bytes.
+     * @param containerStats The {@link ContainerStorageStats}.
      * @throws SQLException
      */
     public void addUpdateToBatch(String clusterName, String hostname, int partitionId, short accountId,
-        short containerId, long storageUsage) throws SQLException {
+        ContainerStorageStats containerStats) throws SQLException {
       addUpdateToBatch(statement -> {
         statement.setString(1, clusterName);
         statement.setString(2, hostname);
         statement.setInt(3, partitionId);
         statement.setInt(4, accountId);
-        statement.setInt(5, containerId);
-        statement.setLong(6, storageUsage);
-        statement.setLong(7, storageUsage);
+        statement.setInt(5, containerStats.getContainerId());
+        statement.setLong(6, containerStats.getLogicalStorageUsage());
+        statement.setLong(7, containerStats.getPhysicalStorageUsage());
+        statement.setLong(8, containerStats.getNumberOfBlobs());
+        statement.setLong(9, containerStats.getLogicalStorageUsage());
+        statement.setLong(10, containerStats.getPhysicalStorageUsage());
+        statement.setLong(11, containerStats.getNumberOfBlobs());
       });
     }
   }

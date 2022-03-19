@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
@@ -30,6 +31,7 @@ public class DiskMetrics {
   public final Histogram diskReadTimePerMbInMs;
   public final Histogram diskWriteTimePerMbInMs;
   public final Meter diskCompactionCopyRateInBytes;
+  public final Counter diskCompactionErrorDueToDiskFailureCount;
 
   public DiskMetrics(MetricRegistry registry, String diskMountPath, int diskIoHistogramReservoirTimeWindow) {
     this.registry = registry;
@@ -44,5 +46,7 @@ public class DiskMetrics {
             new SlidingTimeWindowArrayReservoir(diskIoHistogramReservoirTimeWindow, TimeUnit.MILLISECONDS)));
     diskCompactionCopyRateInBytes =
         registry.meter(MetricRegistry.name(BlobStoreCompactor.class, prefix + "DiskCompactionCopyRateInBytes"));
+    diskCompactionErrorDueToDiskFailureCount =
+        registry.counter(MetricRegistry.name(BlobStoreCompactor.class, prefix + "DiskCompactionErrorDueToDiskFailureCount"));
   }
 }

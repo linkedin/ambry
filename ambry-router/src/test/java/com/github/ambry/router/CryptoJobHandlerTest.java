@@ -196,7 +196,7 @@ public class CryptoJobHandlerTest {
       if (i < closeOnCount) {
         cryptoJobHandler.submitJob(
             new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
-                testData.userMetadata, perBlobKey, cryptoService, kms,
+                testData.userMetadata, perBlobKey, cryptoService, kms, null,
                 new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
                 (EncryptJob.EncryptJobResult result, Exception exception) -> {
                   encryptCallBackCount.countDown();
@@ -208,7 +208,7 @@ public class CryptoJobHandlerTest {
       } else {
         encryptJobs.add(
             new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
-                testData.userMetadata, perBlobKey, cryptoService, kms,
+                testData.userMetadata, perBlobKey, cryptoService, kms, null,
                 new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
                 (EncryptJob.EncryptJobResult result, Exception exception) -> {
                   encryptCallBackCount.countDown();
@@ -229,7 +229,7 @@ public class CryptoJobHandlerTest {
     TestBlobData probeData = getRandomBlob(referenceClusterMap);
     cryptoJobHandler.submitJob(
         new EncryptJob(probeData.blobId.getAccountId(), probeData.blobId.getContainerId(), probeData.blobContent,
-            probeData.userMetadata, perBlobKey, cryptoService, kms,
+            probeData.userMetadata, perBlobKey, cryptoService, kms, null,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
               result.getEncryptedBlobContent().release();
@@ -258,14 +258,14 @@ public class CryptoJobHandlerTest {
     for (int i = 0; i < testDataCount; i++) {
       TestBlobData testData = getRandomBlob(referenceClusterMap);
       cryptoJobHandler.submitJob(new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(),
-          testData.blobContent.retainedDuplicate(), testData.userMetadata, perBlobKey, cryptoService, kms,
+          testData.blobContent.retainedDuplicate(), testData.userMetadata, perBlobKey, cryptoService, kms, null,
           new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
           (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
             assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedBlobContent());
             assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
             decryptJobs.add(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
                 encryptJobResult.getEncryptedBlobContent(), encryptJobResult.getEncryptedUserMetadata(), cryptoService,
-                kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+                kms, null, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
                 (DecryptJob.DecryptJobResult decryptJobResult, Exception e) -> {
                   if (e == null) {
                     assertEquals("BlobId mismatch ", testData.blobId, decryptJobResult.getBlobId());
@@ -301,7 +301,7 @@ public class CryptoJobHandlerTest {
     TestBlobData probeData = getRandomBlob(referenceClusterMap);
     cryptoJobHandler.submitJob(
         new EncryptJob(probeData.blobId.getAccountId(), probeData.blobId.getContainerId(), probeData.blobContent,
-            probeData.userMetadata, perBlobKey, cryptoService, kms,
+            probeData.userMetadata, perBlobKey, cryptoService, kms, null,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
               result.getEncryptedBlobContent().release();
@@ -325,7 +325,7 @@ public class CryptoJobHandlerTest {
 
     cryptoJobHandler.submitJob(
         new EncryptJob(randomData.blobId.getAccountId(), randomData.blobId.getContainerId(), randomData.blobContent,
-            randomData.userMetadata, perBlobKey, cryptoService, kms,
+            randomData.userMetadata, perBlobKey, cryptoService, kms, null,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
               fail("Callback should not have been called since CryptoWorker is closed");
@@ -333,7 +333,7 @@ public class CryptoJobHandlerTest {
 
     cryptoJobHandler.submitJob(
         new DecryptJob(randomData.blobId, randomData.blobContent.nioBuffer(), randomData.blobContent,
-            randomData.userMetadata, cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+            randomData.userMetadata, cryptoService, kms, null, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
             (DecryptJob.DecryptJobResult result, Exception exception) -> {
               fail("Callback should not have been called since CryptoWorker is closed");
             }));
@@ -370,7 +370,7 @@ public class CryptoJobHandlerTest {
     ByteBuffer userMetadata = mode != Mode.Data ? randomData.userMetadata : null;
     cryptoJobHandler.submitJob(
         new EncryptJob(randomData.blobId.getAccountId(), randomData.blobId.getContainerId(), content, userMetadata,
-            perBlobKey, cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
+            perBlobKey, cryptoService, kms, null, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             new EncryptCallbackVerifier(randomData.blobId, false, encryptCallBackCount,
                 new DecryptCallbackVerifier(randomData.blobId, content != null ? content.retainedDuplicate() : null,
                     userMetadata, false, decryptCallBackCount), mode)));
@@ -388,7 +388,7 @@ public class CryptoJobHandlerTest {
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     cryptoJobHandler.submitJob(
         new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
-            testData.userMetadata, perBlobKey, cryptoService, kms,
+            testData.userMetadata, perBlobKey, cryptoService, kms, null,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
             new EncryptCallbackVerifier(testData.blobId, true, encryptCallBackCount, null, Mode.Both)));
     awaitCountDownLatch(encryptCallBackCount, ENCRYPT_JOB_TYPE);
@@ -408,7 +408,7 @@ public class CryptoJobHandlerTest {
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     CountDownLatch decryptCallBackCount = new CountDownLatch(1);
     cryptoJobHandler.submitJob(new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(),
-        testData.blobContent.retainedDuplicate(), testData.userMetadata, perBlobKey, cryptoService, kms,
+        testData.blobContent.retainedDuplicate(), testData.userMetadata, perBlobKey, cryptoService, kms, null,
         new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
         (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
           encryptCallBackCount.countDown();
@@ -424,7 +424,7 @@ public class CryptoJobHandlerTest {
           }
           cryptoJobHandler.submitJob(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
               encryptJobResult.getEncryptedBlobContent(), encryptJobResult.getEncryptedUserMetadata(), cryptoService,
-              kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
+              kms, null, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics),
               (DecryptJob.DecryptJobResult result, Exception e) -> {
                 decryptCallBackCount.countDown();
                 assertNotNull("Exception should have been thrown to decrypt contents for " + testData.blobId, e);
@@ -474,7 +474,7 @@ public class CryptoJobHandlerTest {
         assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
         cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptJobResult.getEncryptedKey(),
             encryptedBlobContent != null ? encryptedBlobContent.retainedDuplicate() : null,
-            encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms,
+            encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms, null,
             new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, e) -> {
           decryptCallBackVerifier.onCompletion(result, e);
         }));

@@ -83,6 +83,29 @@ public class RestUtilsTest {
   }
 
   /**
+   * Method to easily create {@link RestRequest} objects containing a specific request, account and container.
+   * @param restMethod string representation of the rest method.
+   * @param uri string representation of the desired URI.
+   * @param account {@link Account} object associated with the request.
+   * @param container {@link Container} object associated with the request.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  static RestRequest createRestRequest(String restMethod, String uri, Account account, Container container)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    JSONObject request = new JSONObject();
+    request.put(MockRestRequest.REST_METHOD_KEY, (restMethod == null) ? JSONObject.NULL : restMethod);
+    request.put(MockRestRequest.URI_KEY, ((uri == null) ? JSONObject.NULL : uri));
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, ((account == null) ? JSONObject.NULL : account));
+    headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, ((container == null) ? JSONObject.NULL : container));
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    return new MockRestRequest(request, null);
+  }
+
+  /**
    * Sets entries from the passed in HashMap to the @{link JSONObject} headers
    * @param headers  {@link JSONObject} to which the new headers are to be added
    * @param userMetadata {@link Map} which has the new entries that has to be added
@@ -812,11 +835,11 @@ public class RestUtilsTest {
    */
   @Test
   public void setRequestCostHeaderTest() {
-    Map<QuotaName, Double> costMap = new HashMap<>();
+    Map<String, Double> costMap = new HashMap<>();
 
     // test for valid cost map
-    costMap.put(QuotaName.READ_CAPACITY_UNIT, 1.9);
-    costMap.put(QuotaName.STORAGE_IN_GB, 3.0);
+    costMap.put(QuotaName.READ_CAPACITY_UNIT.name(), 1.9);
+    costMap.put(QuotaName.STORAGE_IN_GB.name(), 3.0);
     String expectedQuotaHeaderValue = "READ_CAPACITY_UNIT=1.9; STORAGE_IN_GB=3.0";
     MockRestResponseChannel responseChannel = new MockRestResponseChannel();
     RestUtils.setRequestCostHeader(costMap, responseChannel);
@@ -948,6 +971,42 @@ public class RestUtilsTest {
       boolean isUpload = RestUtils.isUploadRequest(request);
       assertEquals(method == RestMethod.POST, isUpload);
     }
+  }
+
+  @Test
+  public void convertToStrTest() throws Exception {
+    String template = "RestRequest: [Method: %s, Path: %s, Uri: %s, Account: %s, Container: %s]";
+    String method = RestMethod.GET.name();
+    String uri = "/";
+    Account account = InMemAccountService.UNKNOWN_ACCOUNT;
+    Container container = Container.UNKNOWN_CONTAINER;
+
+    // Test with no null values.
+    RestRequest restRequest = createRestRequest(method, "/", InMemAccountService.UNKNOWN_ACCOUNT,
+        Container.UNKNOWN_CONTAINER);
+    String s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, uri, uri, account.toString(), container.toString()), s);
+
+    // Test with null method.
+    restRequest = createRestRequest(null, "/", InMemAccountService.UNKNOWN_ACCOUNT,
+        Container.UNKNOWN_CONTAINER);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, "null", uri, uri, account.toString(), container.toString()), s);
+
+    // Test with null uri.
+    restRequest = createRestRequest(method, null, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, "null", "null", account.toString(), container.toString()), s);
+
+    // Test with null account.
+    restRequest = createRestRequest(method, uri, null, Container.UNKNOWN_CONTAINER);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, uri, uri, "null", container.toString()), s);
+
+    // Test with null container.
+    restRequest = createRestRequest(method, uri, account, null);
+    s = RestUtils.convertToStr(restRequest);
+    assertEquals(String.format(template, method, uri, uri, account, "null"), s);
   }
 
   // helpers.
@@ -1178,7 +1237,7 @@ public class RestUtilsTest {
       boolean shouldSucceed) throws RestServiceException {
     if (shouldSucceed) {
       GetBlobOptions options =
-          RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+          RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
       assertEquals("Unexpected range for args=" + args + " and subResource=" + subResource, expectedRange,
           options.getRange());
       assertEquals("Unexpected operation type for args=" + args + " and subResource=" + subResource, expectedOpType,
@@ -1189,7 +1248,7 @@ public class RestUtilsTest {
           expectedResolveRangeOnEmptyBlob, options.resolveRangeOnEmptyBlob());
     } else {
       try {
-        RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+        RestUtils.buildGetBlobOptions(args, subResource, GetOption.None, null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
         fail("buildGetBlobOptions should not have succeeded with args=" + args + "and subResource=" + subResource);
       } catch (RestServiceException expected) {
         assertEquals("Unexpected error code.", RestServiceErrorCode.InvalidArgs, expected.getErrorCode());

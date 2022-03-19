@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
@@ -28,12 +29,19 @@ public class AzureCloudConfig {
   public static final String COSMOS_COLLECTION_LINK = "cosmos.collection.link";
   public static final String COSMOS_DELETED_CONTAINER_COLLECTION_LINK = "cosmos.deleted.container.collection.link";
   public static final String COSMOS_KEY = "cosmos.key";
+  public static final String COSMOS_KEY_SECRET_NAME = "cosmos.key.secret.name";
+  public static final String COSMOS_VAULT_URL = "cosmos.vault.url";
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
   public static final String AZURE_STORAGE_AUTHORITY = "azure.storage.authority";
   public static final String AZURE_STORAGE_CLIENTID = "azure.storage.clientId";
   public static final String AZURE_STORAGE_SECRET = "azure.storage.secret";
   public static final String AZURE_STORAGE_SCOPE = "azure.storage.scope";
   public static final String AZURE_STORAGE_ENDPOINT = "azure.storage.endpoint";
+  public static final String AZURE_IDENTITY_TENANT_ID = "azure.identity.tenant.id";
+  public static final String AZURE_IDENTITY_CLIENT_ID = "azure.identity.client.id";
+  public static final String AZURE_IDENTITY_SECRET = "azure.identity.secret";
+  public static final String AZURE_IDENTITY_PROXY_HOST = "azure.identity.proxy.host";
+  public static final String AZURE_IDENTITY_PROXY_PORT = "azure.identity.proxy.port";
   public static final String COSMOS_QUERY_BATCH_SIZE = "cosmos.query.batch.size";
   public static final String COSMOS_CONTAINER_DELETION_BATCH_SIZE = "cosmos.container.deletion.batch.size";
   public static final String COSMOS_REQUEST_CHARGE_THRESHOLD = "cosmos.request.charge.threshold";
@@ -61,6 +69,7 @@ public class AzureCloudConfig {
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
   public static final String DEFAULT_AZURE_STORAGE_CLIENT_CLASS =
       "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient";
+  public static final String USE_ASYNC_AZURE_APIS = "use.async.azure.apis";
 
   /**
    * The Azure Blob Storage connection string.
@@ -91,7 +100,24 @@ public class AzureCloudConfig {
    * The Cosmos DB connection key.
    */
   @Config(COSMOS_KEY)
+  @Default("")
   public final String cosmosKey;
+
+  /**
+   * The name of the secret in an Azure KeyVault containing the key to connect to Cosmos DB.
+   * Used as an alternative to configuring the key directly in {@link #COSMOS_KEY}.
+   */
+  @Config(COSMOS_KEY_SECRET_NAME)
+  @Default("")
+  public final String cosmosKeySecretName;
+
+  /**
+   * The URL for the Azure KeyVault containing the cosmos key.
+   * Used as an alternative to configuring the key directly in {@link #COSMOS_KEY}.
+   */
+  @Config(COSMOS_VAULT_URL)
+  @Default("")
+  public final String cosmosVaultUrl;
 
   @Config(AZURE_PURGE_BATCH_SIZE)
   @Default("100")
@@ -170,6 +196,43 @@ public class AzureCloudConfig {
   public final String azureStorageEndpoint;
 
   /**
+   * Azure AAD identity tenant id. For use with {@code ClientSecretCredential} auth.
+   */
+  @Config(AZURE_IDENTITY_TENANT_ID)
+  @Default("")
+  public final String azureIdentityTenantId;
+
+  /**
+   * Azure AAD identity client id. For use with {@code ClientSecretCredential} auth.
+   */
+  @Config(AZURE_IDENTITY_CLIENT_ID)
+  @Default("")
+  public final String azureIdentityClientId;
+
+  /**
+   * Azure AAD identity client secret. For use with {@code ClientSecretCredential} auth.
+   */
+  @Config(AZURE_IDENTITY_SECRET)
+  @Default("")
+  public final String azureIdentitySecret;
+
+  /**
+   * Azure AAD identity proxy host. This is a separate config from other services since there are cases where a proxy
+   * is required only for AAD (since AAD doesn't support private endpoints).
+   * For use with {@code ClientSecretCredential} auth.
+   */
+  @Config(AZURE_IDENTITY_PROXY_HOST)
+  @Default("")
+  public final String azureIdentityProxyHost;
+
+  /**
+   * Azure AAD identity proxy port. For use with {@code ClientSecretCredential} auth.
+   */
+  @Config(AZURE_IDENTITY_PROXY_PORT)
+  @Default("3128")
+  public final int azureIdentityProxyPort;
+
+  /**
    * Factory class to instantiate azure storage client.
    */
   @Config(AZURE_STORAGE_CLIENT_CLASS)
@@ -193,17 +256,32 @@ public class AzureCloudConfig {
   @Config(AZURE_STORAGE_CLIENT_REFRESH_FACTOR)
   public double azureStorageClientRefreshFactor;
 
+  /**
+   * Flag indicating whether to use asynchronous Azure APIs for uploading and downloading of blobs. This is
+   * temporary and can be removed once we move to use only asynchronous methods.
+   */
+  @Config(USE_ASYNC_AZURE_APIS)
+  @Default("false")
+  public final boolean useAsyncAzureAPIs;
+
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
     cosmosCollectionLink = verifiableProperties.getString(COSMOS_COLLECTION_LINK);
     cosmosDeletedContainerCollectionLink = verifiableProperties.getString(COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "");
-    cosmosKey = verifiableProperties.getString(COSMOS_KEY);
+    cosmosKey = verifiableProperties.getString(COSMOS_KEY, "");
+    cosmosKeySecretName = verifiableProperties.getString(COSMOS_KEY_SECRET_NAME, "");
+    cosmosVaultUrl = verifiableProperties.getString(COSMOS_VAULT_URL, "");
     azureStorageAuthority = verifiableProperties.getString(AZURE_STORAGE_AUTHORITY, "");
     azureStorageClientId = verifiableProperties.getString(AZURE_STORAGE_CLIENTID, "");
     azureStorageSecret = verifiableProperties.getString(AZURE_STORAGE_SECRET, "");
     azureStorageScope = verifiableProperties.getString(AZURE_STORAGE_SCOPE, "");
     azureStorageEndpoint = verifiableProperties.getString(AZURE_STORAGE_ENDPOINT, "");
+    azureIdentityTenantId = verifiableProperties.getString(AZURE_IDENTITY_TENANT_ID, "");
+    azureIdentityClientId = verifiableProperties.getString(AZURE_IDENTITY_CLIENT_ID, "");
+    azureIdentitySecret = verifiableProperties.getString(AZURE_IDENTITY_SECRET, "");
+    azureIdentityProxyHost = verifiableProperties.getString(AZURE_IDENTITY_PROXY_HOST, "");
+    azureIdentityProxyPort = verifiableProperties.getInt(AZURE_IDENTITY_PROXY_PORT, CloudConfig.DEFAULT_VCR_PROXY_PORT);
     cosmosQueryBatchSize = verifiableProperties.getInt(COSMOS_QUERY_BATCH_SIZE, DEFAULT_QUERY_BATCH_SIZE);
     cosmosContinuationTokenLimitKb =
         verifiableProperties.getInt(COSMOS_CONTINUATION_TOKEN_LIMIT_KB, DEFAULT_COSMOS_CONTINUATION_TOKEN_LIMIT);
@@ -226,5 +304,6 @@ public class AzureCloudConfig {
         DEFAULT_CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT, 1, Integer.MAX_VALUE);
     azureStorageClientRefreshFactor = verifiableProperties.getDoubleInRange(AZURE_STORAGE_CLIENT_REFRESH_FACTOR,
         DEFAULT_AZURE_STORAGE_CLIENT_REFRESH_FACTOR, 0.0, 1.0);
+    useAsyncAzureAPIs = verifiableProperties.getBoolean(USE_ASYNC_AZURE_APIS, false);
   }
 }

@@ -13,10 +13,12 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.AccountServiceConfig;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -43,6 +45,7 @@ import org.slf4j.LoggerFactory;
 public abstract class AbstractAccountService implements AccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(AbstractAccountService.class);
+  private static final ObjectMapper objectMapper = new ObjectMapper();
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
   protected final AtomicReference<AccountInfoMap> accountInfoMapRef;
@@ -186,8 +189,13 @@ public abstract class AbstractAccountService implements AccountService {
               if (existingContainer.isSameContainer(container)) {
                 // If an exactly same container already exists, treat as no-op (may be retry after partial failure).
                 // But include it in the list returned to caller to provide the containerId.
-                logger.info("Request to create container with existing name and properties: {}",
-                    existingContainer.toJson().toString());
+                String containerStr;
+                try {
+                  containerStr = objectMapper.writeValueAsString(existingContainer);
+                } catch (IOException e) {
+                  containerStr = existingContainer.toString();
+                }
+                logger.info("Request to create container with existing name and properties: {}", containerStr);
                 existingUnchangedContainers.add(existingContainer);
               } else {
                 throw new AccountServiceException("There is a conflicting container in account " + accountName,
@@ -294,9 +302,10 @@ public abstract class AbstractAccountService implements AccountService {
   /**
    * Selects {@link Container}s to be marked as INACTIVE and marked in underlying account store.
    */
-  public void selectInactiveContainersAndMarkInStore(StatsSnapshot statsSnapshot) {
-    Set<Container> inactiveContainerCandidateSet = AccountUtils.selectInactiveContainerCandidates(statsSnapshot,
-        getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS));
+  public void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
+    Set<Container> inactiveContainerCandidateSet =
+        AccountUtils.selectInactiveContainerCandidates(aggregatedAccountStorageStats,
+            getContainersByStatus(Container.ContainerStatus.DELETE_IN_PROGRESS));
     try {
       markContainersInactive(inactiveContainerCandidateSet);
     } catch (InterruptedException e) {

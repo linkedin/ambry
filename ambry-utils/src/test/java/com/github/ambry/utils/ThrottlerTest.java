@@ -38,12 +38,13 @@ public class ThrottlerTest {
     time.setCurrentMilliseconds(11);
     throttler.maybeThrottle(100);
     Assert.assertEquals(1500, time.milliseconds());
+    time.setCurrentMilliseconds(time.milliseconds() + 11);
     throttler.maybeThrottle(500);
-    Assert.assertEquals(5011, time.milliseconds());
+    Assert.assertEquals(6500, time.milliseconds());
     throttler.disable();
     // no more sleeps after disable
     throttler.maybeThrottle(500);
-    Assert.assertEquals(5011, time.milliseconds());
+    Assert.assertEquals(6500, time.milliseconds());
   }
 
   /**
@@ -80,5 +81,16 @@ public class ThrottlerTest {
     Assert.assertEquals(0, time.milliseconds());
     throttler.maybeThrottle(150);
     Assert.assertEquals(1500, time.milliseconds());
+  }
+
+  @Test
+  public void testWithRealTime() throws Exception {
+    Time time = SystemTime.getInstance();
+    long now = time.seconds();
+    Throttler throttler = new Throttler(100, -1, true, time);
+    Thread.sleep(10);
+    throttler.maybeThrottle(500);
+    throttler.maybeThrottle(300);
+    Assert.assertTrue(time.seconds() - now > 7);
   }
 }

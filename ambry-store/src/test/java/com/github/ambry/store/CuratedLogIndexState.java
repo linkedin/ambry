@@ -164,8 +164,8 @@ class CuratedLogIndexState {
     this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, false, false);
   }
 
-  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey)
-      throws IOException, StoreException {
+  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean addTtlUpdates, boolean addUndeletes,
+      boolean enableResetKey) throws IOException, StoreException {
     this(isLogSegmented, tempDir, false, true, addTtlUpdates, addUndeletes, enableResetKey, false);
   }
 
@@ -187,7 +187,8 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean hardDeleteEnabled, boolean initState,
-      boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey, boolean enableAutoCloseLastLogSegment) throws IOException, StoreException {
+      boolean addTtlUpdates, boolean addUndeletes, boolean enableResetKey, boolean enableAutoCloseLastLogSegment)
+      throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     // advance time here so when we set delete's operation time to 0, it will fall within retention day.
     advanceTime(TimeUnit.HOURS.toMillis(CuratedLogIndexState.deleteRetentionHour));
@@ -257,7 +258,7 @@ class CuratedLogIndexState {
     }
     List<IndexEntry> indexEntries = new ArrayList<>(count);
     Offset expectedJournalLastOffset = null;
-    Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
+    Offset endOffsetOfPrevMsg = log.getEndOffset();
     for (int i = 0; i < count; i++) {
       byte[] dataWritten = appendToLog(size);
       FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, size);
@@ -897,7 +898,7 @@ class CuratedLogIndexState {
     while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
       validEntries.addAll(
           getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, deleteReferenceTimeMs, expiryReferenceTimeMs,
-              fileSpanUnderCompaction, deleteTombstoneStats, expiredDeletes, invalidateExpiredDelete));
+              fileSpanUnderCompaction, deleteTombstoneStats, expiredDeletes, invalidateExpiredDelete, null));
       indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
     }
     return validEntries;
@@ -1590,7 +1591,7 @@ class CuratedLogIndexState {
   List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
       long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction,
       Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats, Pair<Set<MockId>, Set<MockId>> expiredDeletes,
-      boolean invalidateExpiredDelete) {
+      boolean invalidateExpiredDelete, BlobStoreStats.IndexEntryAction action) {
     List<IndexEntry> validEntries = new ArrayList<>();
     if (referenceIndex.containsKey(indexSegmentStartOffset)) {
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset)
@@ -1602,14 +1603,16 @@ class CuratedLogIndexState {
         while (iter.hasNext()) {
           IndexValue currentValue = iter.next();
           IndexEntry currentEntry = new IndexEntry(key, currentValue);
+          boolean isValid = false;
           if (currentValue.isUndelete()) {
             if (latestValue.isUndelete() && latestValue.getLifeVersion() == currentValue.getLifeVersion()) {
               validEntries.add(currentEntry);
+              isValid = true;
             }
           } else if (currentValue.isDelete()) {
             if (latestValue.isDelete() && latestValue.getLifeVersion() == currentValue.getLifeVersion()) {
               // check if this is a delete tombstone left by compaction
-              boolean isValid = true;
+              isValid = true;
               try {
                 if (getExpectedValue(key, true) == null) {
                   if (currentValue.getExpiresAtMs() == Utils.Infinite_Time || currentValue.isTtlUpdate()) {
@@ -1648,23 +1651,31 @@ class CuratedLogIndexState {
                   || isTtlUpdateEntryValidWhenFinalStateIsDeleteAndRetention(key, currentValue,
                   fileSpanUnderCompaction)) {
                 validEntries.add(currentEntry);
+                isValid = true;
               }
             } else {
               validEntries.add(currentEntry);
+              isValid = true;
             }
           } else {
             // current index value is PUT
             if (!isExpiredAt(key, expiryReferenceTimeMs)) {
               if (latestValue.isPut()) {
-                validEntries.add(new IndexEntry(key, currentValue));
+                validEntries.add(currentEntry);
+                isValid = true;
               } else if (latestValue.isDelete()) {
                 if (latestValue.getOperationTimeInMs() >= deleteReferenceTimeMs) {
                   validEntries.add(currentEntry);
+                  isValid = true;
                 }
               } else {
                 validEntries.add(currentEntry);
+                isValid = true;
               }
             }
+          }
+          if (action != null) {
+            action.accept(currentEntry, isValid);
           }
         }
       }

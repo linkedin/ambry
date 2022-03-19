@@ -29,6 +29,7 @@ public interface NetworkClient extends Closeable {
    * Attempt to send the given requests and poll for responses from the network.
    * Any requests that cannot be sent out are added to a queue. Every time this method is called, it will first
    * attempt sending the requests in the queue (or time them out) and then attempt sending the newly added requests.
+   * The implementation of this method would have to eventually release the {@link RequestInfo#getRequest()}.
    * @param requestsToSend the list of {@link RequestInfo} representing the requests that need to be sent out. This
    *                     could be empty.
    * @param requestsToDrop the list of correlation IDs representing the requests that can be dropped by

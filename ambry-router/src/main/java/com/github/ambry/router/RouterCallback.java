@@ -60,5 +60,6 @@ class RouterCallback {
       backgroundDeleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceIdSuffix));
     }
   }
+
 }
 

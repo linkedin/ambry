@@ -97,14 +97,15 @@ public class AzureStorageCompactorTest {
     int lookbackDays =
         CloudConfig.DEFAULT_RETENTION_DAYS + numQueryBuckets * CloudConfig.DEFAULT_COMPACTION_QUERY_BUCKET_DAYS;
     configProps.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, String.valueOf(lookbackDays));
+    AzureTestUtils.setConfigProperties(configProps);
     buildCompactor(configProps);
   }
 
   private void buildCompactor(Properties configProps) throws Exception {
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
-    azureBlobDataAccessor =
-        new AzureBlobDataAccessor(mockServiceClient, mockBlobBatchClient, clusterName, azureMetrics);
+    azureBlobDataAccessor = new AzureBlobDataAccessor(mockServiceClient, mockBlobBatchClient, clusterName, azureMetrics,
+        new AzureCloudConfig(new VerifiableProperties(configProps)));
     cosmosDataAccessor =
         new CosmosDataAccessor(mockumentClient, collectionLink, cosmosDeletedContainerCollectionLink, vcrMetrics,
             azureMetrics);

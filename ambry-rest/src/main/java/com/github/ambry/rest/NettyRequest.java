@@ -13,8 +13,8 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -59,6 +59,7 @@ import org.slf4j.LoggerFactory;
  * A wrapper over {@link HttpRequest} and all the {@link HttpContent} associated with the request.
  */
 public class NettyRequest implements RestRequest {
+  static final long UNKNOWN_CONTENT_LENGTH = -1L;
   // If the write of at least {@code bufferWatermark} amount of data is unacknowledged, reading from the channel will be
   // temporarily suspended. It will be resumed when the amount of data unacknowledged drops below this number. If this
   // is <=0, it is assumed that there is no limit on the size of unacknowledged data.
@@ -110,13 +111,13 @@ public class NettyRequest implements RestRequest {
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param channel the {@link Channel} over which the {@code request} has been received.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
-   * @param blacklistedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
+   * @param denyListedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
    * @throws IllegalArgumentException if {@code request} is null.
    * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
    *                                {@link RestMethod} or if the {@link RestUtils.Headers#BLOB_SIZE} header is invalid.
    */
   public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics,
-      Set<String> blacklistedQueryParams) throws RestServiceException {
+      Set<String> denyListedQueryParams) throws RestServiceException {
     if (request == null || channel == null) {
       throw new IllegalArgumentException("Received null argument(s)");
     }
@@ -171,12 +172,12 @@ public class NettyRequest implements RestRequest {
             RestServiceErrorCode.InvalidArgs);
       }
     } else {
-      size = HttpUtil.getContentLength(request, -1L);
+      size = HttpUtil.getContentLength(request, UNKNOWN_CONTENT_LENGTH);
     }
 
     // query params.
     for (Map.Entry<String, List<String>> e : query.parameters().entrySet()) {
-      if (!blacklistedQueryParams.contains(e.getKey())) {
+      if (!denyListedQueryParams.contains(e.getKey())) {
         StringBuilder value = null;
         if (e.getValue() != null) {
           StringBuilder combinedValues = combineVals(new StringBuilder(), e.getValue());
@@ -186,7 +187,7 @@ public class NettyRequest implements RestRequest {
         }
         allArgs.put(e.getKey(), value);
       } else {
-        logger.debug("Encountered blacklisted query parameter {} in request {}", e, request);
+        logger.debug("Encountered denylisted query parameter {} in request {}", e, request);
       }
     }
 
@@ -603,6 +604,7 @@ public class NettyRequest implements RestRequest {
     @Override
     public void onCompletion(Long result, Exception exception) {
       if (httpContent != null) {
+        httpContent.touch("Release at channel " + channel.toString());
         httpContent.release();
       }
       callbackWrapper.updateBytesRead(result);

@@ -15,6 +15,9 @@ package com.github.ambry.utils;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.kqueue.KQueue;
+import io.netty.channel.unix.Errors;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -588,6 +591,12 @@ public class UtilsTest {
   public void clientTerminationWrapAndRecognizeTest() {
     Exception exception = new IOException("Connection reset by peer");
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
+
+    // Netty native IO exceptions should also be caught
+    if (Epoll.isAvailable()) {
+      exception = Errors.newIOException("method", Errors.ERRNO_ECONNRESET_NEGATIVE);
+      assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
+    }
 
     exception = new IOException("Broken pipe");
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));

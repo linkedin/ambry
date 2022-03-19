@@ -103,7 +103,7 @@ public class NamedBlobPutHandlerTest {
   }
 
   private final MockTime time = new MockTime();
-  private final FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+  private final FrontendMetrics metrics;
   private final InMemoryRouter router;
   private final FrontendTestIdConverterFactory idConverterFactory;
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
@@ -119,7 +119,9 @@ public class NamedBlobPutHandlerTest {
     Properties props = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
-    injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, new FrontendConfig(verifiableProperties));
+    FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
+    metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     idSigningService = new AmbryIdSigningService();
     request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + BLOBNAME;

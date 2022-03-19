@@ -238,6 +238,7 @@ class CompactionManager {
       this.triggers = triggers;
       bundleReadBuffer = bundleReadBufferSize == 0 ? null : new byte[bundleReadBufferSize];
       logger.info("Buffer size is {} in compaction thread for {}", bundleReadBufferSize, mountPath);
+      metrics.registerStoreSetToSkipInCompactionForMountPath(mountPath, storesToSkip);
     }
 
     /**
@@ -288,12 +289,12 @@ class CompactionManager {
                     metrics.markCompactionStart(true);
                     compactionStarted = true;
                     store.compact(details, bundleReadBuffer);
-                    if (storeConfig.storeAutoCloseLastLogSegmentEnabled && store.getReplicaId().isSealed()) {
-                      store.closeLastLogSegmentIfQualified();
-                    }
                   } else {
                     storesNoCompaction++;
                     logger.info("{} is not eligible for compaction due to empty compaction details", store);
+                  }
+                  if (storeConfig.storeAutoCloseLastLogSegmentEnabled && store.getReplicaId().isSealed()) {
+                    store.closeLastLogSegmentIfQualified();
                   }
                 }
               } catch (Exception e) {

@@ -14,10 +14,10 @@
 
 package com.github.ambry.clustermap;
 
-import com.github.ambry.commons.Callback;
 import com.github.ambry.accountstats.AccountStatsStore;
-import com.github.ambry.server.AmbryHealthReport;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.commons.Callback;
+import com.github.ambry.server.AmbryStatsReport;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -32,13 +32,13 @@ public interface ClusterParticipant extends AutoCloseable {
 
   /**
    * Initiate the participation of cluster participant.
-   * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
+   * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
    * @param accountStatsStore The {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException
    */
-  void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
-      Callback<StatsSnapshot> callback) throws IOException;
+  void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+      Callback<AggregatedAccountStorageStats> callback) throws IOException;
 
   /**
    * Set or reset the sealed state of the given replica.

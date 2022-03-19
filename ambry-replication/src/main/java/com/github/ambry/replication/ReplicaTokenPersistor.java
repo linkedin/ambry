@@ -117,8 +117,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
    * @param tokenInfoList
    * @throws IOException
    */
-  protected abstract void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
-      throws IOException, ReplicationException;
+  protected abstract void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException;
 
   /**
    * Retrieve the tokens under the same mountPath.

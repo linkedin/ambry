@@ -14,6 +14,8 @@
 package com.github.ambry.clustermap;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -26,6 +28,12 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
    * @return byte-serialized ID of this PartitionId.
    */
   byte[] getBytes();
+
+  /**
+   * Return a numeric id of this partition. If implementation doesn't have a numeric value for partition, just return -1.
+   * @return
+   */
+  long getId();
 
   /**
    * Gets Replicas that comprise this PartitionId.
@@ -41,6 +49,14 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
    * @return list of Replicas that satisfy requirement.
    */
   List<? extends ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName);
+
+  /**
+   * Get replicas (grouped by required state) from specified datacenter.
+   * @param states a set of {@link ReplicaState} that replicas should match.
+   * @param dcName the name of datacenter from which the replica should come.
+   * @return a map whose key is {@link ReplicaState} and value is a list of replicas in that state.
+   */
+  Map<ReplicaState, ? extends List<? extends ReplicaId>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName);
 
   /**
    * Gets the state of this PartitionId.

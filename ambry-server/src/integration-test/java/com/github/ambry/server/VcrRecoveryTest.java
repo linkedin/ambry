@@ -41,7 +41,6 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -127,7 +126,7 @@ public class VcrRecoveryTest {
 
     Properties vcrProperties =
         VcrTestUtil.createVcrProperties(vcrNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            null);
+            12510, null);
     vcrProperties.putAll(recoveryProperties);
     NotificationSystem notificationSystem = new MockNotificationSystem(recoveryCluster.getClusterMap());
 

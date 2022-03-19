@@ -32,6 +32,8 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
@@ -61,6 +63,8 @@ class GetBlobInfoOperation extends GetOperation {
   private final ProgressTracker progressTracker;
   // listener for events that should charge towards quota (like chunk download)
   private final QuotaChargeCallback quotaChargeCallback;
+  // Quota charger for this operation.
+  private final OperationQuotaCharger operationQuotaCharger;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // metrics tracker to track decrypt jobs
@@ -98,6 +102,7 @@ class GetBlobInfoOperation extends GetOperation {
     operationTracker =
         getOperationTracker(blobId.getPartition(), blobId.getDatacenterId(), RouterOperation.GetBlobInfoOperation);
     progressTracker = new ProgressTracker(operationTracker);
+    operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName());
   }
 
   @Override
@@ -169,7 +174,7 @@ class GetBlobInfoOperation extends GetOperation {
       String hostname = replicaId.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
       GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
-      RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId);
+      RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, operationQuotaCharger);
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
       requestRegistrationCallback.registerRequestToSend(this, request);
@@ -368,7 +373,7 @@ class GetBlobInfoOperation extends GetOperation {
       decryptJobMetricsTracker.onJobSubmission();
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
-          new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
+          new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms, options.getBlobOptions,
               decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
             decryptJobMetricsTracker.onJobResultProcessingStart();
             logger.trace("Handling decrypt job callback results for {}", blobId);
@@ -443,12 +448,12 @@ class GetBlobInfoOperation extends GetOperation {
     }
 
     if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
-      if (quotaChargeCallback != null) {
+      if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
-          quotaChargeCallback.chargeQuota();
-        } catch (RouterException routerException) {
+          quotaChargeCallback.charge();
+        } catch (QuotaException quotaException) {
           // No exception should be thrown when doing quota charge for blobinfo operation.
-          logger.trace("Unexpected exception {} thrown on handling quota event for {}", routerException, blobId);
+          logger.trace("Unexpected exception {} thrown on handling quota event for {}", quotaException, blobId);
         }
       }
       Exception e = operationException.get();

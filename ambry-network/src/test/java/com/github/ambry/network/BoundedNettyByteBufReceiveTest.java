@@ -14,15 +14,31 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import io.netty.buffer.ByteBuf;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Random;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 
 public class BoundedNettyByteBufReceiveTest {
+
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
 
   /**
    * Test basic operation of {@link BoundedNettyByteBufReceive}.
@@ -37,7 +53,7 @@ public class BoundedNettyByteBufReceiveTest {
     new Random().nextBytes(buf);
     buffer.put(buf);
     buffer.flip();
-    BoundedNettyByteBufReceive set = new BoundedNettyByteBufReceive();
+    BoundedNettyByteBufReceive set = new BoundedNettyByteBufReceive(100000);
     Assert.assertEquals("Wrong number of bytes read", bufferSize,
         set.readFrom(Channels.newChannel(new ByteBufferInputStream(buffer))));
     buffer.clear();
@@ -46,5 +62,28 @@ public class BoundedNettyByteBufReceiveTest {
       Assert.assertEquals(buffer.array()[i], payload.readByte());
     }
     payload.release();
+  }
+
+  /**
+   * Test when the request size is bigger than the maximum size
+   * @throws Exception
+   */
+  @Test
+  public void testBoundedByteBufferReceiveOnLargeRequest() throws Exception {
+    int bufferSize = 2000;
+    ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
+    buffer.putLong(bufferSize);
+    byte[] buf = new byte[bufferSize - Long.BYTES];
+    new Random().nextBytes(buf);
+    buffer.put(buf);
+    buffer.flip();
+    BoundedNettyByteBufReceive set = new BoundedNettyByteBufReceive(100);
+    // The max request size is 100, but the buffer size is 2000, will result in IOException
+    try {
+      set.readFrom(Channels.newChannel(new ByteBufferInputStream(buffer)));
+      Assert.fail("Should fail with IOException");
+    } catch (IOException e) {
+    }
+    buffer.clear();
   }
 }

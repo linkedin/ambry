@@ -15,6 +15,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Pair;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -46,10 +47,10 @@ class ScanResults {
   // baseBucket   [              ]    [                  ]    [                 ]   .....
   //
   // T0+1H is the first key in the deltaBuckets. All the deltas that happen before T0+1H but after T0 will be added to
-  // its value. T0+2H is the second key in the deltaBucket. All the deltas that happen before T0+2H but after T0+1H will
+  // its value. T0+2H is the second key in the deltaBuckets. All the deltas that happen before T0+2H but after T0+1H will
   // be added to its value. But what are deltas? This is an example to show the answer.
   //
-  // Now let's go through some IndexValues as
+  // Now let's go through some IndexValues like below:
   // 1. PUT[ID1]: created at T0-1D, but will expire at T0+2.5H
   // 2. PUT[ID2]: created at T0-1D, permanent blob
   // The validSize at T0 should be PUT[ID1] + PUT[ID2] because PUT[ID1] haven't expired yet. But we know at T0+2.5H, the
@@ -59,7 +60,7 @@ class ScanResults {
   // PUT[ID1]+PUT[ID2]   [              ]    [                  ]    [ -PUT[ID1]     ]   .....
   // Please notice that the delta is negative. So when we pick any point of time and add the base validSize and all the
   // delta values in the buckets before this point of time, we will get the correct answer. For instance, validSize of
-  // T0 is PUT[ID1]+PUT[ID2], validSize of T0+1H is PUT[ID1]+PUT[ID2]+delta of T0+1H. And validSize of T0+2H is PUT[ID1]
+  // T0 is PUT[ID1]+PUT[ID2], validSize of T0+1H is PUT[ID1]+PUT[ID2]+delta of T0+1H. And validSize of T0+3H is PUT[ID1]
   // +PUT[ID2]-PUT[ID1] because the delta of T0+3H bucket is -PUT[ID1].
   //
   // As new IndexValue comes in, we have to deal with them and fill the delta for them as well.
@@ -86,6 +87,11 @@ class ScanResults {
   final long containerForecastStartTimeMs;
   final long containerLastBucketTimeMs;
   final long containerForecastEndTimeMs;
+
+  // This is for container physical storage usage, it doesn't have to take delta into consideration, so it's more like a base
+  // bucket for valid  storage usage.
+  private final Map<Short, Map<Short, Long>> containerPhysicalStorageUsage = new ConcurrentHashMap<>();
+  private final Map<Short, Map<Short, Long>> containerNumberOfStoreKeys = new ConcurrentHashMap<>();
 
   // LogSegment buckets keep track of valid IndexValue size in each log segments. So the base value of log segment bucket
   // is a map, whose key is the log segment name and the value is the sum of valid IndexValues' sizes. To test if an
@@ -196,6 +202,19 @@ class ScanResults {
   }
 
   /**
+   * Update the physical storage usage and store key for the givne account and container.
+   * @param accountId The account id
+   * @param containerId The container id
+   * @param usage The new physical storage usage
+   * @param newKey The number of new keys to add
+   */
+  void updateContainerPhysicalStorageUsageAndStoreKey(short accountId, short containerId, long usage, long newKey) {
+    updateNestedMapHelper(containerPhysicalStorageUsage, accountId, containerId, usage);
+    containerNumberOfStoreKeys.computeIfAbsent(accountId, k -> new HashMap<>())
+        .compute(containerId, (k, v) -> v == null ? newKey : v.longValue() + newKey);
+  }
+
+  /**
    * Update the log segment base value bucket with the given value.
    * @param logSegmentName the log segment name of the map entry to be updated
    * @param value the value to be added
@@ -296,5 +315,13 @@ class ScanResults {
       }
     }
     return validSizePerContainer;
+  }
+
+  Map<Short, Map<Short, Long>> getContainerPhysicalStorageUsage() {
+    return Collections.unmodifiableMap(containerPhysicalStorageUsage);
+  }
+
+  Map<Short, Map<Short, Long>> getContainerNumberOfStoreKeys() {
+    return Collections.unmodifiableMap(containerNumberOfStoreKeys);
   }
 }

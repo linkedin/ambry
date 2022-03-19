@@ -131,14 +131,15 @@ class AzureCloudDestination implements CloudDestination {
       ClusterMap clusterMap, boolean isVcr, Properties configProps) throws CloudStorageException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
-    this.azureBlobDataAccessor = new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics);
+    this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
+    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
+    this.azureBlobDataAccessor =
+        new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics, azureCloudConfig);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
         new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, cosmosDeletedContainerCollectionLink,
             vcrMetrics, azureMetrics);
-    this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =
@@ -258,6 +259,7 @@ class AzureCloudDestination implements CloudDestination {
   public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
     Map<String, Object> updateFields = new HashMap<>();
+    // TODO Frontend support needs to handle the special case of life version = MessageInfo.LIFE_VERSION_FROM_FRONTEND
     updateFields.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     updateFields.put(CloudBlobMetadata.FIELD_DELETION_TIME, Utils.Infinite_Time);
     UpdateResponse updateResponse = updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
@@ -427,6 +429,7 @@ class AzureCloudDestination implements CloudDestination {
       BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
       azureBlobDataAccessor.uploadFile(tokenLayout.containerName, tokenLayout.blobFilePath, inputStream);
     } catch (IOException | BlobStorageException e) {
+      azureMetrics.absTokenPersistFailureCount.inc();
       throw toCloudStorageException("Could not persist token: " + partitionPath, e);
     }
   }

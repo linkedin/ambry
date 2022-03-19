@@ -14,6 +14,7 @@
 
 package com.github.ambry.account;
 
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -26,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
@@ -45,15 +45,15 @@ public class InMemAccountService implements AccountService {
       new Account(Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE,
           Account.ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
-              Container.DEFAULT_PRIVATE_CONTAINER));
+              Container.DEFAULT_PRIVATE_CONTAINER), Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
+  static final String INMEM_ACCOUNT_UPDATER_PREFIX = "in-memory-account-updater";
   private final boolean shouldReturnOnlyUnknown;
   private final boolean notifyConsumers;
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
   private final Map<String, Account> nameToAccountMap = new HashMap<>();
   private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
-  private boolean shouldUpdateSucceed = true;
-  static final String INMEM_ACCOUNT_UPDATER_PREFIX = "in-memory-account-updater";
   private final ScheduledExecutorService scheduler;
+  private boolean shouldUpdateSucceed = true;
 
   /**
    * Constructor.
@@ -166,7 +166,19 @@ public class InMemAccountService implements AccountService {
    * @return the {@link Account} that was created and added.
    */
   public synchronized Account createAndAddRandomAccount() {
-    Account account = generateRandomAccount();
+    return createAndAddRandomAccount(
+        QuotaResourceType.values()[Utils.getRandomShort(TestUtils.RANDOM) % QuotaResourceType.values().length]);
+  }
+
+  /**
+   * Creates and adds an {@link Account} to this {@link AccountService}. The account will contain one container
+   * with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and
+   * one other random {@link Container}.
+   * @param quotaResourceType {@link QuotaResourceType} for the account.
+   * @return the {@link Account} that was created and added.
+   */
+  public synchronized Account createAndAddRandomAccount(QuotaResourceType quotaResourceType) {
+    Account account = generateRandomAccount(quotaResourceType);
     try {
       updateAccounts(Collections.singletonList(account));
     } catch (AccountServiceException ase) {
@@ -182,6 +194,18 @@ public class InMemAccountService implements AccountService {
    * @return the {@link Account} that was created.
    */
   public synchronized Account generateRandomAccount() {
+    return generateRandomAccount(
+        QuotaResourceType.values()[Utils.getRandomShort(TestUtils.RANDOM) % QuotaResourceType.values().length]);
+  }
+
+  /**
+   * Generates an {@link Account} but does not add it to this {@link AccountService}. The account will contain one
+   * container with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with
+   * {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and one other random {@link Container}.
+   * @param quotaResourceType {@link QuotaResourceType} for the account.
+   * @return the {@link Account} that was created.
+   */
+  public synchronized Account generateRandomAccount(QuotaResourceType quotaResourceType) {
     short refAccountId;
     String refAccountName;
     do {
@@ -198,10 +222,8 @@ public class InMemAccountService implements AccountService {
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId)
             .setNamedBlobMode(Container.NamedBlobMode.OPTIONAL)
             .build();
-    return new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(publicContainer)
-        .addOrUpdateContainer(privateContainer)
-        .addOrUpdateContainer(randomContainer)
-        .build();
+    return new AccountBuilder(refAccountId, refAccountName, refAccountStatus, quotaResourceType).addOrUpdateContainer(
+        publicContainer).addOrUpdateContainer(privateContainer).addOrUpdateContainer(randomContainer).build();
   }
 
   /**

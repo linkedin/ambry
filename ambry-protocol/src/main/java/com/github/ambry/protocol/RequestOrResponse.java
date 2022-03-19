@@ -40,7 +40,6 @@ public abstract class RequestOrResponse extends AbstractByteBufHolder<RequestOrR
   protected ByteBuf bufferToSend;
   protected ByteBuffer byteBufferToSend;
   protected static final Logger logger = LoggerFactory.getLogger(RequestOrResponse.class);
-  public final long requestCreateTime;
 
   private static final int Request_Response_Size_In_Bytes = 8;
   private static final int Request_Response_Type_Size_In_Bytes = 2;
@@ -54,7 +53,6 @@ public abstract class RequestOrResponse extends AbstractByteBufHolder<RequestOrR
     this.correlationId = correlationId;
     this.clientId = clientId;
     this.bufferToSend = null;
-    this.requestCreateTime = System.currentTimeMillis();
   }
 
   public RequestOrResponseType getRequestType() {

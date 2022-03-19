@@ -26,10 +26,12 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.MaxThrottlePolicy;
+import com.github.ambry.quota.QuotaMetrics;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -109,9 +111,10 @@ public class PostBlobHandlerTest {
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
       REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
       try {
+        QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
         QUOTA_MANAGER =
-            new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-                new MaxThrottlePolicy(), Mockito.mock(AccountService.class), null, new MetricRegistry());
+            new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+                Mockito.mock(AccountService.class), null, new QuotaMetrics(new MetricRegistry()));
       } catch (Exception e) {
         throw new IllegalStateException(e);
       }
@@ -121,7 +124,7 @@ public class PostBlobHandlerTest {
   }
 
   private final MockTime time = new MockTime();
-  private final FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+  private final FrontendMetrics metrics;
   private final InMemoryRouter router;
   private final FrontendTestIdConverterFactory idConverterFactory;
   private final FrontendTestSecurityServiceFactory securityServiceFactory;
@@ -136,7 +139,9 @@ public class PostBlobHandlerTest {
     Properties props = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
-    injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, new FrontendConfig(verifiableProperties));
+    FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
+    metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     idSigningService = new AmbryIdSigningService();
     initPostBlobHandler(props);
   }

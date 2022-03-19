@@ -33,12 +33,16 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.utils.TestUtils;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -46,6 +50,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpVersion;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -81,6 +86,8 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static Account ACCOUNT;
   private static Container CONTAINER;
+  private static long DEFAULT_ACCEPT_QUOTA = 1024;
+  private static long DEFAULT_REJECT_QUOTA = 0;
   private static RestServer ambryRestServer = null;
   private final boolean throttleRequest;
   private final QuotaMode quotaMode;
@@ -107,14 +114,31 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param isRequestQuotaEnabled flag to specify if request quota is enabled.
+   * @param quotaMode {@link QuotaMode} object.
+   * @param account {@link Account} for which quota needs to be specified.
+   * @param throttleRequest flag to indicate if the {@link com.github.ambry.quota.QuotaManager} should throttle request.
    * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, String quotaEnforcerStr,
-      boolean isRequestQuotaEnabled, QuotaMode quotaMode) throws IOException, GeneralSecurityException {
+  private static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile,
+      boolean isRequestQuotaEnabled, QuotaMode quotaMode, Account account, boolean throttleRequest) throws IOException, GeneralSecurityException {
     Properties properties = buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
-    properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON, quotaEnforcerStr);
+    // By default the usage and limit of quota will be 0 in the default JsonCUQuotaSource, and hence the default
+    // JsonCUQuotaEnforcer will reject requests. So for cases where we don't want requests to be rejected, we set a
+    // non 0 limit for quota.
+    JSONObject cuResourceQuotaJson = new JSONObject();
+    JSONObject quotaJson = new JSONObject();
+    quotaJson.put("rcu", throttleRequest ? 0 : 10737418240L);
+    quotaJson.put("wcu", throttleRequest ? 0: 10737418240L);
+    cuResourceQuotaJson.put(Integer.toString(account.getId()), quotaJson);
+    properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON, cuResourceQuotaJson.toString());
     properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
     properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, String.valueOf(isRequestQuotaEnabled));
+    properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON, "{\n" + "  \"rcu\": 1024,\n"
+        + "  \"wcu\": 1024\n" + "}");
+    long quotaValue = throttleRequest ? DEFAULT_REJECT_QUOTA : DEFAULT_ACCEPT_QUOTA;
+    properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON,
+        String.format("{\n" + "  \"%s\": {\n" + "    \"rcu\": %d,\n" + "    \"wcu\": %d\n" + "  }\n" + "}", account.getId(), quotaValue, quotaValue));
     return new VerifiableProperties(properties);
   }
 
@@ -164,35 +188,15 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   }
 
   /**
-   * Build the default quota enforcer and source pair json.
-   * @return Json string.
-   */
-  private static String buildDefaultQuotaEnforcerSourceInfoPairConfig(boolean throttleRequest) {
-    JSONObject jsonObject = new JSONObject();
-    if (throttleRequest) {
-      jsonObject.put(QuotaConfig.ENFORCER_STR, "com.github.ambry.quota.RejectQuotaEnforcerFactory");
-      jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.quota.DummyQuotaSourceFactory");
-    } else {
-      jsonObject.put(QuotaConfig.ENFORCER_STR,
-          "com.github.ambry.quota.capacityunit.AmbryCapacityUnitQuotaEnforcerFactory");
-      jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.quota.capacityunit.UnlimitedQuotaSourceFactory");
-    }
-    JSONArray jsonArray = new JSONArray();
-    jsonArray.put(jsonObject);
-    return new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString();
-  }
-
-  /**
    * Sets up an Ambry frontend server.
    * @throws Exception
    */
   @Before
   public void setup() throws Exception {
-    ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
-    String quotaEnforcerSourceInfoPairConfig = buildDefaultQuotaEnforcerSourceInfoPairConfig(throttleRequest);
+    ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
+    CONTAINER = ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     VerifiableProperties quotaProps =
-        buildFrontendVPropsForQuota(TRUST_STORE_FILE, quotaEnforcerSourceInfoPairConfig, true, quotaMode);
+        buildFrontendVPropsForQuota(TRUST_STORE_FILE, true, quotaMode, ACCOUNT, throttleRequest);
     ambryRestServer = new RestServer(quotaProps, CLUSTER_MAP, new LoggingNotificationSystem(),
         SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     ambryRestServer.start();
@@ -219,11 +223,67 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    */
   @Test
   public void postGetHeadUpdateDeleteUndeleteTest() throws Exception {
-    int refContentSize = FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
-    ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    CONTAINER = ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+    int refContentSize = (int) FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes * 3;
     doPostGetHeadUpdateDeleteUndeleteTest(refContentSize, ACCOUNT, CONTAINER, ACCOUNT.getName(),
         !CONTAINER.isCacheable(), ACCOUNT.getName(), CONTAINER.getName(), false);
+  }
+
+  /**
+   * Tests that {@link Operations#GET_CLUSTER_MAP_SNAPSHOT} requests succeed irrespective of quota throttling.
+   * @throws Exception
+   */
+  @Test
+  public void getClusterMapSnapshotTest() throws Exception {
+    FullHttpRequest httpRequest =
+        new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, Operations.GET_CLUSTER_MAP_SNAPSHOT,
+            Unpooled.buffer(0));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+  }
+
+  /**
+   * Tests that {@link Operations#GET_PEERS} requests succeed irrespective of quota throttling.
+   * @throws Exception
+   */
+  @Test
+  public void getPeersTest() throws Exception {
+    String baseUri = Operations.GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + "localhost" + "&"
+        + GetPeersHandler.PORT_QUERY_PARAM + "=" + "62000";
+    String[] uris = {baseUri, "/" + baseUri};
+    for (String uri : uris) {
+      FullHttpRequest httpRequest =
+          new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri, Unpooled.buffer(0));
+      NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+      HttpResponse response = getHttpResponse(responseParts);
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    }
+  }
+
+  /**
+   * Tests that {@link com.github.ambry.rest.RestMethod#OPTIONS} requests are never charged.
+   * @throws Exception
+   */
+  @Test
+  public void optionsTest() throws Exception {
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.OPTIONS,
+        "/media/AAEAAQAAAAAAAAcUAAAAJGNjNTEzNWIwLTFmMTMtNDNhOC1hNjZjLTg3ZjU0MWZlYzM0Yw.png", new DefaultHttpHeaders(),
+        ByteBuffer.wrap(TestUtils.getRandomBytes(0)));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    assertFalse(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_USAGE));
+    assertFalse(response.headers().contains(RestUtils.RequestQuotaHeaders.RETRY_AFTER_MS));
+    assertFalse(response.headers().contains(RestUtils.RequestQuotaHeaders.USER_QUOTA_WARNING));
+  }
+
+  /**
+   * Tests that {@link Operations#ACCOUNTS} requests succeed irrespective of quota throttling.
+   * @throws Exception
+   */
+  @Test
+  public void updateAccountsTest() throws Exception {
+    updateAccountsAndVerify(ACCOUNT_SERVICE, ACCOUNT_SERVICE.generateRandomAccount());
   }
 
   @Override
@@ -266,7 +326,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   void verifyGetBlobResponse(NettyClient.ResponseParts responseParts, ByteRange range, boolean resolveRangeOnEmptyBlob,
       HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
       String containerName) throws RestServiceException {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate,
           expectedContent, accountName, containerName);
     } else {
@@ -296,7 +356,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Override
   void verifyGetHeadResponse(HttpResponse response, HttpHeaders expectedHeaders, ByteRange range, boolean isPrivate,
       String accountName, String containerName, NettyClient.ResponseParts responseParts) throws RestServiceException {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetHeadResponse(response, expectedHeaders, range, isPrivate, accountName, containerName,
           responseParts);
     } else {
@@ -324,7 +384,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Override
   void verifyGetNotModifiedBlobResponse(HttpResponse response, boolean isPrivate,
       NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetNotModifiedBlobResponse(response, isPrivate, responseParts);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
@@ -345,7 +405,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Override
   void verifyUserMetadataResponse(HttpResponse response, HttpHeaders expectedHeaders, byte[] usermetadata,
       NettyClient.ResponseParts responseParts) {
-    if (!throttleRequest  || quotaMode == QuotaMode.TRACKING) {
+    if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyUserMetadataResponse(response, expectedHeaders, usermetadata, responseParts);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());

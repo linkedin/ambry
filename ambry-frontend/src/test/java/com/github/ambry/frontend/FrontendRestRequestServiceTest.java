@@ -34,6 +34,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -41,8 +42,9 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.QuotaMetrics;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.MaxThrottlePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -74,12 +76,15 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StorageStatsUtilTest;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.google.common.collect.Lists;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
@@ -131,9 +136,10 @@ public class FrontendRestRequestServiceTest {
 
   static {
     try {
+      QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER =
-          new AmbryQuotaManager(QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING),
-              new MaxThrottlePolicy(), Mockito.mock(AccountService.class), null, new MetricRegistry());
+          new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+              Mockito.mock(AccountService.class), null, new QuotaMetrics(new MetricRegistry()));
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -142,7 +148,7 @@ public class FrontendRestRequestServiceTest {
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
-  private final FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
+  private final FrontendMetrics frontendMetrics;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
   private final FrontendTestResponseHandler responseHandler;
@@ -188,6 +194,7 @@ public class FrontendRestRequestServiceTest {
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
+    frontendMetrics = new FrontendMetrics(metricRegistry, frontendConfig);
     accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     String endpoint = "http://localhost:1174";
     urlSigningService = new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
@@ -954,8 +961,8 @@ public class FrontendRestRequestServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     Set<Account> expected = new HashSet<>(accountService.getAllAccounts());
-    Set<Account> actual = new HashSet<>(
-        AccountCollectionSerde.accountsFromJson(new JSONObject(new String(restResponseChannel.getResponseBody()))));
+    Set<Account> actual = new HashSet<>(AccountCollectionSerde.accountsFromInputStreamInJson(
+        new ByteArrayInputStream(restResponseChannel.getResponseBody())));
     assertEquals("Unexpected GET /accounts response", expected, actual);
 
     // test an account not found case to ensure that it goes through the exception path
@@ -978,9 +985,7 @@ public class FrontendRestRequestServiceTest {
   public void postAccountsTest() throws Exception {
     Account accountToAdd = accountService.generateRandomAccount();
     List<ByteBuffer> body = new LinkedList<>();
-    body.add(ByteBuffer.wrap(AccountCollectionSerde.accountsToJson(Collections.singleton(accountToAdd))
-        .toString()
-        .getBytes(StandardCharsets.UTF_8)));
+    body.add(ByteBuffer.wrap(AccountCollectionSerde.serializeAccountsInJson(Collections.singleton(accountToAdd))));
     body.add(null);
     RestRequest restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS, null, body);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -1023,26 +1028,28 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void getStatsReportTest() throws Exception {
-    StatsSnapshot accountStatsSnapshot =
-        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
-    StatsSnapshot partitionClassStatsSnapshot =
-        TestUtils.makeAggregatedPartitionClassStats(new String[]{"PartitionClass1", "PartitionClass2"}, 10, 10);
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(
+        StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 1, 10, 10, 1000L, 2, 100));
+    AggregatedPartitionClassStorageStats aggregatedPartitionClassStorageStats =
+        new AggregatedPartitionClassStorageStats(
+            StorageStatsUtilTest.generateRandomAggregatedPartitionClassStorageStats(new String[]{"default", "newClass"},
+                (short) 1, 10, 10, 1000L, 2, 100));
     doAnswer(invocation -> {
       String clusterName = invocation.getArgument(0);
       if (clusterName.equals(CLUSTER_NAME)) {
-        return accountStatsSnapshot;
+        return aggregatedAccountStorageStats;
       } else {
         return null;
       }
-    }).when(accountStatsStore).queryAggregatedAccountStatsByClusterName(anyString());
+    }).when(accountStatsStore).queryAggregatedAccountStorageStatsByClusterName(anyString());
     doAnswer(invocation -> {
       String clusterName = invocation.getArgument(0);
       if (clusterName.equals(CLUSTER_NAME)) {
-        return partitionClassStatsSnapshot;
+        return aggregatedPartitionClassStorageStats;
       } else {
         return null;
       }
-    }).when(accountStatsStore).queryAggregatedPartitionClassStatsByClusterName(anyString());
+    }).when(accountStatsStore).queryAggregatedPartitionClassStorageStatsByClusterName(anyString());
     ObjectMapper mapper = new ObjectMapper();
 
     // construct a request to get account stats
@@ -1052,9 +1059,8 @@ public class FrontendRestRequestServiceTest {
     RestRequest request = createRestRequest(RestMethod.GET, Operations.STATS_REPORT, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(request, restResponseChannel);
-    StatsSnapshot accountStatsFromService =
-        mapper.readValue(restResponseChannel.getResponseBody(), StatsSnapshot.class);
-    assertEquals(accountStatsSnapshot, accountStatsFromService);
+    assertEquals("Storage stats mismatch", aggregatedAccountStorageStats.getStorageStats(),
+        mapper.readValue(restResponseChannel.getResponseBody(), AggregatedAccountStorageStats.class).getStorageStats());
 
     // construct a request to get partition class stats
     headers = new JSONObject();
@@ -1063,9 +1069,9 @@ public class FrontendRestRequestServiceTest {
     request = createRestRequest(RestMethod.GET, Operations.STATS_REPORT, headers, null);
     restResponseChannel = new MockRestResponseChannel();
     doOperation(request, restResponseChannel);
-    StatsSnapshot partitionClassStatsFromService =
-        mapper.readValue(restResponseChannel.getResponseBody(), StatsSnapshot.class);
-    assertEquals(partitionClassStatsSnapshot, partitionClassStatsFromService);
+    assertEquals("Storage stats mismatch", aggregatedPartitionClassStorageStats.getStorageStats(),
+        mapper.readValue(restResponseChannel.getResponseBody(), AggregatedPartitionClassStorageStats.class)
+            .getStorageStats());
 
     // test clustername not found case to ensure that it goes through the exception path
     headers = new JSONObject();
@@ -3141,7 +3147,8 @@ class FrontendTestRouter implements Router {
   String undeleteServiceId = null;
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback,
+      QuotaChargeCallback quotaChargeCallback) {
     GetBlobResult result;
     switch (options.getOperationType()) {
       case BlobInfo:

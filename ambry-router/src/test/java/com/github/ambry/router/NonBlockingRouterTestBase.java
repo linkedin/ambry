@@ -64,8 +64,6 @@ import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
 import static com.github.ambry.utils.TestUtils.*;
@@ -89,7 +87,7 @@ public class NonBlockingRouterTestBase {
   protected static final int USER_METADATA_SIZE = 10;
   protected final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   protected final MockTime mockTime;
-  protected final KeyManagementService kms;
+  protected final MockKeyManagementService kms;
   protected final String singleKeyForKMS;
   protected final CryptoService cryptoService;
   protected final MockClusterMap mockClusterMap;
@@ -127,12 +125,12 @@ public class NonBlockingRouterTestBase {
     this.metadataContentVersion = metadataContentVersion;
     this.includeCloudDc = includeCloudDc;
     mockTime = new MockTime();
-    mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc);
+    mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc, null);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
-    kms = new SingleKeyManagementService(new KMSConfig(vProps), singleKeyForKMS);
+    kms = new MockKeyManagementService(new KMSConfig(vProps), singleKeyForKMS);
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     accountService = new InMemAccountService(false, true);
@@ -550,10 +548,10 @@ public class NonBlockingRouterTestBase {
     setOperationParams();
     Assert.assertFalse("The original ttl should not be infinite for this test to work",
         putBlobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    assertTtl(router, Collections.singleton(blobId), TTL_SECS);
-    router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time)
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    assertTtl(router, Collections.singleton(blobId), TTL_SECS);
+    router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     // if more than one chunk is created, also account for metadata blob
     notificationSystem.checkNotifications(numChunks == 1 ? 1 : numChunks + 1, updateServiceId, Utils.Infinite_Time);
     assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);

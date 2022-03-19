@@ -110,7 +110,7 @@ public class SocketNetworkClientTest {
     networkClient =
         new SocketNetworkClient(selector, networkConfig, networkMetrics, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, time);
-    sslEnabledClusterMap = new MockClusterMap(true, true, 9, 3, 3, false, false);
+    sslEnabledClusterMap = new MockClusterMap(true, true, 9, 3, 3, false, false, null);
     localSslDataNodes = sslEnabledClusterMap.getDataNodeIds()
         .stream()
         .filter(dataNodeId -> sslEnabledClusterMap.getDatacenterName(sslEnabledClusterMap.getLocalDatacenterId())
@@ -169,9 +169,9 @@ public class SocketNetworkClientTest {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     List<ResponseInfo> responseInfoList;
     requestInfoList.add(
-        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(1), replicaId));
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(1), replicaId, null));
     requestInfoList.add(
-        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(2), replicaId));
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(2), replicaId, null));
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
@@ -206,8 +206,8 @@ public class SocketNetworkClientTest {
   public void testConnectionUnavailable() {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     List<ResponseInfo> responseInfoList;
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode, null));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode, null));
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
@@ -247,8 +247,8 @@ public class SocketNetworkClientTest {
   public void testNetworkError() {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     List<ResponseInfo> responseInfoList;
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(5), replicaOnSslNode));
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(6), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(5), replicaOnSslNode, null));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(6), replicaOnSslNode, null));
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
@@ -282,15 +282,15 @@ public class SocketNetworkClientTest {
   public void testExceptionOnConnect() {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     // test that IllegalStateException would be thrown if replica is not specified in RequestInfo
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(-1), null));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(-1), null, null));
     networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals("NetworkClientException should increase because replica is null in request", 1,
         networkMetrics.networkClientException.getCount());
     requestInfoList.forEach(requestInfo -> requestInfo.getRequest().release());
     requestInfoList.clear();
     // test that IOException occurs when selector invokes connect()
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode, null));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode, null));
     selector.setState(MockSelectorState.ThrowExceptionOnConnect);
     try {
       List<ResponseInfo> responseInfos =
@@ -313,7 +313,7 @@ public class SocketNetworkClientTest {
   @Test
   public void testConnectionInitializationFailures() {
     List<RequestInfo> requestInfoList = new ArrayList<>();
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(0), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(0), replicaOnSslNode, null));
     selector.setState(MockSelectorState.IdlePoll);
     Assert.assertEquals(0, selector.connectCallCount());
     // this sendAndPoll() should initiate a connect().
@@ -332,7 +332,7 @@ public class SocketNetworkClientTest {
     responseInfoList.forEach(ResponseInfo::release);
 
     // Another connection should get initialized if a new request comes in for the same destination.
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(1), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(1), replicaOnSslNode, null));
     responseInfoList = networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
@@ -365,7 +365,8 @@ public class SocketNetworkClientTest {
     AtomicInteger nextCorrelationId = new AtomicInteger(1);
     Function<Integer, List<RequestInfo>> requestGen = numRequests -> IntStream.range(0, numRequests)
         .mapToObj(
-            i -> new RequestInfo(sslHost, sslPort, new MockSend(nextCorrelationId.getAndIncrement()), replicaOnSslNode))
+            i -> new RequestInfo(sslHost, sslPort, new MockSend(nextCorrelationId.getAndIncrement()), replicaOnSslNode,
+                null))
         .collect(Collectors.toList());
     // 1 host x 1 port x 3 connections x 100%
     int warmUpPercentage = 100;
@@ -438,7 +439,8 @@ public class SocketNetworkClientTest {
     AtomicInteger nextCorrelationId = new AtomicInteger(1);
     Function<Integer, List<RequestInfo>> requestGen = numRequests -> IntStream.range(0, numRequests)
         .mapToObj(
-            i -> new RequestInfo(sslHost, sslPort, new MockSend(nextCorrelationId.getAndIncrement()), replicaOnSslNode))
+            i -> new RequestInfo(sslHost, sslPort, new MockSend(nextCorrelationId.getAndIncrement()), replicaOnSslNode,
+                null))
         .collect(Collectors.toList());
     List<ResponseInfo> responseInfoList;
 
@@ -519,8 +521,8 @@ public class SocketNetworkClientTest {
   public void testOutOfOrderConnectionEstablishment() {
     selector.setState(MockSelectorState.DelayFailAlternateConnect);
     List<RequestInfo> requestInfoList = new ArrayList<>();
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(2), replicaOnSslNode));
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(2), replicaOnSslNode, null));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode, null));
     List<ResponseInfo> responseInfoList =
         networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     requestInfoList.clear();
@@ -565,7 +567,7 @@ public class SocketNetworkClientTest {
   public void testPendingRequestTimeOutWithDisconnection() throws Exception {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     selector.setState(MockSelectorState.IdlePoll);
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode, null));
     List<ResponseInfo> responseInfoList =
         networkClient.sendAndPoll(requestInfoList, Collections.emptySet(), POLL_TIMEOUT_MS);
     Assert.assertEquals(0, responseInfoList.size());
@@ -596,8 +598,8 @@ public class SocketNetworkClientTest {
   @Test
   public void testExceptionOnPoll() {
     List<RequestInfo> requestInfoList = new ArrayList<>();
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode));
-    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(3), replicaOnSslNode, null));
+    requestInfoList.add(new RequestInfo(sslHost, sslPort, new MockSend(4), replicaOnSslNode, null));
     selector.setState(MockSelectorState.ThrowExceptionOnPoll);
     try {
       List<ResponseInfo> responseInfoList =
@@ -653,18 +655,18 @@ public class SocketNetworkClientTest {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     List<ResponseInfo> responseInfoList;
     requestInfoList.add(
-        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(1), replicaId));
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(1), replicaId, null));
     requestInfoList.add(
-        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(2), replicaId));
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(2), replicaId, null));
 
     // This call would create two connection and not send any requests out
     localNetworkClient.sendAndPoll(requestInfoList, Collections.EMPTY_SET, POLL_TIMEOUT_MS);
     requestInfoList.clear();
 
     requestInfoList.add(
-        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(3), replicaId));
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(3), replicaId, null));
     requestInfoList.add(
-        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(4), replicaId));
+        new RequestInfo(dataNodeId.getHostname(), dataNodeId.getPortToConnectTo(), new MockSend(4), replicaId, null));
 
     mockSelector.setState(MockSelectorState.IdlePoll);
     // This call would send first two requests out. At the same time, keep last two requests in the pendingRequests queue.
@@ -776,7 +778,7 @@ class MockBoundedNettyByteBufReceive extends BoundedNettyByteBufReceive {
    * @param correlationId the correlation id associated with this object.
    */
   public MockBoundedNettyByteBufReceive(int correlationId) {
-    super(PooledByteBufAllocator.DEFAULT.directBuffer(16).writeInt(correlationId), 16);
+    super(PooledByteBufAllocator.DEFAULT.directBuffer(16).writeInt(correlationId), 16, 100 * 1024 * 1024);
   }
 }
 

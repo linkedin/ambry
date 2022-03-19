@@ -23,6 +23,10 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
+import org.apache.helix.HelixAdmin;
+import org.apache.helix.HelixManager;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.json.JSONObject;
@@ -127,6 +131,28 @@ public class AmbryStateModelFactoryTest {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
     MetricRegistry metricRegistry = new MetricRegistry();
     MockHelixParticipant.metricRegistry = metricRegistry;
+    DataNodeConfig mockDataNodeConfig = Mockito.mock(DataNodeConfig.class);
+    Set<String> disabledPartitionSet = new HashSet<>();
+    Set<String> enabledPartitionSet = new HashSet<>();
+    when(mockDataNodeConfig.getDisabledReplicas()).thenReturn(disabledPartitionSet);
+    DataNodeConfigSource mockConfigSource = Mockito.mock(DataNodeConfigSource.class);
+    when(mockConfigSource.get(anyString())).thenReturn(mockDataNodeConfig);
+    HelixAdmin mockHelixAdmin = Mockito.mock(HelixAdmin.class);
+    InstanceConfig mockInstanceConfig = Mockito.mock(InstanceConfig.class);
+    doAnswer(invocation -> {
+      String partitionName = invocation.getArgument(1);
+      boolean enable = invocation.getArgument(2);
+      if (enable) {
+        enabledPartitionSet.add(partitionName);
+      }
+      return null;
+    }).when(mockInstanceConfig).setInstanceEnabledForPartition(any(), any(), anyBoolean());
+    when(mockHelixAdmin.getInstanceConfig(anyString(), anyString())).thenReturn(mockInstanceConfig);
+    when(mockHelixAdmin.setInstanceConfig(anyString(), anyString(), any())).thenReturn(true);
+    HelixManager mockHelixManager = Mockito.mock(HelixManager.class);
+    when(mockHelixManager.getClusterManagmentTool()).thenReturn(mockHelixAdmin);
+    MockHelixManagerFactory.overrideGetHelixManager = true;
+    MockHelixParticipant.mockHelixFactory = new MockHelixManagerFactory(mockConfigSource, mockHelixManager);
     MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(config);
     HelixParticipantMetrics participantMetrics = mockHelixParticipant.getHelixParticipantMetrics();
     String resourceName = "0";
@@ -184,10 +210,13 @@ public class AmbryStateModelFactoryTest {
     assertEquals("Inactive count should be 0", 0,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "inactivePartitionCount"));
     // OFFLINE -> DROPPED
+    disabledPartitionSet.add(partitionName);
     stateModel.onBecomeDroppedFromOffline(mockMessage, null);
     assertEquals("Offline count should be 0", 0,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
     assertEquals("Dropped count should be updated", 1, participantMetrics.partitionDroppedCount.getCount());
+    assertTrue("Partition should be removed from disabled partition set", disabledPartitionSet.isEmpty());
+    assertEquals("Mismatch in enabled partition", partitionName, enabledPartitionSet.iterator().next());
     // ERROR -> DROPPED
     stateModel.onBecomeDroppedFromError(mockMessage, null);
     assertEquals("Dropped count should be updated", 2, participantMetrics.partitionDroppedCount.getCount());
@@ -203,6 +232,7 @@ public class AmbryStateModelFactoryTest {
     stateModel.reset();
     assertEquals("Offline count should still be 1 after reset twice", 1,
         getHelixParticipantMetricValue(metricRegistry, HelixParticipant.class.getName(), "offlinePartitionCount"));
+    MockHelixManagerFactory.overrideGetHelixManager = false;
   }
 
   /**

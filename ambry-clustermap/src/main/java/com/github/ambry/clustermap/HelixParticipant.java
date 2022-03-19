@@ -14,14 +14,14 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.accountstats.AccountStatsStore;
-import com.github.ambry.server.AmbryHealthReport;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.AmbryStatsReport;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,7 +38,6 @@ import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
-import org.apache.helix.healthcheck.HealthReportProvider;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.HelixPropertyStore;
@@ -121,30 +120,25 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   /**
    * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
    * Helix cluster.
-   * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
+   * @param ambryStatsReports {@link List} of {@link AmbryStatsReport} to be registered to the participant.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
-      Callback<StatsSnapshot> callback) throws IOException {
+  public void participate(List<AmbryStatsReport> ambryStatsReports, AccountStatsStore accountStatsStore,
+      Callback<AggregatedAccountStorageStats> callback) throws IOException {
     logger.info("Initiating the participation. The specified state model is {}",
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
         new AmbryStateModelFactory(clusterMapConfig, this));
-    registerHealthReportTasks(stateMachineEngine, ambryHealthReports, accountStatsStore, callback);
+    registerStatsReportAggregationTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
     try {
       // register server as a participant
       manager.connect();
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
-    }
-    if (clusterMapConfig.clustermapEnableHelixHealthReport) {
-      for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
-        manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
-      }
     }
     logger.info("Completed participation in cluster {} at {}", clusterName, zkConnectStr);
   }
@@ -267,40 +261,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
     }
-    synchronized (helixAdministrationLock) {
-      String partitionName = replicaId.getPartitionId().toPathString();
-
-      // 1. update disabled replica list in DataNodeConfig. This modifies ListFields only
-      boolean dataNodeConfigChanged = false;
-      DataNodeConfig dataNodeConfig = getDataNodeConfig();
-      if (!disable && dataNodeConfig.getDisabledReplicas().remove(partitionName)) {
-        logger.info("Removing the partition {} from disabledReplicas list", partitionName);
-        dataNodeConfigChanged = true;
-      } else if (disable && dataNodeConfig.getDisabledReplicas().add(partitionName)) {
-        logger.info("Adding the partition {} to disabledReplicas list", partitionName);
-        dataNodeConfigChanged = true;
-      }
-      if (dataNodeConfigChanged) {
-        logger.info("Setting config with list of disabled replicas: {}", dataNodeConfig.getDisabledReplicas());
-        if (!dataNodeConfigSource.set(dataNodeConfig)) {
-          participantMetrics.setReplicaDisabledStateErrorCount.inc();
-          logger.warn("setReplicaDisabledState() failed DataNodeConfig update");
-        }
-
-        // 2. If the DataNodeConfig was changed, invoke Helix native method to enable/disable partition on local node,
-        //    this will trigger subsequent state transition on given replica. This method modifies MapFields in
-        //    InstanceConfig.
-        InstanceConfig instanceConfig = getInstanceConfig();
-        String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
-        logger.info("{} replica {} on current node", disable ? "Disabling" : "Enabling", partitionName);
-        instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
-        if (!helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig)) {
-          participantMetrics.setReplicaDisabledStateErrorCount.inc();
-          logger.warn("setReplicaDisabledState() failed InstanceConfig update");
-        }
-      }
-      logger.info("Disabled state of partition {} is updated", partitionName);
-    }
+    setPartitionDisabledState(replicaId.getPartitionId().toPathString(), disable);
   }
 
   @Override
@@ -334,6 +295,46 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   protected void markDisablePartitionComplete() {
     disablePartitionsComplete = true;
+  }
+
+  /**
+   * Disable/enable partition on local node. This method will update both InstanceConfig and DataNodeConfig in PropertyStore.
+   * @param partitionName name of partition on local node
+   * @param disable if {@code true}, disable given partition on current node. {@code false} otherwise.
+   */
+  protected void setPartitionDisabledState(String partitionName, boolean disable) {
+    synchronized (helixAdministrationLock) {
+      // 1. update disabled replica list in DataNodeConfig. This modifies ListFields only
+      boolean dataNodeConfigChanged = false;
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+      if (!disable && dataNodeConfig.getDisabledReplicas().remove(partitionName)) {
+        logger.info("Removing the partition {} from disabledReplicas list", partitionName);
+        dataNodeConfigChanged = true;
+      } else if (disable && dataNodeConfig.getDisabledReplicas().add(partitionName)) {
+        logger.info("Adding the partition {} to disabledReplicas list", partitionName);
+        dataNodeConfigChanged = true;
+      }
+      if (dataNodeConfigChanged) {
+        logger.info("Setting config with list of disabled replicas: {}", dataNodeConfig.getDisabledReplicas());
+        if (!dataNodeConfigSource.set(dataNodeConfig)) {
+          participantMetrics.setReplicaDisabledStateErrorCount.inc();
+          logger.warn("setReplicaDisabledState() failed DataNodeConfig update");
+        }
+
+        // 2. If the DataNodeConfig was changed, invoke Helix native method to enable/disable partition on local node,
+        //    this will trigger subsequent state transition on given replica. This method modifies MapFields in
+        //    InstanceConfig.
+        InstanceConfig instanceConfig = getInstanceConfig();
+        String resourceNameForPartition = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+        logger.info("{} replica {} on current node", disable ? "Disabling" : "Enabling", partitionName);
+        instanceConfig.setInstanceEnabledForPartition(resourceNameForPartition, partitionName, !disable);
+        if (!helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig)) {
+          participantMetrics.setReplicaDisabledStateErrorCount.inc();
+          logger.warn("setReplicaDisabledState() failed InstanceConfig update");
+        }
+      }
+      logger.info("Disabled state of partition {} is updated", partitionName);
+    }
   }
 
   /**
@@ -438,40 +439,27 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   /**
-   * Register {@link HelixHealthReportAggregatorTask}s for appropriate {@link AmbryHealthReport}s.
+   * Register aggregation tasks for appropriate {@link AmbryStatsReport}s.
    * @param engine the {@link StateMachineEngine} to register the task state model.
-   * @param healthReports the {@link List} of {@link AmbryHealthReport}s that may require the registration of
-   * corresponding {@link HelixHealthReportAggregatorTask}s.
+   * @param statsReports the {@link List} of {@link AmbryStatsReport}s that may require the registration of
+   * corresponding {@link MySqlReportAggregatorTask}s.
    * @param accountStatsStore the {@link AccountStatsStore} to retrieve and store container stats.
    * @param callback a callback which will be invoked when the aggregation report has been generated successfully.
    */
-  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports,
-      AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback) {
+  private void registerStatsReportAggregationTasks(StateMachineEngine engine, List<AmbryStatsReport> statsReports,
+      AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    for (final AmbryHealthReport healthReport : healthReports) {
-      if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
-        if (clusterMapConfig.clustermapEnableHelixAggregationTask) {
-          // register cluster wide aggregation task for the health report
-          taskFactoryMap.put(
-              String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
-              new TaskFactory() {
-                @Override
-                public Task createNewTask(TaskCallbackContext context) {
-                  return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
-                      healthReport.getReportName(), healthReport.getStatsFieldName(), healthReport.getStatsReportType(),
-                      callback, clusterMapConfig);
-                }
-              });
-        }
+    for (final AmbryStatsReport statsReport : statsReports) {
+      if (statsReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
         if (clusterMapConfig.clustermapEnableMySqlAggregationTask && accountStatsStore != null) {
           taskFactoryMap.put(
-              String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
+              String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, statsReport.getReportName()),
               new TaskFactory() {
                 @Override
                 public Task createNewTask(TaskCallbackContext context) {
                   return new MySqlReportAggregatorTask(context.getManager(),
-                      healthReport.getAggregateIntervalInMinutes(), healthReport.getStatsReportType(),
-                      accountStatsStore, callback, clusterMapConfig, metricRegistry);
+                     statsReport.getAggregateIntervalInMinutes(), statsReport.getStatsReportType(), accountStatsStore,
+                      callback, clusterMapConfig, metricRegistry);
                 }
               });
         }
@@ -682,12 +670,18 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
     }
+    logger.info("Purging disabled state of dropped replica {} from both InstanceConfig and DataNodeConfig",
+        partitionName);
+    setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
     participantMetrics.partitionDroppedCount.inc();
   }
 
   @Override
   public void onPartitionBecomeDroppedFromError(String partitionName) {
+    logger.info("Purging disabled state of dropped replica {} from both InstanceConfig and DataNodeConfig",
+        partitionName);
+    setPartitionDisabledState(partitionName, false);
     localPartitionAndState.remove(partitionName);
     participantMetrics.partitionDroppedCount.inc();
   }

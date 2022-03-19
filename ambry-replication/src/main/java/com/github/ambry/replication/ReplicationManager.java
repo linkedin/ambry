@@ -15,7 +15,6 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -40,25 +39,19 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 
 
 /**
  * Set up replicas based on {@link ReplicationEngine} and do replication across all data centers.
+ * Store-> Store
  */
 public class ReplicationManager extends ReplicationEngine {
-  protected CountDownLatch startupLatch = new CountDownLatch(1);
-  protected boolean started = false;
-  private final StoreConfig storeConfig;
-  private final DataNodeId currentNode;
   private final boolean trackPerPartitionLagInMetric;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -79,14 +72,11 @@ public class ReplicationManager extends ReplicationEngine {
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate, FindTokenHelper findTokenHelper,
       Time time) throws ReplicationException {
-    super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
+    super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
         clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate,
-        findTokenHelper, time);
-    this.storeConfig = storeConfig;
-    this.currentNode = dataNode;
+        findTokenHelper, time, true);
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
-    clusterMap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     // make sure leaderBasedReplicationAdmin is constructed before creating ReplicaThreads since it is passed to them
     if (replicationConfig.replicationModelAcrossDatacenters.equals(ReplicationModelType.LEADER_BASED)) {
       logger.info("Leader-based cross colo replication model is being used");
@@ -153,6 +143,11 @@ public class ReplicationManager extends ReplicationEngine {
     } finally {
       startupLatch.countDown();
     }
+  }
+
+  @Override
+  protected boolean shouldReplicateFromDc(String datacenterName) {
+    return true;
   }
 
   /**
@@ -243,128 +238,6 @@ public class ReplicationManager extends ReplicationEngine {
     }
     replicationMetrics.addLagMetricForPartition(partition, replicationConfig.replicationTrackPerPartitionLagFromRemote);
     return remoteReplicaInfos;
-  }
-
-  /**
-   * Update {@link PartitionInfo} related maps including {@link ReplicationEngine#partitionToPartitionInfo} and
-   * {@link ReplicationEngine#mountPathToPartitionInfos}
-   * @param remoteReplicaInfos the {@link RemoteReplicaInfo}(s) of the local {@link ReplicaId}
-   * @param replicaId the local replica
-   */
-  private void updatePartitionInfoMaps(List<RemoteReplicaInfo> remoteReplicaInfos, ReplicaId replicaId) {
-    PartitionId partition = replicaId.getPartitionId();
-    PartitionInfo partitionInfo =
-        new PartitionInfo(remoteReplicaInfos, partition, storeManager.getStore(partition), replicaId);
-    partitionToPartitionInfo.put(partition, partitionInfo);
-    mountPathToPartitionInfos.computeIfAbsent(replicaId.getMountPath(), key -> ConcurrentHashMap.newKeySet())
-        .add(partitionInfo);
-  }
-
-  /**
-   * Implementation of {@link ClusterMapChangeListener} that helps replication manager react to cluster map changes.
-   */
-  class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
-    /**
-     * {@inheritDoc}
-     * Note that, this method should be thread-safe because multiple threads (from different cluster change handlers) may
-     * concurrently update remote replica infos.
-     */
-    @Override
-    public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
-      // 1. wait for start() to complete
-      try {
-        startupLatch.await();
-      } catch (InterruptedException e) {
-        logger.warn("Waiting for startup is interrupted.");
-        throw new IllegalStateException("Replication manager startup is interrupted while updating remote replicas");
-      }
-      if (started) {
-        // Read-write lock avoids contention between addReplica()/removeReplica() and onReplicaAddedOrRemoved() methods.
-        // Read lock for current method should suffice because multiple threads from cluster change handlers should be able
-        // to access partitionToPartitionInfo map. Each thead only updates PartitionInfo of certain partition and synchronization
-        // is only required within PartitionInfo. Also, addRemoteReplicaInfoToReplicaThread() is thread-safe which allows
-        // several threads from cluster change handlers to add remoteReplicaInfo
-        rwLock.readLock().lock();
-        try {
-          // 2. determine if added/removed replicas have peer replica on local node.
-          //    We skip the replica on current node because it should already be added/removed by state transition thread.
-          Set<ReplicaId> addedPeerReplicas = addedReplicas.stream()
-              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != currentNode)
-              .collect(Collectors.toSet());
-          Set<ReplicaId> removedPeerReplicas = removedReplicas.stream()
-              .filter(r -> partitionToPartitionInfo.containsKey(r.getPartitionId()) && r.getDataNodeId() != currentNode)
-              .collect(Collectors.toSet());
-
-          // No additional synchronization is required because cluster change handler of each dc only updates replica-threads
-          // belonging to certain dc. Hence, there is only one thread adding/removing remote replicas within a certain dc.
-
-          // 3. create replicaInfo for new remote replicas and assign them to replica-threads.
-          List<RemoteReplicaInfo> replicaInfosToAdd = new ArrayList<>();
-          for (ReplicaId remoteReplica : addedPeerReplicas) {
-            logger.info("Attempting to add remote replica in replication manager: " + remoteReplica);
-            PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
-            // create findToken, remoteReplicaInfo
-            FindToken findToken =
-                tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
-            RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(remoteReplica, partitionInfo.getLocalReplicaId(), partitionInfo.getStore(),
-                    findToken,
-                    TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
-                    SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
-            logger.info("Adding remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
-                remoteReplica.getDataNodeId());
-            if (partitionInfo.addReplicaInfoIfAbsent(remoteReplicaInfo)) {
-              replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
-              replicaInfosToAdd.add(remoteReplicaInfo);
-            }
-          }
-          addRemoteReplicaInfoToReplicaThread(replicaInfosToAdd, true);
-
-          // 4. remove replicaInfo from existing partitionInfo and replica-threads
-          List<RemoteReplicaInfo> replicaInfosToRemove = new ArrayList<>();
-          for (ReplicaId remoteReplica : removedPeerReplicas) {
-            logger.info("Attempting to remove remote replica from replication manager: " + remoteReplica);
-            PartitionInfo partitionInfo = partitionToPartitionInfo.get(remoteReplica.getPartitionId());
-            RemoteReplicaInfo removedReplicaInfo = partitionInfo.removeReplicaInfoIfPresent(remoteReplica);
-            if (removedReplicaInfo != null) {
-              replicationMetrics.removeMetricsForRemoteReplicaInfo(removedReplicaInfo);
-              logger.info("Removing remote replica {} on {} from replica threads.", remoteReplica.getReplicaPath(),
-                  remoteReplica.getDataNodeId());
-              replicaInfosToRemove.add(removedReplicaInfo);
-            }
-          }
-          removeRemoteReplicaInfoFromReplicaThread(replicaInfosToRemove);
-          logger.info("{} peer replicas are added and {} peer replicas are removed in replication manager",
-              addedPeerReplicas.size(), removedPeerReplicas.size());
-        } finally {
-          rwLock.readLock().unlock();
-        }
-      }
-    }
-
-    /**
-     * {@inheritDoc}
-     * Note that, this method should be thread-safe because multiple threads (from different cluster change handlers) may
-     * concurrently call this method.
-     */
-    @Override
-    public void onRoutingTableChange() {
-
-      // wait for start() to complete
-      try {
-        startupLatch.await();
-      } catch (InterruptedException e) {
-        logger.warn("Waiting for startup is interrupted.");
-        throw new IllegalStateException(
-            "Replication manager startup is interrupted while handling routing table change");
-      }
-
-      if (leaderBasedReplicationAdmin != null) {
-        // Refreshes the remote leader information for all local leader partitions maintained in the in-mem structure in LeaderBasedReplicationAdmin.
-        // Thread safety is ensured in LeaderBasedReplicationAdmin::refreshPeerLeadersForAllPartitions().
-        leaderBasedReplicationAdmin.refreshPeerLeadersForLeaderPartitions();
-      }
-    }
   }
 
   /**

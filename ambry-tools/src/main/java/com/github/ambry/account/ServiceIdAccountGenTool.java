@@ -14,17 +14,22 @@
 
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.Utils;
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.NonOptionArgumentSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-import org.json.JSONArray;
 import org.json.JSONException;
 
 
@@ -66,7 +71,7 @@ public class ServiceIdAccountGenTool {
       System.exit(0);
     }
     ToolUtils.ensureOrExit(
-        Arrays.asList((OptionSpec) accountJsonFilePathOpt, (OptionSpec) firstAccountIdOpt, (OptionSpec) serviceIdsArg),
+        Arrays.asList(accountJsonFilePathOpt, firstAccountIdOpt, serviceIdsArg),
         options, parser);
     generateAccounts((List<String>) options.nonOptionArguments(), options.valueOf(accountJsonFilePathOpt),
         options.valueOf(firstAccountIdOpt));
@@ -83,8 +88,8 @@ public class ServiceIdAccountGenTool {
    */
   private static void generateAccounts(List<String> serviceIds, String outputFile, short startingAccountId)
       throws JSONException, IOException {
+    Collection<Account> accounts = new ArrayList<>();
     short curAccountId = startingAccountId;
-    JSONArray accounts = new JSONArray();
     for (String serviceId : serviceIds) {
       Container defaultPublicContainer =
           new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(curAccountId).build();
@@ -92,9 +97,11 @@ public class ServiceIdAccountGenTool {
           new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(curAccountId).build();
       Account account = new AccountBuilder(curAccountId, serviceId, Account.AccountStatus.ACTIVE).containers(
           Arrays.asList(defaultPublicContainer, defaultPrivateContainer)).build();
-      accounts.put(account.toJson(true));
+      accounts.add(account);
       curAccountId++;
     }
-    Utils.writeJsonArrayToFile(accounts, outputFile);
+    try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(outputFile))) {
+      new ObjectMapper().writer(new DefaultPrettyPrinter()).writeValue(writer, accounts);
+    }
   }
 }

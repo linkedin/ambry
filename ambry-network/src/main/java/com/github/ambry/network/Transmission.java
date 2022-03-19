@@ -76,7 +76,8 @@ public abstract class Transmission {
   }
 
   protected void initializeNetworkReceive() {
-    networkReceive = new NetworkReceive(getConnectionId(), new BoundedNettyByteBufReceive(), time);
+    networkReceive =
+        new NetworkReceive(getConnectionId(), new BoundedNettyByteBufReceive(config.socketRequestMaxBytes), time);
   }
 
   /**

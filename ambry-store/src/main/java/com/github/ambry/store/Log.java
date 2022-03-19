@@ -212,6 +212,13 @@ class Log implements Write {
   }
 
   /**
+   * @return return the current number of log segment.
+   */
+  int getLogSegmentCount() {
+    return segmentsByName.size();
+  }
+
+  /**
    * This returns the number of unallocated segments for this log. However, this method can only be used when compaction
    * is not running.
    * @return the number of unallocated segments.
@@ -466,7 +473,7 @@ class Log implements Write {
    * @throws StoreException if any store exception occurred as part of ensuring capacity.
    */
   boolean autoCloseLastLogSegmentIfQualified() throws StoreException {
-    if (compactionPolicySwitchInfoCounterValueReached()) {
+    if (compactionPolicySwitchInfoCounterValueReached() && !activeSegment.isEmpty()) {
       //ensure the capacity to open the new log segment and allocate new log segment.
       //if not able to close the last log segment, continue running the compaction.
       try {
@@ -494,11 +501,12 @@ class Log implements Write {
     // this cannot be null since capacity has either been ensured or has thrown.
     LogSegment nextActiveSegment = segmentsByName.higherEntry(activeSegment.getName()).getValue();
     if (isAutoClosed) {
-      logger.info("Auto close last log segment: {} and create new active segment : {}", activeSegment.getName(),
-          nextActiveSegment.getName());
+      logger.info("DataDir: {}, Auto close last log segment: {} and create new active segment : {}", dataDir,
+          activeSegment.getName(), nextActiveSegment.getName());
     } else {
-      logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
-          nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
+      logger.info(
+          "DataDir: {}, Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
+          dataDir, nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
           activeSegment.getCapacityInBytes());
     }
     activeSegment.dropBufferForAppend();

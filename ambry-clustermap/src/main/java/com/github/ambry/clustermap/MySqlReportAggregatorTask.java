@@ -18,13 +18,15 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.server.HostAccountStorageStatsWrapper;
+import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
-import com.github.ambry.server.StatsWrapper;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -50,10 +52,10 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
   public static final ZoneOffset ZONE_OFFSET = ZoneId.systemDefault().getRules().getOffset(LocalDateTime.now());
   public static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
   private static final Logger logger = LoggerFactory.getLogger(MySqlReportAggregatorTask.class);
-  private final HelixClusterAggregator clusterAggregator;
+  private final MySqlClusterAggregator clusterAggregator;
   private final HelixManager manager;
   private final StatsReportType statsReportType;
-  private final Callback<StatsSnapshot> callback;
+  private final Callback<AggregatedAccountStorageStats> callback;
   private final ClusterMapConfig clusterMapConfig;
   private final AccountStatsStore accountStatsStore;
   private final Metrics metrics;
@@ -96,10 +98,10 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
    * @param registry the {@link MetricRegistry}.
    */
   MySqlReportAggregatorTask(HelixManager manager, long relevantTimePeriodInMs, StatsReportType statsReportType,
-      AccountStatsStore accountStatsStore, Callback<StatsSnapshot> callback, ClusterMapConfig clusterMapConfig,
-      MetricRegistry registry) {
+      AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback,
+      ClusterMapConfig clusterMapConfig, MetricRegistry registry) {
     this.manager = manager;
-    clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
+    clusterAggregator = new MySqlClusterAggregator(relevantTimePeriodInMs);
     this.statsReportType = statsReportType;
     this.accountStatsStore = accountStatsStore;
     this.callback = callback;
@@ -110,76 +112,83 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
 
   @Override
   public TaskResult run() {
-    Pair<StatsSnapshot, StatsSnapshot> results = null;
     Exception exception = null;
     Histogram fetchTimeMs = statsReportType == StatsReportType.ACCOUNT_REPORT ? metrics.accountStatsFetchTimeMs
         : metrics.partitionClassStatsFetchTimeMs;
     Histogram aggregationTimeMs =
         statsReportType == StatsReportType.ACCOUNT_REPORT ? metrics.accountStatsAggregationTimeMs
             : metrics.partitionClassStatsAggregationTimeMs;
-    synchronized (accountStatsStore) {
-      long startTimeMs = System.currentTimeMillis();
-      try {
-        List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
-        Map<String, StatsWrapper> statsWrappers =
-            statsReportType == StatsReportType.ACCOUNT_REPORT ? fetchAccountStatsWrapperForInstances(instanceNames)
-                : fetchPartitionClassStatsWrapperForInstances(instanceNames);
+    long startTimeMs = System.currentTimeMillis();
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = null;
+    try {
+      List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
+      if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
+        Map<String, HostAccountStorageStatsWrapper> accountStatsWrappers =
+            fetchAccountStorageStatsWrapperForInstances(instanceNames);
+        fetchTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        logger.info("Aggregating stats from " + accountStatsWrappers.size() + " hosts");
+        Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> results =
+            clusterAggregator.aggregateHostAccountStorageStatsWrappers(accountStatsWrappers);
+        if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+          removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
+        }
+        accountStatsStore.storeAggregatedAccountStorageStats(results.getSecond());
+        aggregatedAccountStorageStats = results.getFirst();
+      } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
+        Map<String, HostPartitionClassStorageStatsWrapper> statsWrappers =
+            fetchPartitionClassStorageStatsWrapperForInstances(instanceNames);
         fetchTimeMs.update(System.currentTimeMillis() - startTimeMs);
         logger.info("Aggregating stats from " + statsWrappers.size() + " hosts");
-        results = clusterAggregator.doWorkOnStatsWrapperMap(statsWrappers, statsReportType);
-        if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
-          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
-            removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
-          }
-          accountStatsStore.storeAggregatedAccountStats(results.getSecond());
-        } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
-          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
-            removeInvalidAggregatedPartitionClassStats(results.getSecond());
-          }
-          accountStatsStore.storeAggregatedPartitionClassStats(results.getSecond());
+        Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> results =
+            clusterAggregator.aggregateHostPartitionClassStorageStatsWrappers(statsWrappers);
+        if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+          removeInvalidAggregatedPartitionClassStats(results.getSecond());
         }
+        accountStatsStore.storeAggregatedPartitionClassStorageStats(results.getSecond());
+      }
 
-        // Create a base report at the beginning of each month.
-        // Check if there is a base report for this month or not.
-        if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
-            && statsReportType == StatsReportType.ACCOUNT_REPORT) {
-          // Get the month, if not the same month, then copy the aggregated stats and update the month
-          String currentMonthValue =
-              LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET).format(TIMESTAMP_FORMATTER);
-          String recordedMonthValue = accountStatsStore.queryRecordedMonth();
-          if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
-              recordedMonthValue)) {
-            if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
-              accountStatsStore.deleteSnapshotOfAggregatedAccountStats();
-            }
-            logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
-            accountStatsStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonthValue);
+      // Create a base report at the beginning of each month.
+      // Check if there is a base report for this month or not.
+      if (clusterMapConfig.clustermapEnableAggregatedMonthlyAccountReport
+          && statsReportType == StatsReportType.ACCOUNT_REPORT) {
+        // Get the month, if not the same month, then copy the aggregated stats and update the month
+        String currentMonthValue =
+            LocalDateTime.ofEpochSecond(time.seconds(), 0, ZONE_OFFSET).format(TIMESTAMP_FORMATTER);
+        String recordedMonthValue = accountStatsStore.queryRecordedMonth();
+        if (recordedMonthValue == null || recordedMonthValue.isEmpty() || !currentMonthValue.equals(
+            recordedMonthValue)) {
+          if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
+            accountStatsStore.deleteSnapshotOfAggregatedAccountStats();
           }
+          logger.info("Taking snapshot of aggregated stats for month " + currentMonthValue);
+          accountStatsStore.takeSnapshotOfAggregatedAccountStatsAndUpdateMonth(currentMonthValue);
         }
-        aggregationTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
-      } catch (Exception e) {
-        logger.error("Exception thrown while aggregating stats from container stats reports across all nodes ", e);
-        exception = e;
-        return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
-      } finally {
-        accountStatsStore.closeConnection();
-        if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null && results != null
-            && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
-          callback.onCompletion(results.getFirst(), exception);
-        }
+      }
+      aggregationTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
+    } catch (Exception e) {
+      logger.error("Exception thrown while aggregating stats from container stats reports across all nodes ", e);
+      exception = e;
+      return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
+    } finally {
+      if (clusterMapConfig.clustermapEnableContainerDeletionAggregation && callback != null
+          && aggregatedAccountStorageStats != null && statsReportType.equals(StatsReportType.ACCOUNT_REPORT)) {
+        callback.onCompletion(aggregatedAccountStorageStats, exception);
       }
     }
   }
 
-  private void removeInvalidAggregatedAccountAndContainerStats(StatsSnapshot currentStats) throws Exception {
-    Map<String, Map<String, Long>> existingStats = accountStatsStore.queryAggregatedAccountStats();
+  private void removeInvalidAggregatedAccountAndContainerStats(AggregatedAccountStorageStats currentStats)
+      throws Exception {
+    AggregatedAccountStorageStats existingStats = accountStatsStore.queryAggregatedAccountStorageStats();
     List<Pair<Short, Short>> toBeDeletedAccountAndContainers = new ArrayList<>();
-    for (Map.Entry<String, Map<String, Long>> accountEntry : existingStats.entrySet()) {
-      short accountId = Short.valueOf(accountEntry.getKey());
-      for (String containerIdStr : accountEntry.getValue().keySet()) {
-        short containerId = Short.valueOf(containerIdStr);
-        if (!accountAndContainerExistsInStatsSnapshot(currentStats, accountId, containerId)) {
+    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> accountEntry : existingStats.getStorageStats()
+        .entrySet()) {
+      short accountId = accountEntry.getKey();
+      for (short containerId : accountEntry.getValue().keySet()) {
+        if (!currentStats.getStorageStats().containsKey(accountId) || !currentStats.getStorageStats()
+            .get(accountId)
+            .containsKey(containerId)) {
           toBeDeletedAccountAndContainers.add(new Pair<>(accountId, containerId));
         }
       }
@@ -191,81 +200,69 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     }
   }
 
-  private void removeInvalidAggregatedPartitionClassStats(StatsSnapshot currentStats) throws Exception {
-    List<Pair<String, String>> toBeDeletedPartitionClassNameAndAccountContainer = new ArrayList<>();
-    StatsSnapshot existingStats = accountStatsStore.queryAggregatedPartitionClassStats();
-    for (Map.Entry<String, StatsSnapshot> partitionClassEntry : existingStats.getSubMap().entrySet()) {
-      String partitionClassName = partitionClassEntry.getKey();
-      for (String accountContainerKey : partitionClassEntry.getValue().getSubMap().keySet()) {
-        if (!partitionClassNameAndAccountContainerExistsInStatsSnapshot(currentStats, partitionClassName,
-            accountContainerKey)) {
-          toBeDeletedPartitionClassNameAndAccountContainer.add(new Pair<>(partitionClassName, accountContainerKey));
+  private void removeInvalidAggregatedPartitionClassStats(AggregatedPartitionClassStorageStats currentStats)
+      throws Exception {
+    List<Pair<String, Pair<Short, Short>>> toBeDeletedPartitionClassNameAndAccountContainer = new ArrayList<>();
+    AggregatedPartitionClassStorageStats existingStats = accountStatsStore.queryAggregatedPartitionClassStorageStats();
+    for (String partitionClassName : existingStats.getStorageStats().keySet()) {
+      Map<Short, Map<Short, ContainerStorageStats>> currentAccountMap =
+          currentStats.getStorageStats().get(partitionClassName);
+      for (Map.Entry<Short, Map<Short, ContainerStorageStats>> accountEntry : existingStats.getStorageStats()
+          .get(partitionClassName)
+          .entrySet()) {
+        short accountId = accountEntry.getKey();
+        for (short containerId : accountEntry.getValue().keySet()) {
+          if (currentAccountMap == null || !currentAccountMap.containsKey(accountId) || !currentAccountMap.get(
+              accountId).containsKey(containerId)) {
+            toBeDeletedPartitionClassNameAndAccountContainer.add(
+                new Pair<>(partitionClassName, new Pair<>(accountId, containerId)));
+          }
         }
       }
     }
-    for (Pair<String, String> pair : toBeDeletedPartitionClassNameAndAccountContainer) {
-      accountStatsStore.deleteAggregatedPartitionClassStatsForAccountContainer(pair.getFirst(), pair.getSecond());
+    for (Pair<String, Pair<Short, Short>> pair : toBeDeletedPartitionClassNameAndAccountContainer) {
+      Pair<Short, Short> accountContainerId = pair.getSecond();
+      accountStatsStore.deleteAggregatedPartitionClassStatsForAccountContainer(pair.getFirst(),
+          accountContainerId.getFirst(), accountContainerId.getSecond());
     }
-  }
-
-  private boolean accountAndContainerExistsInStatsSnapshot(StatsSnapshot snapshot, short accountId, short containerId) {
-    if (snapshot == null || snapshot.getSubMap() == null) {
-      return false;
-    }
-    if (!snapshot.getSubMap().containsKey(Utils.statsAccountKey(accountId))) {
-      return false;
-    }
-    StatsSnapshot containerSnapshot = snapshot.getSubMap().get(Utils.statsAccountKey(accountId));
-    return containerSnapshot.getSubMap() != null && containerSnapshot.getSubMap()
-        .containsKey(Utils.statsContainerKey(containerId));
-  }
-
-  private boolean partitionClassNameAndAccountContainerExistsInStatsSnapshot(StatsSnapshot snapshot,
-      String partitionClassName, String accountContainerKey) {
-    if (snapshot == null || snapshot.getSubMap() == null) {
-      return false;
-    }
-    if (!snapshot.getSubMap().containsKey(partitionClassName)) {
-      return false;
-    }
-    StatsSnapshot accountContainerSnapshot = snapshot.getSubMap().get(partitionClassName);
-    return accountContainerSnapshot.getSubMap() != null && accountContainerSnapshot.getSubMap()
-        .containsKey(accountContainerKey);
   }
 
   /**
-   * Fetch account stats report for each instance in {@code instanceNames}. Each instance name is probably a fully qualified
+   * Fetch account storage stats report for each instance in {@code instanceNames}. Each instance name is probably a fully qualified
    * hostname with port number like this [hostname_portnumber]. It returns a map whose key is the instanceName and the value
-   * is the account {@link StatsWrapper} for each instance.
+   * is the {@link HostAccountStorageStatsWrapper} for each instance.
    * @param instanceNames The list of instance names to fetch account StatsWrapper.
-   * @return A map of StatsWrapper for each instance name.
+   * @return A map of {@link HostAccountStorageStatsWrapper} for each instance name.
    * @throws Exception
    */
-  private Map<String, StatsWrapper> fetchAccountStatsWrapperForInstances(List<String> instanceNames) throws Exception {
-    Map<String, StatsWrapper> statsWrappers = new HashMap<>();
+  private Map<String, HostAccountStorageStatsWrapper> fetchAccountStorageStatsWrapperForInstances(
+      List<String> instanceNames) throws Exception {
+    Map<String, HostAccountStorageStatsWrapper> statsWrappers = new HashMap<>();
     for (String instanceName : instanceNames) {
       Pair<String, Integer> pair = getHostNameAndPort(instanceName);
-      statsWrappers.put(instanceName, accountStatsStore.queryAccountStatsByHost(pair.getFirst(), pair.getSecond()));
+      statsWrappers.put(instanceName,
+          accountStatsStore.queryHostAccountStorageStatsByHost(pair.getFirst(), pair.getSecond()));
     }
     return statsWrappers;
   }
 
   /**
-   * Fetch partition class stats report for each instance in {@code instanceNames}. Each instance name is probably a fully qualified
+   * Fetch partition class storage stats report for each instance in {@code instanceNames}. Each instance name is probably a fully qualified
    * hostname with port number like this [hostname_portnumber]. It returns a map whose key is the instanceName and the value
-   * is the partition class {@link StatsWrapper} for each instance.
+   * is the {@link HostPartitionClassStorageStatsWrapper} for each instance.
    * @param instanceNames The list of instance names to fetch partition class StatsWrapper.
-   * @return A map of StatsWrapper for each instance name.
+   * @return A map of {@link HostPartitionClassStorageStatsWrapper} for each instance name.
    * @throws Exception
    */
-  private Map<String, StatsWrapper> fetchPartitionClassStatsWrapperForInstances(List<String> instanceNames)
-      throws Exception {
-    Map<String, StatsWrapper> statsWrappers = new HashMap<>();
+  private Map<String, HostPartitionClassStorageStatsWrapper> fetchPartitionClassStorageStatsWrapperForInstances(
+      List<String> instanceNames) throws Exception {
+    Map<String, HostPartitionClassStorageStatsWrapper> statsWrappers = new HashMap<>();
     Map<String, Set<Integer>> partitionNameAndIds = accountStatsStore.queryPartitionNameAndIds();
     for (String instanceName : instanceNames) {
       Pair<String, Integer> pair = getHostNameAndPort(instanceName);
       statsWrappers.put(instanceName,
-          accountStatsStore.queryPartitionClassStatsByHost(pair.getFirst(), pair.getSecond(), partitionNameAndIds));
+          accountStatsStore.queryHostPartitionClassStorageStatsByHost(pair.getFirst(), pair.getSecond(),
+              partitionNameAndIds));
     }
     return statsWrappers;
   }

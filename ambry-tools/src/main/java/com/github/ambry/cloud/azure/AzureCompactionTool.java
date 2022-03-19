@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -133,12 +134,23 @@ public class AzureCompactionTool {
     }
 
     @Override
+    public long getId()  {
+      return -1;
+    }
+
+    @Override
     public List<? extends ReplicaId> getReplicaIds() {
       return null;
     }
 
     @Override
     public List<? extends ReplicaId> getReplicaIdsByState(ReplicaState state, String dcName) {
+      return null;
+    }
+
+    @Override
+    public Map<ReplicaState, ? extends List<? extends ReplicaId>> getReplicaIdsByStates(Set<ReplicaState> states,
+        String dcName) {
       return null;
     }
 

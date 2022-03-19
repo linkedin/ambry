@@ -95,6 +95,25 @@ class CloudServiceClusterChangeHandler implements ClusterMapChangeListener, Clus
   }
 
   @Override
+  public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, Set<ReplicaState> states,
+      AmbryPartition partition) {
+    // Add CloudServiceReplica to LEADER list or STANDBY list only, assuming CloudServiceReplica is always on.
+    if (states.contains(ReplicaState.LEADER)) {
+      replicasByState.put(ReplicaState.LEADER,
+          Collections.singletonList(partitionToReplica.get(partition.toPathString())));
+    } else if (states.contains(ReplicaState.STANDBY)) {
+      replicasByState.put(ReplicaState.STANDBY,
+          Collections.singletonList(partitionToReplica.get(partition.toPathString())));
+    }
+
+    for (ReplicaState replicaState : states) {
+      if (replicaState != ReplicaState.LEADER && replicaState != ReplicaState.STANDBY) {
+        replicasByState.put(replicaState, Collections.emptyList());
+      }
+    }
+  }
+
+  @Override
   public Map<AmbryDataNode, Set<AmbryDisk>> getDataNodeToDisksMap() {
     return Collections.emptyMap();
   }

@@ -94,14 +94,15 @@ public class AzureBlobDataAccessor {
    * @param blobBatchClient the {@link BlobBatchClient} to use.
    * @param clusterName the cluster name to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
   AzureBlobDataAccessor(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient, String clusterName,
-      AzureMetrics azureMetrics) {
+      AzureMetrics azureMetrics, AzureCloudConfig azureCloudConfig) {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     try {
       this.storageClient =
           Utils.getObj(AzureCloudConfig.DEFAULT_AZURE_STORAGE_CLIENT_CLASS, blobServiceClient, blobBatchClient,
-              azureMetrics, blobLayoutStrategy);
+              azureMetrics, blobLayoutStrategy, azureCloudConfig);
     } catch (ReflectiveOperationException roEx) {
       throw new IllegalArgumentException("Unable to instantiate storage client: " + roEx.getMessage(), roEx);
     }

@@ -86,6 +86,9 @@ public class UndeleteOperationTracker extends SimpleOperationTracker {
 
   @Override
   public boolean hasFailed() {
+    if (quotaRejected) {
+      return true;
+    }
     return hasReachedAnyLocalQuorum(numReplicasInDcs, numFailureInDcs);
   }
 

@@ -13,10 +13,10 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.commons.Callback;
 import com.github.ambry.accountstats.AccountStatsStore;
-import com.github.ambry.server.AmbryHealthReport;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.commons.Callback;
+import com.github.ambry.server.AmbryStatsReport;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,7 +72,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
     if (mockClusterMap == null) {
       mockClusterMap =
           new MockClusterMap(enableSslPorts, enableHttp2Ports, numNodes, numMountPointsPerNode, numStoresPerMountPoint,
-              false, false);
+              false, false, null);
     }
     return mockClusterMap;
   }
@@ -85,8 +85,8 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
             registeredPartitionStateChangeListeners = new HashMap<>();
 
         @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports, AccountStatsStore accountStatsStore,
-            Callback<StatsSnapshot> callback) {
+        public void participate(List<AmbryStatsReport> ambryHealthReports, AccountStatsStore accountStatsStore,
+            Callback<AggregatedAccountStorageStats> callback) {
           for (String partitionName : partitionLeadershipList) {
             for (PartitionStateChangeListener partitionStateChangeListener : registeredPartitionStateChangeListeners.values()) {
               partitionStateChangeListener.onPartitionBecomeLeaderFromStandby(partitionName);

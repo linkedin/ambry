@@ -23,8 +23,8 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -189,8 +189,8 @@ public class NamedBlobPutHandler {
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
-                  true));
+              routerPutBlobCallback(blobInfo),
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -219,8 +219,9 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback(blobInfo), QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager,
-                  true)), uri, LOGGER, finalCallback);
+              routerStitchBlobCallback(blobInfo),
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)), uri, LOGGER,
+          finalCallback);
     }
 
     /**
@@ -250,10 +251,8 @@ public class NamedBlobPutHandler {
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
           retryExecutor.runWithRetries(retryPolicy,
-              callback ->
-                  router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                      QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false)),
-              this::isRetriable,
+              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
               routerTtlUpdateCallback(blobInfo));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
@@ -338,7 +337,7 @@ public class NamedBlobPutHandler {
      * @return the {@link PutBlobOptions} to use, parsed from the request.
      */
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
-      PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(false);
+      PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(false).restRequest(restRequest);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);

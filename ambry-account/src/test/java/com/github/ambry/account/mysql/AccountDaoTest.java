@@ -14,6 +14,7 @@
 package com.github.ambry.account.mysql;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
@@ -48,6 +49,7 @@ import static org.mockito.Mockito.*;
 /** Unit test for AccountDao class */
 @RunWith(MockitoJUnitRunner.class)
 public class AccountDaoTest {
+  private static final ObjectMapper objectMapper = new ObjectMapper();
   private final short accountId = 101;
   private final Account testAccount;
   private final Container testContainer;
@@ -61,12 +63,14 @@ public class AccountDaoTest {
   private final PreparedStatement mockContainerQueryStatement;
   private final PreparedStatement mockContainerUpdateStatement;
 
-  public AccountDaoTest() throws SQLException {
+  public AccountDaoTest() throws Exception {
+    long lastModifiedTime = SystemTime.getInstance().milliseconds();
     metrics = new MySqlMetrics(MySqlAccountStore.class, new MetricRegistry());
     testContainer =
         new ContainerBuilder((short) 1, "state-backup", Container.ContainerStatus.ACTIVE, "", accountId).build();
     testAccount =
         new AccountBuilder(accountId, "samza", Account.AccountStatus.ACTIVE).addOrUpdateContainer(testContainer)
+            .lastModifiedTime(lastModifiedTime)
             .build();
     testAccountInfo = new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
         new ArrayList<>());
@@ -76,7 +80,7 @@ public class AccountDaoTest {
     accountDao = new AccountDao(dataAccessor);
 
     //Account mock statements
-    String accountJson = AccountCollectionSerde.accountToJsonNoContainers(testAccount).toString();
+    String accountJson = new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(testAccount));
     mockAccountInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into Accounts"))).thenReturn(mockAccountInsertStatement);
     when(mockAccountInsertStatement.executeBatch()).thenReturn(new int[]{1});
@@ -89,11 +93,11 @@ public class AccountDaoTest {
     when(mockAccountResultSet.next()).thenReturn(true).thenReturn(false);
     when(mockAccountResultSet.getString(eq(AccountDao.ACCOUNT_INFO))).thenReturn(accountJson);
     when(mockAccountResultSet.getTimestamp(eq(AccountDao.LAST_MODIFIED_TIME))).thenReturn(
-        new Timestamp(SystemTime.getInstance().milliseconds()));
+        new Timestamp(lastModifiedTime));
     when(mockAccountQueryStatement.executeQuery()).thenReturn(mockAccountResultSet);
 
     // Container mock statements
-    String containerJson = testContainer.toJson().toString();
+    String containerJson = objectMapper.writeValueAsString(testContainer);
     mockContainerInsertStatement = mock(PreparedStatement.class);
     when(mockConnection.prepareStatement(contains("insert into Containers"))).thenReturn(mockContainerInsertStatement);
     when(mockContainerInsertStatement.executeBatch()).thenReturn(new int[]{1});

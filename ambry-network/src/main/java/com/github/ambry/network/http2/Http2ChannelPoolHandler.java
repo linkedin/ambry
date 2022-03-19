@@ -45,19 +45,29 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
   private final int port;
   private final Http2ClientConfig http2ClientConfig;
   private final ConnectionInboundExceptionHandler connectionInboundExceptionHandler;
-
+  private final Http2ClientMetrics http2ClientMetrics;
+  private final Http2PeerCertificateValidator http2PeerCertificateValidator;
   /**
    * Construct a {@link Http2ChannelPoolHandler}.
    * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    * @param http2ClientConfig the {@link Http2ClientConfig}
+   * @param http2ClientMetrics the {@link Http2ClientMetrics}
    */
-  public Http2ChannelPoolHandler(SSLFactory sslFactory, String host, int port, Http2ClientConfig http2ClientConfig) {
+  public Http2ChannelPoolHandler(SSLFactory sslFactory, String host, int port, Http2ClientConfig http2ClientConfig,
+      Http2ClientMetrics http2ClientMetrics) {
     this.sslFactory = sslFactory;
     this.host = host;
     this.port = port;
     this.http2ClientConfig = http2ClientConfig;
     this.connectionInboundExceptionHandler = new ConnectionInboundExceptionHandler();
+    this.http2ClientMetrics = http2ClientMetrics;
+    if (!http2ClientConfig.http2PeerCertificateSanRegex.trim().isEmpty()) {
+      this.http2PeerCertificateValidator =
+          new Http2PeerCertificateValidator(http2ClientConfig.http2PeerCertificateSanRegex, http2ClientMetrics);
+    } else {
+      this.http2PeerCertificateValidator = null;
+    }
   }
 
   @Override
@@ -65,6 +75,9 @@ public class Http2ChannelPoolHandler extends AbstractChannelPoolHandler {
     ChannelPipeline pipeline = ch.pipeline();
     SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT));
     pipeline.addLast(sslHandler);
+    if (http2PeerCertificateValidator != null) {
+      pipeline.addLast(http2PeerCertificateValidator);
+    }
     pipeline.addLast(Http2FrameCodecBuilder.forClient()
         .initialSettings(Http2Settings.defaultSettings()
             .maxFrameSize(http2ClientConfig.http2FrameMaxSize)

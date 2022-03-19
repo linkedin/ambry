@@ -508,7 +508,7 @@ public class AmbryServerRequests extends AmbryRequests {
         error = ServerErrorCode.Unknown_Error;
       }
       // After store is shut down and stopped state is updated, we also need to temporarily disable this replica if Helix
-      // is adopted. The intention here is to make Helix re-elect leader replica if necessary.
+      // is adopted. The intention here is to force Helix to re-elect a new leader replica if necessary.
       if (storeManager instanceof StorageManager && clusterParticipant != null) {
         // Previous operation has guaranteed the store is not null
         Store store = ((StorageManager) storeManager).getStore(partitionId, true);

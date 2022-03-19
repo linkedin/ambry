@@ -13,24 +13,24 @@
  */
 package com.github.ambry.network.http2;
 
+import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.Send;
-import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.pool.ChannelPool;
 import io.netty.util.AttributeKey;
-import io.netty.util.concurrent.Promise;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.GeneralSecurityException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -44,13 +44,17 @@ import org.slf4j.LoggerFactory;
  */
 public class Http2BlockingChannel implements ConnectedChannel {
   private static final Logger logger = LoggerFactory.getLogger(Http2BlockingChannel.class);
-  private final Http2MultiplexedChannelPool http2MultiplexedChannelPool;
+  private final ChannelPool channelPool;
   private final Http2ClientConfig http2ClientConfig;
-  final static AttributeKey<Promise<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
+  private final InetSocketAddress inetSocketAddress;
+  final static AttributeKey<CompletableFuture<ByteBuf>> RESPONSE_PROMISE = AttributeKey.newInstance("ResponsePromise");
+  final static AttributeKey<ChannelPool> CHANNEL_POOL_ATTRIBUTE_KEY = AttributeKey.newInstance("ChannelPool");
 
-  public Http2BlockingChannel(Http2MultiplexedChannelPool http2MultiplexedChannelPool) {
-    this.http2MultiplexedChannelPool = http2MultiplexedChannelPool;
-    this.http2ClientConfig = http2MultiplexedChannelPool.getHttp2ClientConfig();
+  public Http2BlockingChannel(ChannelPool channelPool, InetSocketAddress inetSocketAddress,
+      Http2ClientConfig http2ClientConfig) {
+    this.channelPool = channelPool;
+    this.inetSocketAddress = inetSocketAddress;
+    this.http2ClientConfig = http2ClientConfig;
   }
 
   /**
@@ -65,11 +69,10 @@ public class Http2BlockingChannel implements ConnectedChannel {
       throw new IllegalStateException("Can't create NettySslHttp2Factory: ", e);
     }
     this.http2ClientConfig = http2ClientConfig;
-    this.http2MultiplexedChannelPool =
-        new Http2MultiplexedChannelPool(new InetSocketAddress(hostName, port), nettySslHttp2Factory,
-            Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
-            http2ClientMetrics,
-            new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig));
+    this.inetSocketAddress = new InetSocketAddress(hostName, port);
+    this.channelPool = new Http2MultiplexedChannelPool(this.inetSocketAddress, nettySslHttp2Factory,
+        Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup(), http2ClientConfig,
+        http2ClientMetrics, new Http2BlockingChannelStreamChannelInitializer(http2ClientConfig));
   }
 
   @Override
@@ -100,22 +103,33 @@ public class Http2BlockingChannel implements ConnectedChannel {
   public ChannelOutput sendAndReceive(Send request) throws IOException {
     Channel streamChannel;
     try {
-      streamChannel = http2MultiplexedChannelPool.acquire()
-          .get(http2ClientConfig.http2BlockingChannelAcquireTimeoutMs, TimeUnit.MILLISECONDS);
+      streamChannel =
+          channelPool.acquire().get(http2ClientConfig.http2BlockingChannelAcquireTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (Exception e) {
       throw new IOException("Can't acquire stream channel from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
 
-    Promise<ByteBuf> responsePromise = streamChannel.eventLoop().newPromise();
+    CompletableFuture<ByteBuf> responsePromise = new CompletableFuture<ByteBuf>();
     streamChannel.attr(RESPONSE_PROMISE).set(responsePromise);
-    streamChannel.writeAndFlush(request)
+    streamChannel.attr(CHANNEL_POOL_ATTRIBUTE_KEY).set(channelPool);
+    boolean success = streamChannel.writeAndFlush(request)
         .awaitUninterruptibly(http2ClientConfig.http2BlockingChannelSendTimeoutMs, TimeUnit.MILLISECONDS);
+    if (!success) {
+      if (streamChannel.attr(RESPONSE_PROMISE).getAndSet(null) != null) {
+        channelPool.release(streamChannel);
+      }
+      throw new IOException(
+          "Failed to write and flush request on time, from " + getRemoteHost() + ":" + getRemotePort());
+    }
 
     ByteBuf responseByteBuf;
     try {
       responseByteBuf =
           responsePromise.get(http2ClientConfig.http2BlockingChannelReceiveTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      if (streamChannel.attr(RESPONSE_PROMISE).getAndSet(null) != null) {
+        channelPool.release(streamChannel);
+      }
       throw new IOException("Failed to receive response from " + getRemoteHost() + ":" + getRemotePort(), e);
     }
     NettyByteBufDataInputStream dataInputStream = new NettyByteBufDataInputStream(responseByteBuf);
@@ -126,11 +140,11 @@ public class Http2BlockingChannel implements ConnectedChannel {
 
   @Override
   public String getRemoteHost() {
-    return http2MultiplexedChannelPool.getInetSocketAddress().getHostName();
+    return inetSocketAddress.getHostName();
   }
 
   @Override
   public int getRemotePort() {
-    return http2MultiplexedChannelPool.getInetSocketAddress().getPort();
+    return inetSocketAddress.getPort();
   }
 }

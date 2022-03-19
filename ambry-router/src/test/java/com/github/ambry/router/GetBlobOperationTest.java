@@ -31,6 +31,7 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobAll;
@@ -156,7 +157,7 @@ public class GetBlobOperationTest {
 
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToGetOperation);
-  private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createDummyQuotaChargeEventListener();
+  private final QuotaTestUtils.TestQuotaChargeCallback quotaChargeCallback;
 
   /**
    * A checker that either asserts that a get operation succeeds or returns the specified error code.
@@ -192,9 +193,11 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false},
-        {AdaptiveOperationTracker.class.getSimpleName(), false},
-        {AdaptiveOperationTracker.class.getSimpleName(), true}});
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false, false},
+        {SimpleOperationTracker.class.getSimpleName(), false, true},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, true},
+        {AdaptiveOperationTracker.class.getSimpleName(), true, false}});
   }
 
   /**
@@ -202,8 +205,16 @@ public class GetBlobOperationTest {
    * and can be queried by the getBlob operations in the test.
    * @param operationTrackerType the type of {@link OperationTracker} to use.
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   * @param isBandwidthThrottlingEnabled value for
+   * {@link com.github.ambry.config.QuotaConfig#bandwidthThrottlingFeatureEnabled}.
    */
-  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
+  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean isBandwidthThrottlingEnabled)
+      throws Exception {
+    Properties properties = new Properties();
+    properties.setProperty(QuotaConfig.BANDWIDTH_THROTTLING_FEATURE_ENABLED,
+        String.valueOf(isBandwidthThrottlingEnabled));
+    QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
+    quotaChargeCallback = QuotaTestUtils.createTestQuotaChargeCallback(quotaConfig);
     this.operationTrackerType = operationTrackerType;
     this.testEncryption = testEncryption;
     // Defaults. Tests may override these and do new puts as appropriate.
@@ -283,7 +294,7 @@ public class GetBlobOperationTest {
       FutureResult<EncryptJob.EncryptJobResult> futureResult = new FutureResult<>();
       cryptoJobHandler.submitJob(new EncryptJob(blobProperties.getAccountId(), blobProperties.getContainerId(),
           blobType == BlobType.MetadataBlob ? null : blobContent.retainedDuplicate(), userMetadataBuf.duplicate(),
-          kms.getRandomKey(), cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
+          kms.getRandomKey(), cryptoService, kms, null, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
           futureResult::done));
       EncryptJob.EncryptJobResult result = futureResult.get(5, TimeUnit.SECONDS);
       blobEncryptionKey = result.getEncryptedKey();
@@ -375,6 +386,9 @@ public class GetBlobOperationTest {
       options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(operationType).build(), false,
           routerMetrics.ageAtGet);
       getAndAssertSuccess(false, false, expectedLifeVersion);
+      if (!quotaChargeCallback.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
+        Assert.assertEquals(i + 1, quotaChargeCallback.numChargeCalls);
+      }
     }
   }
 

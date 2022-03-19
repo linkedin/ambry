@@ -34,9 +34,17 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.Crc32Impl;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.quota.Chargeable;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaMethod;
+import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.NettyRequest;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -45,11 +53,13 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
@@ -154,6 +164,12 @@ class PutOperation {
   private long waitTimeForCurrentChunkAvailabilityMs;
   // The time spent by a chunk for data to be available in the channel.
   private long waitTimeForChannelDataAvailabilityMs;
+  // The set of slipped blob ids generated during the put operation.
+  private Set<BlobId> slippedPutBlobIds = new HashSet<>();
+
+  // Variables to keep track of netty chunks
+  private final RestRequest restRequest;
+  private final String loggingContext;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -289,6 +305,8 @@ class PutOperation {
     metadataPutChunk = new MetadataPutChunk();
     chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
+    restRequest = options.getRestRequest();
+    loggingContext = makeLoggingContext();
   }
 
   /**
@@ -332,6 +350,7 @@ class PutOperation {
     // the chunk filling process for this PutOperation is finished.
     channel.readInto(chunkFillerChannel, (result, exception) -> {
       if (exception != null) {
+        logger.info("{}: ChannelRead has exception, will terminate the operation", loggingContext, exception);
         setOperationExceptionAndComplete(exception);
         routerCallback.onPollReady();
       } else {
@@ -441,8 +460,9 @@ class PutOperation {
   /**
    * release all the chunk {@link ByteBuf} resource when the operation is done.
    */
-  private void releaseResource() {
+  private synchronized void clearReadyChunks() {
     for (PutChunk chunk : putChunks) {
+      logger.debug("{}: Chunk {} state: {}", loggingContext, chunk.getChunkIndex(), chunk.getState());
       // Only release the chunk in ready or complete mode. Filler thread will release the chunk in building mode
       // and the encryption thread will release the chunk in encrypting mode.
       if (chunk.isReady() || chunk.isComplete()) {
@@ -451,9 +471,31 @@ class PutOperation {
     }
   }
 
+  /**
+   * Release the blob content of chunks, including building chunk, excluding encrypted chunks since encrypted chunks have
+   * other thread to release the data.
+   */
+  private synchronized void releaseDataForAllChunks() {
+    for (PutChunk chunk : putChunks) {
+      if (chunk.isBuilding() || chunk.isReady() || chunk.isComplete()) {
+        logger.info("{}: Clear unfinished chunk {} {} since operation is completed", loggingContext,
+            chunk.getChunkIndex(), chunk.getState());
+        chunk.releaseBlobContent();
+      }
+    }
+  }
+
   void setOperationCompleted() {
     operationCompleted = true;
-    releaseResource();
+    clearReadyChunks();
+  }
+
+  /**
+   * Clean up the chunks to release any data buffer. This should be invoked when terminating the operation with
+   * an exception.
+   */
+  public void cleanupChunks() {
+    releaseDataForAllChunks();
   }
 
   /**
@@ -495,7 +537,7 @@ class PutOperation {
   void handleResponse(ResponseInfo responseInfo, PutResponse putResponse) {
     int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
     PutChunk putChunk = correlationIdToPutChunk.remove(correlationId);
-    logger.debug("Handling response for {}", correlationId);
+    logger.debug("{}: Handling response for {}", loggingContext, correlationId);
     putChunk.handleResponse(responseInfo, putResponse);
     if (putChunk.isComplete()) {
       onChunkOperationComplete(putChunk);
@@ -512,22 +554,23 @@ class PutOperation {
     if (chunk.getChunkBlobId() == null) {
       // the overall operation has failed if any of the chunk fails.
       if (chunk.getChunkException() == null) {
-        logger.error("Operation on chunk failed, but no exception was set");
+        logger.error("{}: Operation on chunk failed, but no exception was set", loggingContext);
       }
-      logger.error("Failed putting chunk at index: {}, failing the entire operation", chunk.getChunkIndex());
+      logger.error("{}: Failed putting chunk at index: {}, failing the entire operation", loggingContext,
+          chunk.getChunkIndex());
       setOperationCompleted();
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
-      logger.trace("Successfully put data chunk with blob id : {}", chunk.getChunkBlobId());
+      logger.trace("{}: Successfully put data chunk with blob id : {}", loggingContext, chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkBlobSize, chunk.chunkIndex);
       metadataPutChunk.maybeNotifyForChunkCreation(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
       if (chunk.failedAttempts > 0) {
-        logger.trace("Slipped put succeeded for chunk: {}", chunk.getChunkBlobId());
+        logger.trace("{}: Slipped put succeeded for chunk: {}", loggingContext, chunk.getChunkBlobId());
         routerMetrics.slippedPutSuccessCount.inc();
       } else {
-        logger.trace("Successfully put chunk: {} ", chunk.getChunkBlobId());
+        logger.trace("{}: Successfully put chunk: {} ", loggingContext, chunk.getChunkBlobId());
       }
       setOperationCompleted();
     }
@@ -598,7 +641,8 @@ class PutOperation {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
           if (chunkCounter != 0 && lastChunk.buf.readableBytes() == 0) {
-            logger.trace("The last buffer(s) received from chunkFillerChannel have no data, discarding them.");
+            logger.trace("{}: The last buffer(s) received from chunkFillerChannel have no data, discarding them.",
+                loggingContext);
             lastChunk.releaseBlobContent();
             lastChunk.state = ChunkState.Free;
           } else {
@@ -611,12 +655,11 @@ class PutOperation {
         }
       }
       if (operationCompleted) {
-        PutChunk lastChunk = getBuildingChunk();
-        if (lastChunk != null) {
-          logger.info("Clear unfinished chunk since operation is completed");
-          // call release blob content, not clear, since clear should only be used in the main thread.
-          lastChunk.releaseBlobContent();
-        }
+        logger.debug("{}: Operation terminated, now try to clean up chunks", loggingContext);
+        // Go over the put chunk list and release building, ready and complete chunks. This is because the multi-threading.
+        // We have callback in chunk.readInto to release all the ready and complete chunks but that's in different
+        // thread. There might a chance when callback runs, the last chunk is still building and then change to complete.
+        releaseDataForAllChunks();
       }
     } catch (Exception e) {
       RouterException routerException = e instanceof RouterException ? (RouterException) e
@@ -638,6 +681,22 @@ class PutOperation {
    */
   List<PutChunk> getPutChunks() {
     return new ArrayList<>(putChunks);
+  }
+
+  /**
+   * Appends the given slipped chunk blob id onto the {@code slippedPutBlobIds}.
+   * @param chunkBlobId The slipped chunk blob id.
+   */
+  synchronized private void appendSlippedPutBlobId(BlobId chunkBlobId) {
+    slippedPutBlobIds.add(chunkBlobId);
+  }
+
+  /**
+   *
+   * @return the set of slipped chunk blob ids.
+   */
+  Set<BlobId> getSlippedPutBlobIds() {
+    return slippedPutBlobIds;
   }
 
   /**
@@ -937,7 +996,7 @@ class PutOperation {
    * handles a chunk of data and takes it to completion, and once done, moves on to handle more chunks of data. This
    * why there is a reference to the "current chunk" in the comments.
    */
-  class PutChunk {
+  class PutChunk implements Chargeable {
     // the position of the current chunk in the overall blob.
     private int chunkIndex;
     // the blobId of the current chunk.
@@ -980,6 +1039,8 @@ class PutOperation {
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
+    // whether the quota is already charged for this chunk.
+    private boolean isCharged;
 
     /**
      * Construct a PutChunk
@@ -1007,6 +1068,7 @@ class PutOperation {
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
+      isCharged = false;
     }
 
     /**
@@ -1014,9 +1076,18 @@ class PutOperation {
      */
     synchronized void releaseBlobContent() {
       if (buf != null) {
-        buf.release();
+        logger.trace("{}: releasing the chunk data for chunk {}", loggingContext, chunkIndex);
+        ReferenceCountUtil.safeRelease(buf);
         buf = null;
       }
+    }
+
+    /**
+     * True is the data in this chunk is released.
+     * @return
+     */
+    synchronized boolean isDataReleased() {
+      return buf == null;
     }
 
     /**
@@ -1090,6 +1161,59 @@ class PutOperation {
       return operationTracker;
     }
 
+    @Override
+    public boolean check() {
+      if (quotaChargeCallback == null || isCharged) {
+        return true;
+      }
+
+      return quotaChargeCallback.check();
+    }
+
+    @Override
+    public boolean charge() {
+      if (quotaChargeCallback == null || isCharged) {
+        return true;
+      }
+      try {
+        quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
+        isCharged = true;
+      } catch (QuotaException quotaException) {
+        logger.warn(String.format("Quota charging failed in GetBlobOperation for blob %s due to %s ", blobId.toString(),
+            quotaException.toString()));
+      }
+      return isCharged;
+    }
+
+    @Override
+    public boolean quotaExceedAllowed() {
+      if (quotaChargeCallback == null) {
+        return true;
+      }
+      return quotaChargeCallback.quotaExceedAllowed();
+    }
+
+    @Override
+    public QuotaResource getQuotaResource() {
+      if (quotaChargeCallback == null) {
+        return null;
+      }
+      try {
+        return quotaChargeCallback.getQuotaResource();
+      } catch (QuotaException quotaException) {
+        logger.error(String.format(
+            "Could create QuotaResource object during GetBlobOperation for the chunk %s due to %s. This should never happen.",
+            blobId.toString(), quotaException.toString()));
+      }
+      // A null return means quota resource could not be created for this chunk. The consumer should decide how to handle nulls.
+      return null;
+    }
+
+    @Override
+    public QuotaMethod getQuotaMethod() {
+      return quotaChargeCallback.getQuotaMethod();
+    }
+
     /**
      * Prepare this chunk for building, that is, for being filled with data from the channel.
      * @param chunkIndex the position in the overall blob that this chunk is going to  be in.
@@ -1133,9 +1257,9 @@ class PutOperation {
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename());
-        operationTracker =
-            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, null, true, routerMetrics);
+        operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
+        logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
         state = ChunkState.Ready;
       } catch (RouterException e) {
         setOperationExceptionAndComplete(e);
@@ -1146,12 +1270,34 @@ class PutOperation {
     }
 
     /**
+     * Gets an {@link OperationTracker} based on the config;
+     * @return an {@link OperationTracker} based on the config;
+     */
+    protected OperationTracker getOperationTracker() {
+      OperationTracker operationTracker;
+      String trackerType = routerConfig.routerPutOperationTrackerType;
+      String originatingDcName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+      if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
+        operationTracker =
+            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, originatingDcName, true,
+                routerMetrics);
+      } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
+        operationTracker =
+            new AdaptiveOperationTracker(routerConfig, routerMetrics, RouterOperation.PutOperation, partitionId,
+                originatingDcName, time);
+      } else {
+        throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
+      }
+      return operationTracker;
+    }
+
+    /**
      * The callback method to handle the result and exception from an encryption job.
      * @param result The result of Encryption job.
      * @param exception The exception of Encryption job.
      */
     private void encryptionCallback(EncryptJob.EncryptJobResult result, Exception exception) {
-      logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
+      logger.trace("{}: Processing encrypt job callback for chunk at index {}", loggingContext, chunkIndex);
       if (!isMetadataChunk()) {
         // If this is a data blob, then release the content with or without exception.
         // When there is no exception, then the encrypted data will be used.
@@ -1165,21 +1311,22 @@ class PutOperation {
         }
         encryptedPerBlobKey = result.getEncryptedKey();
         chunkUserMetadata = result.getEncryptedUserMetadata().array();
-        logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
+        logger.trace("{}: Completing encrypt job result for chunk at index {}", loggingContext, chunkIndex);
         prepareForSending();
         chunkReadyAtMs = time.milliseconds();
       } else {
         encryptJobMetricsTracker.incrementOperationError();
         if (!isOperationComplete()) {
-          logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
+          logger.trace("{}: Setting exception from encrypt of chunk at index {} ", loggingContext, chunkIndex,
+              exception);
           // If we are here, then the result is null. no need to release it.
           setOperationExceptionAndComplete(
               new RouterException("Exception thrown on encrypting the content for chunk at index " + chunkIndex,
                   exception, RouterErrorCode.UnexpectedInternalError));
         } else {
           logger.trace(
-              "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
-              chunkIndex, getOperationException(), exception);
+              "{}: Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
+              loggingContext, chunkIndex, getOperationException(), exception);
           // If we are here, then the operation is completed and the exception could be null, in this case,
           // we have to release the content in the result.
           if (result != null) {
@@ -1193,7 +1340,8 @@ class PutOperation {
       // double check if the operation is not completed. If so, we have to release the buf here, since in
       // main thread, chunk might already be released.
       if (isOperationComplete()) {
-        logger.info("Release blob content for put chunk in encryption callback since operation is completed");
+        logger.info("{}: Release blob content for put chunk in encryption callback since operation is completed",
+            loggingContext);
         releaseBlobContent();
       }
     }
@@ -1203,18 +1351,19 @@ class PutOperation {
      */
     private void encryptChunk() {
       try {
-        logger.trace("Chunk at index {} moves to {} state", chunkIndex, ChunkState.Encrypting);
+        logger.trace("{}: Chunk at index {} moves to {} state", loggingContext, chunkIndex, ChunkState.Encrypting);
         state = ChunkState.Encrypting;
         chunkEncryptReadyAtMs = time.milliseconds();
         encryptJobMetricsTracker.onJobSubmission();
-        logger.trace("Submitting encrypt job for chunk at index {}", chunkIndex);
+        logger.trace("{}: Submitting encrypt job for chunk at index {}", loggingContext, chunkIndex);
         cryptoJobHandler.submitJob(
             new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
                 isMetadataChunk() ? null : buf.retainedDuplicate(), ByteBuffer.wrap(chunkUserMetadata),
-                kms.getRandomKey(), cryptoService, kms, encryptJobMetricsTracker, this::encryptionCallback));
+                kms.getRandomKey(), cryptoService, kms, options, encryptJobMetricsTracker, this::encryptionCallback));
       } catch (GeneralSecurityException e) {
         encryptJobMetricsTracker.incrementOperationError();
-        logger.trace("Exception thrown while generating random key for chunk at index {}", chunkIndex, e);
+        logger.trace("{}: Exception thrown while generating random key for chunk at index {}", loggingContext,
+            chunkIndex, e);
         setOperationExceptionAndComplete(new RouterException(
             "GeneralSecurityException thrown while generating random key for chunk at index " + chunkIndex, e,
             RouterErrorCode.UnexpectedInternalError));
@@ -1250,10 +1399,12 @@ class PutOperation {
         // If current buf is null, then only read the up to routerMaxPutChunkSizeBytes.
         toWrite = Math.min(channelReadBuf.readableBytes(), routerConfig.routerMaxPutChunkSizeBytes);
         buf = channelReadBuf.readRetainedSlice(toWrite);
+        buf.touch(loggingContext);
       } else {
         int remainingSize = routerConfig.routerMaxPutChunkSizeBytes - buf.readableBytes();
         toWrite = Math.min(channelReadBuf.readableBytes(), remainingSize);
         ByteBuf remainingSlice = channelReadBuf.readRetainedSlice(toWrite);
+        remainingSlice.touch(loggingContext);
         // buf already has some bytes
         if (buf instanceof CompositeByteBuf) {
           // Buf is already a CompositeByteBuf, then just add the slice from
@@ -1264,6 +1415,7 @@ class PutOperation {
               : buf.alloc().compositeHeapBuffer(maxComponents);
           composite.addComponents(true, buf, remainingSlice);
           buf = composite;
+          buf.touch(loggingContext);
         }
       }
       if (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes) {
@@ -1282,13 +1434,15 @@ class PutOperation {
       if (operationTracker.isDone()) {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
+          appendSlippedPutBlobId(chunkBlobId);
           if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts) {
-            logger.trace("Attempt to put chunk with id: {} failed, attempting slipped put ", chunkBlobId);
+            logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
+                chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
             prepareForSending();
           } else {
             // this chunk could not be successfully put. The whole operation has to fail.
-            logger.error("Slipped puts failed for {}", getChunkBlobId());
+            logger.error("{}: Slipped puts failed for {}", loggingContext, getChunkBlobId());
             chunkBlobId = null;
             setOperationExceptionAndComplete(chunkException);
             done = true;
@@ -1299,13 +1453,14 @@ class PutOperation {
         }
       }
       if (done) {
-        // the chunk is complete now. We can charge against quota for the chunk.
-        if (quotaChargeCallback != null) {
+        // the chunk is complete now. We can charge against quota for the chunk if its not a metadata chunk.
+        if (QuotaUtils.postProcessCharge(quotaChargeCallback) && !(this instanceof MetadataPutChunk)
+            && chunkException == null) {
           try {
-            quotaChargeCallback.chargeQuota();
-          } catch (RouterException rEx) {
+            quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
+          } catch (QuotaException quotaException) {
             // For now we only log for quota charge exceptions for in progress requests.
-            logger.info("Exception {} while handling quota charge event", rEx.toString());
+            logger.info("{}: Exception {} while handling quota charge event", loggingContext, quotaException.toString());
           }
         }
         state = ChunkState.Complete;
@@ -1343,8 +1498,8 @@ class PutOperation {
         ChunkPutRequestInfo info = entry.getValue();
         if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(info.replicaId, TrackedRequestFinalState.FAILURE);
-          logger.warn("PutRequest with correlationId {} in flight has expired for replica {} {}", correlationId,
-              info.replicaId.getDataNodeId(), info);
+          logger.warn("{}: PutRequest with correlationId {} in flight has expired for replica {} {}", loggingContext,
+              correlationId, info.replicaId.getDataNodeId(), info);
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
@@ -1369,7 +1524,7 @@ class PutOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         PutRequest putRequest = createPutRequest();
-        RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId);
+        RequestInfo request = new RequestInfo(hostname, port, putRequest, replicaId, null);
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo.put(correlationId,
             new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
@@ -1377,11 +1532,11 @@ class PutOperation {
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
         if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
-          logger.debug("Making request with correlationId {} to a remote replica {} in {}", correlationId,
-              replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
+          logger.debug("{}: Making request with correlationId {} to a remote replica {} in {}", loggingContext,
+              correlationId, replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoRequestCount.inc();
         } else {
-          logger.trace("Making request with correlationId {} to a local replica {}", correlationId,
+          logger.trace("{}: Making request with correlationId {} to a local replica {}", loggingContext, correlationId,
               replicaId.getDataNodeId());
         }
         routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestRate.mark();
@@ -1397,7 +1552,9 @@ class PutOperation {
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
           chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
-          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
+          routerConfig.routerPutRequestUseJavaNativeCrc32 ? Crc32Impl.getJavaNativeInstance()
+              : Crc32Impl.getAmbryInstance());
     }
 
     /**
@@ -1415,8 +1572,9 @@ class PutOperation {
             RouterErrorCode.AmbryUnavailable);
       }
       if (!partitionClass.equals(selected.getPartitionClass())) {
-        logger.warn("No partitions for partitionClass='{}' found, partitionClass='{}' used instead. blobProperties={}",
-            partitionClass, selected.getPartitionClass(), passedInBlobProperties);
+        logger.warn(
+            "{}: No partitions for partitionClass='{}' found, partitionClass='{}' used instead. blobProperties={}",
+            loggingContext, partitionClass, selected.getPartitionClass(), passedInBlobProperties);
         routerMetrics.unknownPartitionClassCount.inc();
       }
       return selected;
@@ -1440,7 +1598,7 @@ class PutOperation {
         // - the response is for an earlier attempt of this chunk (slipped put scenario). And the map was cleared
         // before attempting the slipped put.
         // - the response is for an earlier chunk held by this PutChunk.
-        logger.debug("No matching request found for {}", correlationId);
+        logger.debug("{}: No matching request found for {}", loggingContext, correlationId);
         return;
       }
       long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
@@ -1450,8 +1608,8 @@ class PutOperation {
       boolean isSuccessful;
       TrackedRequestFinalState putRequestFinalState = null;
       if (responseInfo.getError() != null) {
-        logger.debug("PutRequest with response correlationId {} timed out for replica {} ", correlationId,
-            chunkPutRequestInfo.replicaId.getDataNodeId());
+        logger.debug("{}: PutRequest with response correlationId {} timed out for replica {} ", loggingContext,
+            correlationId, chunkPutRequestInfo.replicaId.getDataNodeId());
         setChunkException(new RouterException(
             "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
             RouterErrorCode.OperationTimedOut));
@@ -1460,8 +1618,8 @@ class PutOperation {
       } else {
         if (putResponse == null) {
           logger.debug(
-              "PutRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
-              correlationId, chunkPutRequestInfo.replicaId.getDataNodeId());
+              "{}: PutRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
+              loggingContext, correlationId, chunkPutRequestInfo.replicaId.getDataNodeId());
           setChunkException(new RouterException("Response deserialization received an unexpected error",
               RouterErrorCode.UnexpectedInternalError));
           isSuccessful = false;
@@ -1474,8 +1632,8 @@ class PutOperation {
             // There is no other way to handle it.
             routerMetrics.unknownReplicaResponseError.inc();
             logger.error(
-                "The correlation id in the PutResponse {} is not the same as the correlation id in the associated PutRequest: {}",
-                putResponse.getCorrelationId(), correlationId);
+                "{}: The correlation id in the PutResponse {} is not the same as the correlation id in the associated PutRequest: {}",
+                loggingContext, putResponse.getCorrelationId(), correlationId);
             setChunkException(
                 new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
             isSuccessful = false;
@@ -1484,13 +1642,14 @@ class PutOperation {
           } else {
             ServerErrorCode putError = putResponse.getError();
             if (putError == ServerErrorCode.No_Error) {
-              logger.trace("The putRequest was successful for chunk {}", chunkIndex);
+              logger.trace("{}: The putRequest was successful for chunk {}", loggingContext, chunkIndex);
               isSuccessful = true;
             } else {
               // chunkException will be set within processServerError.
               logger.trace(
-                  "Replica {} returned an error {} for a PutRequest with response correlationId : {} and blobId {}",
-                  chunkPutRequestInfo.replicaId, putResponse.getError(), putResponse.getCorrelationId(), blobId);
+                  "{}: Replica {} returned an error {} for a PutRequest with response correlationId : {} and blobId {}",
+                  loggingContext, chunkPutRequestInfo.replicaId, putResponse.getError(), putResponse.getCorrelationId(),
+                  blobId);
               processServerError(putResponse.getError());
               isSuccessful = false;
               putRequestFinalState =
@@ -1503,7 +1662,7 @@ class PutOperation {
       if (isSuccessful) {
         operationTracker.onResponse(chunkPutRequestInfo.replicaId, TrackedRequestFinalState.SUCCESS);
         if (RouterUtils.isRemoteReplica(routerConfig, chunkPutRequestInfo.replicaId)) {
-          logger.trace("Cross colo request successful for remote replica in {} ",
+          logger.trace("{}: Cross colo request successful for remote replica in {} ", loggingContext,
               chunkPutRequestInfo.replicaId.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoSuccessCount.inc();
         }
@@ -1723,6 +1882,25 @@ class PutOperation {
           buf.readableBytes(), BlobType.MetadataBlob,
           encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
+  }
+
+  /**
+   * Return a string message that will be used as a context for logging;
+   * @return
+   */
+  private String makeLoggingContext() {
+    if (restRequest == null || restRequest.getRestRequestContext() == null) {
+      return "";
+    }
+    String channelStr =
+        ((NettyRequest.NettyRequestContext) restRequest.getRestRequestContext()).getChannel().toString();
+    StringBuilder sb = new StringBuilder();
+    sb.append('[');
+    sb.append(channelStr);
+    if (isEncryptionEnabled) {
+      sb.append(", Encrypted");
+    }
+    return sb.append("]").toString();
   }
 
   /**

@@ -34,7 +34,7 @@ public class JSONStringStorageQuotaSourceFactory implements QuotaSourceFactory {
    */
   public JSONStringStorageQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService)
       throws IOException {
-    source = new JSONStringStorageQuotaSource(quotaConfig.storageQuotaConfig);
+    source = new JSONStringStorageQuotaSource(quotaConfig.storageQuotaConfig, accountService);
   }
 
   @Override

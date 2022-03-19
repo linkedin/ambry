@@ -41,6 +41,11 @@ public class MockReplicaId implements ReplicaId {
   }
 
   public MockReplicaId(int port, MockPartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
+    this(port, partitionId, dataNodeId, indexOfMountPathToUse, ReplicaState.STANDBY);
+  }
+
+  public MockReplicaId(int port, MockPartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse,
+      ReplicaState replicaState) {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
     if (dataNodeId.getMountPaths().isEmpty()) {
@@ -61,7 +66,7 @@ public class MockReplicaId implements ReplicaId {
       diskId = new MockDiskId(dataNodeId, mountPath);
     }
     isSealed = partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
-    replicaState = ReplicaState.STANDBY;
+    this.replicaState = replicaState;
   }
 
   @Override

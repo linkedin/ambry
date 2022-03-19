@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
-import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
+import static com.github.ambry.clustermap.VcrClusterParticipant.*;
 
 
 /**

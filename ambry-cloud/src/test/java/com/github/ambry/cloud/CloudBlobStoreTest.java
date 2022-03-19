@@ -475,6 +475,7 @@ public class CloudBlobStoreTest {
     // add blob and then undelete should pass
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
     ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE));
+    // currently messageInfo.lifeVersion = 2
     messageWriteSet.add(messageInfo, buffer);
     store.put(messageWriteSet);
     assertEquals(store.undelete(messageInfo), 2);

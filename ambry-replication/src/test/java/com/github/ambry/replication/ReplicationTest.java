@@ -729,7 +729,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     MockClusterMap clusterMap = new MockClusterMap();
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
-    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    MockHelixParticipant mockHelixParticipant = Mockito.spy(new MockHelixParticipant(clusterMapConfig));
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
     // choose a replica on local node and put decommission file into its dir
     ReplicaId localReplica = clusterMap.getReplicaIds(clusterMap.getDataNodeIds().get(0)).get(0);
     String partitionName = localReplica.getPartitionId().toPathString();
@@ -800,6 +801,8 @@ public class ReplicationTest extends ReplicationTestHelper {
         participantLatch.await(1, TimeUnit.SECONDS));
     // verify stats manager listener is called
     verify(mockHelixParticipant.mockStatsManagerListener).onPartitionBecomeDroppedFromOffline(anyString());
+    // verify setPartitionDisabledState method is called
+    verify(mockHelixParticipant).setPartitionDisabledState(partitionName, false);
     File storeDir = new File(localReplica.getReplicaPath());
     assertFalse("Store dir should not exist", storeDir.exists());
     storageManager.shutdown();

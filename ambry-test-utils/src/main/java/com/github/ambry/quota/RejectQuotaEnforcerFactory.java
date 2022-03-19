@@ -35,7 +35,7 @@ public class RejectQuotaEnforcerFactory implements QuotaEnforcerFactory {
   }
 
   @Override
-  public QuotaEnforcer getRequestQuotaEnforcer() {
+  public QuotaEnforcer getQuotaEnforcer() {
     return rejectQuotaEnforcer;
   }
 }

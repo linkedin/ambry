@@ -14,7 +14,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.Account;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.DataNodeId;
@@ -29,6 +29,9 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
+import com.github.ambry.server.storagestats.HostAccountStorageStats;
+import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreStats;
@@ -36,8 +39,6 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -63,11 +65,11 @@ public class StatsManagerIntegrationTest {
   private final Path tempDir;
   private final String accountStatsOutputFileString;
   private final AccountStatsMySqlStore accountStatsMySqlStore;
+  private final HostAccountStorageStats hostAccountStorageStats;
+  private final HostPartitionClassStorageStats hostPartitionClassStorageStats;
   private final StatsManager statsManager;
   private final List<ReplicaId> replicas = new ArrayList<>();
   private final Map<PartitionId, Store> storeMap = new HashMap<>();
-  private StatsSnapshot aggregatedAccountStatsSnapshot = new StatsSnapshot(0L, new HashMap<>());
-  private StatsSnapshot aggregatedPartitionClassStatsSnapshot = new StatsSnapshot(0L, new HashMap<>());
 
   public StatsManagerIntegrationTest() throws Exception {
     tempDir = Files.createTempDirectory("StatsManagerIntegrationTest");
@@ -78,27 +80,27 @@ public class StatsManagerIntegrationTest {
     DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC1");
 
+    hostAccountStorageStats = new HostAccountStorageStats(
+        StorageStatsUtilTest.generateRandomHostAccountStorageStats(6, 10, 6, 10000L, 2, 10));
+    Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> hostPartitionClassStorageStatsMap =
+        new HashMap<>();
     for (int i = 0; i < 6; i++) {
       String partitionClassName =
           i % 2 == 0 ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS;
       PartitionId partitionId =
           new MockPartitionId(i, partitionClassName, Collections.singletonList((MockDataNodeId) dataNodeId), 0);
-      Map<StatsReportType, StatsSnapshot> snapshotsByType = StatsManagerTest.generateRandomSnapshot();
-      StoreStats storeStats = new StatsManagerTest.MockStoreStats(snapshotsByType, false, null);
+      StoreStats storeStats =
+          new StatsManagerTest.MockStoreStats(hostAccountStorageStats.getStorageStats().get((long)i), false, null);
       storeMap.put(partitionId, new StatsManagerTest.MockStore(storeStats));
       replicas.add(partitionId.getReplicaIds().get(0));
-      aggregatedAccountStatsSnapshot.getSubMap()
-          .put(Utils.statsPartitionKey(i), snapshotsByType.get(StatsReportType.ACCOUNT_REPORT));
-      aggregatedPartitionClassStatsSnapshot.getSubMap()
-          .computeIfAbsent(partitionClassName, k -> new StatsSnapshot(0L, new HashMap<>()))
-          .getSubMap()
-          .put(Utils.statsPartitionKey(i), snapshotsByType.get(StatsReportType.PARTITION_CLASS_REPORT));
+      hostPartitionClassStorageStatsMap.computeIfAbsent(partitionClassName, k -> new HashMap<>())
+          .put((long) i, hostAccountStorageStats.getStorageStats().get((long)i));
     }
-    aggregatedAccountStatsSnapshot.updateValue();
-    aggregatedPartitionClassStatsSnapshot.updateValue();
+    hostPartitionClassStorageStats = new HostPartitionClassStorageStats(hostPartitionClassStorageStatsMap);
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
     statsManager = new StatsManager(storageManager, replicas, new MetricRegistry(),
-        new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), null, null, null);
+        new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), null, null,
+        new InMemAccountService(false, false));
   }
 
   /**
@@ -107,11 +109,12 @@ public class StatsManagerIntegrationTest {
    */
   @Before
   public void before() throws Exception {
-    Connection dbConnection = accountStatsMySqlStore.getMySqlDataAccessor().getDatabaseConnection(true);
-    Statement statement = dbConnection.createStatement();
-    for (String table : AccountStatsMySqlStore.TABLES) {
-      statement.executeUpdate("DELETE FROM " + table);
-    }
+    accountStatsMySqlStore.cleanupTables();
+  }
+
+  @After
+  public void after() {
+    accountStatsMySqlStore.shutdown();
   }
 
   /**
@@ -123,8 +126,9 @@ public class StatsManagerIntegrationTest {
     StatsManager.AccountStatsPublisher publisher = statsManager.new AccountStatsPublisher(accountStatsMySqlStore);
     publisher.run();
 
-    StatsWrapper statsWrapper = accountStatsMySqlStore.queryAccountStatsByHost(HOSTNAME, PORT);
-    assertEquals(aggregatedAccountStatsSnapshot, statsWrapper.getSnapshot());
+    HostAccountStorageStatsWrapper statsWrapper =
+        accountStatsMySqlStore.queryHostAccountStorageStatsByHost(HOSTNAME, PORT);
+    assertEquals(hostAccountStorageStats.getStorageStats(), statsWrapper.getStats().getStorageStats());
   }
 
   /**
@@ -143,9 +147,9 @@ public class StatsManagerIntegrationTest {
     publisher.run();
 
     Map<String, Set<Integer>> partitionNameAndIds = accountStatsMySqlStore.queryPartitionNameAndIds();
-    StatsWrapper statsWrapper =
-        accountStatsMySqlStore.queryPartitionClassStatsByHost(HOSTNAME, PORT, partitionNameAndIds);
-    assertEquals(aggregatedPartitionClassStatsSnapshot, statsWrapper.getSnapshot());
+    HostPartitionClassStorageStatsWrapper statsWrapper =
+        accountStatsMySqlStore.queryHostPartitionClassStorageStatsByHost(HOSTNAME, PORT, partitionNameAndIds);
+    assertEquals(hostPartitionClassStorageStats.getStorageStats(), statsWrapper.getStats().getStorageStats());
   }
 
   private Properties initProperties() throws Exception {
@@ -156,7 +160,7 @@ public class StatsManagerIntegrationTest {
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(PORT));
     configProps.setProperty(AccountStatsMySqlConfig.DOMAIN_NAMES_TO_REMOVE, ".github.com");
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(BATCH_SIZE));
-    configProps.setProperty(StatsManagerConfig.STATS_OUTPUT_FILE_PATH, accountStatsOutputFileString);
+    configProps.setProperty(AccountStatsMySqlConfig.LOCAL_BACKUP_FILE_PATH, accountStatsOutputFileString);
     configProps.setProperty(StatsManagerConfig.STATS_ENABLE_MYSQL_REPORT, Boolean.TRUE.toString());
     return configProps;
   }
@@ -164,7 +168,6 @@ public class StatsManagerIntegrationTest {
   private AccountStatsMySqlStore createAccountStatsMySqlStore(Properties configProps) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties(configProps);
     return (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(verifiableProperties,
-        new ClusterMapConfig(verifiableProperties), new StatsManagerConfig(verifiableProperties),
-        new MetricRegistry()).getAccountStatsStore();
+        new ClusterMapConfig(verifiableProperties), new MetricRegistry()).getAccountStatsStore();
   }
 }

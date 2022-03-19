@@ -15,6 +15,10 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.rest.RestRequest;
+import java.util.Objects;
+
+
 /**
  * Represents any options associated with a putBlob request.
  */
@@ -22,15 +26,18 @@ public class PutBlobOptions {
   public static final PutBlobOptions DEFAULT = new PutBlobOptionsBuilder().build();
   private final boolean chunkUpload;
   private final long maxUploadSize;
+  private final RestRequest restRequest;
 
   /**
    * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
    *                    stitched blob.
    * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
+   * @param restRequest The {@link RestRequest} that triggered this put operation.
    */
-  public PutBlobOptions(boolean chunkUpload, long maxUploadSize) {
+  public PutBlobOptions(boolean chunkUpload, long maxUploadSize, RestRequest restRequest) {
     this.chunkUpload = chunkUpload;
     this.maxUploadSize = maxUploadSize;
+    this.restRequest = restRequest;
   }
 
   /**
@@ -48,6 +55,13 @@ public class PutBlobOptions {
     return maxUploadSize;
   }
 
+  /**
+   * @return The {@link RestRequest} that triggered this put operation.
+   */
+  public RestRequest getRestRequest() {
+    return restRequest;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -58,18 +72,18 @@ public class PutBlobOptions {
     }
 
     PutBlobOptions options = (PutBlobOptions) o;
-    return chunkUpload == options.chunkUpload && maxUploadSize == options.maxUploadSize;
+    return chunkUpload == options.chunkUpload && maxUploadSize == options.maxUploadSize && Objects.equals(restRequest,
+        options.restRequest);
   }
 
   @Override
   public int hashCode() {
-    int result = (chunkUpload ? 1 : 0);
-    result = 31 * result + (int) (maxUploadSize ^ (maxUploadSize >>> 32));
-    return result;
+    return Objects.hash(chunkUpload, maxUploadSize, restRequest);
   }
 
   @Override
   public String toString() {
-    return "PutBlobOptions{" + "chunkUpload=" + chunkUpload + ", maxUploadSize=" + maxUploadSize + '}';
+    return "PutBlobOptions{" + "chunkUpload=" + chunkUpload + ", maxUploadSize=" + maxUploadSize + ", restRequest="
+        + restRequest + '}';
   }
 }

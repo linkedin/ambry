@@ -43,6 +43,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -103,6 +104,8 @@ class BlobStoreCompactor {
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
   private final AtomicReference<CompactionDetails> currentCompactionDetails = new AtomicReference();
+  private final AtomicInteger compactedLogCount = new AtomicInteger(0);
+  private final AtomicInteger logSegmentCount = new AtomicInteger(0);
 
   /**
    * Constructs the compactor component.
@@ -168,7 +171,8 @@ class BlobStoreCompactor {
     isActive = true;
     logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
         System.getProperty("os.name"), useDirectIO);
-    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails);
+    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails, compactedLogCount,
+        logSegmentCount);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -305,6 +309,10 @@ class BlobStoreCompactor {
       }
       endCompaction();
     } catch (InterruptedException | IOException e) {
+      if (e instanceof IOException) {
+        diskMetrics.diskCompactionErrorDueToDiskFailureCount.inc();
+        logger.error("Compaction of store {} failed due to disk issue.", dataDir);
+      }
       throw new StoreException("Exception during compaction", e, StoreErrorCodes.Unknown_Error);
     } finally {
       compactionInProgress.set(false);
@@ -397,8 +405,8 @@ class BlobStoreCompactor {
       }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
-      if (srcIndex.journal.getFirstOffset() != null
-          && segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
+      Offset journalFirstOffset = srcIndex.journal.getFirstOffset();
+      if (journalFirstOffset != null && segmentEndOffset.compareTo(journalFirstOffset) >= 0) {
         throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
       }
       prevSegmentName = segment.getName();
@@ -835,18 +843,38 @@ class BlobStoreCompactor {
               double currentWriteTimePerMbInMs = diskMetrics.diskWriteTimePerMbInMs.getSnapshot().get95thPercentile();
               int desiredWritePerSecond = getDesiredSpeedPerSecond(currentWriteTimePerMbInMs,
                   config.storeCompactionIoPerMbWriteLatencyThresholdMs);
-              logger.debug(
-                  "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
-                  currentReadTimePerMbInMs, currentWriteTimePerMbInMs, desiredReadPerSecond, desiredWritePerSecond);
-              diskIOScheduler.updateThrottlerDesiredRate(COMPACTION_CLEANUP_JOB_NAME,
-                  Math.min(desiredReadPerSecond, desiredWritePerSecond));
+              if (currentReadTimePerMbInMs > config.storeCompactionIoPerMbReadLatencyThresholdMs
+                  || currentWriteTimePerMbInMs > config.storeCompactionIoPerMbWriteLatencyThresholdMs) {
+                // Only log when compaction copy rate is impacted.
+                logger.debug(
+                    "Current disk read per MB: {}ms, current disk write per MB: {} ms, Desired compaction copy rate(bytes/seconds): read: {} write: {}",
+                    currentReadTimePerMbInMs, currentWriteTimePerMbInMs, desiredReadPerSecond, desiredWritePerSecond);
+              }
+              int desiredRate = Math.min(desiredReadPerSecond, desiredWritePerSecond);
+              double currentRate = diskMetrics.diskCompactionCopyRateInBytes.getOneMinuteRate();
+              if (currentRate > desiredRate) {
+                // If last one minute rate is too high, need to slow down(by sleep) to desired rate.
+                // 100 -> 50 : sleep 2-1 time unit
+                // 100 -> 25 : sleep 4-1 time unit
+                // 100 -> 90: sleep (100/90 - 1) time unit
+                long sleepInMs = (long) ((currentRate / desiredRate - 1) * Time.MsPerSec);
+                long actualSleepTimeInMs = Math.min(sleepInMs, 10 * Time.MsPerSec);
+                logger.debug(
+                    "Current rate: {}, desired rate: {}. Calculated sleep time: {} ms. Actual sleep time: {} ms",
+                    currentRate, desiredRate, sleepInMs, actualSleepTimeInMs);
+                try {
+                  Thread.sleep(actualSleepTimeInMs);
+                } catch (InterruptedException e) {
+                  logger.warn("Compaction throttling sleep is interrupted", e);
+                }
+              }
             } else {
               logger.debug(
                   "Adaptive compaction is not enabled: storeCompactionMinOperationsBytesPerSec: {}, storeCompactionOperationsBytesPerSec: {}",
                   config.storeCompactionMinOperationsBytesPerSec, config.storeCompactionOperationsBytesPerSec);
+              // call into diskIOScheduler to make sure we can proceed.
+              diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
             }
-            // call into diskIOScheduler to make sure we can proceed.
-            diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
 
             if (useDirectIO) {
               // do direct IO write
@@ -912,9 +940,11 @@ class BlobStoreCompactor {
               throw new StoreException("Cannot insert duplicate PUT entry for " + srcIndexEntry.getKey(),
                   StoreErrorCodes.Unknown_Error);
             } else {
+              // Add a PUT IndexValue with the same info (especially same lifeVersion).
               IndexValue tgtValue =
-                  new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                      srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
+                  new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE,
+                      srcValue.getExpiresAtMs(), fileSpan.getStartOffset().getOffset(), srcValue.getOperationTimeInMs(),
+                      srcValue.getAccountId(), srcValue.getContainerId(), srcValue.getLifeVersion());
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
             }
             long lastModifiedTimeSecsToSet =
@@ -1137,6 +1167,31 @@ class BlobStoreCompactor {
     if (compactionLog != null) {
       if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         logger.info("Compaction of {} finished", storeId);
+        if (srcIndex != null && !srcIndex.isEmpty() && !compactionLog.cycleLogs.isEmpty()) {
+          // The log segment positions after compaction
+          Set<Long> logSegmentPositionsAfterCompaction = srcIndex.getLogSegments()
+              .stream()
+              .map(LogSegment::getName)
+              .map(LogSegmentName::getPosition)
+              .collect(Collectors.toSet());
+          logSegmentCount.set(logSegmentPositionsAfterCompaction.size());
+          // The log segment positions under compaction
+          Set<Long> logSegmentPositionsUnderCompaction = new HashSet<>();
+          for (CompactionLog.CycleLog clog : compactionLog.cycleLogs) {
+            logSegmentPositionsUnderCompaction.addAll(clog.compactionDetails.getLogSegmentsUnderCompaction()
+                .stream()
+                .map(LogSegmentName::getPosition)
+                .collect(Collectors.toSet()));
+          }
+          // If the position under compaction doesn't exist in the set after compaction, then this log segment is compacted
+          // eg: log segment under compaction [0_23, 130_16, 144_3]
+          //     log segment after compaction [0_24, 130_24, 155_0, 166_0]
+          // log segment 144_3's position doesn't exist in the compaction log, so we have one log segment compacted.
+          compactedLogCount.set((int) logSegmentPositionsUnderCompaction.stream()
+              .filter(p -> !logSegmentPositionsAfterCompaction.contains(p))
+              .count());
+        }
+
         if (srcIndex != null && srcIndex.hardDeleter != null) {
           srcIndex.hardDeleter.resume();
         }
@@ -1155,13 +1210,20 @@ class BlobStoreCompactor {
    * @param logSegmentName the name of the log segment whose index segment files are required.
    * @return a map that contains all the index segment files of the log segment - keyed on the start offset.
    */
-  private SortedMap<Offset, File> getIndexSegmentDetails(LogSegmentName logSegmentName) {
+  SortedMap<Offset, File> getIndexSegmentDetails(LogSegmentName logSegmentName) {
     SortedMap<Offset, File> indexSegmentStartOffsetToFile = new TreeMap<>();
     File[] indexSegmentFiles =
         PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir.getAbsolutePath(), logSegmentName);
     for (File indexSegmentFile : indexSegmentFiles) {
-      indexSegmentStartOffsetToFile.put(IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName()),
-          indexSegmentFile);
+      Offset indexOffset = IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName());
+      // Only add index offset that has same log segment name with the given log segment name.
+      // This is because we have to deal with filename filter issue in getIndexSegmentFilesForLogSegment.
+      // If we have log segment 0_1 and 0_10, and we are only looking for index segment files for 0_1, the above method
+      // would return the index segment files for 0_10 as well, since they start with the same string and ends with the
+      // same string in filename.
+      if (indexOffset.getName().equals(logSegmentName)) {
+        indexSegmentStartOffsetToFile.put(indexOffset, indexSegmentFile);
+      }
     }
     return indexSegmentStartOffsetToFile;
   }
@@ -1624,6 +1686,12 @@ class BlobStoreCompactor {
             }
           }
         } else if (currentValue.isTtlUpdate()) {
+          if (currentLatestState == null) {
+            // Under only one circumstance would this happen, an TTL_UPDATE index value has no PUT before and no DELETE after.
+            // This is because the PUT is already compacted due to DELETE is out of retention and DELETE is compacted due to
+            // DELETE tombstone clean up. But TTL_UPDATE is in different log segment from PUT and DELETE so it never gets compacted.
+            continue;
+          }
           if (currentLatestState.isPut()) {
             // If isPut returns true, when the latest state doesn't carry ttl_update flag, this is wrong
             throw new IllegalStateException(

@@ -60,8 +60,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
 
   // Note: assuming that passed mountPath is the partitionId path
   @Override
-  protected void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList)
-      throws IOException, ReplicationException {
+  protected void persist(String mountPath, List<ReplicaTokenInfo> tokenInfoList) throws IOException {
     try {
       ByteArrayOutputStream tokenOutputStream = new ByteArrayOutputStream(4096);
       replicaTokenSerde.serializeTokens(tokenInfoList, tokenOutputStream);
@@ -70,7 +69,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
       cloudDestination.persistTokens(mountPath, replicaTokenFileName, inputStream);
       logger.debug("Persisted replica tokens for {} to cloud destination.", mountPath);
     } catch (CloudStorageException e) {
-      throw new ReplicationException("IO error persisting replica tokens at mount path " + mountPath, e);
+      logger.error("IO error persisting replica tokens at mount path " + mountPath, e);
     }
   }
 

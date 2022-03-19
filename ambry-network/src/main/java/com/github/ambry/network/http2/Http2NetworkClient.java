@@ -20,8 +20,6 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.RequestOrResponse;
-import com.github.ambry.utils.Utils;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -32,7 +30,6 @@ import io.netty.channel.pool.ChannelPoolMap;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.AttributeKey;
-import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
@@ -106,8 +103,7 @@ public class Http2NetworkClient implements NetworkClient {
     for (RequestInfo requestInfo : requestsToSend) {
       long streamInitiateTime = System.currentTimeMillis();
 
-      RequestOrResponse request = (RequestOrResponse) (requestInfo.getRequest());
-      long waitingTime = streamInitiateTime - request.requestCreateTime;
+      long waitingTime = streamInitiateTime - requestInfo.getRequestCreateTime();
       http2ClientMetrics.requestToNetworkClientLatencyMs.update(waitingTime);
 
       this.pools.get(InetSocketAddress.createUnresolved(requestInfo.getHost(), requestInfo.getPort().getPort()))
@@ -147,7 +143,6 @@ public class Http2NetworkClient implements NetworkClient {
                         }
                       }
                     }
-                    // When success, handler would release the request.
                   } else {
                     http2ClientMetrics.http2StreamWriteAndFlushErrorCount.inc();
                     logger.warn("Stream {} {} writeAndFlush fail. Cause: {}", streamChannel.hashCode(), streamChannel,
@@ -157,7 +152,6 @@ public class Http2NetworkClient implements NetworkClient {
                       http2ClientResponseHandler.getResponseInfoQueue()
                           .put(new ResponseInfo(requestInfoFromChannelAttr, NetworkClientErrorCode.NetworkError, null));
                     }
-                    ReferenceCountUtil.safeRelease(requestInfo.getRequest());
                   }
                 }
               });
@@ -203,7 +197,7 @@ public class Http2NetworkClient implements NetworkClient {
                 successCount.incrementAndGet();
               } else {
                 failCount.incrementAndGet();
-                responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId));
+                responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId, false));
                 logger.error("Couldn't acquire stream channel to {}:{} . Cause: {}.", dataNodeId.getHostname(),
                     dataNodeId.getHttp2Port(), future.cause());
               }

@@ -112,6 +112,10 @@ public class RestUtils {
      */
     public final static String COOKIE = "Cookie";
     /**
+     * Access-Control-Allow-Origin.
+     */
+    public static final String ACCESS_CONTROL_ALLOW_ORIGIN = "Access-Control-Allow-Origin";
+    /**
      * Header to be set by the clients during a Get blob call to denote, that blob should be served only if the blob
      * has been modified after the value set for this header.
      */
@@ -615,13 +619,14 @@ public class RestUtils {
    *             arguments to values.
    * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
    * @param getOption the {@link GetOption} required.
+   * @param restRequest the {@link RestRequest} that initiate this get operation, null if no rest request is available.
    * @param blobSegmentIdx index of blob segment one wishes to GET, {@link GetBlobOptions#NO_BLOB_SEGMENT_IDX_SPECIFIED}
    *                       if not used
    * @return a populated {@link GetBlobOptions} object.
    * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
    */
   public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource,
-      GetOption getOption, int blobSegmentIdx) throws RestServiceException {
+      GetOption getOption, RestRequest restRequest, int blobSegmentIdx) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
     if (subResource != null && !subResource.equals(SubResource.Segment) && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.",
@@ -635,6 +640,7 @@ public class RestUtils {
         .blobSegment(blobSegmentIdx)
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
         .resolveRangeOnEmptyBlob(resolveRangeOnEmptyBlob)
+        .restRequest(restRequest)
         .build();
   }
 
@@ -1021,12 +1027,10 @@ public class RestUtils {
    * @param costMap {@link Map} of cost for each quota.
    * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
    */
-  public static void setRequestCostHeader(Map<QuotaName, Double> costMap, RestResponseChannel restResponseChannel) {
+  public static void setRequestCostHeader(Map<String, Double> costMap, RestResponseChannel restResponseChannel) {
     Objects.requireNonNull(costMap, "cost map cannot be null");
     restResponseChannel.setHeader(RequestCostHeaders.REQUEST_COST, KVHeaderValueEncoderDecoder.encodeKVHeaderValue(
-        costMap.entrySet()
-            .stream()
-            .collect(Collectors.toMap(e -> e.getKey().name(), e -> String.valueOf(e.getValue())))));
+        costMap.entrySet().stream().collect(Collectors.toMap(e -> e.getKey(), e -> String.valueOf(e.getValue())))));
   }
 
   /**
@@ -1146,6 +1150,36 @@ public class RestUtils {
     int startIndex = blobIdWithExtension.startsWith("/") ? 1 : 0;
     int endIndex = extensionIndex != -1 ? extensionIndex : blobIdWithExtension.length();
     return blobIdWithExtension.substring(startIndex, endIndex);
+  }
+
+  /**
+   * Convert the specified {@link RestRequest} object to a string representation.
+   * @param restRequest {@link RestRequest} object.
+   * @return String representation of the {@link RestRequest} object.
+   */
+  public static String convertToStr(RestRequest restRequest) {
+    if (Objects.isNull(restRequest)) {
+      return "RestRequest: null";
+    }
+    StringBuilder sb = new StringBuilder();
+    sb.append("RestRequest: [");
+    sb.append("Method: " + ((restRequest.getRestMethod() == null) ? "null" : restRequest.getRestMethod().name()));
+    sb.append(", Path: " + ((restRequest.getPath() == null) ? "null" : restRequest.getPath()));
+    sb.append(", Uri: " + ((restRequest.getUri() == null) ? "null" : restRequest.getUri()));
+    Account account = null;
+    try {
+      account = RestUtils.getAccountFromArgs(restRequest.getArgs());
+    } catch (RestServiceException restServiceException) {
+    }
+    sb.append(", Account: " + ((account == null) ? "null" : account.toString()));
+    Container container = null;
+    try {
+      container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+    } catch (RestServiceException restServiceException) {
+    }
+    sb.append(", Container: " + ((container == null) ? "null" : container.toString()));
+    sb.append("]");
+    return sb.toString();
   }
 
   /**

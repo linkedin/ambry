@@ -61,6 +61,7 @@ public class RouterConfig {
   public static final String ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS =
       "router.operation.tracker.include.down.replicas";
   public static final String ROUTER_GET_OPERATION_TRACKER_TYPE = "router.get.operation.tracker.type";
+  public static final String ROUTER_PUT_OPERATION_TRACKER_TYPE = "router.put.operation.tracker.type";
   public static final String ROUTER_LATENCY_TOLERANCE_QUANTILE = "router.latency.tolerance.quantile";
   public static final String ROUTER_BLOBID_CURRENT_VERSION = "router.blobid.current.version";
   public static final String ROUTER_METADATA_CONTENT_VERSION = "router.metadata.content.version";
@@ -84,6 +85,8 @@ public class RouterConfig {
       "router.operation.tracker.terminate.on.not.found.enabled";
   public static final String ROUTER_OPERATION_TRACKER_MAX_INFLIGHT_REQUESTS =
       "router.operation.tracker.max.inflight.requests";
+  public static final String ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE =
+      "router.adaptive.operation.tracker.waiting.for.response";
   public static final String ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED =
       "router.operation.tracker.exclude.timeout.enabled";
   public static final String ROUTER_OPERATION_TRACKER_HISTOGRAM_DUMP_ENABLED =
@@ -104,6 +107,11 @@ public class RouterConfig {
       "router.cross.colo.request.to.dc.with.most.replicas";
   public static final String ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS =
       "router.background.deleter.max.concurrent.operations";
+  public static final String ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32 = "router.put.request.use.java.native.crc32";
+  public static final String OPERATION_CONTROLLER = "router.operation.controller";
+  public static final String ROUTER_REQUEST_HANDLER_NUM_OF_THREADS = "router.request.handler.num.of.threads";
+  public static final String ROUTER_STORE_KEY_CONVERTER_FACTORY = "router.store.key.converter.factory";
+  public static final String ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS = "router.unavailable.due.to.offline.replicas";
 
   /**
    * Number of independent scaling units for the router.
@@ -264,6 +272,13 @@ public class RouterConfig {
   public final String routerGetOperationTrackerType;
 
   /**
+   * The OperationTracker to use for PUT operations.
+   */
+  @Config(ROUTER_PUT_OPERATION_TRACKER_TYPE)
+  @Default("SimpleOperationTracker")
+  public final String routerPutOperationTrackerType;
+
+  /**
    * If an adaptive operation tracker is being used, a request is discounted from the parallelism count if it has been
    * outstanding for more than the quantile defined here (compared to latencies of other requests of the same class).
    */
@@ -403,6 +418,14 @@ public class RouterConfig {
   public final int routerOperationTrackerMaxInflightRequests;
 
   /**
+   * True when the adaptive operation tracker would wait for all the responses coming back before sending out new requests
+   * when there is no request exceeding the given percentile.
+   */
+  @Config(ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE)
+  @Default("false")
+  public final boolean routerAdaptiveOperationTrackerWaitingForResponse;
+
+  /**
    * Indicates whether to enable excluding timed out requests in Histogram reservoir.
    */
   @Config(ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED)
@@ -501,6 +524,44 @@ public class RouterConfig {
   public final int routerBackgroundDeleterMaxConcurrentOperations;
 
   /**
+   * True to use java native crc32 implementation
+   */
+  @Config(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32)
+  @Default("false")
+  public final boolean routerPutRequestUseJavaNativeCrc32;
+
+  /**
+   * Name of the operation controller class to use.
+   */
+  @Config(OPERATION_CONTROLLER)
+  @Default("com.github.ambry.router.OperationController")
+  public final String operationController;
+
+  /**
+   * Implementation class for StoreKeyConverterFactory
+   * This config is specific to the embedded AmbryRequests in cloud router only
+   */
+  @Config(ROUTER_STORE_KEY_CONVERTER_FACTORY)
+  @Default("com.github.ambry.store.StoreKeyConverterFactoryImpl")
+  public final String routerStoreKeyConverterFactory;
+
+  /**
+   * The number of request handler threads used by the server to process requests
+   * This config is specific to the embedded AmbryRequests in cloud router only
+   */
+  @Config(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS)
+  @Default("7")
+  public final int routerRequestHandlerNumOfThreads;
+
+  /**
+   * If {@code true} the router will check if offline replicas could be the cause of failure before throwing not found
+   * error. If offline replicas could be the cause of failure, then router should return unavailable error.
+   */
+  @Config(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS)
+  @Default("false")
+  public final boolean routerUnavailableDueToOfflineReplicas;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -541,6 +602,8 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS, true);
     routerGetOperationTrackerType =
         verifiableProperties.getString(ROUTER_GET_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
+    routerPutOperationTrackerType =
+        verifiableProperties.getString(ROUTER_PUT_OPERATION_TRACKER_TYPE, "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
         verifiableProperties.getDoubleInRange(ROUTER_LATENCY_TOLERANCE_QUANTILE, DEFAULT_LATENCY_TOLERANCE_QUANTILE,
             0.0, 1.0);
@@ -577,6 +640,8 @@ public class RouterConfig {
         verifiableProperties.getLong(ROUTER_OPERATION_TRACKER_MIN_DATA_POINTS_REQUIRED, 1000L);
     routerOperationTrackerMaxInflightRequests =
         verifiableProperties.getIntInRange(ROUTER_OPERATION_TRACKER_MAX_INFLIGHT_REQUESTS, 2, 1, Integer.MAX_VALUE);
+    routerAdaptiveOperationTrackerWaitingForResponse =
+        verifiableProperties.getBoolean(ROUTER_ADAPTIVE_OPERATION_TRACKER_WAITING_FOR_RESPONSE, false);
     routerOperationTrackerExcludeTimeoutEnabled =
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_EXCLUDE_TIMEOUT_ENABLED, false);
     routerOperationTrackerHistogramDumpEnabled =
@@ -608,5 +673,14 @@ public class RouterConfig {
     routerBackgroundDeleterMaxConcurrentOperations =
         verifiableProperties.getIntInRange(ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS, 0, 0,
             Integer.MAX_VALUE);
+    routerPutRequestUseJavaNativeCrc32 =
+        verifiableProperties.getBoolean(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32, false);
+    operationController =
+        verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
+    routerRequestHandlerNumOfThreads = verifiableProperties.getInt(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS, 7);
+    routerStoreKeyConverterFactory = verifiableProperties.getString(ROUTER_STORE_KEY_CONVERTER_FACTORY,
+        "com.github.ambry.store.StoreKeyConverterFactoryImpl");
+    routerUnavailableDueToOfflineReplicas =
+        verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS, false);
   }
 }

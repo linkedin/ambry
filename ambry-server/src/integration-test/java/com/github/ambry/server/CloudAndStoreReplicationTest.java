@@ -141,7 +141,7 @@ public class CloudAndStoreReplicationTest {
         new MockDataNodeId("localhost", vcrPortList, Collections.singletonList(vcrMountPath), cloudDc);
 
     // create ambry server recovery cluster
-    MockClusterMap serverClusterMap = new MockClusterMap(false, true, 2, 1, 1, true, false);
+    MockClusterMap serverClusterMap = new MockClusterMap(false, true, 2, 1, 1, true, false, null);
     recoveryCluster = new MockCluster(serverClusterMap, Collections.singletonList(vcrNode), recoveryProperties);
     partitionId = recoveryCluster.getClusterMap().getWritablePartitionIds(null).get(0);
     allRecoveryNodes = serverClusterMap.getDataNodes();
@@ -160,7 +160,7 @@ public class CloudAndStoreReplicationTest {
 
     Properties vcrProperties =
         VcrTestUtil.createVcrProperties(vcrNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            null);
+            12510, null);
     vcrProperties.putAll(recoveryProperties);
     MockNotificationSystem notificationSystem = new MockNotificationSystem(recoveryCluster.getClusterMap());
 

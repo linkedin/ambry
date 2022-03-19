@@ -15,6 +15,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.RestRequest;
 
 import static com.github.ambry.router.GetBlobOptions.*;
 
@@ -29,6 +30,7 @@ public class GetBlobOptionsBuilder {
   private ByteRange range = null;
   private boolean resolveRangeOnEmptyBlob = false;
   private boolean rawMode = false;
+  private RestRequest restRequest = null;
   private int blobSegmentIdx = NO_BLOB_SEGMENT_IDX_SPECIFIED;
 
   /**
@@ -70,6 +72,15 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
+   * @param restRequest The {@link RestRequest} that triggered this get operation.
+   * @return this builder.
+   */
+  public GetBlobOptionsBuilder restRequest(RestRequest restRequest) {
+    this.restRequest = restRequest;
+    return this;
+  }
+
+  /**
    * @param rawMode the raw mode flag for this get request.
    * If rawMode is true, the returned {@link GetBlobResult} will contain the raw (unserialized) blob payload in the
    * data channel and null blobInfo.  This option cannot be used in conjunction with a byte range.
@@ -93,6 +104,7 @@ public class GetBlobOptionsBuilder {
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
-    return new GetBlobOptions(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx);
+    return new GetBlobOptions(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx,
+        restRequest);
   }
 }

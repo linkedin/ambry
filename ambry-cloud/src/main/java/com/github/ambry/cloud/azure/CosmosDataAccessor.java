@@ -13,6 +13,8 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.security.keyvault.secrets.SecretClient;
+import com.azure.security.keyvault.secrets.SecretClientBuilder;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -115,7 +117,7 @@ public class CosmosDataAccessor {
     }
     // TODO: test option to set connectionPolicy.setEnableEndpointDiscovery(false);
     asyncDocumentClient = new AsyncDocumentClient.Builder().withServiceEndpoint(azureCloudConfig.cosmosEndpoint)
-        .withMasterKeyOrResourceToken(azureCloudConfig.cosmosKey)
+        .withMasterKeyOrResourceToken(getCosmosKey(azureCloudConfig))
         .withConnectionPolicy(connectionPolicy)
         .withConsistencyLevel(ConsistencyLevel.Session)
         .build();
@@ -816,5 +818,27 @@ public class CosmosDataAccessor {
     RequestOptions options = new RequestOptions();
     options.setPartitionKey(new PartitionKey(partitionPath));
     return options;
+  }
+
+  /**
+   * Fetch the key either directly from configs, or indirectly by looking for it in an Azure KeyVault.
+   * @param azureCloudConfig the config
+   * @return the CosmosDB key.
+   */
+  private static String getCosmosKey(AzureCloudConfig azureCloudConfig) {
+    if (!azureCloudConfig.cosmosKey.isEmpty()) {
+      return azureCloudConfig.cosmosKey;
+    }
+    if (azureCloudConfig.cosmosKeySecretName.isEmpty() || azureCloudConfig.cosmosVaultUrl.isEmpty()) {
+      throw new IllegalArgumentException(
+          String.format("One of the required configs for fetching the cosmos key from a keyvault (%s, %s) missing",
+              AzureCloudConfig.COSMOS_KEY_SECRET_NAME, AzureCloudConfig.COSMOS_VAULT_URL));
+    }
+    // check that all required azure identity configs are present if keyvault lookup is used.
+    AzureUtils.validateAzureIdentityConfigs(azureCloudConfig);
+    SecretClient secretClient = new SecretClientBuilder().vaultUrl(azureCloudConfig.cosmosVaultUrl)
+        .credential(AzureUtils.getClientSecretCredential(azureCloudConfig))
+        .buildClient();
+    return secretClient.getSecret(azureCloudConfig.cosmosKeySecretName).getValue();
   }
 }

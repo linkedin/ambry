@@ -69,8 +69,8 @@ public class ClusterMapUtils {
   static final String REPLICAS_STR_SEPARATOR = ":";
   static final String REPLICAS_CAPACITY_STR = "replicaCapacityInBytes";
   static final String REPLICA_TYPE_STR = "replicaType";
-  static final String SSL_PORT_STR = "sslPort";
-  static final String HTTP2_PORT_STR = "http2Port";
+  public static final String SSL_PORT_STR = "sslPort";
+  public static final String HTTP2_PORT_STR = "http2Port";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
@@ -86,6 +86,7 @@ public class ClusterMapUtils {
   static final String DATACENTER_ID_STR = "id";
   static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final String XID_STR = "xid";
+  static final String DISK_CAPACITY_DELIM_STR = ",";
   static final long DEFAULT_XID = Long.MIN_VALUE;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
@@ -446,7 +447,7 @@ public class ClusterMapUtils {
    * @param longValue a Long value.
    * @return the serialized byte array.
    */
-  static byte[] serializeShortAndLong(Short shortValue, Long longValue) {
+  public static byte[] serializeShortAndLong(Short shortValue, Long longValue) {
     ByteBuffer buffer = ByteBuffer.allocate(Short.SIZE / Byte.SIZE + Long.SIZE / Byte.SIZE);
     buffer.putShort(shortValue);
     buffer.putLong(longValue);

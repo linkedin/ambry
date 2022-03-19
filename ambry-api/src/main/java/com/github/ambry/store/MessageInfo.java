@@ -235,6 +235,14 @@ public class MessageInfo {
     return lifeVersion;
   }
 
+  /**
+   * True when the life version is not from frontend requests.
+   * @return true when it's not from frontend requests.
+   */
+  public static boolean hasLifeVersion(short lifeVersion) {
+    return lifeVersion > MessageInfo.LIFE_VERSION_FROM_FRONTEND;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {

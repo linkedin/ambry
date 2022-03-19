@@ -122,7 +122,7 @@ class MockServer {
     response.release();
     ByteBuffer payload = channel.getBuffer();
     payload.flip();
-    BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive();
+    BoundedNettyByteBufReceive receive = new BoundedNettyByteBufReceive(100 * 1024 * 1024);
     receive.readFrom(Channels.newChannel(new ByteBufferInputStream(payload)));
     return receive;
   }

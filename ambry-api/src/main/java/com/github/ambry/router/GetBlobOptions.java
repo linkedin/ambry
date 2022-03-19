@@ -16,6 +16,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.RestRequest;
 import java.util.Objects;
 
 
@@ -32,6 +33,7 @@ public class GetBlobOptions {
   // Flag indicating whether to return the raw blob payload without deserialization.
   private final boolean rawMode;
   private final int blobSegmentIdx;
+  private final RestRequest restRequest;
   public static final int NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
 
   /**
@@ -45,9 +47,10 @@ public class GetBlobOptions {
    * @param rawMode a system flag indicating that the raw bytes should be returned.
    * @param blobSegmentIdx if not NO_BLOB_SEGMENT_IDX_SPECIFIED, the blob segment requested to be returned (only
    *                       relevant for metadata blobs)
+   * @param restRequest the {@link RestRequest} that triggered this get operation.
    */
   GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean resolveRangeOnEmptyBlob,
-      boolean rawMode, int blobSegmentIdx) {
+      boolean rawMode, int blobSegmentIdx, RestRequest restRequest) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }
@@ -63,6 +66,7 @@ public class GetBlobOptions {
     this.resolveRangeOnEmptyBlob = resolveRangeOnEmptyBlob;
     this.rawMode = rawMode;
     this.blobSegmentIdx = blobSegmentIdx;
+    this.restRequest = restRequest;
   }
 
   /**
@@ -115,10 +119,17 @@ public class GetBlobOptions {
     return blobSegmentIdx != NO_BLOB_SEGMENT_IDX_SPECIFIED;
   }
 
+  /**
+   * @return The {@link RestRequest} that triggered this get operation.
+   */
+  public RestRequest getRestRequest() {
+    return restRequest;
+  }
+
   @Override
   public String toString() {
     return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range
-        + ", rawMode=" + rawMode + ", blobSegmentIdx=" + blobSegmentIdx + '}';
+        + ", rawMode=" + rawMode + ", blobSegmentIdx=" + blobSegmentIdx + ", restRequest=" + restRequest + '}';
   }
 
   @Override
@@ -132,12 +143,12 @@ public class GetBlobOptions {
     GetBlobOptions that = (GetBlobOptions) o;
     return resolveRangeOnEmptyBlob == that.resolveRangeOnEmptyBlob && rawMode == that.rawMode
         && blobSegmentIdx == that.blobSegmentIdx && operationType == that.operationType && getOption == that.getOption
-        && Objects.equals(range, that.range);
+        && Objects.equals(range, that.range) && Objects.equals(restRequest, that.restRequest);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx);
+    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx, restRequest);
   }
 
   /**

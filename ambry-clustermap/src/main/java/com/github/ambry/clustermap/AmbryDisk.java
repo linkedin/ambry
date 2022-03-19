@@ -27,9 +27,9 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 class AmbryDisk implements DiskId, Resource {
   private final AmbryDataNode datanode;
   private final String mountPath;
-  private final long rawCapacityBytes;
   private final ResourceStatePolicy resourceStatePolicy;
   private final long maxCapacityInBytes;
+  private volatile long rawCapacityBytes;
 
   /**
    * Instantiate an AmbryDisk object.
@@ -130,6 +130,15 @@ class AmbryDisk implements DiskId, Resource {
     } else {
       resourceStatePolicy.onHardDown();
     }
+  }
+
+  /**
+   * Set the new disk capacity in bytes.
+   * @param capacityInBytes the new capacity in bytes.
+   */
+  void setDiskCapacityInBytes(long capacityInBytes) {
+    rawCapacityBytes = capacityInBytes;
+    ClusterMapUtils.validateDiskCapacity(rawCapacityBytes, maxCapacityInBytes);
   }
 
   /**

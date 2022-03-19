@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.io.InputStream;
@@ -375,6 +376,11 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) {
+    return partitionNameToAmbryPartition.get(partitionIdStr);
+  }
+
+  @Override
   public List<PartitionId> getWritablePartitionIds(String partitionClass) {
     return partitionSelectionHelper.getWritablePartitions(partitionClass);
   }
@@ -444,16 +450,22 @@ public class HelixClusterManager implements ClusterMap {
     ClusterChangeHandler localClusterChangeHandler =
         dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).clusterChangeHandler;
     AmbryDataNode dataNode = localClusterChangeHandler.getDataNode(instanceName);
-    String mountPathFromHelix = replicaInfos.get(instanceName);
+    String mountPathAndDiskCapacityFromHelix = replicaInfos.get(instanceName);
+    String[] segments = mountPathAndDiskCapacityFromHelix.split(DISK_CAPACITY_DELIM_STR);
+    String mountPath = segments[0];
+    String diskCapacityStr = segments.length >= 2 ? segments[1] : null;
     Set<AmbryDisk> disks = dataNode != null ? localClusterChangeHandler.getDisks(dataNode) : null;
     Optional<AmbryDisk> potentialDisk =
-        disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPathFromHelix)).findAny()
-            : Optional.empty();
+        disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPath)).findAny() : Optional.empty();
     if (potentialDisk.isPresent()) {
       try {
+        AmbryDisk targetDisk = potentialDisk.get();
+        if (diskCapacityStr != null) {
+          // update disk capacity if bootstrap replica info contains disk capacity in bytes.
+          targetDisk.setDiskCapacityInBytes(Long.parseLong(diskCapacityStr));
+        }
         bootstrapReplica =
-            new AmbryServerReplica(clusterMapConfig, currentPartition, potentialDisk.get(), true, replicaCapacity,
-                false);
+            new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity, false);
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
@@ -579,6 +591,13 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * @return localDC's zk connect string.
+   */
+  public String getLocalDcZkConnectString() {
+    return dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getZkConnectStrs().get(0);
+  }
+
+  /**
    * A callback class for {@link HelixClusterChangeHandler} in each dc to update cluster-wide info (i.e partition-to-replica
    * mapping, cluster-wide capacity)
    */
@@ -700,6 +719,17 @@ public class HelixClusterManager implements ClusterMap {
         }
       }
       return replicas;
+    }
+
+    @Override
+    public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, AmbryPartition partition,
+        Set<ReplicaState> states, String dcName) {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        String dc = dcInfo.dcName;
+        if (dcName == null || dcName.equals(dc)) {
+          dcInfo.clusterChangeHandler.getReplicaIdsByStates(replicasByState, states, partition);
+        }
+      }
     }
 
     /**

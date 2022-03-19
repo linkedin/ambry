@@ -23,8 +23,8 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -165,7 +165,11 @@ class FrontendRestRequestService implements RestRequestService {
       throw new InstantiationException("ResponseHandler is not set.");
     }
     long startupBeginTime = System.currentTimeMillis();
-    quotaManager.init();
+    try {
+      quotaManager.init();
+    } catch (Exception e) {
+      throw new InstantiationException("FrontendRestRequestService Instantiation failed due to: " + e.getMessage());
+    }
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
@@ -212,6 +216,9 @@ class FrontendRestRequestService implements RestRequestService {
         idConverter.close();
         idConverter = null;
       }
+      if (accountStatsStore != null) {
+        accountStatsStore.shutdown();
+      }
       logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {
       logger.error("Downstream service close failed", e);
@@ -245,7 +252,8 @@ class FrontendRestRequestService implements RestRequestService {
       } else {
         SubResource subResource = requestPath.getSubResource();
         GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,
-            getGetOption(restRequest, frontendConfig.defaultRouterGetOption), requestPath.getBlobSegmentIdx());
+            getGetOption(restRequest, frontendConfig.defaultRouterGetOption), restRequest,
+            requestPath.getBlobSegmentIdx());
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subResource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -750,7 +758,7 @@ class FrontendRestRequestService implements RestRequestService {
           if (subResource == null) {
             getCallback.markStartTime();
             router.getBlob(convertedId, getCallback.options, getCallback,
-                QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
           } else {
             switch (subResource) {
               case BlobInfo:
@@ -758,7 +766,7 @@ class FrontendRestRequestService implements RestRequestService {
               case Segment:
                 getCallback.markStartTime();
                 router.getBlob(convertedId, getCallback.options, getCallback,
-                    QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, true));
+                    QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
                 break;
               case Replicas:
                 response = getReplicasHandler.getReplicas(convertedId, restResponseChannel);
@@ -777,13 +785,13 @@ class FrontendRestRequestService implements RestRequestService {
           headCallback.markStartTime();
           router.getBlob(convertedId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
               .getOption(getOption)
-              .build(), headCallback,
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
+              .restRequest(restRequest)
+              .build(), headCallback, QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
           break;
         case DELETE:
           deleteCallback.markStartTime();
           router.deleteBlob(convertedId, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback,
-              QuotaChargeCallback.buildQuotaChargeCallback(restRequest, quotaManager, false));
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
           break;
         default:
           throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);

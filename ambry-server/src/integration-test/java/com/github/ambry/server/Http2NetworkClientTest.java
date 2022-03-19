@@ -155,7 +155,7 @@ public class Http2NetworkClientTest {
             properties.getBlobSize(), BlobType.DataBlob, null);
     RequestInfo request =
         new RequestInfo(dataNodeId.getHostname(), new Port(dataNodeId.getHttp2Port(), PortType.HTTP2), putRequest,
-            clusterMap.getReplicaIds(dataNodeId).get(0));
+            clusterMap.getReplicaIds(dataNodeId).get(0), null);
     List<ResponseInfo> responseInfos =
         networkClient.sendAndPoll(Collections.singletonList(request), new HashSet<>(), 300);
     long startTime = SystemTime.getInstance().milliseconds();
@@ -185,7 +185,7 @@ public class Http2NetworkClientTest {
         new GetRequest(1, "http2-clientid", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
 
     request = new RequestInfo(dataNodeId.getHostname(), new Port(dataNodeId.getHttp2Port(), PortType.HTTP2), getRequest,
-        clusterMap.getReplicaIds(dataNodeId).get(0));
+        clusterMap.getReplicaIds(dataNodeId).get(0), null);
     responseInfos = networkClient.sendAndPoll(Collections.singletonList(request), new HashSet<>(), 300);
     startTime = SystemTime.getInstance().milliseconds();
     while (responseInfos.size() == 0) {

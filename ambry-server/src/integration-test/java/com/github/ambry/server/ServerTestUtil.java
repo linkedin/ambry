@@ -145,7 +145,7 @@ import static org.junit.Assert.*;
 
 final class ServerTestUtil {
   private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER =
-      QuotaTestUtils.createDummyQuotaChargeEventListener();
+      QuotaTestUtils.createTestQuotaChargeCallback();
 
   static byte[] getBlobDataAndRelease(BlobData blobData) {
     byte[] actualBlobData = new byte[(int) blobData.getSize()];
@@ -649,8 +649,12 @@ final class ServerTestUtil {
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 
-    Port port = clientSSLConfig == null ? new Port(dataNode.getPort(), PortType.PLAINTEXT)
-        : new Port(dataNode.getSSLPort(), PortType.SSL);
+    Port port;
+    if (clientSSLConfig == null) {
+      port = new Port(dataNode.getPort(), PortType.PLAINTEXT);
+    } else {
+      port = new Port(dataNode.getSSLPort(), PortType.SSL);
+    }
     ConnectedChannel channel =
         getBlockingChannelBasedOnPortType(port, "localhost", clientSSLSocketFactory, clientSSLConfig);
     channel.connect();
@@ -674,7 +678,7 @@ final class ServerTestUtil {
     // Start the VCR and CloudBackupManager
     Properties props =
         VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
-            vcrSSLProps);
+            12510, vcrSSLProps);
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIds, clusterAgentsFactory.getClusterMap());
     CloudDestinationFactory cloudDestinationFactory =

@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.KMSConfig;
+import com.github.ambry.rest.RestRequest;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import javax.crypto.KeyGenerator;
@@ -26,7 +27,7 @@ import org.bouncycastle.util.encoders.Hex;
 
 /**
  * Single {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
- * {@link #getKey(short, short)} calls, but a different random key for any {@link #getRandomKey()} calls.
+ * {@link #getKey(RestRequest, short, short)} calls, but a different random key for any {@link #getRandomKey()} calls.
  */
 public class SingleKeyManagementService implements KeyManagementService<SecretKeySpec> {
   private final SecretKeySpec secretKeySpec;
@@ -37,7 +38,7 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
   /**
    * Instantiates {@link SingleKeyManagementService} with {@link KMSConfig} and a default container key which is hex string.
    * @param config {@link KMSConfig} to fetch configs from
-   * @param defaultContainerKey the default container key that will be returned for all {@link #getKey(short, short)} calls
+   * @param defaultContainerKey the default container key that will be returned for all {@link #getKey(RestRequest, short, short)} calls
    * @throws GeneralSecurityException
    */
   public SingleKeyManagementService(KMSConfig config, String defaultContainerKey) throws GeneralSecurityException {
@@ -65,18 +66,20 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
 
   /**
    * Fetches the key associated with the pair of AccountId and ContainerId. {@link SingleKeyManagementService} returns
-   * the default key for all {@link #getKey(short, short)}}
+   * the default key for all {@link #getKey(RestRequest, short, short)}}
+   * @param restRequest the {@link RestRequest} to use
    * @param accountId refers to the id of the {@link Account} for which key is expected
    * @param containerId refers to the id of the {@link Container} for which key is expected
    * @return {@link SecretKeySpec} the key associated with the accountId and containerId
    */
   @Override
-  public SecretKeySpec getKey(short accountId, short containerId) throws GeneralSecurityException {
-    return getKey(accountId + ":" + containerId);
+  public SecretKeySpec getKey(RestRequest restRequest, short accountId, short containerId)
+      throws GeneralSecurityException {
+    return getKey(restRequest, accountId + ":" + containerId);
   }
 
   @Override
-  public SecretKeySpec getKey(String context) throws GeneralSecurityException {
+  public SecretKeySpec getKey(RestRequest restRequest, String context) throws GeneralSecurityException {
     if (enabled) {
       return secretKeySpec;
     } else {

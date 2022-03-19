@@ -102,6 +102,7 @@ public class NettyPerfClient {
   private final String serviceId;
   private final String targetAccountName;
   private final String targetContainerName;
+  private final String ttl;
   private final List<Pair<String, String>> customHeaders = new ArrayList<>();
   private final ChannelConnectListener channelConnectListener = new ChannelConnectListener();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -140,6 +141,7 @@ public class NettyPerfClient {
     final Integer testTime;
     final Integer targetQPS;
     final String sslPropsFilePath;
+    final String ttl;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     /**
@@ -209,6 +211,11 @@ public class NettyPerfClient {
           .describedAs("serviceId")
           .ofType(String.class)
           .defaultsTo("NettyPerfClient");
+      ArgumentAcceptingOptionSpec<String> ttl = parser.accepts("ttl", "Blob ttl")
+          .withOptionalArg()
+          .describedAs("ttl")
+          .ofType(String.class)
+          .defaultsTo("86400");
       ArgumentAcceptingOptionSpec<Integer> testTime = parser.accepts("testTime",
           "How long the perf test should run for, in seconds. If not set, the test will run until interrupted")
           .withOptionalArg()
@@ -241,6 +248,7 @@ public class NettyPerfClient {
       this.testTime = options.valueOf(testTime);
       this.targetQPS = options.valueOf(targetQPS);
       this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
+      this.ttl = options.valueOf(ttl);
       validateArgs();
 
       logger.info("Hosts: {}", this.hosts);
@@ -254,6 +262,7 @@ public class NettyPerfClient {
       logger.info("SSL properties file path: {}", this.sslPropsFilePath);
       logger.info("Custom Headers: {}", this.customHeaders);
       logger.info("Target QPS: {}", this.targetQPS);
+      logger.info("Blob ttl: {}", this.ttl);
     }
 
     /**
@@ -289,7 +298,7 @@ public class NettyPerfClient {
           new NettyPerfClient(clientArgs.hosts, clientArgs.port, clientArgs.path, clientArgs.pathFileName,
               clientArgs.concurrency, clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize,
               clientArgs.sslPropsFilePath, clientArgs.serviceId, clientArgs.targetAccountName,
-              clientArgs.targetContainerName, clientArgs.customHeaders, clientArgs.targetQPS);
+              clientArgs.targetContainerName, clientArgs.customHeaders, clientArgs.targetQPS, clientArgs.ttl);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         logger.info("Received shutdown signal. Requesting NettyPerfClient shutdown");
@@ -325,15 +334,17 @@ public class NettyPerfClient {
    * @param customHeaders list of http headers name:value to be added.
    * @param targetQPS the target QPS expected on single frontend. If not specified, targetQPS uses default value 0, which
    *                  means the client attempts to issue request as fast as it can.
+   * @param ttl The blob ttl.
    * @throws IOException
    * @throws GeneralSecurityException
    */
   private NettyPerfClient(List<String> hosts, int port, String path, String pathFileName, int concurrency,
       Long totalSize, Integer chunkSize, String sslPropsFilePath, String serviceId, String targetAccountName,
-      String targetContainerName, List<String> customHeaders, int targetQPS) throws Exception {
+      String targetContainerName, List<String> customHeaders, int targetQPS, String ttl) throws Exception {
     this.hosts = hosts;
     this.port = port;
     this.path = path;
+    this.ttl = ttl;
     if (pathFileName != null) {
       this.pathList = Files.readAllLines(Paths.get(pathFileName));
     } else {
@@ -626,6 +637,9 @@ public class NettyPerfClient {
         }
         if (targetContainerName != null && !targetContainerName.isEmpty() ) {
           request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
+        }
+        if (ttl != null && !ttl.isEmpty()) {
+          request.headers().add(RestUtils.Headers.TTL, ttl);
         }
       } else {
         if (pathList == null) {

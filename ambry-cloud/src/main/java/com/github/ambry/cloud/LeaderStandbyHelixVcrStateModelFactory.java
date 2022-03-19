@@ -24,10 +24,10 @@ public class LeaderStandbyHelixVcrStateModelFactory extends VcrStateModelFactory
 
   /**
    * Constructor for {@link LeaderStandbyHelixVcrStateModelFactory}.
-   * @param helixVcrCluster the helix vcr cluster.
+   * @param helixVcrClusterParticipant the helix vcr cluster participant.
    */
-  public LeaderStandbyHelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
-    this.helixVcrCluster = helixVcrCluster;
+  public LeaderStandbyHelixVcrStateModelFactory(HelixVcrClusterParticipant helixVcrClusterParticipant) {
+    this.helixVcrClusterParticipant = helixVcrClusterParticipant;
   }
 
   /**
@@ -39,7 +39,7 @@ public class LeaderStandbyHelixVcrStateModelFactory extends VcrStateModelFactory
    */
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
-    return new LeaderStandbyHelixVcrStateModel(helixVcrCluster);
+    return new LeaderStandbyHelixVcrStateModel(helixVcrClusterParticipant);
   }
 
   @Override

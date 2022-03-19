@@ -16,10 +16,10 @@ package com.github.ambry.accountstats;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -41,23 +41,20 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
   private final String clusterName;
   private final String hostname;
   private final MetricRegistry registry;
-  private final String localBackupFilePath;
 
   /**
    * Constructor to create a {@link AccountStatsMySqlStoreFactory}.
    * @param verifiableProperties
    * @param clusterMapConfig
-   * @param statsManagerConfig
    * @param registry
    */
   public AccountStatsMySqlStoreFactory(VerifiableProperties verifiableProperties, ClusterMapConfig clusterMapConfig,
-      StatsManagerConfig statsManagerConfig, MetricRegistry registry) {
+      MetricRegistry registry) {
     accountStatsMySqlConfig = new AccountStatsMySqlConfig(verifiableProperties);
     clusterName = clusterMapConfig.clusterMapClusterName;
     hostnameHelper = new HostnameHelper(accountStatsMySqlConfig, clusterMapConfig.clusterMapPort);
     hostname = hostnameHelper.simplifyHostname(clusterMapConfig.clusterMapHostName);
     localDC = clusterMapConfig.clusterMapDatacenterName;
-    localBackupFilePath = statsManagerConfig.outputFilePath;
     this.registry = registry;
   }
 
@@ -67,44 +64,34 @@ public class AccountStatsMySqlStoreFactory implements AccountStatsStoreFactory {
    * @throws SQLException
    */
   @Override
-  public AccountStatsStore getAccountStatsStore() throws SQLException {
+  public AccountStatsStore getAccountStatsStore() throws Exception {
     Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(accountStatsMySqlConfig.dbInfo);
     List<DbEndpoint> dbEndpoints = dcToMySqlDBEndpoints.get(localDC);
     if (dbEndpoints == null || dbEndpoints.size() == 0) {
       throw new IllegalArgumentException("Empty db endpoints for datacenter: " + localDC);
     }
-    if (accountStatsMySqlConfig.enableRewriteBatchedStatement) {
-      dbEndpoints = setRewriteBatchedStatements(dbEndpoints);
-    }
-    try {
-      dbEndpoints.forEach(ep -> logger.info("DBUrl: {}", ep.getUrl()));
-      return new AccountStatsMySqlStore(accountStatsMySqlConfig, dbEndpoints, localDC, clusterName, hostname,
-          localBackupFilePath, hostnameHelper, registry);
-    } catch (SQLException e) {
-      logger.error("Account Stats MySQL store creation failed", e);
-      throw e;
-    }
+    dbEndpoints.forEach(ep -> logger.info("DBUrl: {}", ep.getUrl()));
+    return new AccountStatsMySqlStore(accountStatsMySqlConfig, buildDataSource(dbEndpoints.get(0)), clusterName,
+        hostname, hostnameHelper, registry);
   }
 
-  /**
-   * Set rewriteBatchedStatements for the db url if not set yet.
-   * @param endpoints The list of {@link DbEndpoint}s.
-   * @return The modified lit of {@link DbEndpoint}s.
-   */
-  static List<DbEndpoint> setRewriteBatchedStatements(List<DbEndpoint> endpoints) {
-    List<DbEndpoint> result = new ArrayList<>();
-    for (DbEndpoint ep : endpoints) {
-      if (ep.getUrl().contains(REWRITE_BATCHED_STATEMENTS_LITERAL)) {
-        result.add(ep);
-      } else {
-        String sep = ep.getUrl().contains("?") ? "&" : "?";
-        String newUrl = new StringBuilder(ep.getUrl()).append(sep)
-            .append(REWRITE_BATCHED_STATEMENTS_LITERAL)
-            .append("=true")
-            .toString();
-        result.add(new DbEndpoint(newUrl, ep.getDatacenter(), ep.isWriteable(), ep.getUsername(), ep.getPassword()));
-      }
-    }
-    return result;
+  private HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
+    HikariConfig hikariConfig = new HikariConfig();
+    hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
+    hikariConfig.setUsername(dbEndpoint.getUsername());
+    hikariConfig.setPassword(dbEndpoint.getPassword());
+    hikariConfig.setMaximumPoolSize(accountStatsMySqlConfig.poolSize);
+    hikariConfig.setMinimumIdle(0);
+    hikariConfig.setIdleTimeout(accountStatsMySqlConfig.connectionIdleTimeoutMs);
+    // Recommended properties for automatic prepared statement caching
+    // https://github.com/brettwooldridge/HikariCP/wiki/MySQL-Configuration
+    hikariConfig.addDataSourceProperty("cachePrepStmts", "true");
+    hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
+    hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+    hikariConfig.addDataSourceProperty("useServerPrepStmts", "true");
+    hikariConfig.addDataSourceProperty(REWRITE_BATCHED_STATEMENTS_LITERAL,
+        String.valueOf(accountStatsMySqlConfig.enableRewriteBatchedStatement));
+    hikariConfig.setMetricRegistry(registry);
+    return new HikariDataSource(hikariConfig);
   }
 }

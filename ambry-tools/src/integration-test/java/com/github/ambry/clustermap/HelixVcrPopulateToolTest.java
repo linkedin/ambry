@@ -37,7 +37,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.clustermap.HelixVcrPopulateTool.*;
+import static com.github.ambry.clustermap.HelixVcrUtil.*;
 
 
 @RunWith(Parameterized.class)
@@ -70,7 +70,7 @@ public class HelixVcrPopulateToolTest {
   private HelixAdmin srcHelixAdmin;
   private HelixZkClient zkClient;
   private ClusterSetup clusterSetup;
-  private Config config;
+  private HelixVcrUtil.VcrHelixConfig config;
 
   /**
    * Constructor for {@link HelixVcrPopulateTool}.
@@ -93,7 +93,7 @@ public class HelixVcrPopulateToolTest {
   @Before
   public void beforeTest() throws Exception {
     try (InputStream input = new ByteArrayInputStream(configData.getBytes())) {
-      config = new ObjectMapper().readValue(input, Config.class);
+      config = new ObjectMapper().readValue(input, HelixVcrUtil.VcrHelixConfig.class);
     } catch (IOException ex) {
       throw new IllegalStateException("Could not load config from config data: " + configData);
     }
@@ -114,7 +114,7 @@ public class HelixVcrPopulateToolTest {
       partitionSet.add(Integer.toString(i));
     }
     IdealState idealState =
-        HelixVcrPopulateTool.buildIdealState(resourceName, partitionSet, config.getIdealStateConfigFields());
+        HelixVcrUtil.buildIdealState(resourceName, partitionSet, config.getIdealStateConfigFields());
     srcHelixAdmin.addResource(SRC_CLUSTER_NAME, resourceName, idealState);
   }
 
@@ -124,8 +124,8 @@ public class HelixVcrPopulateToolTest {
   }
 
   /**
-   * Test {@link HelixVcrPopulateTool#createCluster(String, String, Config)} and
-   * {@link HelixVcrPopulateTool#updateResourceAndPartition(String, String, String, String, Config, boolean)} method.
+   * Test {@link HelixVcrUtil#createCluster(String, String, HelixVcrUtil.VcrHelixConfig)} and
+   * {@link HelixVcrUtil#updateResourceAndPartition(String, String, String, String, HelixVcrUtil.VcrHelixConfig, boolean)} method.
    */
   @Test
   public void testCreateAndUpdateCluster() throws Exception {
@@ -137,9 +137,9 @@ public class HelixVcrPopulateToolTest {
     TestUtils.ZkInfo destZkInfo =
         new com.github.ambry.utils.TestUtils.ZkInfo(TestUtils.getTempDir("helixDestVcr"), "DC1", (byte) 1,
             destZkServerPort, true);
-    HelixVcrPopulateTool.createCluster(destZkConnectString, destVcrClusterName, config);
+    HelixVcrUtil.createCluster(destZkConnectString, destVcrClusterName, config);
 
-    HelixVcrPopulateTool.updateResourceAndPartition(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString,
+    HelixVcrUtil.updateResourceAndPartition(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString,
         destVcrClusterName, config, false);
     Assert.assertTrue("Dest and Src should be same",
         isSrcDestSync(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString, destVcrClusterName));
@@ -153,52 +153,21 @@ public class HelixVcrPopulateToolTest {
     }
     for (String resourceName : resourceNames) {
       IdealState idealState =
-          HelixVcrPopulateTool.buildIdealState(resourceName, partitionSet, config.getIdealStateConfigFields());
+          HelixVcrUtil.buildIdealState(resourceName, partitionSet, config.getIdealStateConfigFields());
       srcHelixAdmin.addResource(SRC_CLUSTER_NAME, resourceName, idealState);
     }
 
-    HelixVcrPopulateTool.updateResourceAndPartition(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString,
+    HelixVcrUtil.updateResourceAndPartition(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString,
         destVcrClusterName, config, false);
     Assert.assertTrue("Dest and Src should be same",
         isSrcDestSync(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString, destVcrClusterName));
 
     // Test the update-only option as well, make sure partitions are unchanged
-    HelixVcrPopulateTool.updateResourceIdealState(destZkConnectString, destVcrClusterName, config, false);
+    HelixVcrUtil.updateResourceIdealState(destZkConnectString, destVcrClusterName, config, false);
     Assert.assertTrue("Dest and Src should be same",
         isSrcDestSync(SRC_ZK_CONNECT_STRING, SRC_CLUSTER_NAME, destZkConnectString, destVcrClusterName));
 
     destZkInfo.shutdown();
   }
 
-  /**
-   * A method to verify resources and partitions in src cluster and dest cluster are same.
-   */
-  private boolean isSrcDestSync(String srcZkString, String srcClusterName, String destZkString,
-      String destClusterName) {
-
-    HelixAdmin srcAdmin = new ZKHelixAdmin(srcZkString);
-    Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
-    HelixAdmin destAdmin = new ZKHelixAdmin(destZkString);
-    Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
-
-    for (String resource : srcResources) {
-      if (HelixVcrPopulateTool.ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
-        System.out.println("Resource " + resource + " from src cluster is ignored");
-        continue;
-      }
-      if (destResources.contains(resource)) {
-        // check if every partition exist.
-        Set<String> srcPartitions = srcAdmin.getResourceIdealState(srcClusterName, resource).getPartitionSet();
-        Set<String> destPartitions = destAdmin.getResourceIdealState(destClusterName, resource).getPartitionSet();
-        for (String partition : srcPartitions) {
-          if (!destPartitions.contains(partition)) {
-            return false;
-          }
-        }
-      } else {
-        return false;
-      }
-    }
-    return true;
-  }
 }

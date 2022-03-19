@@ -17,7 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockClusterSpectator;
+import com.github.ambry.clustermap.MockVcrClusterSpectator;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -57,7 +57,7 @@ import org.mockito.internal.util.reflection.FieldSetter;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 import static com.github.ambry.clustermap.TestUtils.*;
-import static com.github.ambry.clustermap.VirtualReplicatorCluster.*;
+import static com.github.ambry.clustermap.VcrClusterParticipant.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -82,7 +82,7 @@ public class CloudToStoreReplicationManagerTest {
   private final MockDataNodeId vcrNode;
   private final DataNodeId currentNode;
   private final MockHelixParticipant mockHelixParticipant;
-  private final MockClusterSpectator mockClusterSpectator;
+  private final MockVcrClusterSpectator mockClusterSpectator;
   private final MockClusterMap clusterMap;
 
   public CloudToStoreReplicationManagerTest() throws Exception {
@@ -108,7 +108,7 @@ public class CloudToStoreReplicationManagerTest {
     vcrNode = new MockDataNodeId("localhost", vcrPortList, Collections.singletonList(VCR_MOUNT_PATH), CLOUD_DC_NAME);
     clusterMap = new MockClusterMap();
     currentNode = clusterMap.getDataNodeIds().get(0);
-    mockClusterSpectator = new MockClusterSpectator(Collections.singletonList(vcrNode));
+    mockClusterSpectator = new MockVcrClusterSpectator(Collections.singletonList(vcrNode));
     long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
     Properties properties = new Properties();
     properties.setProperty("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));

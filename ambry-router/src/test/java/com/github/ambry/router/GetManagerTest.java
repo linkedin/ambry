@@ -84,7 +84,7 @@ public class GetManagerTest {
   private GetBlobOptions options = new GetBlobOptionsBuilder().build();
   private List<ChunkInfo> chunkInfos;
   private final QuotaChargeCallback quotaChargeCallback =
-      QuotaTestUtils.createDummyQuotaChargeEventListener();
+      QuotaTestUtils.createTestQuotaChargeCallback();
 
   /**
    * Pre-initialization common to all tests.
@@ -561,7 +561,8 @@ public class GetManagerTest {
   /**
    * @return Return a {@link NonBlockingRouter} created with default {@link VerifiableProperties}
    */
-  private NonBlockingRouter getNonBlockingRouter() throws IOException, GeneralSecurityException {
+  private NonBlockingRouter getNonBlockingRouter() throws IOException, GeneralSecurityException,
+                                                          ReflectiveOperationException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");

@@ -61,6 +61,11 @@ public class ResponseHandlerTest {
     }
 
     @Override
+    public PartitionId getPartitionIdByName(String partitionIdStr) {
+      return null;
+    }
+
+    @Override
     public List<PartitionId> getWritablePartitionIds(String partitionClass) {
       return null;
     }

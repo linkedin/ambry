@@ -24,7 +24,6 @@ import java.util.Set;
 public class CloudConfig {
 
   public static final String CLOUD_IS_VCR = "cloud.is.vcr";
-  public static final String VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS = "virtual.replicator.cluster.factory.class";
   public static final String CLOUD_DESTINATION_FACTORY_CLASS = "cloud.destination.factory.class";
   public static final String VCR_CLUSTER_ZK_CONNECT_STRING = "vcr.cluster.zk.connect.string";
   public static final String VCR_CLUSTER_NAME = "vcr.cluster.name";
@@ -59,14 +58,21 @@ public class CloudConfig {
   public static final String VCR_ASSIGNED_PARTITIONS = "vcr.assigned.partitions";
   public static final String VCR_PROXY_HOST = "vcr.proxy.host";
   public static final String VCR_PROXY_PORT = "vcr.proxy.port";
-  public static final String VCR_CLUSTER_SPECTATOR_FACTORY_CLASS = "vcr.cluster.spectator.factory.class";
+  public static final String VCR_CLUSTER_AGENTS_FACTORY_CLASS = "vcr.cluster.agents.factory.class";
   // Comma separated names of datacenter(s) which the VCR replicate from.
   public static final String VCR_SOURCE_DATACENTERS = "vcr.source.datacenters";
   public static final String CLOUD_COMPACTION_NUM_THREADS = "cloud.compaction.num.threads";
   public static final String VCR_HELIX_STATE_MODEL_FACTORY_CLASS = "vcr.helix.state.model.factory.class";
+  public static final String VCR_HELIX_UPDATER_PARTITION_ID = "vcr.helix.updater.partition.id";
+  public static final String VCR_HELIX_UPDATE_CONFIG = "vcr.helix.update.config";
+  public static final String VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS = "vcr.helix.update.delay.time.in.seconds";
+  public static final String VCR_HELIX_SYNC_CHECK_INTERVAL_IN_SECONDS = "vcr.helix.sync.check.interval.in.seconds";
+  public static final String VCR_HELIX_LOCK_TIMEOUT_IN_MS = "vcr.helix.lock.timeout.in.ms";
+  public static final String VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS =
+      "vcr.wait.time.if.helix.lock.not.obtained.in.ms";
+  public static final String VCR_HELIX_LOCK_MAX_RETRY_COUNT = "vcr.helix.lock.max.retry.count";
+  public static final String VCR_HELIX_UPDATE_DRY_RUN = "vcr.helix.update.dry.run";
 
-  public static final String DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS =
-      "com.github.ambry.cloud.StaticVcrClusterFactory";
   public static final String DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS =
       "com.github.ambry.cloud.azure.AzureCloudDestinationFactory";
   public static final String KMS_SERVICE_KEY_CONTEXT = "kms.service.key.context";
@@ -92,10 +98,21 @@ public class CloudConfig {
   public static final int DEFAULT_BATCH_TIMEOUT = 60000;
   public static final int DEFAULT_VCR_PROXY_PORT = 3128;
   public static final int DEFAULT_CLOUD_COMPACTION_NUM_THREADS = 4;
-  public static final String DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS =
-      "com.github.ambry.clustermap.HelixClusterSpectatorFactory";
+  public static final String DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS =
+      "com.github.ambry.cloud.HelixVcrClusterAgentsFactory";
   public static final String DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS =
       "com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory";
+  public static final String DEFAULT_VCR_HELIX_UPDATE_CONFIG =
+      "{\n" + "  \"clusterConfigFields\": {\n" + "    \"maxOfflineInstancesAllowed\": 4,\n"
+          + "    \"numOfflineInstancesForAutoExit\": 2,\n" + "    \"allowAutoJoin\": true\n" + "  },\n"
+          + "  \"idealStateConfigFields\": {\n" + "    \"numReplicas\": 1,\n"
+          + "    \"stateModelDefRef\": \"OnlineOffline\",\n"
+          + "    \"rebalanceStrategy\": \"org.apache.helix.controller.rebalancer.strategy.CrushEdRebalanceStrategy\",\n"
+          + "    \"minActiveReplicas\": 0,\n"
+          + "    \"rebalancerClassName\": \"org.apache.helix.controller.rebalancer.DelayedAutoRebalancer\",\n"
+          + "    \"rebalanceDelayInMins\": 20\n" + "  }\n" + "}";
+
+  public static final String VCR_HELIX_CONFIG_READY = "vcrHelixConfigReady";
 
   /**
    * True for VCR node, false for live serving node.
@@ -103,13 +120,6 @@ public class CloudConfig {
   @Config(CLOUD_IS_VCR)
   @Default("false")
   public final boolean cloudIsVcr;
-
-  /**
-   * The virtual replicator cluster factory class name.
-   */
-  @Config(VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS)
-  @Default(DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS)
-  public final String virtualReplicatorClusterFactoryClass;
 
   /**
    * The cloud destination factory class name.
@@ -338,11 +348,11 @@ public class CloudConfig {
   public final int cloudBatchRequestTimeout;
 
   /**
-   * The class used to instantiate {@link com.github.ambry.clustermap.ClusterSpectatorFactory}
+   * The class used to instantiate {@link VcrClusterAgentsFactory}
    */
-  @Config(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
-  @Default(DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS)
-  public final String vcrClusterSpectatorFactoryClass;
+  @Config(VCR_CLUSTER_AGENTS_FACTORY_CLASS)
+  @Default(DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS)
+  public final String vcrClusterAgentsFactoryClass;
 
   /**
    * Comma separated set of datacenters which can act as peer for cross colo replication.
@@ -361,11 +371,65 @@ public class CloudConfig {
   @Default(DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS)
   public final String vcrHelixStateModelFactoryClass;
 
+  /**
+   * The vcr node responsible for partition 1 is the vcr helix updater. Use empty string to disable vcr helix auto update.
+   */
+  @Config(VCR_HELIX_UPDATER_PARTITION_ID)
+  @Default("")
+  public final String vcrHelixUpdaterPartitionId;
+
+  /**
+   * The config string used when update VCR helix.
+   */
+  @Config(VCR_HELIX_UPDATE_CONFIG)
+  @Default(DEFAULT_VCR_HELIX_UPDATE_CONFIG)
+  public final String vcrHelixUpdateConfig;
+
+  /**
+   * The delay between an ambry cluster change notification arrive and VCR helix update action
+   */
+  @Config(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS)
+  @Default("60")
+  public final int vcrHelixUpdateDelayTimeInSeconds;
+
+  /**
+   * The period to check if Ambry Helix and VCR Helix on sync.
+   */
+  @Config(VCR_HELIX_SYNC_CHECK_INTERVAL_IN_SECONDS)
+  @Default("3600")
+  public final int vcrHelixSyncCheckIntervalInSeconds;
+
+  /**
+   * THe max time in ms that a helix lock can be held. After timeout, it can be obtained by others.
+   */
+  @Config(VCR_HELIX_LOCK_TIMEOUT_IN_MS)
+  @Default("600000")
+  public final long vcrHelixLockTimeoutInMs;
+
+  /**
+   * Sleep time if failed to obtain helix lock to update vcr helix.
+   */
+  @Config(VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS)
+  @Default("500")
+  public final long vcrWaitTimeIfHelixLockNotObtainedInMs;
+
+  /**
+   * Sleep time if failed to obtain helix lock to update vcr helix.
+   */
+  @Config(VCR_HELIX_LOCK_MAX_RETRY_COUNT)
+  @Default("10")
+  public final int vcrHelixLockMaxRetryCount;
+
+  /**
+   * If true, VCR helix update will be in dry run mode. We can also use this to turn off automated VCR cluster update.
+   */
+  @Config(VCR_HELIX_UPDATE_DRY_RUN)
+  @Default("false")
+  public final boolean vcrHelixUpdateDryRun;
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
-    virtualReplicatorClusterFactoryClass = verifiableProperties.getString(VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS,
-        DEFAULT_VIRTUAL_REPLICATOR_CLUSTER_FACTORY_CLASS);
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
     vcrAssignedPartitions = verifiableProperties.getString(VCR_ASSIGNED_PARTITIONS, null);
@@ -414,12 +478,21 @@ public class CloudConfig {
     vcrProxyHost = verifiableProperties.getString(VCR_PROXY_HOST, null);
     vcrProxyPort = verifiableProperties.getInt(VCR_PROXY_PORT, DEFAULT_VCR_PROXY_PORT);
 
-    vcrClusterSpectatorFactoryClass = verifiableProperties.getString(VCR_CLUSTER_SPECTATOR_FACTORY_CLASS,
-        DEFAULT_VCR_CLUSTER_SPECTATOR_FACTORY_CLASS);
+    vcrClusterAgentsFactoryClass =
+        verifiableProperties.getString(VCR_CLUSTER_AGENTS_FACTORY_CLASS, DEFAULT_VCR_CLUSTER_AGENTS_FACTORY_CLASS);
 
     vcrSourceDatacenters =
         Utils.splitString(verifiableProperties.getString(VCR_SOURCE_DATACENTERS, ""), ",", HashSet::new);
     vcrHelixStateModelFactoryClass = verifiableProperties.getString(VCR_HELIX_STATE_MODEL_FACTORY_CLASS,
         DEFAULT_VCR_HELIX_STATE_MODEL_FACTORY_CLASS);
+    vcrHelixUpdaterPartitionId = verifiableProperties.getString(VCR_HELIX_UPDATER_PARTITION_ID, "");
+    vcrHelixUpdateConfig = verifiableProperties.getString(VCR_HELIX_UPDATE_CONFIG, DEFAULT_VCR_HELIX_UPDATE_CONFIG);
+    vcrHelixUpdateDelayTimeInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 60);
+    vcrHelixUpdateDryRun = verifiableProperties.getBoolean(VCR_HELIX_UPDATE_DRY_RUN, false);
+    vcrHelixSyncCheckIntervalInSeconds = verifiableProperties.getInt(VCR_HELIX_UPDATE_DELAY_TIME_IN_SECONDS, 3600);
+    vcrHelixLockTimeoutInMs = verifiableProperties.getLong(VCR_HELIX_LOCK_TIMEOUT_IN_MS, 600000);
+    vcrWaitTimeIfHelixLockNotObtainedInMs =
+        verifiableProperties.getLong(VCR_WAIT_TIME_IF_HELIX_LOCK_NOT_OBTAINED_IN_MS, 500);
+    vcrHelixLockMaxRetryCount = verifiableProperties.getInt(VCR_HELIX_LOCK_MAX_RETRY_COUNT, 10);
   }
 }

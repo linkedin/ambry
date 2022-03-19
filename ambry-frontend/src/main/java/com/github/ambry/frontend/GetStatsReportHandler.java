@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
@@ -23,9 +24,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
@@ -115,8 +114,7 @@ class GetStatsReportHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(metrics.getStatsReportSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        String clusterName =
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.CLUSTER_NAME, true);
+        String clusterName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.CLUSTER_NAME, true);
         String reportType = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.GET_STATS_REPORT_TYPE, true);
         StatsReportType statsReportType;
         try {
@@ -125,30 +123,24 @@ class GetStatsReportHandler {
           throw new RestServiceException(reportType + " is not a valid StatsReportType",
               RestServiceErrorCode.BadRequest);
         }
-        StatsSnapshot snapshot;
-        synchronized (accountStatsStore) {
-          try {
-            switch (statsReportType) {
-              case ACCOUNT_REPORT:
-                snapshot = accountStatsStore.queryAggregatedAccountStatsByClusterName(clusterName);
-                break;
-              case PARTITION_CLASS_REPORT:
-                snapshot = accountStatsStore.queryAggregatedPartitionClassStatsByClusterName(clusterName);
-                break;
-              default:
-                throw new RestServiceException("StatsReportType " + statsReportType + "not supported",
-                    RestServiceErrorCode.BadRequest);
-            }
-          } finally {
-            accountStatsStore.closeConnection();
-          }
+        Object result;
+        switch (statsReportType) {
+          case ACCOUNT_REPORT:
+            result = accountStatsStore.queryAggregatedAccountStorageStatsByClusterName(clusterName);
+            break;
+          case PARTITION_CLASS_REPORT:
+            result = accountStatsStore.queryAggregatedPartitionClassStorageStatsByClusterName(clusterName);
+            break;
+          default:
+            throw new RestServiceException("StatsReportType " + statsReportType + "not supported",
+                RestServiceErrorCode.BadRequest);
         }
-        if (snapshot == null) {
+        if (result == null) {
           throw new RestServiceException("StatsReport not found for clusterName " + clusterName,
               RestServiceErrorCode.NotFound);
         }
         try {
-          byte[] jsonBytes = mapper.writeValueAsBytes(snapshot);
+          byte[] jsonBytes = mapper.writeValueAsBytes(result);
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, jsonBytes.length);

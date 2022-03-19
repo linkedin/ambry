@@ -15,10 +15,12 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.ServerSecurityService;
+import com.github.ambry.rest.ServerSecurityServiceFactory;
+
 
 /**
  * Default implementation of {@link ServerSecurityServiceFactory} for Ambry

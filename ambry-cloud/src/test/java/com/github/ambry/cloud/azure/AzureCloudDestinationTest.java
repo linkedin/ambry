@@ -434,7 +434,6 @@ public class AzureCloudDestinationTest {
     metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertTrue("Expected empty map", metadataMap.isEmpty());
     verify(mockBlockBlobClient, times(2)).getPropertiesWithResponse(any(), any(), any());
-    verify(mockBlockBlobClient).downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     verifyZeroInteractions(mockumentClient);
 
     //
@@ -454,7 +453,6 @@ public class AzureCloudDestinationTest {
     assertEquals("Expected map of one", 1, metadataMap.size());
     verify(mockumentClient).queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class));
     verify(mockBlockBlobClient, times(2)).getPropertiesWithResponse(any(), any(), any());
-    verify(mockBlockBlobClient, times(2)).downloadWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
   }
 
   /** Test querying metadata. */

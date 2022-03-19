@@ -16,6 +16,8 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RestMethod;
@@ -28,9 +30,12 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.server.StorageStatsUtilTest;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingBiConsumer;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -50,7 +55,7 @@ public class GetStatsReportHandlerTest {
   private final AccountStatsStore accountStatsStore;
 
   public GetStatsReportHandlerTest() {
-    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties())));
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     accountStatsStore = mock(AccountStatsStore.class);
     handler = new GetStatsReportHandler(securityServiceFactory.getSecurityService(), metrics, accountStatsStore);
@@ -58,43 +63,53 @@ public class GetStatsReportHandlerTest {
 
   @Test
   public void handleGoodCaseTest() throws Exception {
-    ThrowingBiConsumer<RestRequest, StatsSnapshot> testAction = (request, expectedStatsSnapshot) -> {
-      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-      ReadableStreamChannel channel = sendRequestGetResponse(request, restResponseChannel);
-      assertNotNull("There should be a response", channel);
-      assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
-      assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
-          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-      assertEquals("Content-length is not as expected", channel.getSize(),
-          Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
-      assertEquals("StatsSnapshot mismatch", expectedStatsSnapshot,
-          mapper.readValue(RestTestUtils.getResponseBody(channel), StatsSnapshot.class));
-    };
-    StatsSnapshot accountStatsSnapshot =
-        TestUtils.makeAccountStatsSnapshotFromContainerStorageMap(TestUtils.makeStorageMap(10, 10, 10000, 1000));
+    AggregatedAccountStorageStats aggregatedAccountStorageStats = new AggregatedAccountStorageStats(
+        StorageStatsUtilTest.generateRandomAggregatedAccountStorageStats((short) 1, 10, 10, 1000L, 2, 100));
     doAnswer(invocation -> {
       String clusterName = invocation.getArgument(0);
       if (clusterName.equals(CLUSTER_NAME)) {
-        return accountStatsSnapshot;
+        return aggregatedAccountStorageStats;
       } else {
         return null;
       }
-    }).when(accountStatsStore).queryAggregatedAccountStatsByClusterName(anyString());
+    }).when(accountStatsStore).queryAggregatedAccountStorageStatsByClusterName(anyString());
     RestRequest restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.ACCOUNT_REPORT.name());
-    testAction.accept(restRequest, accountStatsSnapshot);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
+    assertNotNull("There should be a response", channel);
+    assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Content-length is not as expected", channel.getSize(),
+        Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Storage stats mismatch", aggregatedAccountStorageStats.getStorageStats(),
+        mapper.readValue(RestTestUtils.getResponseBody(channel), AggregatedAccountStorageStats.class)
+            .getStorageStats());
 
-    StatsSnapshot partitionClassStatsSnapshot =
-        TestUtils.makeAggregatedPartitionClassStats(new String[]{"PartitionClass1", "PartitionClass2"}, 10, 10);
+    AggregatedPartitionClassStorageStats aggregatedPartitionClassStorageStats =
+        new AggregatedPartitionClassStorageStats(
+            StorageStatsUtilTest.generateRandomAggregatedPartitionClassStorageStats(new String[]{"default", "newClass"},
+                (short) 1, 10, 10, 1000L, 2, 100));
     doAnswer(invocation -> {
       String clusterName = invocation.getArgument(0);
       if (clusterName.equals(CLUSTER_NAME)) {
-        return partitionClassStatsSnapshot;
+        return aggregatedPartitionClassStorageStats;
       } else {
         return null;
       }
-    }).when(accountStatsStore).queryAggregatedPartitionClassStatsByClusterName(anyString());
+    }).when(accountStatsStore).queryAggregatedPartitionClassStorageStatsByClusterName(anyString());
     restRequest = createRestRequest(CLUSTER_NAME, StatsReportType.PARTITION_CLASS_REPORT.name());
-    testAction.accept(restRequest, partitionClassStatsSnapshot);
+    restResponseChannel = new MockRestResponseChannel();
+    channel = sendRequestGetResponse(restRequest, restResponseChannel);
+    assertNotNull("There should be a response", channel);
+    assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    assertEquals("Content-type is not as expected", RestUtils.JSON_CONTENT_TYPE,
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Content-length is not as expected", channel.getSize(),
+        Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Storage stats mismatch", aggregatedPartitionClassStorageStats.getStorageStats(),
+        mapper.readValue(RestTestUtils.getResponseBody(channel), AggregatedPartitionClassStorageStats.class)
+            .getStorageStats());
   }
 
   @Test

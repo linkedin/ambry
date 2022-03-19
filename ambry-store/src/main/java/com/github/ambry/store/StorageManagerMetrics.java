@@ -17,6 +17,9 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -52,6 +55,9 @@ public class StorageManagerMetrics {
 
   private final Counter compactionCount;
   private final AtomicLong compactionsInProgress = new AtomicLong(0);
+
+  // A map from mount path to a set of blob store to skip in compactions (error state)
+  private final Map<String, Set<BlobStore>> mountPathToStoreSetToSkipInCompactions = new ConcurrentHashMap<>();
 
   /**
    * Create a {@link StorageManagerMetrics} object for handling metrics related to the stores on a node.
@@ -97,6 +103,11 @@ public class StorageManagerMetrics {
     Gauge<Long> compactionsInProgressGauge = compactionsInProgress::longValue;
     registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
         compactionsInProgressGauge);
+
+    Gauge<Long> storeToSkipGauge =
+        () -> mountPathToStoreSetToSkipInCompactions.values().stream().mapToLong(Set::size).sum();
+    registry.gauge(MetricRegistry.name(CompactionManager.class, "CompactionNumberOfStoresToSkip"),
+        () -> storeToSkipGauge);
   }
 
   /**
@@ -109,6 +120,15 @@ public class StorageManagerMetrics {
     registry.register(MetricRegistry.name(StorageManager.class, "CompactionThreadsAlive"), compactionThreadsCountGauge);
     Gauge<Integer> compactionHealthGauge = () -> storageManager.getCompactionThreadCount() == diskCount ? 1 : 0;
     registry.register(MetricRegistry.name(StorageManager.class, "CompactionHealth"), compactionHealthGauge);
+  }
+
+  /**
+   * Register the set of blobstores to skip in compaction with the given mount path.
+   * @param mountPath The mount path
+   * @param stores The set of blobstores to skip in compaction.
+   */
+  void registerStoreSetToSkipInCompactionForMountPath(String mountPath, Set<BlobStore> stores) {
+    mountPathToStoreSetToSkipInCompactions.put(mountPath, stores);
   }
 
   /**

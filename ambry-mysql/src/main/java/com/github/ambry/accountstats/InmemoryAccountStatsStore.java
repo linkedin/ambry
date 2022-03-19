@@ -13,10 +13,10 @@
  */
 package com.github.ambry.accountstats;
 
-import com.github.ambry.server.StatsSnapshot;
-import com.github.ambry.server.StatsWrapper;
-import com.github.ambry.utils.Utils;
-import java.util.HashMap;
+import com.github.ambry.server.HostAccountStorageStatsWrapper;
+import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,12 +28,12 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   private final String clusterName;
   private final String hostname;
 
-  private StatsWrapper currentHostStatsWrapper = null;
-  private StatsSnapshot aggregatedAccountStats = null;
-  private StatsSnapshot monthlyAggregatedAccountStats = null;
+  private HostAccountStorageStatsWrapper currentHostStatsWrapper = null;
+  private AggregatedAccountStorageStats aggregatedAccountStats = null;
+  private AggregatedAccountStorageStats monthlyAggregatedAccountStats = null;
   private String currentMonth;
 
-  private StatsSnapshot aggregatedPartitionClassStats = null;
+  private AggregatedPartitionClassStorageStats aggregatedPartitionClassStats = null;
 
   /**
    * Constructor to instantiate an {@link InmemoryAccountStatsStore}.
@@ -46,13 +46,14 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
-  public void storeAccountStats(StatsWrapper statsWrapper) throws Exception {
+  public void storeHostAccountStorageStats(HostAccountStorageStatsWrapper statsWrapper) throws Exception {
     currentHostStatsWrapper = statsWrapper;
   }
 
   @Override
-  public void storeAggregatedAccountStats(StatsSnapshot snapshot) throws Exception {
-    aggregatedAccountStats = snapshot;
+  public void storeAggregatedAccountStorageStats(AggregatedAccountStorageStats aggregatedAccountStorageStats)
+      throws Exception {
+    aggregatedAccountStats = aggregatedAccountStorageStats;
   }
 
   @Override
@@ -60,7 +61,7 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
-  public StatsWrapper queryAccountStatsByHost(String hostname, int port) throws Exception {
+  public HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHost(String hostname, int port) throws Exception {
     if (hostname.equals(this.hostname)) {
       return currentHostStatsWrapper;
     } else {
@@ -68,33 +69,14 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
     }
   }
 
-  private Map<String, Map<String, Long>> fromAggregatedAccountStats(StatsSnapshot snapshot) {
-    if (snapshot == null) {
-      return null;
-    }
-    Map<String, Map<String, Long>> result = new HashMap<>();
-    for (Map.Entry<String, StatsSnapshot> accountMapEntry : snapshot.getSubMap().entrySet()) {
-      String accountIdKey = accountMapEntry.getKey();
-      short accountId = Utils.accountIdFromStatsAccountKey(accountIdKey);
-      StatsSnapshot containerStatsSnapshot = accountMapEntry.getValue();
-      for (Map.Entry<String, StatsSnapshot> currContainerMapEntry : containerStatsSnapshot.getSubMap().entrySet()) {
-        String containerIdKey = currContainerMapEntry.getKey();
-        short containerId = Utils.containerIdFromStatsContainerKey(containerIdKey);
-        long currStorageUsage = currContainerMapEntry.getValue().getValue();
-        result.computeIfAbsent(String.valueOf(accountId), k -> new HashMap<>())
-            .put(String.valueOf(containerId), currStorageUsage);
-      }
-    }
-    return result;
+  @Override
+  public AggregatedAccountStorageStats queryAggregatedAccountStorageStats() throws Exception {
+    return aggregatedAccountStats;
   }
 
   @Override
-  public Map<String, Map<String, Long>> queryAggregatedAccountStats() throws Exception {
-    return fromAggregatedAccountStats(aggregatedAccountStats);
-  }
-
-  @Override
-  public StatsSnapshot queryAggregatedAccountStatsByClusterName(String clusterName) throws Exception {
+  public AggregatedAccountStorageStats queryAggregatedAccountStorageStatsByClusterName(String clusterName)
+      throws Exception {
     if (clusterName.equals(this.clusterName)) {
       return aggregatedAccountStats;
     } else {
@@ -103,8 +85,8 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
-  public Map<String, Map<String, Long>> queryMonthlyAggregatedAccountStats() throws Exception {
-    return fromAggregatedAccountStats(monthlyAggregatedAccountStats);
+  public AggregatedAccountStorageStats queryMonthlyAggregatedAccountStorageStats() throws Exception {
+    return monthlyAggregatedAccountStats;
   }
 
   @Override
@@ -129,34 +111,35 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
-  public void storePartitionClassStats(StatsWrapper statsWrapper) throws Exception {
+  public void storeHostPartitionClassStorageStats(HostPartitionClassStorageStatsWrapper statsWrapper) throws Exception {
 
   }
 
   @Override
-  public StatsWrapper queryPartitionClassStatsByHost(String hostname, int port,
+  public HostPartitionClassStorageStatsWrapper queryHostPartitionClassStorageStatsByHost(String hostname, int port,
       Map<String, Set<Integer>> partitionNameAndIds) throws Exception {
     return null;
   }
 
   @Override
-  public void storeAggregatedPartitionClassStats(StatsSnapshot statsSnapshot) throws Exception {
-    aggregatedPartitionClassStats = statsSnapshot;
+  public void storeAggregatedPartitionClassStorageStats(AggregatedPartitionClassStorageStats stats) throws Exception {
+    aggregatedPartitionClassStats = stats;
   }
 
   @Override
-  public void deleteAggregatedPartitionClassStatsForAccountContainer(String partitionClassName,
-      String accountContainerKey) throws Exception {
+  public void deleteAggregatedPartitionClassStatsForAccountContainer(String partitionClassName, short accountId,
+      short containerId) throws Exception {
 
   }
 
   @Override
-  public StatsSnapshot queryAggregatedPartitionClassStats() throws Exception {
+  public AggregatedPartitionClassStorageStats queryAggregatedPartitionClassStorageStats() throws Exception {
     return aggregatedPartitionClassStats;
   }
 
   @Override
-  public StatsSnapshot queryAggregatedPartitionClassStatsByClusterName(String clusterName) throws Exception {
+  public AggregatedPartitionClassStorageStats queryAggregatedPartitionClassStorageStatsByClusterName(String clusterName)
+      throws Exception {
     if (clusterName.equals(this.clusterName)) {
       return aggregatedPartitionClassStats;
     } else {
@@ -165,7 +148,7 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
-  public void closeConnection() {
+  public void shutdown() {
 
   }
 }

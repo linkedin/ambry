@@ -18,7 +18,7 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.ClusterSpectator;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
@@ -57,15 +57,16 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.config.CloudConfig.*;
 
 
 /**
  * {@link CloudToStoreReplicationManager} replicates data from Vcr nodes to ambry data nodes.
+ * Cloud -> Store, run on storage node.
  */
 public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final ClusterMapConfig clusterMapConfig;
-  private final StoreConfig storeConfig;
-  private final ClusterSpectator vcrClusterSpectator;
+  private final VcrClusterSpectator vcrClusterSpectator;
   private final ClusterParticipant clusterParticipant;
   private static final String cloudReplicaTokenFileName = "cloudReplicaTokens";
   private AtomicReference<ConcurrentHashMap<String, CloudDataNode>> instanceNameToCloudDataNode;
@@ -89,7 +90,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @param requestNotification {@link NotificationSystem} object to notify on events.
    * @param storeKeyConverterFactory {@link StoreKeyConverterFactory} object.
    * @param transformerClassName name of the class to transform and validate replication messages.
-   * @param vcrClusterSpectator {@link ClusterSpectator} object to get changes in vcr cluster map.
+   * @param vcrClusterSpectator {@link VcrClusterSpectator} object to get changes in vcr cluster map.
    * @param clusterParticipant {@link ClusterParticipant} object to get changes in partition state of partitions on datanodes.
    * @throws ReplicationException
    */
@@ -98,12 +99,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId currentNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
-    super(replicationConfig, clusterMapConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
+      VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
+    super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
-        transformerClassName, clusterParticipant, storeManager, null);
+        transformerClassName, clusterParticipant, storeManager, null, false);
     this.clusterMapConfig = clusterMapConfig;
-    this.storeConfig = storeConfig;
     this.vcrClusterSpectator = vcrClusterSpectator;
     this.clusterParticipant = clusterParticipant;
     this.instanceNameToCloudDataNode = new AtomicReference<>(new ConcurrentHashMap<>());
@@ -128,6 +128,10 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     // start scheduler thread to persist index in the background
     scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
+
+    started = true;
+    startupLatch.countDown();
+    logger.info("CloudToStoreReplicationManager started.");
   }
 
   /**
@@ -172,7 +176,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
           partitionName);
       return;
     }
-    CloudReplica peerCloudReplica = new CloudReplica(partitionId, getCloudDataNode());
+    DataNodeId cloudDataNode = getCloudDataNode();
+    CloudReplica peerCloudReplica = new CloudReplica(partitionId, cloudDataNode);
     FindTokenFactory findTokenFactory =
         tokenHelper.getFindTokenFactoryFromReplicaType(peerCloudReplica.getReplicaType());
     RemoteReplicaInfo remoteReplicaInfo =
@@ -187,7 +192,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     partitionToPartitionInfo.put(partitionId, partitionInfo);
     mountPathToPartitionInfos.computeIfAbsent(localReplica.getMountPath(), key -> ConcurrentHashMap.newKeySet())
         .add(partitionInfo);
-    logger.info("Cloud Partition {} added to {}", partitionName, dataNodeId);
+    logger.info("Cloud Partition {} added to {}. CloudNode {} port {}", partitionName, dataNodeId, cloudDataNode,
+        cloudDataNode.getPortToConnectTo());
 
     // Reload replication token if exist.
     reloadReplicationTokenIfExists(localReplica, remoteReplicaInfos);
@@ -213,6 +219,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     // random during initialization. So it's enough to just match the partitionId in the token so that replication
     // can start from cloud from where it left off.
     return tokenInfo.getPartitionId().equals(remoteReplicaInfo.getReplicaId().getPartitionId());
+  }
+
+  @Override
+  protected boolean shouldReplicateFromDc(String datacenterName) {
+    return true;
   }
 
   /**
@@ -286,16 +297,24 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
       // create a new list of available vcr nodes.
       for (InstanceConfig instanceConfig : instanceConfigs) {
-        String instanceName = instanceConfig.getInstanceName();
-        Port sslPort =
-            getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
-        Port http2Port =
-            getHttp2PortStr(instanceConfig) == null ? null : new Port(getHttp2PortStr(instanceConfig), PortType.HTTP2);
-        CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
-            new Port(Integer.parseInt(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, http2Port,
-            clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
-        newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
-        newVcrNodes.add(cloudDataNode);
+        if (instanceConfig.getRecord().getBooleanField(VCR_HELIX_CONFIG_READY, false)) {
+          // only when VCR_HELIX_CONFIG_READY, we take action on it.
+          String instanceName = instanceConfig.getInstanceName();
+          Port sslPort =
+              getSslPortStr(instanceConfig) == null ? null : new Port(getSslPortStr(instanceConfig), PortType.SSL);
+          Port http2Port = getHttp2PortStr(instanceConfig) == null ? null
+              : new Port(getHttp2PortStr(instanceConfig), PortType.HTTP2);
+          CloudDataNode cloudDataNode = new CloudDataNode(instanceConfig.getHostName(),
+              new Port(Integer.parseInt(instanceConfig.getPort()), PortType.PLAINTEXT), sslPort, http2Port,
+              clusterMapConfig.clustermapVcrDatacenterName, clusterMapConfig);
+          newInstanceNameToCloudDataNode.put(instanceName, cloudDataNode);
+          newVcrNodes.add(cloudDataNode);
+          logger.info("Instance config change. VCR Node {} added. SslPort: {}, Http2Port: {}", cloudDataNode, sslPort,
+              http2Port);
+        } else {
+          logger.info("Instance config change received, but VCR_HELIX_CONFIG_READY is false. Instance: {}:{}",
+              instanceConfig.getHostName(), instanceConfig.getPort());
+        }
       }
 
       synchronized (notificationLock) {

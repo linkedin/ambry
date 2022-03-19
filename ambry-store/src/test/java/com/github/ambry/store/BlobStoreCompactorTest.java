@@ -39,6 +39,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -52,12 +54,13 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -332,6 +335,30 @@ public class BlobStoreCompactorTest {
     }
   }
 
+  @Test
+  public void getIndexSegmentDetailsTest() throws Exception {
+    // Create 0_1 log and 0_10 log and their index segment files, use getIndexSegmentDetails to load all the index segment
+    // files for 0_1, making sure that 0_10 log's index segment files won't be included in the final result.
+    refreshState(false, false, false);
+    LogSegmentName name01 = LogSegmentName.fromPositionAndGeneration(0, 1);
+    LogSegmentName name010 = LogSegmentName.fromPositionAndGeneration(0, 10);
+    Files.createFile(Paths.get(tempDirStr, name01.toFilename()));
+    Files.createFile(Paths.get(tempDirStr, name010.toFilename()));
+
+    // Create 3 index segment files for each log segment
+
+    for (LogSegmentName logSegmentName : new LogSegmentName[]{name01, name010}) {
+      for (long off : new long[]{18, 1000, 2000}) {
+        Offset offset = new Offset(logSegmentName, off);
+        Files.createFile(Paths.get(tempDirStr,
+            IndexSegment.generateIndexSegmentFilenamePrefix(offset) + IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX));
+      }
+    }
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
+    SortedMap<Offset, File> details = compactor.getIndexSegmentDetails(name01);
+    assertEquals(3, details.size());
+  }
+
   /**
    * A basic test for compaction that selects the first two log segments and compacts them into one log segment.
    * @throws Exception
@@ -400,11 +427,36 @@ public class BlobStoreCompactorTest {
   }
 
   /**
+   * Test finding key with old file span. The log segment associated with start offset in file span has been compacted.
+   * @throws Exception
+   */
+  @Test
+  public void findKeyWithOldFileSpan() throws Exception {
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true, false);
+    FileSpan oldFileSpan = new FileSpan(state.index.getStartOffset(), state.index.getCurrentEndOffset());
+    MockId tombstone1 = state.permanentDeleteTombstones.get(0);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // find the key by using old file span (the 0_0 log segment has been compacted to 0_1). The index should use current
+    // first segment if there is no log segment found less than or equal to start offset in old file span.
+    IndexValue indexValue = state.index.findKey(tombstone1, oldFileSpan);
+    assertNotNull("The key should exist", indexValue);
+  }
+
+  /**
    * Tests compacting delete tombstone with both invalid and journal based tokens.
    * @throws Exception
    */
   @Test
-  public void compactDeleteTombstoneTwice() throws Exception {
+  public void compactDeleteTombstoneTwiceTest() throws Exception {
     assumeTrue(purgeDeleteTombstone);
     refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
@@ -1468,6 +1520,10 @@ public class BlobStoreCompactorTest {
     state.addUndeleteEntry((MockId) p12.getKey(), (short) 2);
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
 
+    // Index Segment 1.3 P2 -> P2
+    IndexEntry p13 = state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short) 2).get(0);
+    state.addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
+
     // Make sure we have 3 log segments
     writeDataToMeetRequiredSegmentCount(3, null);
     state.reloadIndex(true, false);
@@ -1593,9 +1649,9 @@ public class BlobStoreCompactorTest {
       compactor.close(0);
     }
     // Before compaction, the records in the log are
-    // P11 U11 P P P| P12 D12 U12 U12 P
+    // P11 U11 P P P| P12 D12 U12 U12 P | P13(2) P P P P
     // After compaction, the records in the log are
-    // P P P P12 U12
+    // P P P P12 U12| P P13(2)
     cleanedUpSize = (ps + us) + (ds + us);
     compactedLogSegmentName = logSegmentName.getNextGenerationName();
     assertEquals("End offset of log segment not as expected after compaction",
@@ -1622,6 +1678,16 @@ public class BlobStoreCompactorTest {
     verifyIndexEntry(indexEntries.get(4), (MockId) p12.getKey(), currentExpectedOffset, us, Utils.Infinite_Time, false,
         false, true, (short) 2);
     currentExpectedOffset += us;
+
+    // Get the entries in the second segment
+    segment = indexSegments.higherEntry(segment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertEquals("LogSegment name mismatch", compactedLogSegmentName, segment.getStartOffset().getName());
+    segment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0), false, false);
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    currentExpectedOffset += ps; // skip one put
+    verifyIndexEntry(indexEntries.get(1), (MockId) p13.getKey(), currentExpectedOffset, ps, Utils.Infinite_Time, false,
+        false, false, (short) 2);
 
     // no clean shutdown file should exist
     assertFalse("Clean shutdown file not deleted",
@@ -1741,6 +1807,11 @@ public class BlobStoreCompactorTest {
     state.addDeleteEntry((MockId) p15.getKey());
     state.addDeleteEntry((MockId) p15.getKey(), null, (short) 1);
     state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+
+    // Index Segment 1.6 T -> [], Put already compacted
+    MockId p16id = state.getUniqueId();
+    state.makePermanent(p16id, true);
+    state.addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
 
     // Make sure we have 3 log segments
     writeDataToMeetRequiredSegmentCount(3, null);
@@ -1917,10 +1988,10 @@ public class BlobStoreCompactorTest {
       compactor.close(0);
     }
     // Before compaction, the records in the log are
-    // P11 U11 U11 T11 P| P12 T12 U12 U12 P| P13 T13 U13 U13 P| P14 T14 D14 D14 P| P15 T15 D15 D15 P
+    // P11 U11 U11 T11 P| P12 T12 U12 U12 P| P13 T13 U13 U13 P| P14 T14 D14 D14 P| P15 T15 D15 D15 P | T16 P P P P
     // After compaction, the records in the log are
-    // P11 U11 T11 P P12| T12 U12 P P13 T13| U13 P D14 P D15| P
-    cleanedUpSize = us + us + us + (ps + ts + ds) + (ps + ts + ds);
+    // P11 U11 T11 P P12| T12 U12 P P13 T13| U13 P D14 P D15| P P P P P
+    cleanedUpSize = us + us + us + (ps + ts + ds) + (ps + ts + ds) + ts;
     compactedLogSegmentName = logSegmentName.getNextGenerationName();
     assertEquals("End offset of log segment not as expected after compaction",
         endOffsetOfSegmentBeforeCompaction - cleanedUpSize,
@@ -1985,6 +2056,7 @@ public class BlobStoreCompactorTest {
     currentExpectedOffset += us + ps; // skip one put
     verifyIndexEntry(indexEntries.get(4), (MockId) p15.getKey(), currentExpectedOffset, ds, Utils.Infinite_Time, true,
         true, false, (short) 1);
+    currentExpectedOffset += ds;
 
     // no clean shutdown file should exist
     assertFalse("Clean shutdown file not deleted",
@@ -2891,11 +2963,10 @@ public class BlobStoreCompactorTest {
         compactor.close(0);
       }
     }
-    if (compactor.closeLastLogSegmentIfQualified()) {
+    if (state.log.autoCloseLastLogSegmentIfQualified()) {
       //refresh journal.
       state.index.journal.cleanUpJournal();
     }
-    compactor.closeLastLogSegmentIfQualified();
     if (!changeExpected) {
       assertEquals("Journal size should be cleaned up after last log segment closed", 0,
           state.index.journal.getCurrentNumberOfEntries());
@@ -2907,10 +2978,6 @@ public class BlobStoreCompactorTest {
           logSegmentSizeSumBeforeCompaction - logSegmentSizeAfterCompaction > 0);
       assertEquals("Log Segment count should be same due to no new index entry mapping to the last log segment.",
           logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction);
-      state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
-      assertEquals("Log Segment count should be increased after some data has been added to the last log segment.",
-          logSegmentCountBeforeCompaction, logSegmentCountAfterCompaction - 1);
     }
   }
 
@@ -3837,8 +3904,8 @@ public class BlobStoreCompactorTest {
   public void testCloseLastLogSegmentIfQualified() throws Exception {
     //create first active log segment
     refreshState(false, false, true);
-    //leave two log segment space for auto close last log segment purpose
-    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 2;
+    //leave five log segment space for auto close last log segment purpose
+    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 5;
     writeDataToMeetRequiredSegmentCountForAutoCloseLogSegmentTest(requiredCount);
 
     //delete blobs in last index segment.
@@ -3866,7 +3933,6 @@ public class BlobStoreCompactorTest {
     CompactionPolicySwitchInfo compactionPolicySwitchInfo =
         new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
     backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
-
     //instantiate compactor.
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, true);
     compactor.initialize(state.index);
@@ -3881,6 +3947,54 @@ public class BlobStoreCompactorTest {
             - 1);
 
     compactAndVerifyForContainerDeletion(segmentsUnderCompaction, state.time.milliseconds(), true);
+
+    // Edge case test: if the last log segment is empty, no need to auto close it.
+    int beforeAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    compactionPolicySwitchInfo = new CompactionPolicySwitchInfo(System.currentTimeMillis(), true);
+    backUpCompactionPolicyInfo(tempDir.toString(), compactionPolicySwitchInfo);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, true);
+    compactor.initialize(state.index);
+    if (state.log.autoCloseLastLogSegmentIfQualified()) {
+      //refresh journal.
+      state.index.journal.cleanUpJournal();
+    }
+    int afterAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    assertEquals("No segments should be created since last log segment is empty", beforeAutoCloseLogSegmentsCnt,
+        afterAutoCloseLogSegmentsCnt);
+
+    //make sure new data will be added into the last log segment
+    long logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
+    state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    long logSegmentCountAfterNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
+    assertEquals("Log Segment count should be increased after some data has been added to the last log segment.",
+        logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment,
+        logSegmentCountAfterNewDataAddIntoAutoClosedLogSegment - 1);
+    assertEquals("Last index segment should belongs to auto closed log segment",
+        state.index.getIndexSegments().lastEntry().getValue().getLogSegmentName(),
+        state.log.getLastSegment().getName());
+
+    //close the last log segment again.
+    beforeAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    if (state.log.autoCloseLastLogSegmentIfQualified()) {
+      //refresh journal.
+      state.index.journal.cleanUpJournal();
+    }
+    afterAutoCloseLogSegmentsCnt = state.log.getLogSegmentCount();
+    assertEquals("One log segment should be created since last log segment is not empty", beforeAutoCloseLogSegmentsCnt,
+        afterAutoCloseLogSegmentsCnt - 1);
+
+    //make sure new data will be added into the last log segment
+    logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
+    state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    logSegmentCountAfterNewDataAddIntoAutoClosedLogSegment = state.index.getLogSegmentCount();
+    assertEquals("Log Segment count should be increased after some data has been added to the last log segment.",
+        logSegmentCountBeforeNewDataAddIntoAutoClosedLogSegment,
+        logSegmentCountAfterNewDataAddIntoAutoClosedLogSegment - 1);
+    assertEquals("Last index segment should belongs to auto closed log segment",
+        state.index.getIndexSegments().lastEntry().getValue().getLogSegmentName(),
+        state.log.getLastSegment().getName());
+
+    // check flow after deployment
     state.reloadLog(true);
   }
 

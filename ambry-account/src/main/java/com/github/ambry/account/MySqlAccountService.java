@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -124,11 +123,11 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   private void initCacheFromBackupFile() {
     long aMonthAgo = SystemTime.getInstance().seconds() - TimeUnit.DAYS.toSeconds(30);
-    Map<String, String> accountMapFromFile = backupFileManager.getLatestAccountMap(aMonthAgo);
+    Collection<Account> accounts = backupFileManager.getLatestAccounts(aMonthAgo);
     AccountInfoMap accountInfoMap = null;
-    if (accountMapFromFile != null) {
+    if (accounts != null) {
       try {
-        accountInfoMap = new AccountInfoMap(accountServiceMetrics, accountMapFromFile);
+        accountInfoMap = new AccountInfoMap(accounts);
       } catch (Exception e) {
         logger.warn("Failure in parsing of Account Metadata from local backup file", e);
       }
@@ -233,10 +232,7 @@ public class MySqlAccountService extends AbstractAccountService {
         } finally {
           infoMapLock.readLock().unlock();
         }
-        Map<String, String> accountMap = new HashMap<>();
-        accountCollection.forEach(
-            account -> accountMap.put(Short.toString(account.getId()), account.toJson(false).toString()));
-        backupFileManager.persistAccountMap(accountMap, backupFileManager.getLatestVersion() + 1,
+        backupFileManager.persistAccountMap(accountCollection, backupFileManager.getLatestVersion() + 1,
             SystemTime.getInstance().seconds());
       } else {
         // Cache is up to date
@@ -536,8 +532,7 @@ public class MySqlAccountService extends AbstractAccountService {
         isAccountAdded = true;
         addedContainers = new ArrayList<>(account.getAllContainers());
       } else {
-        if (!AccountCollectionSerde.accountToJsonNoContainers(accountInCache)
-            .similar(AccountCollectionSerde.accountToJsonNoContainers(account))) {
+        if (!accountInCache.equalsWithoutContainers(account)) {
           isAccountUpdated = true;
         }
         // Get list of added and updated containers in the account.

@@ -38,6 +38,7 @@ public class CloudDataNode implements DataNodeId {
   private final Port http2Port;
   private final String dataCenterName;
   private final boolean isSslEnabled;
+  private final boolean enableHttp2Replication;
   private final List<String> sslEnabledDataCenters;
   private static final Logger logger = LoggerFactory.getLogger(CloudDataNode.class);
 
@@ -57,6 +58,7 @@ public class CloudDataNode implements DataNodeId {
     this.dataCenterName = clusterMapConfig.clusterMapDatacenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
+    this.enableHttp2Replication = clusterMapConfig.clusterMapEnableHttp2Replication;
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
     validatePorts(plainTextPort, sslPort, http2Port, isSslEnabled);
   }
@@ -73,8 +75,11 @@ public class CloudDataNode implements DataNodeId {
     this.dataCenterName = dataCenterName;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.isSslEnabled = sslEnabledDataCenters.contains(dataCenterName);
+    this.enableHttp2Replication = clusterMapConfig.clusterMapEnableHttp2Replication;
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
     validatePorts(plainTextPort, sslPort, http2Port, isSslEnabled);
+    logger.info("CloudDataNode {} created. Plaintext Port {}, SSL Port {} HTTP2 Port {}", hostName, plainTextPort,
+        sslPort, http2Port);
   }
 
   @Override
@@ -117,7 +122,10 @@ public class CloudDataNode implements DataNodeId {
 
   @Override
   public Port getPortToConnectTo() {
-    return isSslEnabled ? sslPort : plainTextPort;
+    if (enableHttp2Replication) {
+      return http2Port;
+    }
+    return sslEnabledDataCenters.contains(getDatacenterName()) ? sslPort : plainTextPort;
   }
 
   @Override

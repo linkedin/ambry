@@ -63,7 +63,6 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.DataNodeConfigSourceType.*;
-import static com.github.ambry.clustermap.PropertyStoreToDataNodeConfigAdapter.Converter.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -154,7 +153,7 @@ public class HelixBootstrapUpgradeUtil {
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
 
-  enum HelixAdminOperation {
+  public enum HelixAdminOperation {
     BootstrapCluster,
     ValidateCluster,
     UpdateIdealState,
@@ -219,7 +218,7 @@ public class HelixBootstrapUpgradeUtil {
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
-  static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+  public static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager, String stateModelDef,
       HelixAdminOperation helixAdminOperation, DataNodeConfigSourceType dataNodeConfigSourceType,
@@ -497,7 +496,7 @@ public class HelixBootstrapUpgradeUtil {
     this.portNum = portNum;
     this.partitionName = partitionName;
     this.helixAdminOperation = helixAdminOperation;
-    this.dataNodeConfigSourceType = dataNodeConfigSourceType == null ? INSTANCE_CONFIG : dataNodeConfigSourceType;
+    this.dataNodeConfigSourceType = dataNodeConfigSourceType == null ? PROPERTY_STORE : dataNodeConfigSourceType;
     this.overrideReplicaStatus = overrideReplicaStatus;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
@@ -628,17 +627,18 @@ public class HelixBootstrapUpgradeUtil {
    *     "1": {
    *         "replicaCapacityInBytes": 107374182400,
    *         "partitionClass": "max-replicas-all-datacenters",
-   *         "localhost1_17088": "/tmp/c/1",
-   *         "localhost2_17088": "/tmp/d/1"
+   *         "localhost1_17088": "/tmp/c/1,536870912000",
+   *         "localhost2_17088": "/tmp/d/1,536870912000"
    *     },
    *     "2": {
    *         "replicaCapacityInBytes": 107374182400,
    *         "partitionClass": "max-replicas-all-datacenters",
-   *         "localhost3_17088": "/tmp/e/1"
+   *         "localhost3_17088": "/tmp/e/1,536870912000"
    *     }
    * }
    * In above example, two new replicas of partition[1] will be added to localhost1 and localhost2 respectively.
-   * The host name is followed by mount path on which the new replica should be placed.
+   * The host name is followed by mount path and disk capacity (separated by comma) on which the new replica should be
+   * placed.
    * @return a map that contains detailed replica info.
    */
   private Map<String, Map<String, Map<String, String>>> generateReplicaAdditionMap() {
@@ -689,7 +689,9 @@ public class HelixBootstrapUpgradeUtil {
                 partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
                 partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
                 return partitionMap;
-              }).put(instance, replica.getMountPath());
+              })
+                  .put(instance,
+                      replica.getMountPath() + DISK_CAPACITY_DELIM_STR + replica.getDiskId().getRawCapacityInBytes());
             }
           }
         }
@@ -1233,6 +1235,9 @@ public class HelixBootstrapUpgradeUtil {
         } else {
           if (!dryRun) {
             dcAdmin.setResourceIdealState(clusterName, resourceName, resourceIs);
+            System.out.println("------------------add resource!");
+            System.out.println(resourceName);
+            System.out.println(resourceName);
           }
           resourcesUpdated.getAndIncrement();
         }

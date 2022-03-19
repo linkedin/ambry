@@ -33,14 +33,17 @@ public class BoundedNettyByteBufReceive extends AbstractByteBufHolder<BoundedNet
   private ByteBuf sizeBuffer = null;
   private long sizeToRead = 0;
   private long sizeRead = 0;
+  private long maxRequestSize;
   private final static Logger logger = LoggerFactory.getLogger(BoundedNettyByteBufReceive.class);
 
-  public BoundedNettyByteBufReceive() {
+  public BoundedNettyByteBufReceive(long maxRequestSize) {
+    this.maxRequestSize = maxRequestSize;
   }
 
-  BoundedNettyByteBufReceive(ByteBuf buffer, long sizeToRead) {
+  BoundedNettyByteBufReceive(ByteBuf buffer, long sizeToRead, long maxRequestSize) {
     this.buffer = Objects.requireNonNull(buffer);
     this.sizeToRead = sizeToRead;
+    this.maxRequestSize = maxRequestSize;
   }
 
   public boolean isReadComplete() {
@@ -83,6 +86,9 @@ public class BoundedNettyByteBufReceive extends AbstractByteBufHolder<BoundedNet
         sizeToRead = sizeBuffer.readLong();
         sizeRead += Long.BYTES;
         sizeBuffer.release();
+        if (sizeToRead > maxRequestSize) {
+          throw new IOException("Request size larger than the maximum size! " + sizeToRead + " > " + maxRequestSize);
+        }
         buffer = ByteBufAllocator.DEFAULT.heapBuffer((int) sizeToRead - Long.BYTES);
       }
     }
@@ -121,6 +127,6 @@ public class BoundedNettyByteBufReceive extends AbstractByteBufHolder<BoundedNet
 
   @Override
   public BoundedNettyByteBufReceive replace(ByteBuf content) {
-    return new BoundedNettyByteBufReceive(content, sizeToRead);
+    return new BoundedNettyByteBufReceive(content, sizeToRead, maxRequestSize);
   }
 }

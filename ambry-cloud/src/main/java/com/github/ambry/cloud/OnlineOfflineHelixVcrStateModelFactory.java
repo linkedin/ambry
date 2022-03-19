@@ -22,8 +22,8 @@ import org.apache.helix.participant.statemachine.StateModel;
  */
 public class OnlineOfflineHelixVcrStateModelFactory extends VcrStateModelFactory {
 
-  public OnlineOfflineHelixVcrStateModelFactory(HelixVcrCluster helixVcrCluster) {
-    this.helixVcrCluster = helixVcrCluster;
+  public OnlineOfflineHelixVcrStateModelFactory(HelixVcrClusterParticipant helixVcrClusterParticipant) {
+    this.helixVcrClusterParticipant = helixVcrClusterParticipant;
   }
 
   /**
@@ -35,7 +35,7 @@ public class OnlineOfflineHelixVcrStateModelFactory extends VcrStateModelFactory
    */
   @Override
   public StateModel createNewStateModel(String resourceName, String partitionName) {
-    return new OnlineOfflineHelixVcrStateModel(helixVcrCluster);
+    return new OnlineOfflineHelixVcrStateModel(helixVcrClusterParticipant);
   }
 
   @Override

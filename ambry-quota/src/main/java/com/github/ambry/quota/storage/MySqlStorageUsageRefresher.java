@@ -15,9 +15,11 @@ package com.github.ambry.quota.storage;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.MySqlReportAggregatorTask;
 import com.github.ambry.config.StorageQuotaConfig;
-import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.File;
@@ -36,6 +38,7 @@ import java.time.Month;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -45,6 +48,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -136,23 +140,21 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     }
 
     if (containerStorageUsageMonthlyBase == null) {
-      synchronized (accountStatsStore) {
-        try {
-          // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
-          logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
-          containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
-          // If the monthly base is indeed for this month, then try to persist it in the backup file.
-          // There is a chance that the database has a snapshot from last month since the aggregation task is executed
-          // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
-          // would have the snapshot of last month.
-          if (currentMonth.equals(accountStatsStore.queryRecordedMonth())) {
-            tryPersistMonthlyUsage();
-          }
-        } catch (Exception e) {
-          throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
-        } finally {
-          accountStatsStore.closeConnection();
+      try {
+        // If we are here, then loading monthly base from backup file failed. We have to fetch it from database.
+        logger.info("Fetching monthly base from mysql database for this month: {}", currentMonth);
+        containerStorageUsageMonthlyBase =
+            convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryMonthlyAggregatedAccountStorageStats(),
+                config.usePhysicalStorage);
+        // If the monthly base is indeed for this month, then try to persist it in the backup file.
+        // There is a chance that the database has a snapshot from last month since the aggregation task is executed
+        // every few minutes(maybe hours). Before the first aggregation task of this month is executed, the database
+        // would have the snapshot of last month.
+        if (currentMonth.equals(accountStatsStore.queryRecordedMonth())) {
+          tryPersistMonthlyUsage();
         }
+      } catch (Exception e) {
+        throw new IllegalStateException("Unable to fetch monthly storage usage from mysql", e);
       }
     }
     metrics.mysqlRefresherInitTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -178,24 +180,21 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
    */
   private void fetchMonthlyStorageUsageAndMaybeRetry() {
     boolean shouldRetry = false;
-    synchronized (accountStatsStore) {
-      try {
-        String monthValue = accountStatsStore.queryRecordedMonth();
-        if (monthValue.equals(currentMonth)) {
-          logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}",
-              currentMonth);
-          containerStorageUsageMonthlyBase = accountStatsStore.queryMonthlyAggregatedAccountStats();
-        } else {
-          logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
-              monthValue);
-          shouldRetry = true;
-        }
-      } catch (Exception e) {
-        logger.error("Failed to refresh monthly storage usage", e);
+    try {
+      String monthValue = accountStatsStore.queryRecordedMonth();
+      if (monthValue.equals(currentMonth)) {
+        logger.info("Fetching monthly base from mysql database in periodical thread for this month: {}", currentMonth);
+        containerStorageUsageMonthlyBase =
+            convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryMonthlyAggregatedAccountStorageStats(),
+                config.usePhysicalStorage);
+      } else {
+        logger.info("Current month [{}] is not the same as month [{}]recorded in mysql database", currentMonth,
+            monthValue);
         shouldRetry = true;
-      } finally {
-        accountStatsStore.closeConnection();
       }
+    } catch (Exception e) {
+      logger.error("Failed to refresh monthly storage usage", e);
+      shouldRetry = true;
     }
 
     if (shouldRetry) {
@@ -258,26 +257,24 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
    */
   private void initialFetchAndSchedule() {
     Runnable updater = () -> {
-      synchronized (accountStatsStore) {
-        try {
-          long startTimeMs = System.currentTimeMillis();
-          Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
-          Map<String, Map<String, Long>> storageUsage = accountStatsStore.queryAggregatedAccountStats();
-          if (storageUsage != null) {
-            subtract(storageUsage, base);
-            containerStorageUsageForCurrentMonthRef.set(storageUsage);
-            if (listener.get() != null) {
-              listener.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));
-            }
-            metrics.mysqlRefresherRefreshUsageTimeMs.update(System.currentTimeMillis() - startTimeMs);
+      try {
+        long startTimeMs = System.currentTimeMillis();
+        Map<String, Map<String, Long>> base = containerStorageUsageMonthlyBase;
+        Map<String, Map<String, Long>> storageUsage =
+            convertAggregatedAccountStorageStatsToMap(accountStatsStore.queryAggregatedAccountStorageStats(),
+                config.usePhysicalStorage);
+        if (storageUsage != null) {
+          subtract(storageUsage, base);
+          containerStorageUsageForCurrentMonthRef.set(storageUsage);
+          if (listener.get() != null) {
+            listener.get().onNewContainerStorageUsage(Collections.unmodifiableMap(storageUsage));
           }
-        } catch (Exception e) {
-          logger.error("Failed to retrieve the container usage from mysql", e);
-          // If we already have a container usage map in memory, then don't replace it with empty map.
-          containerStorageUsageForCurrentMonthRef.compareAndSet(null, Collections.EMPTY_MAP);
-        } finally {
-          accountStatsStore.closeConnection();
+          metrics.mysqlRefresherRefreshUsageTimeMs.update(System.currentTimeMillis() - startTimeMs);
         }
+      } catch (Exception e) {
+        logger.error("Failed to retrieve the container usage from mysql", e);
+        // If we already have a container usage map in memory, then don't replace it with empty map.
+        containerStorageUsageForCurrentMonthRef.compareAndSet(null, Collections.EMPTY_MAP);
       }
     };
     updater.run();
@@ -292,10 +289,10 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
   }
 
   /**
-   * Subtract values of {@code base} from values of {@code storageUsage}.
-   * If values exist in {@code storageUsage} but not in {@code base}, then nothing happens.
-   * If values exist in {@code base} but not in {@code storageUsage}, then nothing happens either.
-   * If values in {@code storageUsage} are less than values in {@code base}, then the result is 0.
+   * Subtract values of {@code base} from values of {@code containerStorageUsage}.
+   * If values exist in {@code containerStorageUsage} but not in {@code base}, then nothing happens.
+   * If values exist in {@code base} but not in {@code containerStorageUsage}, then nothing happens either.
+   * If values in {@code containerStorageUsage} are less than values in {@code base}, then the result is 0.
    * @param storageUsage
    * @param base
    */
@@ -367,6 +364,32 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     long secondsNextMonth =
         currentMonthDateTime.plusMonths(1).plusSeconds(offsetInSecond).atOffset(ZONE_OFFSET).toEpochSecond();
     return secondsNextMonth - time.seconds();
+  }
+
+  /**
+   * Convert an {@link AggregatedAccountStorageStats} to a map from account id to container id to storage usage.
+   * The account id and container id are keys of the outer map and the inner map, they are both in string format.
+   * @param aggregatedAccountStorageStats The {@link AggregatedAccountStorageStats}.
+   * @param usePhysicalStorageUsage True to use physical storage, false to use logical storage usage.
+   * @return A map from account id to container id to storage usage.
+   */
+  static Map<String, Map<String, Long>> convertAggregatedAccountStorageStatsToMap(
+      AggregatedAccountStorageStats aggregatedAccountStorageStats, boolean usePhysicalStorageUsage) {
+    Map<String, Map<String, Long>> result = new HashMap<>();
+    if (aggregatedAccountStorageStats == null) {
+      return result;
+    }
+    Map<Short, Map<Short, ContainerStorageStats>> storageStats = aggregatedAccountStorageStats.getStorageStats();
+    for (short accountId : storageStats.keySet()) {
+      Map<String, Long> containerMap = storageStats.get(accountId)
+          .entrySet()
+          .stream()
+          .collect(Collectors.toMap(ent -> String.valueOf(ent.getKey()),
+              ent -> usePhysicalStorageUsage ? ent.getValue().getPhysicalStorageUsage()
+                  : ent.getValue().getLogicalStorageUsage()));
+      result.put(String.valueOf(accountId), containerMap);
+    }
+    return result;
   }
 
   /**

@@ -14,11 +14,16 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountCollectionSerde;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
@@ -56,6 +61,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
@@ -75,10 +81,12 @@ public class FrontendIntegrationTestBase {
   static final String CLUSTER_NAME = "Cluster-name";
   protected FrontendConfig frontendConfig;
   protected NettyClient nettyClient;
+  protected QuotaConfig quotaConfig;
 
   public FrontendIntegrationTestBase(FrontendConfig frontendConfig, NettyClient nettyClient) {
     this.frontendConfig = frontendConfig;
     this.nettyClient = nettyClient;
+    this.quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
   }
 
   /**
@@ -192,6 +200,7 @@ public class FrontendIntegrationTestBase {
         expectedContainerName);
     getHeadAndVerify(blobId, null, GetOption.None, headers, isPrivate, expectedAccountName, expectedContainerName);
     ByteRange range = ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
+    headers.add(RestUtils.Headers.BLOB_SIZE, range.getRangeSize());
     getBlobAndVerify(blobId, range, null, false, headers, isPrivate, content, expectedAccountName,
         expectedContainerName);
     getHeadAndVerify(blobId, range, null, headers, isPrivate, expectedAccountName, expectedContainerName);
@@ -385,7 +394,7 @@ public class FrontendIntegrationTestBase {
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
     verifyUserMetadata(expectedHeaders, response, null, null);
-    verifyGetRequestCostHeaders(response, Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)));
+    verifyGetRequestCostHeaders(response, expectedContentArray.length);
   }
 
   /**
@@ -890,9 +899,9 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the content posted.
    */
   private void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
-    cuCost = (cuCost > 1) ? cuCost : 1;
-    double storageCost = contentSize / UserQuotaRequestCostPolicy.BYTES_IN_GB;
+    double cuCost = contentSize / SimpleAmbryCostModelPolicy.CU_COST_UNIT;
+    cuCost = Math.max(cuCost, 1);
+    double storageCost = contentSize / (double) QuotaUtils.BYTES_IN_GB;
     verifyCommonRequestCostHeaders(response, cuCost, storageCost, false);
   }
 
@@ -902,8 +911,8 @@ public class FrontendIntegrationTestBase {
    * @param contentSize size of the blob.
    */
   private void verifyGetRequestCostHeaders(HttpResponse response, long contentSize) {
-    double cuCost = contentSize / UserQuotaRequestCostPolicy.CU_COST_UNIT;
-    cuCost = (cuCost > 1) ? cuCost : 1;
+    double cuCost = Math.ceil(contentSize / SimpleAmbryCostModelPolicy.CU_COST_UNIT);
+    cuCost = Math.max(cuCost, 1);
     verifyCommonRequestCostHeaders(response, cuCost, 0, true);
   }
 
@@ -942,5 +951,25 @@ public class FrontendIntegrationTestBase {
         Double.parseDouble(costMap.get(QuotaName.STORAGE_IN_GB.name())), 0.000001);
     Assert.assertEquals("Invalid " + cuUnitName + " cost.", expectedCuCost, Double.parseDouble(costMap.get(cuUnitName)),
         0.000001);
+  }
+
+  /**
+   * Call the {@code POST /accounts} API to update account metadata and verify that the update succeeded.
+   * @param accountService {@link AccountService} object.
+   * @param accounts the accounts to replace or add using the {@code POST /accounts} call.
+   */
+  void updateAccountsAndVerify(AccountService accountService, Account... accounts) throws Exception {
+    byte[] accountUpdateJson = AccountCollectionSerde.serializeAccountsInJson(Arrays.asList(accounts));
+    FullHttpRequest request =
+        buildRequest(HttpMethod.POST, Operations.ACCOUNTS, null, ByteBuffer.wrap(accountUpdateJson));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(request, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    verifyTrackingHeaders(response);
+    assertNoContent(responseParts.queue, 1);
+
+    for (Account account : accounts) {
+      assertEquals("Update not reflected in AccountService", account, accountService.getAccountById(account.getId()));
+    }
   }
 }
