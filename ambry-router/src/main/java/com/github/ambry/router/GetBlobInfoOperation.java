@@ -213,51 +213,53 @@ class GetBlobInfoOperation extends GetOperation {
       // Ignore. The request must have timed out.
       return;
     }
-    long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
-    routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-    routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestLatencyMs.update(
-        requestLatencyMs);
-    if (responseInfo.getError() != null) {
-      logger.trace("GetBlobInfoRequest with response correlationId {} timed out for replica {} ", correlationId,
-          getRequestInfo.replicaId.getDataNodeId());
-      onErrorResponse(getRequestInfo.replicaId, new RouterException(
-          "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
-          RouterErrorCode.OperationTimedOut));
+    if (responseInfo.isQuotaRejected()) {
+      logger.trace("GetBlobInfoRequest with response correlationId {} was rejected because quota was exceeded.",
+          correlationId);
+      onErrorResponse(getRequestInfo.replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests));
     } else {
-      if (getResponse == null) {
-        logger.trace(
-            "GetBlobInfoRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
-            correlationId, getRequestInfo.replicaId.getDataNodeId());
-        onErrorResponse(getRequestInfo.replicaId,
-            new RouterException("Response deserialization received an unexpected error",
-                RouterErrorCode.UnexpectedInternalError));
+      long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
+      routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestLatencyMs.update(requestLatencyMs);
+      if (responseInfo.getError() != null) {
+        logger.trace("GetBlobInfoRequest with response correlationId {} timed out for replica {} ", correlationId,
+            getRequestInfo.replicaId.getDataNodeId());
+        onErrorResponse(getRequestInfo.replicaId, new RouterException(
+            "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
+            RouterErrorCode.OperationTimedOut));
       } else {
-        if (getResponse.getCorrelationId() != correlationId) {
-          // The NetworkClient associates a response with a request based on the fact that only one request is sent
-          // out over a connection id, and the response received on a connection id must be for the latest request
-          // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
-          // There is no other way to handle it.
-          routerMetrics.unknownReplicaResponseError.inc();
-          logger.trace("GetBlobInfoRequest with response correlationId {} mismatch from response {} for replica {} ",
-              correlationId, getResponse.getCorrelationId(), getRequestInfo.replicaId.getDataNodeId());
-          onErrorResponse(getRequestInfo.replicaId, new RouterException(
-              "The correlation id in the GetResponse " + getResponse.getCorrelationId()
-                  + "is not the same as the correlation id in the associated GetRequest: " + correlationId,
-              RouterErrorCode.UnexpectedInternalError));
-          // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
+        if (getResponse == null) {
+          logger.trace(
+              "GetBlobInfoRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
+              correlationId, getRequestInfo.replicaId.getDataNodeId());
+          onErrorResponse(getRequestInfo.replicaId,
+              new RouterException("Response deserialization received an unexpected error", RouterErrorCode.UnexpectedInternalError));
         } else {
-          try {
-            processGetBlobInfoResponse(getRequestInfo, getResponse);
-          } catch (IOException | MessageFormatException e) {
-            // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
-            // detection.
-            logger.trace(
-                "GetBlobInfoRequest with response correlationId {} response deserialization failed for replica {} ",
-                correlationId, getRequestInfo.replicaId.getDataNodeId());
-            routerMetrics.responseDeserializationErrorCount.inc();
-            onErrorResponse(getRequestInfo.replicaId,
-                new RouterException("Response deserialization received an unexpected error", e,
-                    RouterErrorCode.UnexpectedInternalError));
+          if (getResponse.getCorrelationId() != correlationId) {
+            // The NetworkClient associates a response with a request based on the fact that only one request is sent
+            // out over a connection id, and the response received on a connection id must be for the latest request
+            // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
+            // There is no other way to handle it.
+            routerMetrics.unknownReplicaResponseError.inc();
+            logger.trace("GetBlobInfoRequest with response correlationId {} mismatch from response {} for replica {} ",
+                correlationId, getResponse.getCorrelationId(), getRequestInfo.replicaId.getDataNodeId());
+            onErrorResponse(getRequestInfo.replicaId, new RouterException(
+                "The correlation id in the GetResponse " + getResponse.getCorrelationId() + "is not the same as the correlation id in the associated GetRequest: " + correlationId,
+                RouterErrorCode.UnexpectedInternalError));
+            // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
+          } else {
+            try {
+              processGetBlobInfoResponse(getRequestInfo, getResponse);
+            } catch (IOException | MessageFormatException e) {
+              // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
+              // detection.
+              logger.trace(
+                  "GetBlobInfoRequest with response correlationId {} response deserialization failed for replica {} ",
+                  correlationId, getRequestInfo.replicaId.getDataNodeId());
+              routerMetrics.responseDeserializationErrorCount.inc();
+              onErrorResponse(getRequestInfo.replicaId,
+                  new RouterException("Response deserialization received an unexpected error", e, RouterErrorCode.UnexpectedInternalError));
+            }
           }
         }
       }

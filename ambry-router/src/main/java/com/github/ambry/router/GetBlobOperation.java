@@ -932,7 +932,11 @@ class GetBlobOperation extends GetOperation {
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
       routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
           requestLatencyMs);
-      if (responseInfo.getError() != null) {
+      if (responseInfo.isQuotaRejected()) {
+        logger.trace("GetBlobRequest with response correlationId {} rejected because it exceeded quota", correlationId);
+        onQuotaErrorResponse(
+            getRequestInfo.replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests));
+      } else if (responseInfo.getError() != null) {
         // responseInfo.getError() returns NetworkClientErrorCode. If error is not null, it probably means (1) connection
         // checkout timed out; (2) pending connection timed out; (3) established connection timed out. In all these cases,
         // the latency histogram in adaptive operation tracker should not be updated.
@@ -1114,6 +1118,18 @@ class GetBlobOperation extends GetOperation {
       setChunkException(exception);
       routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestErrorCount.inc();
+    }
+
+    /**
+     * Perform the necessary actions when a request fails due to quota compliance.
+     * @param replicaId the {@link ReplicaId} associated with the failed response.
+     * @param exception the {@link RouterException} associated with the failed response.
+     */
+    private void onQuotaErrorResponse(ReplicaId replicaId, RouterException exception) {
+      chunkOperationTracker.onResponse(replicaId,
+          TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
+      setChunkException(exception);
+      routerMetrics.routerRequestErrorCount.inc();
     }
 
     /**

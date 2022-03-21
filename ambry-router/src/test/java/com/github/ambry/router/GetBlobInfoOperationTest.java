@@ -441,6 +441,44 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
+   * Test the case where {@link GetBlobInfoOperation} is rejected due to quota.
+   */
+  @Test
+  public void testQuotaRejection() {
+    for (short expectedLifeVersion : new short[]{0, 1}) {
+      NonBlockingRouter.currentOperationsCount.incrementAndGet();
+      // Now set the lifeVersion
+      for (MockServer mockServer : mockServerLayout.getMockServers()) {
+        if (mockServer.getBlobs().containsKey(blobId.getID())) {
+          mockServer.getBlobs().get(blobId.getID()).lifeVersion = expectedLifeVersion;
+        }
+      }
+      GetBlobInfoOperation op =
+          new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+              routerCallback, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback);
+      ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
+      requestRegistrationCallback.setRequestsToSend(requestListToFill);
+      op.poll(requestRegistrationCallback);
+      Assert.assertEquals("There should only be as many requests at this point as requestParallelism",
+          requestParallelism, correlationIdToGetOperation.size());
+
+      for(RequestInfo requestInfo : requestListToFill) {
+        ResponseInfo quotaResponseInfo = new ResponseInfo(requestInfo, true);
+        op.handleResponse(quotaResponseInfo, null);
+        if (op.isOperationComplete()) {
+          break;
+        }
+      }
+      Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+      RouterException routerException = (RouterException) op.getOperationException();
+      Assert.assertEquals(RouterErrorCode.TooManyRequests, routerException.getErrorCode());
+      // poll again to make sure that counters aren't triggered again (check in @After)
+      op.poll(requestRegistrationCallback);
+      correlationIdToGetOperation.clear();
+    }
+  }
+
+  /**
    * Test the case where origin replicas return Blob_Not_found and the rest times out.
    * @throws Exception
    */
