@@ -139,7 +139,7 @@ public class QuotaTestUtils {
    * An implementation of {@link QuotaChargeCallback} for tests.
    */
   public static class TestQuotaChargeCallback implements QuotaChargeCallback {
-    public int numChargeCalls = 0;
+    public int numCheckAndChargeCalls = 0;
     private final QuotaConfig quotaConfig;
 
     /**
@@ -160,32 +160,13 @@ public class QuotaTestUtils {
 
     @Override
     public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge, long chunkSize) {
+      numCheckAndChargeCalls++;
       return QuotaAction.ALLOW;
     }
 
     @Override
     public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge) {
-      return QuotaAction.ALLOW;
-    }
-
-    @Override
-    public void charge(long chunkSize) {
-      numChargeCalls++;
-    }
-
-    @Override
-    public void charge() {
-      charge(quotaConfig.quotaAccountingUnit);
-    }
-
-    @Override
-    public boolean check() {
-      return false;
-    }
-
-    @Override
-    public boolean quotaExceedAllowed() {
-      return false;
+      return checkAndCharge(shouldCheckExceedAllowed, forceCharge, quotaConfig.quotaAccountingUnit);
     }
 
     @Override

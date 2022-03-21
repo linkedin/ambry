@@ -83,47 +83,6 @@ public class PostProcessQuotaChargeCallback implements QuotaChargeCallback {
   }
 
   @Override
-  public void charge(long chunkSize) throws QuotaException {
-    try {
-      Map<QuotaName, Double> requestCost = requestCostPolicy.calculateRequestQuotaCharge(restRequest, chunkSize)
-          .entrySet()
-          .stream()
-          .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), Map.Entry::getValue));
-      QuotaAction quotaAction = quotaManager.chargeAndRecommend(restRequest, requestCost, false, true);
-      if (QuotaUtils.shouldThrottle(quotaAction) && isQuotaEnforcedOnRequest) {
-        if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING
-            && quotaManager.getQuotaConfig().throttleInProgressRequests) {
-          throw new QuotaException("Exception while charging quota",
-              new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests), false);
-        } else {
-          LOGGER.debug("Quota exceeded for an in progress request.");
-        }
-      }
-    } catch (Exception ex) {
-      if (ex.getCause() instanceof RouterException && ((RouterException) ex.getCause()).getErrorCode()
-          .equals(RouterErrorCode.TooManyRequests)) {
-        throw ex;
-      }
-      LOGGER.error("Unexpected exception while charging quota.", ex);
-    }
-  }
-
-  @Override
-  public void charge() throws QuotaException {
-    charge(quotaManager.getQuotaConfig().quotaAccountingUnit);
-  }
-
-  @Override
-  public boolean check() {
-    return false;
-  }
-
-  @Override
-  public boolean quotaExceedAllowed() {
-    return false;
-  }
-
-  @Override
   public QuotaResource getQuotaResource() throws QuotaException {
     return QuotaResource.fromRestRequest(restRequest);
   }

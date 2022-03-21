@@ -51,7 +51,6 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -387,7 +386,7 @@ public class GetBlobOperationTest {
           routerMetrics.ageAtGet);
       getAndAssertSuccess(false, false, expectedLifeVersion);
       if (!quotaChargeCallback.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
-        Assert.assertEquals(i + 1, quotaChargeCallback.numChargeCalls);
+        Assert.assertEquals(i + 1, quotaChargeCallback.numCheckAndChargeCalls);
       }
     }
   }

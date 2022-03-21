@@ -79,24 +79,4 @@ public class PreProcessQuotaChargeCallback implements QuotaChargeCallback {
   public QuotaConfig getQuotaConfig() {
     return quotaManager.getQuotaConfig();
   }
-
-  @Override
-  public void charge(long chunkSize) {
-    throw new UnsupportedOperationException("charge() is not supported in PreProcessQuotaChargeCallback.");
-  }
-
-  @Override
-  public void charge() {
-    charge(getQuotaConfig().quotaAccountingUnit);
-  }
-
-  @Override
-  public boolean check() {
-    throw new UnsupportedOperationException("check() is not supported in PreProcessQuotaChargeCallback.");
-  }
-
-  @Override
-  public boolean quotaExceedAllowed() {
-    throw new UnsupportedOperationException("quotaExceedAllowed() is not supported in PreProcessQuotaChargeCallback.");
-  }
 }

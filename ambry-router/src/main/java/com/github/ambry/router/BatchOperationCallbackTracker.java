@@ -90,7 +90,7 @@ class BatchOperationCallbackTracker {
     if (completed.compareAndSet(false, true)) {
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
-          quotaChargeCallback.charge();
+          quotaChargeCallback.checkAndCharge(false, true);
         } catch (QuotaException quotaException) {
           LOGGER.info("Exception {} while charging quota for ttl operation", quotaException.toString());
         }

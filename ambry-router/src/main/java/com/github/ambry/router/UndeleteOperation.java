@@ -370,7 +370,7 @@ public class UndeleteOperation {
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
-          quotaChargeCallback.charge();
+          quotaChargeCallback.checkAndCharge(false, true);
         } catch (QuotaException quotaException) {
           LOGGER.info("Exception {} while charging quota for undelete operation", quotaException.toString());
         }
