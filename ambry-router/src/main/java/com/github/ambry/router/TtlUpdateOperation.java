@@ -120,7 +120,8 @@ class TtlUpdateOperation {
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics);
     this.quotaChargeCallback = quotaChargeCallback;
-    this.operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName());
+    this.operationQuotaCharger =
+        new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
   }
 
   /**

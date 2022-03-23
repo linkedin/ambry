@@ -116,7 +116,8 @@ public class UndeleteOperation {
     this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
         clusterMap.getDatacenterName(blobId.getDatacenterId()), routerMetrics);
     this.quotaChargeCallback = quotaChargeCallback;
-    operationQuotaCharger = new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName());
+    operationQuotaCharger =
+        new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
   }
 
   /**
