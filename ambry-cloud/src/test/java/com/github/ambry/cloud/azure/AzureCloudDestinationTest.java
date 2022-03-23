@@ -155,6 +155,8 @@ public class AzureCloudDestinationTest {
 
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com:443");
+    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "ambry/deletedContainer");
     configProps.setProperty(AzureCloudConfig.COSMOS_DATABASE, "ambry");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "metadata");
     configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION, "deletedContainer");
