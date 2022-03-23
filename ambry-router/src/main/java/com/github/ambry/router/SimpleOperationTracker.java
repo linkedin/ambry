@@ -301,7 +301,7 @@ class SimpleOperationTracker implements OperationTracker {
           || routerOperation == RouterOperation.GetBlobInfoOperation) {
         List<ReplicaId> remoteOfflineReplicas = new ArrayList<>();
         for (ReplicaId replica : offlineReplicas) {
-          if (replica.getDataNodeId().getDatacenterName().equals(this.originatingDcName)) {
+          if (replica.getDataNodeId().getDatacenterName().equals(originatingDcName)) {
             numReplicasInOriginatingDc++;
           }
           if (replica.getDataNodeId().getDatacenterName().equals(datacenterName)) {
@@ -334,11 +334,19 @@ class SimpleOperationTracker implements OperationTracker {
     if (totalReplicaCount < getSuccessTarget(inFlightReplicaType)) {
       throw notEnoughReplicasException.get();
     }
-    if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && numReplicasInOriginatingDc > 0) {
-      // we relax this condition to account for intermediate state of moving replicas (there could be 6 replicas in
-      // originating dc temporarily). Also we force frontend to check all originating dc replicas in case one replica is
-      // rebuilt from scratch, one replica is in error state and only one replica that holds the blob. This guarantees
-      // frontend will try fetching blob from the last replica.
+
+    int numActiveReplicasInOriginatingDc =
+        getEligibleReplicas(originatingDcName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)).size();
+    if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && numReplicasInOriginatingDc > 0
+        && numActiveReplicasInOriginatingDc >= routerConfig.routerPutSuccessTarget) {
+      // This condition accounts for following cases:
+      // 1. Intermediate state of moving replicas (there could be 6 replicas in originating dc temporarily).
+      // 2. Looks at all replicas (instead of routerPutSuccessTarget) in originating DC since one of the replicas
+      // in which the blob was PUT originally could be in error state or is being rebuilt from scratch. By looking at
+      // all replicas, we make sure that we don't miss the other replica in which blob was PUT.
+      // 3. Uses this feature only if there are at least 'routerPutSuccessTarget' number of replicas in leader or
+      // standby state. This ensures that all the replicas in PUT quorum are not down (or being rebuilt) which means
+      // that there is at least one active replica containing the blob.
       originatingDcNotFoundFailureThreshold = numReplicasInOriginatingDc;
     } else {
       originatingDcNotFoundFailureThreshold = 0;
@@ -523,8 +531,8 @@ class SimpleOperationTracker implements OperationTracker {
    * @return {@code true} if not found count in originating datacenter exceeds threshold, {@code false} otherwise.
    */
   private boolean hasFailedOnOriginatingDcNotFound() {
-    return originatingDcNotFoundFailureThreshold > 0
-        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold;
+    return originatingDcNotFoundFailureThreshold > 0 && (originatingDcNotFoundCount
+        >= originatingDcNotFoundFailureThreshold);
   }
 
   /**

@@ -32,6 +32,7 @@ public class RouterConfig {
   public static final String DEFAULT_CRYPTO_SERVICE_FACTORY = "com.github.ambry.router.GCMCryptoServiceFactory";
   public static final double DEFAULT_LATENCY_TOLERANCE_QUANTILE = 0.9;
   public static final long DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS = 1000L;
+  public static final long ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS = 24 * 60 * 1000L;
 
   // config keys
   public static final String ROUTER_SCALING_UNIT_COUNT = "router.scaling.unit.count";
@@ -112,6 +113,7 @@ public class RouterConfig {
   public static final String ROUTER_REQUEST_HANDLER_NUM_OF_THREADS = "router.request.handler.num.of.threads";
   public static final String ROUTER_STORE_KEY_CONVERTER_FACTORY = "router.store.key.converter.factory";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS = "router.unavailable.due.to.offline.replicas";
+  public static final String ROUTER_NOT_FOUND_CACHE_TTL_IN_MS = "router.not.found.cache.ttl.in.ms";
 
   /**
    * Number of independent scaling units for the router.
@@ -562,6 +564,14 @@ public class RouterConfig {
   public final boolean routerUnavailableDueToOfflineReplicas;
 
   /**
+   * Expiration time for Blob IDs stored in not-found cache. Default value is 15 seconds.
+   * Setting it to 0 would disable the cache and avoid storing any blob IDs.
+   */
+  @Config(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS)
+  @Default("15*1000")
+  public final long routerNotFoundCacheTtlInMs;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -682,5 +692,7 @@ public class RouterConfig {
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");
     routerUnavailableDueToOfflineReplicas =
         verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS, false);
+    routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
+        ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
   }
 }

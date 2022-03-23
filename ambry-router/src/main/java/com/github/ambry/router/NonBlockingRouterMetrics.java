@@ -33,6 +33,7 @@ import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.utils.CachedHistogram;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import com.google.common.cache.Cache;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -729,9 +730,18 @@ public class NonBlockingRouterMetrics {
         (Gauge<Integer>) currentOperationsCount::get);
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
         (Gauge<Integer>) currentBackgroundOperationsCount::get);
-    metricRegistry.register(
-        MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
+    metricRegistry.register(MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
         (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
+  }
+
+  /**
+   * Initializes a {@link Gauge} metric to monitor the cache hit rate for {@link Cache} keeping track of blobs
+   * which known not to be present in Ambry.
+   * @param cache which keeps track of blobs not found recently.
+   */
+  public void initializeNotFoundCacheMetrics(Cache cache) {
+    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "BlobsNotFoundCacheHitRate"),
+        (Gauge<Double>) () -> cache.stats().hitRate());
   }
 
   /**
