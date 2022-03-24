@@ -57,6 +57,7 @@ import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -274,6 +275,7 @@ public class IndexTest {
    * @throws Exception
    */
   @Test
+  @Ignore
   public void getBlobReadInfoTestWithChangingIndexSegments() throws Exception {
     Assume.assumeTrue(isLogSegmented);
     Assume.assumeTrue(persistentIndexVersion >= PersistentIndex.VERSION_3);

@@ -13,10 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -43,10 +41,35 @@ import org.slf4j.LoggerFactory;
  */
 public class HelixVcrUtil {
   private static final Logger logger = LoggerFactory.getLogger(HelixVcrUtil.class);
-  public static final List<String> ignoreResourceKeyWords = Arrays.asList("aggregation", "trigger", "stats");
   static final String SEPARATOR = "/";
   private static final ZNRecordSerializer ZN_RECORD_SERIALIZER = new ZNRecordSerializer();
   private static final String DELAYED_REBALANCER_CLASS_NAME = "DelayedAutoRebalancer";
+  private static final Set<String> smallIntegers = new HashSet<>();
+
+  static {
+    for (int i = 0; i < 512; i++) {
+      smallIntegers.add(String.valueOf(i));
+    }
+  }
+
+  /**
+   * Return {@code true} if the given resource name is a resource that contains partition information. Our current
+   * partition resources are all named as integer values.
+   * @param resourceName The resource name.
+   * @return {@code true} when the given resource contains partition information
+   */
+  public static boolean isPartitionResourceName(String resourceName) {
+    // all the partitions are placed under resource named as integer values.
+    if (smallIntegers.contains(resourceName)) {
+      return true;
+    }
+    try {
+      Integer.parseUnsignedInt(resourceName);
+      return true;
+    } catch (Exception e) {
+      return false;
+    }
+  }
 
   /**
    * Create a helix cluster with given information.
@@ -178,7 +201,7 @@ public class HelixVcrUtil {
       }
     }
     for (String resource : srcResources) {
-      if (ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
+      if (!isPartitionResourceName(resource)) {
         logger.info("Resource {} from src cluster is ignored", resource);
         continue;
       }
@@ -283,7 +306,8 @@ public class HelixVcrUtil {
   /**
    * A method to verify resources and partitions in src cluster and dest cluster are same.
    */
-  public static boolean isSrcDestSync(String srcZkString, String srcClusterName, String destZkString, String destClusterName) {
+  public static boolean isSrcDestSync(String srcZkString, String srcClusterName, String destZkString,
+      String destClusterName) {
 
     HelixAdmin srcAdmin = new ZKHelixAdmin(srcZkString);
     Set<String> srcResources = new HashSet<>(srcAdmin.getResourcesInCluster(srcClusterName));
@@ -291,7 +315,7 @@ public class HelixVcrUtil {
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
 
     for (String resource : srcResources) {
-      if (HelixVcrUtil.ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
+      if (!isPartitionResourceName(resource)) {
         System.out.println("Resource " + resource + " from src cluster is ignored");
         continue;
       }

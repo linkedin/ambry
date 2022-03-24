@@ -482,7 +482,7 @@ public class TestUtils {
     Set<String> destResources = new HashSet<>(destAdmin.getResourcesInCluster(destClusterName));
 
     for (String resource : srcResources) {
-      if (HelixVcrUtil.ignoreResourceKeyWords.stream().anyMatch(resource::contains)) {
+      if (!HelixVcrUtil.isPartitionResourceName(resource)) {
         System.out.println("Resource " + resource + " from src cluster is ignored");
         continue;
       }
