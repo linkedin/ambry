@@ -73,25 +73,34 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
    */
   @Override
   public void closeConnection(NetworkRequest originalRequest) throws InterruptedException {
-    //TODO: close connection
+    ChannelHandlerContext context = ((NettyServerRequest) originalRequest).getCtx();
+    if (context != null) {
+      logger.trace("close connection " + context.channel());
+      context.channel().close();
+    }
   }
 
   /** Get the next request or block until there is one */
   @Override
   public NetworkRequest receiveRequest() throws InterruptedException {
 
-    NetworkRequest request = requestQueue.take();
-    http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
-    if (request.equals(EmptyRequest.getInstance())) {
-      logger.debug("Request handler {} received shut down command ", request);
-    } else {
-      DataInputStream stream = new DataInputStream(request.getInputStream());
-      try {
-        // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
-        // Here we just need to consume it.
-        stream.readLong();
-      } catch (IOException e) {
-        throw new IllegalStateException("stream read error." + e);
+    NetworkRequest request = null;
+    while (request == null) {
+      request = requestQueue.take();
+      http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
+      if (request.equals(EmptyRequest.getInstance())) {
+        logger.debug("Request handler {} received shut down command ", request);
+      } else {
+        DataInputStream stream = new DataInputStream(request.getInputStream());
+        try {
+          // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
+          // Here we just need to consume it.
+          stream.readLong();
+        } catch (IOException e) {
+          logger.error("Encountered an error while reading length out, close the connection", e);
+          closeConnection(request);
+          request = null;
+        }
       }
     }
     return request;
