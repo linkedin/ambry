@@ -74,8 +74,10 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   @Override
   public void closeConnection(NetworkRequest originalRequest) throws InterruptedException {
     ChannelHandlerContext context = ((NettyServerRequest) originalRequest).getCtx();
-    logger.trace("close connection " + context.channel());
-    context.channel().close();
+    if (context != null) {
+      logger.trace("close connection " + context.channel());
+      context.channel().close();
+    }
   }
 
   /** Get the next request or block until there is one */
