@@ -29,10 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.mockito.Mockito.*;
 
@@ -40,17 +43,45 @@ import static org.mockito.Mockito.*;
 /**
  * Test for {@link PreProcessQuotaChargeCallback}.
  */
+@RunWith(Parameterized.class)
 public class PreProcessQuotaChargeCallbackTest {
-  private static final QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
-  private static final SimpleRequestQuotaCostPolicy simpleRequestQuotaCostPolicy =
-      new SimpleRequestQuotaCostPolicy(quotaConfig);
+  private final QuotaConfig quotaConfig;
+  private final SimpleRequestQuotaCostPolicy simpleRequestQuotaCostPolicy;
+  private final boolean isThrottling;
   private QuotaManager quotaManager;
   private Account account;
+
+  /**
+   * Constructor for {@link PreProcessQuotaChargeCallbackTest}.
+   * @param isThrottling {@code true} if running with {@link QuotaMode#THROTTLING}. {@code false} otherwise.
+   */
+  public PreProcessQuotaChargeCallbackTest(boolean isThrottling) {
+    Properties properties = new Properties();
+    this.isThrottling = isThrottling;
+    if (isThrottling) {
+      properties.setProperty(QuotaConfig.THROTTLING_MODE, QuotaMode.THROTTLING.name());
+    }
+    quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
+    simpleRequestQuotaCostPolicy = new SimpleRequestQuotaCostPolicy(quotaConfig);
+  }
+
+  /**
+   * Running for both {@link QuotaMode#TRACKING} as well as {@link QuotaMode#THROTTLING}.
+   * @return an array container a flag that is {@code true} for {@link QuotaMode#THROTTLING} and {@code false} for
+   * {@link QuotaMode#TRACKING}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.stream(new Boolean[]{Boolean.TRUE, Boolean.FALSE})
+        .map(isThrottling -> new Object[]{isThrottling})
+        .collect(Collectors.toList());
+  }
 
   @Before
   public void setUp() {
     quotaManager = mock(QuotaManager.class);
     when(quotaManager.getQuotaConfig()).thenReturn(quotaConfig);
+    when(quotaManager.getQuotaMode()).thenReturn(quotaConfig.throttlingMode);
     InMemAccountService accountService = new InMemAccountService(false, false);
     account = accountService.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
   }
@@ -101,11 +132,12 @@ public class PreProcessQuotaChargeCallbackTest {
           for (QuotaAction quotaAction : QuotaAction.values()) {
             when(quotaManager.chargeAndRecommend(eq(restRequest), eq(costMap), eq(shouldCheckQuotaExceedAllowed),
                 eq(forceCharge))).thenReturn(quotaAction);
+            QuotaAction expectedQuotaAction = isThrottling ? quotaAction : QuotaAction.ALLOW;
             if (testWithChunkSize) {
-              Assert.assertEquals(quotaAction,
+              Assert.assertEquals(expectedQuotaAction,
                   preProcessQuotaChargeCallback.checkAndCharge(shouldCheckQuotaExceedAllowed, forceCharge, chunkSize));
             } else {
-              Assert.assertEquals(quotaAction,
+              Assert.assertEquals(expectedQuotaAction,
                   preProcessQuotaChargeCallback.checkAndCharge(shouldCheckQuotaExceedAllowed, forceCharge));
             }
             callCount++;
