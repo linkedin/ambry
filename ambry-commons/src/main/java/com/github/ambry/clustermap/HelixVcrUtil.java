@@ -47,18 +47,19 @@ public class HelixVcrUtil {
   private static final Set<String> smallIntegers = new HashSet<>();
 
   static {
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < 512; i++) {
       smallIntegers.add(String.valueOf(i));
     }
   }
 
   /**
-   * Return {@code true} is the given resource name is a resource that contains partition information.
+   * Return {@code true} if the given resource name is a resource that contains partition information. Our current
+   * partition resources are all named as integer values.
    * @param resourceName The resource name.
-   * @return {@code true} when the given resource contains partition inforrmation
+   * @return {@code true} when the given resource contains partition information
    */
   public static boolean isPartitionResourceName(String resourceName) {
-    // all the paritions are placed under resource named as integer values.
+    // all the partitions are placed under resource named as integer values.
     if (smallIntegers.contains(resourceName)) {
       return true;
     }
