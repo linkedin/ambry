@@ -18,8 +18,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.RouterErrorCode;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -54,7 +52,11 @@ public class PreProcessQuotaChargeCallback implements QuotaChargeCallback {
         .entrySet()
         .stream()
         .collect(Collectors.toMap(entry -> QuotaName.valueOf(entry.getKey()), Map.Entry::getValue));
-    return quotaManager.chargeAndRecommend(restRequest, requestCost, shouldCheckQuotaExceedAllowed, forceCharge);
+    QuotaAction quotaAction =
+        quotaManager.chargeAndRecommend(restRequest, requestCost, shouldCheckQuotaExceedAllowed, forceCharge);
+    // Note that we track quota usages even if QuotaMode is TRACKING, so although we return ALLOW, checkAndCharge still
+    // needs to happen
+    return quotaManager.getQuotaMode() == QuotaMode.TRACKING ? QuotaAction.ALLOW : quotaAction;
   }
 
   @Override
