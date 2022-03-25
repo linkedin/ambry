@@ -195,14 +195,16 @@ abstract class GetOperation {
         return 3;
       case RangeNotSatisfiable:
         return 4;
-      case AmbryUnavailable:
+      case TooManyRequests:
         return 5;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 6;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 7;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 8;
+      case BlobDoesNotExist:
+        return 9;
       default:
         return Integer.MIN_VALUE;
     }

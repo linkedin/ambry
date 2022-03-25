@@ -745,6 +745,31 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test the case where {@link GetBlobOperation} is rejected due to quota checks.
+   * @throws Exception
+   */
+  @Test
+  public void testQuotaRejection() throws Exception {
+    doPut();
+    GetBlobOperation op = createOperation(routerConfig, null);
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      for (RequestInfo requestInfo : requestRegistrationCallback.getRequestsToSend()) {
+        ResponseInfo fakeResponse = new ResponseInfo(requestInfo, true);
+        op.handleResponse(fakeResponse, null);
+        fakeResponse.release();
+        if (op.isOperationComplete()) {
+          break;
+        }
+      }
+      requestRegistrationCallback.getRequestsToSend().clear();
+    }
+
+    assertFailureAndCheckErrorCode(op, RouterErrorCode.TooManyRequests);
+    Assert.assertTrue(op.isOperationComplete());
+  }
+
+  /**
    * Test the case where every server returns Blob_Not_Found. All servers must have been contacted,
    * due to cross-colo proxying.
    * @throws Exception
