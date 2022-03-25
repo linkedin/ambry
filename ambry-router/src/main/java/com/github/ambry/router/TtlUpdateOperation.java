@@ -190,6 +190,10 @@ class TtlUpdateOperation {
       return;
     }
     ReplicaId replica = ttlUpdateRequestInfo.replica;
+    if (responseInfo.isQuotaRejected()) {
+      processQuotaRejectedResponse(ttlUpdateRequest.getCorrelationId(), replica);
+      return;
+    }
     long requestLatencyMs = time.milliseconds() - ttlUpdateRequestInfo.startTimeMs;
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).ttlUpdateRequestLatencyMs.update(requestLatencyMs);
@@ -284,6 +288,18 @@ class TtlUpdateOperation {
   }
 
   /**
+   * Process response if it was rejected due to quota compliance.
+   * @param correlationId correlation id of the request.
+   * @param replicaId {@link ReplicaId} of the request.
+   */
+  private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
+    LOGGER.debug("TtlUpdateRequest with response correlationId {} was rejected because quota was exceeded.",
+        correlationId);
+    onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
+    checkAndMaybeComplete();
+  }
+
+  /**
    * Processes {@link ServerErrorCode} received from {@code replica}. This method maps a {@link ServerErrorCode}
    * to a {@link RouterErrorCode}
    * @param serverErrorCode The ServerErrorCode received from the replica.
@@ -315,6 +331,16 @@ class TtlUpdateOperation {
    * @param exception the {@link RouterException} associated with the failed response.
    */
   private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+    onErrorResponse(replicaId, exception, true);
+  }
+
+  /**
+   * Perform the necessary actions when a request to a replica fails.
+   * @param replicaId the {@link ReplicaId} associated with the failed response.
+   * @param exception the {@link RouterException} associated with the failed response.
+   * @param updateDataNodeMetrics {@code true} if data node metrics should be updated. {@code false} otherwise.
+   */
+  private void onErrorResponse(ReplicaId replicaId, RouterException exception, boolean updateDataNodeMetrics) {
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
     setOperationException(exception);
@@ -322,7 +348,9 @@ class TtlUpdateOperation {
         && exception.getErrorCode() != RouterErrorCode.BlobExpired) {
       routerMetrics.routerRequestErrorCount.inc();
     }
-    routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).ttlUpdateRequestErrorCount.inc();
+    if (updateDataNodeMetrics) {
+      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).ttlUpdateRequestErrorCount.inc();
+    }
   }
 
   /**
@@ -369,14 +397,16 @@ class TtlUpdateOperation {
         return 2;
       case BlobUpdateNotAllowed:
         return 3;
-      case AmbryUnavailable:
+      case TooManyRequests:
         return 4;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 5;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 6;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 7;
+      case BlobDoesNotExist:
+        return 8;
       default:
         return Integer.MIN_VALUE;
     }

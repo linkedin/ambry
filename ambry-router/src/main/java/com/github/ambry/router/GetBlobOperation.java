@@ -928,15 +928,15 @@ class GetBlobOperation extends GetOperation {
         // Ignore right away. This associated operation has completed.
         return;
       }
+      if (responseInfo.isQuotaRejected()) {
+        processQuotaRejectedResponse(correlationId, getRequestInfo.replicaId);
+        return;
+      }
       long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
       routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
           requestLatencyMs);
-      if (responseInfo.isQuotaRejected()) {
-        logger.trace("GetBlobRequest with response correlationId {} rejected because it exceeded quota", correlationId);
-        onQuotaErrorResponse(
-            getRequestInfo.replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests));
-      } else if (responseInfo.getError() != null) {
+      if (responseInfo.getError() != null) {
         // responseInfo.getError() returns NetworkClientErrorCode. If error is not null, it probably means (1) connection
         // checkout timed out; (2) pending connection timed out; (3) established connection timed out. In all these cases,
         // the latency histogram in adaptive operation tracker should not be updated.
@@ -1108,28 +1108,39 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
+     * Process response if it was rejected due to quota compliance.
+     * @param correlationId correlation id of the request.
+     * @param replicaId {@link ReplicaId} of the request.
+     */
+    private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
+      logger.trace("GetBlobRequest with response correlationId {} rejected because it exceeded quota", correlationId);
+      onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
+      checkAndMaybeComplete();
+    }
+
+    /**
      * Perform the necessary actions when a request to a replica fails.
      * @param replicaId the {@link ReplicaId} associated with the failed response.
      * @param exception the {@link RouterException} associated with the failed response.
      */
     private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
-      chunkOperationTracker.onResponse(replicaId,
-          TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
-      setChunkException(exception);
-      routerMetrics.routerRequestErrorCount.inc();
-      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestErrorCount.inc();
+      onErrorResponse(replicaId, exception, true);
     }
 
     /**
-     * Perform the necessary actions when a request fails due to quota compliance.
+     * Perform the necessary actions when a request to a replica fails.
      * @param replicaId the {@link ReplicaId} associated with the failed response.
      * @param exception the {@link RouterException} associated with the failed response.
+     * @param updateDataNodeMetrics {@code true} if data node metrics should be updated. {@code false} otherwise.
      */
-    private void onQuotaErrorResponse(ReplicaId replicaId, RouterException exception) {
+    private void onErrorResponse(ReplicaId replicaId, RouterException exception, boolean updateDataNodeMetrics) {
       chunkOperationTracker.onResponse(replicaId,
           TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
       setChunkException(exception);
       routerMetrics.routerRequestErrorCount.inc();
+      if (updateDataNodeMetrics) {
+        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestErrorCount.inc();
+      }
     }
 
     /**

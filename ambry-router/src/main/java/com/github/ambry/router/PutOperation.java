@@ -976,12 +976,14 @@ class PutOperation {
     switch (routerErrorCode) {
       case InsufficientCapacity:
         return 1;
-      case AmbryUnavailable:
+      case TooManyRequests:
         return 2;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 3;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 4;
+      case OperationTimedOut:
+        return 5;
       default:
         return Integer.MIN_VALUE;
     }
@@ -1546,6 +1548,10 @@ class PutOperation {
         logger.debug("{}: No matching request found for {}", loggingContext, correlationId);
         return;
       }
+      if (responseInfo.isQuotaRejected()) {
+        processQuotaRejectedResponse(correlationId, chunkPutRequestInfo.replicaId);
+        return;
+      }
       long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
       routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs.update(
@@ -1618,15 +1624,41 @@ class PutOperation {
     }
 
     /**
+     * Process response if it was rejected due to quota compliance.
+     * @param correlationId correlation id of the request.
+     * @param replicaId {@link ReplicaId} of the request.
+     */
+    private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
+      logger.debug("{}: PutRequest with response correlationId {} was rejected because quota was exceeded.",
+          loggingContext, correlationId);
+      setChunkException(new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests));
+      onErrorResponse(replicaId, TrackedRequestFinalState.QUOTA_REJECTED, false);
+      checkAndMaybeComplete();
+    }
+
+    /**
      * Perform the necessary actions when a request to a replica fails.
      * @param replicaId the {@link ReplicaId} associated with the failed response.
      * @param putRequestFinalState the {@link RouterErrorCode} associated with failed response.
      */
     private void onErrorResponse(ReplicaId replicaId, TrackedRequestFinalState putRequestFinalState) {
+      onErrorResponse(replicaId, putRequestFinalState, true);
+    }
+
+    /**
+     * Perform the necessary actions when a request to a replica fails.
+     * @param replicaId the {@link ReplicaId} associated with the failed response.
+     * @param putRequestFinalState the {@link RouterErrorCode} associated with failed response.
+     * @param updateDataNodeMetrics {@code true} if data node metrics should be updated. {@code false} otherwise.
+     */
+    private void onErrorResponse(ReplicaId replicaId, TrackedRequestFinalState putRequestFinalState,
+        boolean updateDataNodeMetrics) {
       // For Put, final state could be TIMED_OUT, REQUEST_DISABLED and FAILURE
       operationTracker.onResponse(replicaId, putRequestFinalState);
       routerMetrics.routerRequestErrorCount.inc();
-      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
+      if (updateDataNodeMetrics) {
+        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
+      }
     }
 
     /**

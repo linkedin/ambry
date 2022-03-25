@@ -128,6 +128,16 @@ class RouterTestHelpers {
   }
 
   /**
+   * Test operation that gets rejected due to quota checks.
+   * @param errorCodeChecker Performs the checks that ensure that {@link RouterErrorCode#TooManyRequests} is returned .
+   * @throws Exception
+   */
+  static void testWithQuotaRejection(ErrorCodeChecker errorCodeChecker)
+      throws Exception {
+    errorCodeChecker.testAndAssert(RouterErrorCode.TooManyRequests);
+  }
+
+  /**
    * Set the servers in the specified layout to respond with the designated error codes.
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers in {@code serverLayout}.
    *                                If there are fewer error codes in this array than there are servers,

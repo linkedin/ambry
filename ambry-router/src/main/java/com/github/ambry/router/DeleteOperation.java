@@ -176,6 +176,10 @@ class DeleteOperation {
       return;
     }
     ReplicaId replica = deleteRequestInfo.replica;
+    if (responseInfo.isQuotaRejected()) {
+      processQuotaRejectedResponse(deleteRequest.getCorrelationId(), replica);
+      return;
+    }
     long requestLatencyMs = time.milliseconds() - deleteRequestInfo.startTimeMs;
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestLatencyMs.update(requestLatencyMs);
@@ -240,6 +244,18 @@ class DeleteOperation {
   }
 
   /**
+   * Process response if it was rejected due to quota compliance.
+   * @param correlationId correlation id of the request.
+   * @param replicaId {@link ReplicaId} of the request.
+   */
+  private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
+    logger.trace(
+        "DeleteRequest with response correlationId {} was rejected because quota was exceeded.", correlationId);
+    onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
+    checkAndMaybeComplete();
+  }
+
+  /**
    * Goes through the inflight request list of this {@code DeleteOperation} and remove those that
    * have been timed out.
    * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
@@ -296,11 +312,23 @@ class DeleteOperation {
    * @param exception the {@link RouterException} associated with the failed response.
    */
   private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+    onErrorResponse(replicaId, exception, true);
+  }
+
+  /**
+   * Perform the necessary actions when a request to a replica fails.
+   * @param replicaId the {@link ReplicaId} associated with the failed response.
+   * @param exception the {@link RouterException} associated with the failed response.
+   * @param updateDataNodeMetrics {@code true} if data node metrics should be updated. {@code false} otherwise.
+   */
+  private void onErrorResponse(ReplicaId replicaId, RouterException exception, boolean updateDataNodeMetrics) {
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
     setOperationException(exception);
     routerMetrics.routerRequestErrorCount.inc();
-    routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).deleteRequestErrorCount.inc();
+    if (updateDataNodeMetrics) {
+      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).deleteRequestErrorCount.inc();
+    }
   }
 
   /**
@@ -344,14 +372,16 @@ class DeleteOperation {
         return 1;
       case BlobExpired:
         return 2;
-      case AmbryUnavailable:
+      case TooManyRequests:
         return 3;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 4;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 5;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 6;
+      case BlobDoesNotExist:
+        return 7;
       default:
         return Integer.MIN_VALUE;
     }
