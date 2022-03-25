@@ -321,7 +321,7 @@ class DeleteOperation {
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
-          quotaChargeCallback.charge();
+          quotaChargeCallback.checkAndCharge(false, true);
         } catch (QuotaException quotaException) {
           logger.error("Exception  {} in quota charge event listener during delete operation",
               quotaException.toString());

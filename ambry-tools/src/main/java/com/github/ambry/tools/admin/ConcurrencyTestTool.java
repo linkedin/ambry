@@ -117,26 +117,6 @@ public class ConcurrencyTestTool {
     }
 
     @Override
-    public void charge(long chunkSize) {
-
-    }
-
-    @Override
-    public void charge() {
-
-    }
-
-    @Override
-    public boolean check() {
-      return false;
-    }
-
-    @Override
-    public boolean quotaExceedAllowed() {
-      return false;
-    }
-
-    @Override
     public QuotaResource getQuotaResource() {
       return null;
     }

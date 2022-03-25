@@ -343,7 +343,7 @@ class TtlUpdateOperation {
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
-          quotaChargeCallback.charge();
+          quotaChargeCallback.checkAndCharge(false, true);
         } catch (QuotaException quotaException) {
           LOGGER.info("Exception {} while charging quota for ttl update operation.", quotaException.toString());
         }

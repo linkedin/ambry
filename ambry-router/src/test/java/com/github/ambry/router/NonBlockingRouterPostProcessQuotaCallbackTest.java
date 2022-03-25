@@ -115,28 +115,6 @@ public class NonBlockingRouterPostProcessQuotaCallbackTest extends NonBlockingRo
         }
 
         @Override
-        public void charge(long chunkSize) throws QuotaException {
-          listenerCalledCount.addAndGet(chunkSize);
-          throw new QuotaException("exception during check and charge",
-              new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests), false);
-        }
-
-        @Override
-        public void charge() throws QuotaException {
-          charge(quotaAccountingSize);
-        }
-
-        @Override
-        public boolean check() {
-          return false;
-        }
-
-        @Override
-        public boolean quotaExceedAllowed() {
-          return false;
-        }
-
-        @Override
         public QuotaResource getQuotaResource() {
           return null;
         }

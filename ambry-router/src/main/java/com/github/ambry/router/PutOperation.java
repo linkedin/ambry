@@ -1402,7 +1402,7 @@ class PutOperation {
         if (QuotaUtils.postProcessCharge(quotaChargeCallback) && !(this instanceof MetadataPutChunk)
             && chunkException == null) {
           try {
-            quotaChargeCallback.charge(chunkBlobProperties.getBlobSize());
+            quotaChargeCallback.checkAndCharge(false, true, chunkBlobProperties.getBlobSize());
           } catch (QuotaException quotaException) {
             // For now we only log for quota charge exceptions for in progress requests.
             logger.info("{}: Exception {} while handling quota charge event", loggingContext, quotaException.toString());
