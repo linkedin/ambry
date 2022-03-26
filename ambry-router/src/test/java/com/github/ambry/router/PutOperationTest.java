@@ -297,6 +297,54 @@ public class PutOperationTest {
   }
 
   /**
+   * Test PUT operation with quota rejected errors.
+   * @throws Exception
+   */
+  @Test
+  public void testHandleQuotaRejectedErrors() throws Exception {
+    int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    PutOperation op =
+        PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+            new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+            null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+            blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
+    op.startOperation();
+    List<RequestInfo> requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // fill chunks would end up filling the maximum number of PutChunks.
+    op.fillChunks();
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+    // make 1st request of all chunks encounter quota rejection.
+    for (RequestInfo requestInfo : requestInfos) {
+      ResponseInfo responseInfo = new ResponseInfo(requestInfo, true);
+      op.handleResponse(responseInfo, null);
+      responseInfo.release();
+      if (op.isOperationComplete()) {
+        break;
+      }
+    }
+
+    requestInfos = new ArrayList<>();
+    requestRegistrationCallback.setRequestsToSend(requestInfos);
+    // poll to populate request
+    op.poll(requestRegistrationCallback);
+    // If any slipped put requests also encounters quota rejection, then the operation is terminated.
+    ResponseInfo responseInfo = new ResponseInfo(requestInfos.get(0), true);
+    op.handleResponse(responseInfo, null);
+    responseInfo.release();
+    Assert.assertTrue(op.isOperationComplete());
+    Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException)op.getOperationException()).getErrorCode());
+  }
+
+  /**
    * Test PUT operation that handles ServerErrorCode = Temporarily_Disabled and Replica_Unavailable
    * @throws Exception
    */

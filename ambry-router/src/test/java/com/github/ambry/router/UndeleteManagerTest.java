@@ -52,6 +52,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -232,6 +233,20 @@ public class UndeleteManagerTest {
   }
 
   /**
+   * Failure tests when undelete request is rejected due to quota compliance.
+   * @throws Exception
+   */
+  @Test
+  public void quotaRejectedTest() throws Exception {
+    for (String blobId : blobIds) {
+      deleteBlobInAllServer(blobId);
+
+      executeOpAndVerifyQuotaRejected(Collections.singleton(blobId), RouterErrorCode.BlobDoesNotExist);
+      serverLayout.getMockServers().forEach(server -> server.resetServerErrors());
+    }
+  }
+
+  /**
    * Failure tests when two servers in a datacenter return blob_not_found. It fails one undelete request and thus fails
    * all the blobs in the same batch.
    * @throws Exception
@@ -400,7 +415,7 @@ public class UndeleteManagerTest {
     FutureResult<Void> future = new FutureResult<>();
     NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
     undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done, quotaChargeCallback);
-    sendRequestsGetResponse(future, undeleteManager, advanceTime);
+    sendRequestsGetResponse(future, undeleteManager, advanceTime, false);
     if (expectedErrorCode == null) {
       // Should return no error
       future.get(1, TimeUnit.MILLISECONDS);
@@ -418,12 +433,27 @@ public class UndeleteManagerTest {
     }
   }
 
+  private void executeOpAndVerifyQuotaRejected(Collection<String> ids, RouterErrorCode expectedErrorCode)
+      throws Exception {
+    FutureResult<Void> future = new FutureResult<>();
+    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
+    undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done, quotaChargeCallback);
+    sendRequestsGetResponse(future, undeleteManager, false, true);
+    try {
+      future.get(1, TimeUnit.MILLISECONDS);
+      fail("Operation should fail, exception is expected");
+    } catch (Exception e) {
+      assertEquals("RouterErrorCode should be " + RouterErrorCode.TooManyRequests + " (future)",
+          RouterErrorCode.TooManyRequests, ((RouterException) e.getCause()).getErrorCode());
+    }
+  }
+
   private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode) throws Exception {
     executeOpAndVerify(ids, expectedErrorCode, false);
   }
 
   private void sendRequestsGetResponse(FutureResult<Void> future, UndeleteManager undeleteManager,
-      boolean advanceTime) {
+      boolean advanceTime, boolean isQuotaRejected) {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     Set<Integer> requestsToDrop = new HashSet<>();
     Set<RequestInfo> requestAcks = new HashSet<>();
@@ -432,12 +462,18 @@ public class UndeleteManagerTest {
       undeleteManager.poll(requestInfoList, requestsToDrop);
       referenceRequestInfos.addAll(requestInfoList);
 
-      List<ResponseInfo> responseInfoList = new ArrayList<>();
-      try {
-        responseInfoList = networkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
-      } catch (RuntimeException | Error e) {
-        if (!advanceTime) {
-          throw e;
+      List<ResponseInfo> responseInfoList;
+      if (isQuotaRejected) {
+        responseInfoList = requestInfoList.stream().map(requestInfo -> new ResponseInfo(requestInfo, true)).collect(
+            Collectors.toList());
+      } else {
+        responseInfoList = new ArrayList<>();
+        try {
+          responseInfoList = networkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
+        } catch (RuntimeException | Error e) {
+          if (!advanceTime) {
+            throw e;
+          }
         }
       }
       for (ResponseInfo responseInfo : responseInfoList) {

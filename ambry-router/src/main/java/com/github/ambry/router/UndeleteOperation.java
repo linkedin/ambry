@@ -186,6 +186,10 @@ public class UndeleteOperation {
       return;
     }
     ReplicaId replica = undeleteRequestInfo.replica;
+    if (responseInfo.isQuotaRejected()) {
+      processQuotaRejectedResponse(undeleteRequest.getCorrelationId(), replica);
+      return;
+    }
     long requestLatencyMs = time.milliseconds() - undeleteRequestInfo.startTimeMs;
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).undeleteRequestLatencyMs.update(requestLatencyMs);
@@ -270,6 +274,18 @@ public class UndeleteOperation {
   }
 
   /**
+   * Process response if it was rejected due to quota compliance.
+   * @param correlationId correlation id of the request.
+   * @param replicaId {@link ReplicaId} of the request.
+   */
+  private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
+    LOGGER.trace(
+        "UndeleteRequest with response correlationId {} was rejected because quota was exceeded.", correlationId);
+    onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
+    checkAndMaybeComplete();
+  }
+
+  /**
    * A wrapper class that is used to check if a request has been expired.
    */
   private class UndeleteRequestInfo {
@@ -349,11 +365,23 @@ public class UndeleteOperation {
    * @param exception the {@link RouterException} associated with the failed response.
    */
   private void onErrorResponse(ReplicaId replicaId, RouterException exception) {
+    onErrorResponse(replicaId, exception, true);
+  }
+
+  /**
+   * Perform the necessary actions when a request to a replica fails.
+   * @param replicaId the {@link ReplicaId} associated with the failed response.
+   * @param exception the {@link RouterException} associated with the failed response.
+   * @param updateDataNodeMetrics {@code true} if data node metrics should be updated. {@code false} otherwise.
+   */
+  private void onErrorResponse(ReplicaId replicaId, RouterException exception, boolean updateDataNodeMetrics) {
     operationTracker.onResponse(replicaId,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(exception.getErrorCode()));
     setOperationException(exception);
     routerMetrics.routerRequestErrorCount.inc();
-    routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).undeleteRequestErrorCount.inc();
+    if (updateDataNodeMetrics) {
+      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).undeleteRequestErrorCount.inc();
+    }
   }
 
   /**
@@ -405,16 +433,18 @@ public class UndeleteOperation {
         return 1;
       case BlobExpired:
         return 2;
-      case AmbryUnavailable:
+      case TooManyRequests:
         return 3;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 4;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 5;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 6;
-      case BlobNotDeleted:
+      case BlobDoesNotExist:
         return 7;
+      case BlobNotDeleted:
+        return 8;
       default:
         return Integer.MIN_VALUE;
     }

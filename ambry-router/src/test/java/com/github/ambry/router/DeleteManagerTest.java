@@ -204,6 +204,24 @@ public class DeleteManagerTest {
   }
 
   /**
+   * Test for the case when delete operation fails due to quota compliance.
+   */
+  @Test
+  public void testQuotaRejected() throws Exception {
+    // Create a router with QuotaRejectionOperationController for this test.
+    router.close();
+    Properties properties = getNonBlockingRouterProperties();
+    properties.setProperty(RouterConfig.OPERATION_CONTROLLER, QuotaRejectingOperationController.class.getCanonicalName());
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
+        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    testWithQuotaRejection(deleteErrorCodeChecker);
+  }
+
+  /**
    * Test the case when one server store responds with {@code Blob_Authorization_Failure}, and other servers
    * respond with {@code Blob_Not_Found}. The delete operation should be able to resolve the
    * router error code as {@code Blob_Authorization_Failure}. The order of received responses is the same as
