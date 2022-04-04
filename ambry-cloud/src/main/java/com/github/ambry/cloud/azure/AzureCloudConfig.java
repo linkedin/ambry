@@ -13,10 +13,21 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 
 /**
@@ -32,6 +43,7 @@ public class AzureCloudConfig {
   public static final String COSMOS_KEY_SECRET_NAME = "cosmos.key.secret.name";
   public static final String COSMOS_VAULT_URL = "cosmos.vault.url";
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
+  public static final String AZURE_STORAGE_ACCOUNT_INFO = "azure.storage.account_info";
   public static final String AZURE_STORAGE_AUTHORITY = "azure.storage.authority";
   public static final String AZURE_STORAGE_CLIENTID = "azure.storage.clientId";
   public static final String AZURE_STORAGE_SECRET = "azure.storage.secret";
@@ -70,6 +82,119 @@ public class AzureCloudConfig {
   public static final String DEFAULT_AZURE_STORAGE_CLIENT_CLASS =
       "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient";
   public static final String USE_ASYNC_AZURE_APIS = "use.async.azure.apis";
+
+  public static final String AZURE_STORAGE_ACCOUNT_INFO_STR = "storageAccountInfo";
+  public static final String AZURE_STORAGE_ACCOUNT_INFO_NAME = "name";
+  public static final String AZURE_STORAGE_ACCOUNT_INFO_PARTITION_RANGE = "partitionRange";
+  public static final String AZURE_STORAGE_ACCOUNT_INFO_STORAGE_SCOPE = "storageScope";
+  public static final String AZURE_STORAGE_ACCOUNT_INFO_STORAGE_ENDPOINT = "storageEndpoint";
+  public static final String AZURE_STORAGE_ACCOUNT_INFO_STORAGE_CONNECTION_STRING = "storageConnectionString";
+
+  /**
+   * Stores Azure Storage Account related info for one storage account.
+   */
+  public static class StorageAccountInfo {
+    private final String name;
+    private final int partitionRangeStart;
+    private final int partitionRangeEnd;
+    private final String storageScope;
+    private final String storageEndpoint;
+    private final String storageConnectionString;
+
+    /**
+     * Construct a StorageAccountInfo object with the given parameters.
+     * @param name the name of the storage account.
+     * @param partitionRangeStart the lower bound (inclusive) of the partition range this storage account covers.
+     * @param partitionRangeEnd the upper bound (exclusive) of the partition range this storage account covers.
+     * @param storageScope the Azure scope.
+     * @param storageEndpoint the Azure end-point
+     */
+    StorageAccountInfo(String name, int partitionRangeStart, int partitionRangeEnd, String storageScope, String storageEndpoint, String storageConnectionString) {
+      this.name = name;
+      this.partitionRangeStart = partitionRangeStart;
+      this.partitionRangeEnd = partitionRangeEnd;
+
+      // Used by ADAuthBasedStorageClient
+      this.storageScope = storageScope;
+
+      // Used by ADAuthBasedStorageClient and ClientSecretCredentialStorageClient
+      this.storageEndpoint = storageEndpoint;
+
+      // Used by ConnectionStringBasedStorageClient
+      this.storageConnectionString = storageConnectionString;
+    }
+
+    public String getName() {
+      return name;
+    }
+
+    public int getPartitionRangeStart() {
+      return partitionRangeStart;
+    }
+
+    public int getPartitionRangeEnd() {
+      return partitionRangeEnd;
+    }
+
+    public String getStorageScope() {
+      return storageScope;
+    }
+
+    public String getStorageEndpoint() {
+      return storageEndpoint;
+    }
+
+    public String getStorageConnectionString() { return storageConnectionString; }
+  }
+
+  static List<StorageAccountInfo> parseStorageAccountInfo(AzureCloudConfig azureCloudConfig) {
+    if (azureCloudConfig.getAzureStorageAccountInfo.isEmpty()) {
+      return Collections.emptyList();
+    }
+    int prev_partition_upper_bound = 0;
+    List<StorageAccountInfo> storageAccountInfoList = new ArrayList<>();
+    JSONObject root = new JSONObject(azureCloudConfig.getAzureStorageAccountInfo);
+      JSONArray all = root.getJSONArray(AZURE_STORAGE_ACCOUNT_INFO_STR);
+      for (int i = 0; i < all.length(); i++) {
+        JSONObject entry = all.getJSONObject(i);
+        String name = entry.optString(AZURE_STORAGE_ACCOUNT_INFO_NAME);
+        if (name.isEmpty()) {
+          throw new IllegalArgumentException(String.format("Storage account #%d is missing the name setting", i));
+        }
+        String storageScope = entry.optString(AZURE_STORAGE_ACCOUNT_INFO_STORAGE_SCOPE);
+        String storageEndpoint = entry.optString(AZURE_STORAGE_ACCOUNT_INFO_STORAGE_ENDPOINT);
+        String storageConnectionString = entry.optString(AZURE_STORAGE_ACCOUNT_INFO_STORAGE_CONNECTION_STRING);
+        String partitionRange = entry.optString(AZURE_STORAGE_ACCOUNT_INFO_PARTITION_RANGE);
+        if (partitionRange.isEmpty()) {
+          throw new IllegalArgumentException(
+              String.format("The partition range for the storage account %s is missing", name));
+        }
+        Pattern p = Pattern.compile("(\\d+)-(\\d+)");
+        Matcher m = p.matcher(partitionRange);
+        if (!m.find()) {
+          throw new IllegalArgumentException(
+              String.format("The partition range %s for the storage account %s is not valid", partitionRange, name));
+        }
+        final int lower_partition_bound = Integer.parseInt(m.group(1));
+        final int upper_partition_bound = Integer.parseInt(m.group(2));
+
+        if (upper_partition_bound - lower_partition_bound < 1) {
+          throw new IllegalArgumentException(
+              String.format("The partition range %s for the storage account %s is not valid", partitionRange, name));
+        }
+
+        if (lower_partition_bound != prev_partition_upper_bound) {
+          throw new IllegalArgumentException(
+              String.format("The partition range %s for the storage account %s is not valid since it leaves a "
+              + "gap which is not covered by other storage accounts", partitionRange, name));
+        }
+        prev_partition_upper_bound = upper_partition_bound;
+        storageAccountInfoList.add(new StorageAccountInfo(name, lower_partition_bound, upper_partition_bound,
+            storageScope, storageEndpoint, storageConnectionString));
+      }
+
+      return storageAccountInfoList;
+  }
 
   /**
    * The Azure Blob Storage connection string.
@@ -162,6 +287,13 @@ public class AzureCloudConfig {
   @Config(COSMOS_DIRECT_HTTPS)
   @Default("false")
   public final boolean cosmosDirectHttps;
+
+  /**
+   * Azure storage account info.
+   */
+  @Config(AZURE_STORAGE_ACCOUNT_INFO)
+  @Default("")
+  public final String getAzureStorageAccountInfo;
 
   /**
    * Azure storage authority.
@@ -272,6 +404,7 @@ public class AzureCloudConfig {
     cosmosKey = verifiableProperties.getString(COSMOS_KEY, "");
     cosmosKeySecretName = verifiableProperties.getString(COSMOS_KEY_SECRET_NAME, "");
     cosmosVaultUrl = verifiableProperties.getString(COSMOS_VAULT_URL, "");
+    getAzureStorageAccountInfo = verifiableProperties.getString(AZURE_STORAGE_ACCOUNT_INFO, "");
     azureStorageAuthority = verifiableProperties.getString(AZURE_STORAGE_AUTHORITY, "");
     azureStorageClientId = verifiableProperties.getString(AZURE_STORAGE_CLIENTID, "");
     azureStorageSecret = verifiableProperties.getString(AZURE_STORAGE_SECRET, "");
