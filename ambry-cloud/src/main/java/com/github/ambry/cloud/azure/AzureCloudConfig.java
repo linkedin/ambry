@@ -13,17 +13,13 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.github.ambry.clustermap.ClusterMapUtils;
-import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.json.JSONArray;
@@ -43,7 +39,7 @@ public class AzureCloudConfig {
   public static final String COSMOS_KEY_SECRET_NAME = "cosmos.key.secret.name";
   public static final String COSMOS_VAULT_URL = "cosmos.vault.url";
   public static final String COSMOS_DIRECT_HTTPS = "cosmos.direct.https";
-  public static final String AZURE_STORAGE_ACCOUNT_INFO = "azure.storage.account_info";
+  public static final String AZURE_STORAGE_ACCOUNT_INFO = "azure.storage.account.info";
   public static final String AZURE_STORAGE_AUTHORITY = "azure.storage.authority";
   public static final String AZURE_STORAGE_CLIENTID = "azure.storage.clientId";
   public static final String AZURE_STORAGE_SECRET = "azure.storage.secret";
@@ -124,36 +120,60 @@ public class AzureCloudConfig {
       this.storageConnectionString = storageConnectionString;
     }
 
+    /**
+     * @return the name of {@link StorageAccountInfo}.
+     */
     public String getName() {
       return name;
     }
 
+    /**
+     * @return the beginning of partition range corresponding to {@link StorageAccountInfo}.
+     */
     public int getPartitionRangeStart() {
       return partitionRangeStart;
     }
 
+    /**
+     * @return the end of partition range corresponding to {@link StorageAccountInfo}.
+     */
     public int getPartitionRangeEnd() {
       return partitionRangeEnd;
     }
 
+    /**
+     * @return the storage scope of {@link StorageAccountInfo}.
+     */
     public String getStorageScope() {
       return storageScope;
     }
 
+    /**
+     * @return the storage end-point of {@link StorageAccountInfo}.
+     */
     public String getStorageEndpoint() {
       return storageEndpoint;
     }
 
+    /**
+     * @return the storage connection string of {@link StorageAccountInfo}.
+     */
     public String getStorageConnectionString() { return storageConnectionString; }
   }
 
-  static List<StorageAccountInfo> parseStorageAccountInfo(AzureCloudConfig azureCloudConfig) {
-    if (azureCloudConfig.getAzureStorageAccountInfo.isEmpty()) {
+  /**
+   * Parse storage account info portion of the {@link AzureCloudConfig} and return the list of storage accounts
+   * in the form of {@link StorageAccountInfo}.
+   * @param storageAccountInfoStr list of storage account info in the form of json string.
+   * @return the list of {@link StorageAccountInfo}.
+   */
+  static List<StorageAccountInfo> parseStorageAccountInfo(String storageAccountInfoStr) {
+    if (storageAccountInfoStr.isEmpty()) {
       return Collections.emptyList();
     }
     int prev_partition_upper_bound = 0;
     List<StorageAccountInfo> storageAccountInfoList = new ArrayList<>();
-    JSONObject root = new JSONObject(azureCloudConfig.getAzureStorageAccountInfo);
+    JSONObject root = new JSONObject(storageAccountInfoStr);
       JSONArray all = root.getJSONArray(AZURE_STORAGE_ACCOUNT_INFO_STR);
       for (int i = 0; i < all.length(); i++) {
         JSONObject entry = all.getJSONObject(i);
@@ -293,7 +313,7 @@ public class AzureCloudConfig {
    */
   @Config(AZURE_STORAGE_ACCOUNT_INFO)
   @Default("")
-  public final String getAzureStorageAccountInfo;
+  public final List<StorageAccountInfo> azureStorageAccountInfo;
 
   /**
    * Azure storage authority.
@@ -404,7 +424,7 @@ public class AzureCloudConfig {
     cosmosKey = verifiableProperties.getString(COSMOS_KEY, "");
     cosmosKeySecretName = verifiableProperties.getString(COSMOS_KEY_SECRET_NAME, "");
     cosmosVaultUrl = verifiableProperties.getString(COSMOS_VAULT_URL, "");
-    getAzureStorageAccountInfo = verifiableProperties.getString(AZURE_STORAGE_ACCOUNT_INFO, "");
+    azureStorageAccountInfo = parseStorageAccountInfo(verifiableProperties.getString(AZURE_STORAGE_ACCOUNT_INFO, ""));
     azureStorageAuthority = verifiableProperties.getString(AZURE_STORAGE_AUTHORITY, "");
     azureStorageClientId = verifiableProperties.getString(AZURE_STORAGE_CLIENTID, "");
     azureStorageSecret = verifiableProperties.getString(AZURE_STORAGE_SECRET, "");

@@ -14,7 +14,9 @@
 package com.github.ambry.cloud.azure;
 
 import com.github.ambry.config.VerifiableProperties;
+import java.util.List;
 import java.util.Properties;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -32,63 +34,88 @@ public class AzureCloudConfigTest {
 
   /** Test Azure cloud config for a single storage account */
   @Test
-  public void testStorageAccountInfoConfigSimple() throws Exception {
+  public void testStorageAccountInfoConfigSimple() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
         "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
             + "        \"partitionRange\":\"0-1000000\",\n"
-            + "        \"storageScope\":\"https://wus2ambryprodblobstore1.blob.core.windows.net/.default\",\n"
-            + "        \"storageEndpoint\":\"https://wus2ambryprodblobstore1.blob.core.windows.net\",\n" + "      }\n"
+            + "        \"storageScope\":\"https://testStorageAccount1.blob.core.windows.net/.default\",\n"
+            + "        \"storageConnectionString\":\"https://testStorageAccount1.blob.core.windows.net/\",\n"
+            + "        \"storageEndpoint\":\"https://testStorageAccount1.blob.core.windows.net\",\n" + "      }\n"
             + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
+    List<AzureCloudConfig.StorageAccountInfo> storageAccountInfoList = azureCloudConfig.azureStorageAccountInfo;
+    Assert.assertEquals(1, storageAccountInfoList.size());
+    Assert.assertEquals(0, storageAccountInfoList.get(0).getPartitionRangeStart());
+    Assert.assertEquals(1000000, storageAccountInfoList.get(0).getPartitionRangeEnd());
+    Assert.assertEquals("https://testStorageAccount1.blob.core.windows.net/.default",
+        storageAccountInfoList.get(0).getStorageScope());
+    Assert.assertEquals("https://testStorageAccount1.blob.core.windows.net/",
+        storageAccountInfoList.get(0).getStorageConnectionString());
+    Assert.assertEquals("https://testStorageAccount1.blob.core.windows.net",
+        storageAccountInfoList.get(0).getStorageEndpoint());
   }
 
   /** Test Azure cloud config for a multiple storage accounts */
   @Test
-  public void testStorageAccountInfoConfigMultipleAccounts() throws Exception {
+  public void testStorageAccountInfoConfigMultipleAccounts() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
-        "{\n" + "    \"storageAccountInfo\":[\n"
-              + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
-              + "        \"partitionRange\":\"0-1000000\",\n"
-              + "        \"storageScope\":\"https://testStorageAccount1.blob.core.windows.net/.default\",\n"
-              + "        \"storageEndpoint\":\"https://testStorageAccount1.blob.core.windows.net\",\n" + "      },\n"
-              + "      {\n" + "        \"name\":\"testStorageAccount2\",\n"
-              + "        \"partitionRange\":\"1000000-10000000\",\n"
-              + "        \"storageScope\":\"https://testStorageAccount2.blob.core.windows.net/.default\",\n"
-              + "        \"storageEndpoint\":\"https://testStorageAccount2.blob.core.windows.net\",\n" + "      }\n"
-              + "    ]\n" + "    }");
+        "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
+            + "        \"partitionRange\":\"0-1000000\",\n"
+            + "        \"storageScope\":\"https://testStorageAccount1.blob.core.windows.net/.default\",\n"
+            + "        \"storageConnectionString\":\"https://testStorageAccount1.blob.core.windows.net/\",\n"
+            + "        \"storageEndpoint\":\"https://testStorageAccount1.blob.core.windows.net\",\n" + "      },\n"
+            + "      {\n" + "        \"name\":\"testStorageAccount2\",\n"
+            + "        \"partitionRange\":\"1000000-10000000\",\n"
+            + "        \"storageScope\":\"https://testStorageAccount2.blob.core.windows.net/.default\",\n"
+            + "        \"storageConnectionString\":\"https://testStorageAccount2.blob.core.windows.net/\",\n"
+            + "        \"storageEndpoint\":\"https://testStorageAccount2.blob.core.windows.net\",\n" + "      }\n"
+            + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
+    List<AzureCloudConfig.StorageAccountInfo> storageAccountInfoList = azureCloudConfig.azureStorageAccountInfo;
+    Assert.assertEquals(2, storageAccountInfoList.size());
+    Assert.assertEquals(0, storageAccountInfoList.get(0).getPartitionRangeStart());
+    Assert.assertEquals(1000000, storageAccountInfoList.get(0).getPartitionRangeEnd());
+    Assert.assertEquals("https://testStorageAccount1.blob.core.windows.net/.default",
+        storageAccountInfoList.get(0).getStorageScope());
+    Assert.assertEquals("https://testStorageAccount1.blob.core.windows.net/",
+        storageAccountInfoList.get(0).getStorageConnectionString());
+    Assert.assertEquals("https://testStorageAccount1.blob.core.windows.net",
+        storageAccountInfoList.get(0).getStorageEndpoint());
+    Assert.assertEquals(1000000, storageAccountInfoList.get(1).getPartitionRangeStart());
+    Assert.assertEquals(10000000, storageAccountInfoList.get(1).getPartitionRangeEnd());
+    Assert.assertEquals("https://testStorageAccount2.blob.core.windows.net/.default",
+        storageAccountInfoList.get(1).getStorageScope());
+    Assert.assertEquals("https://testStorageAccount2.blob.core.windows.net/",
+        storageAccountInfoList.get(1).getStorageConnectionString());
+    Assert.assertEquals("https://testStorageAccount2.blob.core.windows.net",
+        storageAccountInfoList.get(1).getStorageEndpoint());
   }
 
   /** Test Azure cloud config for a storage account with no account name */
   @Test(expected = IllegalArgumentException.class)
-  public void testStorageAccountInfoConfigNoAccountName() throws Exception {
+  public void testStorageAccountInfoConfigNoAccountName() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
-        "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n"
-            + "        \"partitionRange\":\"0-100\",\n"
+        "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"partitionRange\":\"0-100\",\n"
             + "        \"storageScope\":\"https://wus2ambryprodblobstore1.blob.core.windows.net/.default\",\n"
             + "        \"storageEndpoint\":\"https://wus2ambryprodblobstore1.blob.core.windows.net\",\n" + "      }\n"
             + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
   }
 
   /** Test Azure cloud config for a storage account with no partition range format */
   @Test(expected = IllegalArgumentException.class)
-  public void testStorageAccountInfoConfigNoPartitionRange() throws Exception {
+  public void testStorageAccountInfoConfigNoPartitionRange() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
         "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
             + "        \"storageScope\":\"https://wus2ambryprodblobstore1.blob.core.windows.net/.default\",\n"
             + "        \"storageEndpoint\":\"https://wus2ambryprodblobstore1.blob.core.windows.net\",\n" + "      }\n"
             + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
   }
 
   /** Test Azure cloud config for a storage account with invalid partition range format */
   @Test(expected = IllegalArgumentException.class)
-  public void testStorageAccountInfoConfigBadFormat() throws Exception {
+  public void testStorageAccountInfoConfigBadFormat() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
         "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
             + "        \"partitionRange\":\"0-\",\n"
@@ -96,12 +123,11 @@ public class AzureCloudConfigTest {
             + "        \"storageEndpoint\":\"https://wus2ambryprodblobstore1.blob.core.windows.net\",\n" + "      }\n"
             + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
   }
 
   /** Test Azure cloud config for a storage account with invalid partition range */
   @Test(expected = IllegalArgumentException.class)
-  public void testStorageAccountInfoConfigBadRange() throws Exception {
+  public void testStorageAccountInfoConfigBadRange() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
         "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
             + "        \"partitionRange\":\"10-10\",\n"
@@ -109,15 +135,13 @@ public class AzureCloudConfigTest {
             + "        \"storageEndpoint\":\"https://wus2ambryprodblobstore1.blob.core.windows.net\",\n" + "      }\n"
             + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
   }
 
   /** Test Azure cloud config for multiple storage accounts with invalid partition ranges */
   @Test(expected = IllegalArgumentException.class)
-  public void testStorageAccountInfoConfigBadRanges() throws Exception {
+  public void testStorageAccountInfoConfigBadRanges() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
-        "{\n" + "    \"storageAccountInfo\":[\n"
-            + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
+        "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
             + "        \"partitionRange\":\"0-1000000\",\n"
             + "        \"storageScope\":\"https://testStorageAccount1.blob.core.windows.net/.default\",\n"
             + "        \"storageEndpoint\":\"https://testStorageAccount1.blob.core.windows.net\",\n" + "      },\n"
@@ -127,15 +151,13 @@ public class AzureCloudConfigTest {
             + "        \"storageEndpoint\":\"https://testStorageAccount2.blob.core.windows.net\",\n" + "      }\n"
             + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
   }
 
   /** Test Azure cloud config for multiple storage accounts with uncovered partition ids */
   @Test(expected = IllegalArgumentException.class)
-  public void testStorageAccountInfoConfigWithGap() throws Exception {
+  public void testStorageAccountInfoConfigWithGap() {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
-        "{\n" + "    \"storageAccountInfo\":[\n"
-            + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
+        "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"testStorageAccount1\",\n"
             + "        \"partitionRange\":\"0-1000000\",\n"
             + "        \"storageScope\":\"https://testStorageAccount1.blob.core.windows.net/.default\",\n"
             + "        \"storageEndpoint\":\"https://testStorageAccount1.blob.core.windows.net\",\n" + "      },\n"
@@ -145,7 +167,5 @@ public class AzureCloudConfigTest {
             + "        \"storageEndpoint\":\"https://testStorageAccount2.blob.core.windows.net\",\n" + "      }\n"
             + "    ]\n" + "    }");
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
-    AzureCloudConfig.parseStorageAccountInfo(azureCloudConfig);
   }
-
 }
