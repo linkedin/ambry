@@ -67,7 +67,6 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
-import rx.observables.BlockingObservable;
 
 
 public class CosmosDataAccessor {
@@ -819,7 +818,7 @@ public class CosmosDataAccessor {
    * @param sqlQuerySpec the DocumentDB query to execute.
    * @param cosmosQueryRequestOptions {@link CosmosQueryRequestOptions} object specifying the options associated with the method.
    * @param timer the {@link Timer} to use to record query time (excluding waiting).
-   * @return {@link BlockingObservable} object containing the query response.
+   * @return {@link CosmosPagedFlux} containing the query response.
    */
   private CosmosPagedFlux<CloudBlobMetadata> executeCosmosQuery(SqlQuerySpec sqlQuerySpec,
       CosmosQueryRequestOptions cosmosQueryRequestOptions, Timer timer) {
@@ -834,7 +833,7 @@ public class CosmosDataAccessor {
    * @param cosmosQueryRequestOptions {@link CosmosQueryRequestOptions} object specifying the options associated with the method.
    * @param classType type of Class.
    * @param timer the {@link Timer} to use to record query time (excluding waiting).
-   * @return {@link BlockingObservable} object containing the query response.
+   * @return {@link CosmosPagedFlux} containing the query response.
    */
   <T> CosmosPagedFlux<T> executeCosmosQuery(String containerName, SqlQuerySpec sqlQuerySpec,
       CosmosQueryRequestOptions cosmosQueryRequestOptions, Class<T> classType, Timer timer) {

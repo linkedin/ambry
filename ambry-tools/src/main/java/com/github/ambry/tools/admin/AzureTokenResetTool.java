@@ -37,7 +37,7 @@ import org.slf4j.LoggerFactory;
  * Very dangerous tool.  Please know what you're doing and wear a hard hat at all times.
  * Required properties:
  *  - "azure.storage.connection.string" for the storage account.
- *  - "cosmos.endpoint", "cosmos.collection.link", "cosmos.key" (set to any nonempty value)
+ *  - "cosmos.endpoint", "cosmos.database", "cosmos.collection" , "cosmos.key" (set to any nonempty value)
  *  - "clustermap.cluster.name" used to restrict blob container name search (e.g. "main-123")
  * Optional properties:
  *  - "vcr.proxy.host" name of the proxy host to tunnel through.
