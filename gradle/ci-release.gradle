@@ -18,7 +18,7 @@ task gitTag {
     description = "Creates annotated tag 'v$version'"
 
     doLast {
-        println "Setting Git user and email to Travis CI"
+        println "Setting Git user and email to github-actions"
         exec { commandLine "git", "config", "user.email", "github-actions@github.com" }
         exec { commandLine "git", "config", "user.name", "github-actions" }
         println "Creating tag v$version"
@@ -27,11 +27,13 @@ task gitTag {
     }
 }
 
-task gitPush(type: Exec) {
+task gitPush {
     description = "Pushes tags by running 'git push --tags'"
     mustRunAfter "gitTag" //tag first, push later
 
-    doFirst { println "Pushing tag v$version" }
-    commandLine "git" "push" "--tags" 
-    doLast { println "Pushed tag v$version" }
+    doLast {
+      println "Pushing tag v$version"
+      exec { commandLine "git" "push" "--tags" }
+      println "Pushed tag v$version"
+    }
 }
