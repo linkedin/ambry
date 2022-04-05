@@ -19,8 +19,8 @@ task gitTag {
 
     doLast {
         println "Setting Git user and email to Travis CI"
-        exec { commandLine "git", "config", "user.email", "travis@travis-ci.org" }
-        exec { commandLine "git", "config", "user.name", "Travis CI" }
+        exec { commandLine "git", "config", "user.email", "github-actions@github.com" }
+        exec { commandLine "git", "config", "user.name", "github-actions" }
         println "Creating tag v$version"
         exec { commandLine "git", "tag", "-a", "-m", "Release $version", "v$version" }
         println "Created tag v$version"
@@ -28,10 +28,10 @@ task gitTag {
 }
 
 task gitPush(type: Exec) {
-    description = "Pushes tags by running 'git push --tags'. Hides secret key from git push output."
+    description = "Pushes tags by running 'git push --tags'"
     mustRunAfter "gitTag" //tag first, push later
 
     doFirst { println "Pushing tag v$version" }
-    commandLine "./gradle/git-push.sh", "v$version"
+    commandLine "git" "push" "--tags" 
     doLast { println "Pushed tag v$version" }
 }
