@@ -33,7 +33,7 @@ task gitPush {
 
     doLast {
       println "Pushing tag v$version"
-      exec { commandLine "git" "push" "--tags" }
+      exec { commandLine "git", "push", "--tags" }
       println "Pushed tag v$version"
     }
 }
