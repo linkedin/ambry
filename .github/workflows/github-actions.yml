@@ -116,7 +116,6 @@ jobs:
     env:
       ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
       ARTIFACTORY_API_KEY: ${{ secrets.ARTIFACTORY_API_KEY }}
-      GIT_SECRET: ${{ secrets.GIT_SECRET }}
     steps:
       - name: Checkout Ambry
         uses: actions/checkout@v2
