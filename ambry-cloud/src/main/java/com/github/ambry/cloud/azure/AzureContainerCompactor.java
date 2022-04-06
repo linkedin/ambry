@@ -25,8 +25,6 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.ResourceResponse;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -263,18 +261,11 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
       throws CloudStorageException {
     // TODO: update the cache and cosmos container deletion entry table to remove the partitionId from deletePendingPartitions list
 
-    ResourceResponse<Document> updatedDocument = requestAgent.doWithRetries(
-        () -> cosmosDataAccessor.updateContainerDeletionEntry(containerId, accountId, (document, fieldsChanged) -> {
-          Set<String> deletePendingPartitions = new HashSet<>();
-          Iterator<JsonNode> iterator =
-              ((ArrayNode) document.get(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY)).iterator();
-          while (iterator.hasNext()) {
-            deletePendingPartitions.add(iterator.next().textValue());
-          }
-          fieldsChanged.set(deletePendingPartitions.remove(partitionPath));
-          document.set(CosmosContainerDeletionEntry.DELETE_PENDING_PARTITIONS_KEY, deletePendingPartitions);
-          if (deletePendingPartitions.isEmpty()) {
-            document.set(CosmosContainerDeletionEntry.DELETED_KEY, true);
+    requestAgent.doWithRetries(() -> cosmosDataAccessor.updateContainerDeletionEntry(containerId, accountId,
+        (cosmosContainerDeletionEntry, fieldsChanged) -> {
+          fieldsChanged.set(cosmosContainerDeletionEntry.removePartition(partitionPath));
+          if (cosmosContainerDeletionEntry.getDeletePendingPartitions().isEmpty()) {
+            cosmosContainerDeletionEntry.markDeleted();
             fieldsChanged.set(true);
           }
         }), "UpdateContainerDeletionProgress", partitionPath);

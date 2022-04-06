@@ -13,6 +13,12 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosAsyncDatabase;
+import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.implementation.HttpConstants;
+import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobErrorCode;
@@ -36,12 +42,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.ResourceResponse;
-import com.microsoft.azure.cosmosdb.internal.HttpConstants;
-import com.microsoft.azure.cosmosdb.internal.HttpConstants.StatusCodes;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -117,8 +117,12 @@ class AzureCloudDestination implements CloudDestination {
   /**
    * Test constructor.
    * @param storageClient the {@link BlobServiceClient} to use.
-   * @param asyncDocumentClient the {@link AsyncDocumentClient} to use.
-   * @param cosmosCollectionLink the CosmosDB collection link to use.
+   * @param cosmosAsyncClient the {@link CosmosAsyncClient} to use.
+   * @param cosmosAsyncDatabase the {@link CosmosAsyncDatabase} to use.
+   * @param cosmosAsyncContainer the {@link CosmosAsyncContainer} to use.
+   * @param cosmosDatabase the cosmos Database to use.
+   * @param cosmosCollection the CosmosDB collection to use for blob metadata.
+   * @param cosmosDeletedContainerCollection the CosmosDB collection to use for deleted Containers.
    * @param clusterName the name of the Ambry cluster.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureReplicationFeedType the {@link AzureReplicationFeed.FeedType} to use for replication from Azure.
@@ -126,9 +130,11 @@ class AzureCloudDestination implements CloudDestination {
    * @param isVcr whether this instance is a VCR.
    */
   AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
-      AsyncDocumentClient asyncDocumentClient, String cosmosCollectionLink, String cosmosDeletedContainerCollectionLink,
-      String clusterName, AzureMetrics azureMetrics, AzureReplicationFeed.FeedType azureReplicationFeedType,
-      ClusterMap clusterMap, boolean isVcr, Properties configProps) throws CloudStorageException {
+      CosmosAsyncClient cosmosAsyncClient, CosmosAsyncDatabase cosmosAsyncDatabase,
+      CosmosAsyncContainer cosmosAsyncContainer, String cosmosDatabase, String cosmosCollection,
+      String cosmosDeletedContainerCollection, String clusterName, AzureMetrics azureMetrics,
+      AzureReplicationFeed.FeedType azureReplicationFeedType, ClusterMap clusterMap, boolean isVcr,
+      Properties configProps) throws CloudStorageException {
     this.azureMetrics = azureMetrics;
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
@@ -138,8 +144,8 @@ class AzureCloudDestination implements CloudDestination {
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
-        new CosmosDataAccessor(asyncDocumentClient, cosmosCollectionLink, cosmosDeletedContainerCollectionLink,
-            vcrMetrics, azureMetrics);
+        new CosmosDataAccessor(cosmosAsyncClient, cosmosAsyncDatabase, cosmosAsyncContainer, cosmosDatabase,
+            cosmosCollection, cosmosDeletedContainerCollection, vcrMetrics, azureMetrics);
     this.azureStorageCompactor =
         new AzureStorageCompactor(azureBlobDataAccessor, cosmosDataAccessor, cloudConfig, vcrMetrics, azureMetrics);
     this.azureContainerCompactor =
@@ -157,17 +163,17 @@ class AzureCloudDestination implements CloudDestination {
     if (e instanceof BlobStorageException) {
       azureMetrics.storageErrorCount.inc();
       statusCode = ((BlobStorageException) e).getStatusCode();
-    } else if (e instanceof DocumentClientException) {
+    } else if (e instanceof CosmosException) {
       azureMetrics.documentErrorCount.inc();
-      statusCode = ((DocumentClientException) e).getStatusCode();
-      retryDelayMs = ((DocumentClientException) e).getRetryAfterInMilliseconds();
+      statusCode = ((CosmosException) e).getStatusCode();
+      retryDelayMs = ((CosmosException) e).getRetryAfterDuration().toMillis();
     } else {
       // Note: catch-all since ABS can throw things like IOException, IllegalStateException
       azureMetrics.storageErrorCount.inc();
-      statusCode = StatusCodes.INTERNAL_SERVER_ERROR;
+      statusCode = HttpConstants.StatusCodes.INTERNAL_SERVER_ERROR;
     }
     // Everything is retryable except NOT_FOUND
-    boolean isRetryable = (statusCode != StatusCodes.NOTFOUND && !(e instanceof StoreException));
+    boolean isRetryable = (statusCode != HttpConstants.StatusCodes.NOTFOUND && !(e instanceof StoreException));
     return new CloudStorageException(message, e, statusCode, isRetryable, retryDelayMs);
   }
 
@@ -306,7 +312,7 @@ class AzureCloudDestination implements CloudDestination {
    * Get metadata for specified list of blobs.
    * @param blobIds {@link List} of {@link BlobId}s to get metadata of.
    * @return {@link List} of {@link CloudBlobMetadata} for the blobs list.
-   * @throws CloudStorageException
+   * @throws CloudStorageException if there is an error.
    */
   private List<CloudBlobMetadata> getBlobMetadataChunked(List<BlobId> blobIds) throws CloudStorageException {
     if (blobIds.isEmpty() || blobIds.size() > queryBatchSize) {
@@ -317,7 +323,7 @@ class AzureCloudDestination implements CloudDestination {
     String partitionPath = blobIds.get(0).getPartition().toPathString();
     try {
       return cosmosDataAccessor.queryMetadata(partitionPath, query, azureMetrics.missingKeysQueryTime);
-    } catch (DocumentClientException dex) {
+    } catch (CosmosException dex) {
       throw toCloudStorageException(
           "Failed to query metadata for " + blobIds.size() + " blobs in partition " + partitionPath, dex);
     }
@@ -328,8 +334,8 @@ class AzureCloudDestination implements CloudDestination {
       throws CloudStorageException {
     try {
       return azureReplicationFeed.getNextEntriesAndUpdatedToken(findToken, maxTotalSizeOfEntries, partitionPath);
-    } catch (DocumentClientException dex) {
-      throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, dex);
+    } catch (CosmosException cex) {
+      throw toCloudStorageException("Failed to query blobs for partition " + partitionPath, cex);
     }
   }
 
@@ -350,9 +356,9 @@ class AzureCloudDestination implements CloudDestination {
     // 1) the blob storage entry metadata (so GET's can be served entirely from ABS)
     // 2) the CosmosDB metadata collection
     try {
-      boolean updatedStorage = false;
-      Map<String, String> metadataMap = null;
-      UpdateResponse updateResponse = null;
+      boolean updatedStorage;
+      Map<String, String> metadataMap;
+      UpdateResponse updateResponse;
       try {
         updateResponse = azureBlobDataAccessor.updateBlobMetadata(blobId, updateFields, cloudUpdateValidator);
         // Note: if blob does not exist will throw exception with NOT_FOUND status
@@ -383,19 +389,19 @@ class AzureCloudDestination implements CloudDestination {
 
       // Note: even if nothing changed in blob storage, still attempt to update Cosmos since this could be a retry
       // of a request where ABS was updated but Cosmos update failed.
-      boolean updatedCosmos = false;
+      boolean updatedCosmos;
       try {
-        ResourceResponse<Document> response = cosmosDataAccessor.updateMetadata(blobId, metadataMap);
-        updatedCosmos = response != null;
-      } catch (DocumentClientException dex) {
-        if (dex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
+        CosmosItemResponse<CloudBlobMetadata> response = cosmosDataAccessor.updateMetadata(blobId, metadataMap);
+        updatedCosmos = response.getItem() != null;
+      } catch (CosmosException cex) {
+        if (cex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
           // blob exists in ABS but not Cosmos - inconsistent state
           // Recover by inserting the updated map into cosmos
           cosmosDataAccessor.upsertMetadata(CloudBlobMetadata.fromMap(metadataMap));
           azureMetrics.blobUpdateRecoverCount.inc();
           updatedCosmos = true;
         } else {
-          throw dex;
+          throw cex;
         }
       }
 

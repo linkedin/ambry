@@ -13,6 +13,12 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.DirectConnectionConfig;
+import com.azure.cosmos.GatewayConnectionConfig;
+import com.azure.cosmos.ThrottlingRetryOptions;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
@@ -30,14 +36,6 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.AccountTestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.ConnectionMode;
-import com.microsoft.azure.cosmosdb.ConnectionPolicy;
-import com.microsoft.azure.cosmosdb.ConsistencyLevel;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.PartitionKey;
-import com.microsoft.azure.cosmosdb.RequestOptions;
-import com.microsoft.azure.cosmosdb.RetryOptions;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -128,7 +126,7 @@ public class AzureContainerCompactorIntegrationTest {
   }
 
   @After
-  public void destroy() throws IOException, DocumentClientException {
+  public void destroy() throws IOException, CosmosException {
     cleanup();
     // TODO destroy the abs blob and cosmos db
     if (cloudDestination != null) {
@@ -137,7 +135,7 @@ public class AzureContainerCompactorIntegrationTest {
   }
 
   @Test
-  public void testDeprecateContainers() throws CloudStorageException, DocumentClientException {
+  public void testDeprecateContainers() throws CloudStorageException, CosmosException {
     cleanup();
     // Add new containers and verify that they are persisted in cloud.
     Set<Container> containers = generateContainers(5);
@@ -153,7 +151,7 @@ public class AzureContainerCompactorIntegrationTest {
   }
 
   @Test
-  public void testCompactAssignedDeprecatedContainers() throws CloudStorageException, DocumentClientException {
+  public void testCompactAssignedDeprecatedContainers() throws CloudStorageException, CosmosException {
     // Create a deprecated container.
     Set<Container> containers = generateContainers(1);
     cloudDestination.deprecateContainers(containers);
@@ -190,7 +188,7 @@ public class AzureContainerCompactorIntegrationTest {
    * Verifies that the data stored in cosmos table is as expected.
    * @param containers {@link Set} of {@link Container}s that should be present in cosmos.
    */
-  private void verifyCosmosData(Set<Container> containers) throws DocumentClientException {
+  private void verifyCosmosData(Set<Container> containers) throws CosmosException {
     Set<CosmosContainerDeletionEntry> entries = cloudDestination.getCosmosDataAccessor().getDeprecatedContainers(100);
     Assert.assertEquals(containers.size(), entries.size());
     Set<Short> containerIds = containers.stream().map(Container::getId).collect(Collectors.toSet());
@@ -232,37 +230,34 @@ public class AzureContainerCompactorIntegrationTest {
 
   /**
    * Cleanup entries in the cosmos db container deletion table.
-   * @throws DocumentClientException in case of any exception.
+   * @throws CosmosException in case of any exception.
    */
-  private void cleanup() throws DocumentClientException {
-    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-    connectionPolicy.setRequestTimeoutInMillis(cloudConfig.cloudQueryRequestTimeout);
+  private void cleanup() throws CosmosException {
     // Note: retry decisions are made at CloudBlobStore level.  Configure Cosmos with no retries.
-    RetryOptions noRetries = new RetryOptions();
-    noRetries.setMaxRetryAttemptsOnThrottledRequests(0);
-    connectionPolicy.setRetryOptions(noRetries);
+    ThrottlingRetryOptions throttlingRetryOptions = new ThrottlingRetryOptions();
+    throttlingRetryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
+    CosmosClientBuilder cosmosClientBuilder = new CosmosClientBuilder().endpoint(azureCloudConfig.cosmosEndpoint)
+        .key(azureCloudConfig.cosmosKey)
+        .throttlingRetryOptions(throttlingRetryOptions)
+        .consistencyLevel(com.azure.cosmos.ConsistencyLevel.SESSION);
     if (azureCloudConfig.cosmosDirectHttps) {
       logger.info("Using CosmosDB DirectHttps connection mode");
-      connectionPolicy.setConnectionMode(ConnectionMode.Direct);
+      cosmosClientBuilder.directMode(new DirectConnectionConfig());
+    } else {
+      cosmosClientBuilder.gatewayMode(new GatewayConnectionConfig());
     }
-    AsyncDocumentClient asyncDocumentClient =
-        new AsyncDocumentClient.Builder().withServiceEndpoint(azureCloudConfig.cosmosEndpoint)
-            .withMasterKeyOrResourceToken(azureCloudConfig.cosmosKey)
-            .withConnectionPolicy(connectionPolicy)
-            .withConsistencyLevel(ConsistencyLevel.Session)
-            .build();
+    CosmosAsyncClient cosmosAsyncClient = cosmosClientBuilder.buildAsyncClient();
+
     Set<CosmosContainerDeletionEntry> entries = cloudDestination.getCosmosDataAccessor().getDeprecatedContainers(100);
     AtomicBoolean error = new AtomicBoolean(false);
     while (!entries.isEmpty() && !error.get()) {
       entries.stream().forEach(entry -> {
         try {
-          RequestOptions requestOptions = new RequestOptions();
-          requestOptions.setPartitionKey(new PartitionKey(entry.getId()));
           cloudRequestAgent.doWithRetries(() -> CosmosDataAccessor.executeCosmosAction(
-              () -> asyncDocumentClient.deleteDocument(
-                  azureCloudConfig.cosmosDeletedContainerCollectionLink + "/docs/" + entry.getId(), requestOptions)
-                  .toBlocking()
-                  .single(), null), "Test Cleanup", entry.getId());
+              () -> cosmosAsyncClient.getDatabase(azureCloudConfig.cosmosDatabase)
+                  .getContainer(azureCloudConfig.cosmosDeletedContainerCollection)
+                  .deleteItem(entry.getId(), new com.azure.cosmos.models.PartitionKey(entry.getId()))
+                  .block(), null), "Test Cleanup", entry.getId());
         } catch (CloudStorageException ex) {
           logger.warn("Failed to delete container deprecation entry {}. Unable to cleanup", entry);
           error.set(true);

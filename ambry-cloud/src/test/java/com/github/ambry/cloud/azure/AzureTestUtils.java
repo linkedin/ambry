@@ -13,7 +13,12 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.models.CosmosChangeFeedRequestOptions;
+import com.azure.cosmos.models.CosmosQueryRequestOptions;
+import com.azure.cosmos.models.FeedResponse;
+import com.azure.cosmos.models.SqlQuerySpec;
+import com.azure.cosmos.util.CosmosPagedFlux;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudRequestAgent;
@@ -24,23 +29,15 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.FeedResponse;
-import com.microsoft.azure.cosmosdb.ResourceResponse;
-import com.microsoft.azure.cosmosdb.StoredProcedureResponse;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.commons.codec.binary.Base64;
-import rx.Observable;
-import rx.observables.BlockingObservable;
+import reactor.core.publisher.Flux;
 
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
@@ -61,35 +58,12 @@ class AzureTestUtils {
   static final long partition = 666;
   static final ObjectMapper objectMapper = new ObjectMapper();
 
-  /**
-   * Create {@link Document} object from {@link CloudBlobMetadata} object.
-   * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
-   * @return {@link Document} object.
-   */
-  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata) throws IOException {
-    Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
-    document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, System.currentTimeMillis());
-    return document;
-  }
-
-  /**
-   * Create {@link Document} object from {@link CloudBlobMetadata} object with specified updateTime.
-   * @param cloudBlobMetadata {@link CloudBlobMetadata} object.
-   * @param uploadTime specified upload time.
-   * @return {@link Document} object.
-   */
-  static Document createDocumentFromCloudBlobMetadata(CloudBlobMetadata cloudBlobMetadata, long uploadTime)
-      throws JsonProcessingException {
-    Document document = new Document(objectMapper.writeValueAsString(cloudBlobMetadata));
-    document.set(CosmosDataAccessor.COSMOS_LAST_UPDATED_COLUMN, uploadTime);
-    return document;
-  }
-
   static void setConfigProperties(Properties configProps) {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
-    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
-    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "ambry/deletedContainer");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DATABASE, "ambry");
+    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION, "deletedContainer");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_AUTHORITY,
         "https://login.microsoftonline.com/test-account/");
@@ -124,80 +98,29 @@ class AzureTestUtils {
   }
 
   /**
-   * Utility to mock the call chain to get mocked {@link Observable} for single resource from {@link AsyncDocumentClient}.
-   * @param metadata the {@link CloudBlobMetadata} to return as a document.
-   * @return {@link Observable< ResourceResponse <Document>>} object.
+   * Utility to mock return value of {@link CosmosAsyncContainer#queryItems(SqlQuerySpec, CosmosQueryRequestOptions, Class)}
+   * or {@link CosmosAsyncContainer#queryChangeFeed(CosmosChangeFeedRequestOptions, Class)}.
+   * @param documentList {@link List <T>} of documents to return from mocked call.
+   * @return {@link CosmosPagedFlux} containing document list.
    */
-  static Observable<ResourceResponse<Document>> getMockedObservableForSingleResource(CloudBlobMetadata metadata)
-      throws IOException {
-    Observable<ResourceResponse<Document>> mockResponse = mock(Observable.class);
-    BlockingObservable<ResourceResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    ResourceResponse<Document> mockResourceResponse = mock(ResourceResponse.class);
-    when(mockBlockingObservable.single()).thenReturn(mockResourceResponse);
-    Document metadataDoc = createDocumentFromCloudBlobMetadata(metadata);
-    when(mockResourceResponse.getResource()).thenReturn(metadataDoc);
-    return mockResponse;
-  }
-
-  static Observable<StoredProcedureResponse> getMockBulkDeleteResponse(int count) {
-    Observable<StoredProcedureResponse> mockObservable = mock(Observable.class);
-    BlockingObservable<StoredProcedureResponse> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockObservable.toBlocking()).thenReturn(mockBlockingObservable);
-    StoredProcedureResponse mockResponse = mock(StoredProcedureResponse.class);
-    when(mockBlockingObservable.single()).thenReturn(mockResponse);
-    Document responseDoc = new Document();
-    responseDoc.set(CosmosDataAccessor.PROPERTY_CONTINUATION, "false");
-    responseDoc.set(CosmosDataAccessor.PROPERTY_DELETED, String.valueOf(count));
-    when(mockResponse.getResponseAsDocument()).thenReturn(responseDoc);
-    return mockObservable;
-  }
-
-  /**
-   * Utility to mock the query call chain of {@link AsyncDocumentClient} such that query returns {@code documentList}.
-   * @param documentList {@link List <Document>} of documents to return from mocked call.
-   * @param mockResponse {@link Observable} mocked response.
-   */
-  static void mockObservableForQuery(List<Document> documentList, Observable<FeedResponse<Document>> mockResponse) {
-    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    lenient().when(mockBlockingObservable.single()).thenReturn(feedResponse);
-    when(mockBlockingObservable.getIterator()).thenAnswer(invocation -> {
-      Iterator<FeedResponse<Document>> feedResponseIterator = mock(Iterator.class);
-      when(feedResponseIterator.hasNext()).thenReturn(true).thenReturn(false);
-      when(feedResponseIterator.next()).thenReturn(feedResponse);
-      return feedResponseIterator;
-    });
+  static CosmosPagedFlux getMockPagedFluxForQueryOrChangeFeed(List<CloudBlobMetadata> documentList) {
+    FeedResponse feedResponse = mock(FeedResponse.class);
     when(feedResponse.getResults()).thenReturn(documentList);
+    CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
+    when(cosmosPagedFlux.byPage(anyInt())).thenReturn(Flux.just(feedResponse));
+    return cosmosPagedFlux;
   }
 
   /**
-   * Utility to mock the query call chain of {@link AsyncDocumentClient} such that query returns {@code documentList}.
-   * @param documentList {@link List <Document>} of documents to return from mocked call.
-   * @param mockResponse {@link Observable} mocked response.
+   * Utility to mock return value of {@link CosmosAsyncContainer#queryItems(SqlQuerySpec, CosmosQueryRequestOptions, Class)}.
+   * @return {@link CosmosPagedFlux} containing no results.
    */
-  static void mockObservableForChangeFeedQuery(List<Document> documentList,
-      Observable<FeedResponse<Document>> mockResponse) {
-    FeedResponse<Document> feedResponse = mock(FeedResponse.class);
-    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    Observable<FeedResponse<Document>> mockObservable = mock(Observable.class);
-    when(mockResponse.limit(anyInt())).thenReturn(mockObservable);
-    when(mockObservable.toBlocking()).thenReturn(mockBlockingObservable);
-    when(mockBlockingObservable.single()).thenReturn(feedResponse);
-    when(feedResponse.getResults()).thenReturn(documentList);
-    Iterator<FeedResponse<Document>> iterator = mock(Iterator.class);
-  }
-
-  /**
-   * Utility to mock the query call chain of {@link AsyncDocumentClient} such that query returns empty list.
-   */
-  static Observable<FeedResponse<Document>> getMockedObservableForQueryWithNoResults() {
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    BlockingObservable<FeedResponse<Document>> mockBlockingObservable = mock(BlockingObservable.class);
-    when(mockResponse.toBlocking()).thenReturn(mockBlockingObservable);
-    when(mockBlockingObservable.getIterator()).thenReturn(Collections.emptyIterator());
-    return mockResponse;
+  static CosmosPagedFlux getMockedPagedFluxForQueryWithNoResults() {
+    FeedResponse feedResponse = mock(FeedResponse.class);
+    when(feedResponse.getResults()).thenReturn(Collections.EMPTY_LIST);
+    CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
+    when(cosmosPagedFlux.byPage(anyInt())).thenReturn(Flux.just(feedResponse));
+    return cosmosPagedFlux;
   }
 
   /**

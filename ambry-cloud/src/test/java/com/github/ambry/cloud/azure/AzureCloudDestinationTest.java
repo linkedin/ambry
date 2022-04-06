@@ -14,6 +14,15 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.rest.Response;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosAsyncDatabase;
+import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.models.CosmosItemResponse;
+import com.azure.cosmos.models.FeedResponse;
+import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.SqlQuerySpec;
+import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobDownloadResponse;
@@ -38,19 +47,11 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.FeedOptions;
-import com.microsoft.azure.cosmosdb.FeedResponse;
-import com.microsoft.azure.cosmosdb.RequestOptions;
-import com.microsoft.azure.cosmosdb.ResourceResponse;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -69,9 +70,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.internal.util.reflection.FieldSetter;
 import org.mockito.junit.MockitoJUnitRunner;
-import rx.Observable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import static com.github.ambry.cloud.azure.AzureTestUtils.*;
+import static com.github.ambry.cloud.azure.CosmosDataAccessor.*;
 import static com.github.ambry.commons.BlobId.*;
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -88,24 +90,27 @@ public class AzureCloudDestinationTest {
   private final String clusterName = "main";
   private final AzureReplicationFeed.FeedType defaultAzureReplicationFeedType =
       AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
-  private Properties configProps = new Properties();
+  private final Properties configProps = new Properties();
   private AzureCloudDestination azureDest;
   private ClusterMap clusterMap;
   private BlobServiceClient mockServiceClient;
   private BlockBlobClient mockBlockBlobClient;
   private BlobBatchClient mockBlobBatchClient;
-  private AsyncDocumentClient mockumentClient;
+  private CosmosAsyncClient mockCosmosAsyncClient;
+  private CosmosAsyncDatabase mockCosmosAsyncDatabase;
+  private CosmosAsyncContainer mockCosmosAsyncContainer;
+  private CosmosException mockNotFoundCosmosException;
   private VcrMetrics vcrMetrics;
   private AzureMetrics azureMetrics;
-  private DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
-  private int blobSize = 1024;
-  private byte dataCenterId = 66;
-  private short accountId = 101;
-  private short containerId = 5;
+  private final DummyCloudUpdateValidator dummyCloudUpdateValidator = new DummyCloudUpdateValidator();
+  private final int blobSize = 1024;
+  private final byte dataCenterId = 66;
+  private final short accountId = 101;
+  private final short containerId = 5;
   private BlobId blobId;
-  private long creationTime = System.currentTimeMillis();
-  private long deletionTime = creationTime + 10000;
-  private long expirationTime = Utils.Infinite_Time;
+  private final long creationTime = System.currentTimeMillis();
+  private final long deletionTime = creationTime + 10000;
+  private final long expirationTime = Utils.Infinite_Time;
 
   /**
    * Utility method to get blob input stream.
@@ -131,17 +136,28 @@ public class AzureCloudDestinationTest {
     mockBlockBlobClient = AzureBlobDataAccessorTest.setupMockBlobClient(mockServiceClient);
     mockBlobExistence(false);
 
-    mockumentClient = mock(AsyncDocumentClient.class);
-    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(blobMetadata);
-    when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
-    when(mockumentClient.upsertDocument(anyString(), any(Object.class), any(RequestOptions.class),
-        anyBoolean())).thenReturn(mockResponse);
-    when(mockumentClient.replaceDocument(any(Document.class), any(RequestOptions.class))).thenReturn(mockResponse);
-    when(mockumentClient.deleteDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
+    mockCosmosAsyncClient = mock(CosmosAsyncClient.class);
+    mockCosmosAsyncDatabase = mock(CosmosAsyncDatabase.class);
+    mockCosmosAsyncContainer = mock(CosmosAsyncContainer.class);
+    when(mockCosmosAsyncDatabase.getContainer(anyString())).thenReturn(mockCosmosAsyncContainer);
+    CosmosItemResponse cosmosItemResponse = mock(CosmosItemResponse.class);
+    when(cosmosItemResponse.getItem()).thenReturn(blobMetadata);
+    when(mockCosmosAsyncContainer.readItem(anyString(), any(), any())).thenReturn(Mono.just(cosmosItemResponse));
+    when(mockCosmosAsyncContainer.upsertItem(any(), any(), any())).thenReturn(Mono.just(cosmosItemResponse));
+    when(mockCosmosAsyncContainer.replaceItem(any(), anyString(), any(), any())).thenReturn(
+        Mono.just(cosmosItemResponse));
+    when(mockCosmosAsyncContainer.deleteItem(anyString(), (PartitionKey) any())).thenReturn(Mono.empty());
+    Duration mockDuration = mock(Duration.class);
+    when(mockDuration.toMillis()).thenReturn(Long.valueOf(10));
+    mockNotFoundCosmosException = mock(CosmosException.class);
+    when(mockNotFoundCosmosException.getStatusCode()).thenReturn(STATUS_NOT_FOUND);
+    when(mockNotFoundCosmosException.getRetryAfterDuration()).thenReturn(mockDuration);
+
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com:443");
-    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION_LINK, "ambry/metadata");
-    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION_LINK, "ambry/deletedContainer");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DATABASE, "ambry");
+    configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "metadata");
+    configProps.setProperty(AzureCloudConfig.COSMOS_DELETED_CONTAINER_COLLECTION, "deletedContainer");
     configProps.setProperty(AzureCloudConfig.COSMOS_KEY, "cosmos-key");
     configProps.setProperty("clustermap.cluster.name", "main");
     configProps.setProperty("clustermap.datacenter.name", "uswest");
@@ -156,9 +172,9 @@ public class AzureCloudDestinationTest {
     vcrMetrics = new VcrMetrics(new MetricRegistry());
     azureMetrics = new AzureMetrics(new MetricRegistry());
     clusterMap = mock(ClusterMap.class);
-    azureDest =
-        new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-            azureMetrics, defaultAzureReplicationFeedType, clusterMap, false, configProps);
+    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockCosmosAsyncClient,
+        mockCosmosAsyncDatabase, mockCosmosAsyncContainer, "ambry", "metadata", "deletedContainer", clusterName,
+        azureMetrics, defaultAzureReplicationFeedType, clusterMap, false, configProps);
   }
 
   @After
@@ -265,9 +281,8 @@ public class AzureCloudDestinationTest {
   /** Test upload when doc client throws exception. */
   @Test
   public void testUploadDocClientException() throws Exception {
-    when(mockumentClient.upsertDocument(anyString(), any(), any(RequestOptions.class), anyBoolean())).thenThrow(
-        new RuntimeException("Dcoument not Found", new DocumentClientException(404)));
-    expectCloudStorageException(() -> uploadDefaultBlob(), DocumentClientException.class);
+    when(mockCosmosAsyncContainer.upsertItem(any(), any(), any())).thenReturn(Mono.error(mockNotFoundCosmosException));
+    expectCloudStorageException(() -> uploadDefaultBlob(), CosmosException.class);
     verifyUploadErrorMetrics(true);
   }
 
@@ -343,8 +358,8 @@ public class AzureCloudDestinationTest {
   @Test
   public void testUpdateCosmosNotFound() throws Exception {
     mockBlobExistence(true);
-    when(mockumentClient.readDocument(anyString(), any())).thenThrow(
-        new RuntimeException("Document not Found", new DocumentClientException(404)));
+    when(mockCosmosAsyncContainer.readItem(anyString(), any(), any())).thenReturn(
+        Mono.error(mockNotFoundCosmosException));
     assertTrue("Expected update to recover",
         azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
     assertTrue("Expected update to recover", azureDest.undeleteBlob(blobId, (short) 0, dummyCloudUpdateValidator) == 0);
@@ -353,8 +368,7 @@ public class AzureCloudDestinationTest {
     } catch (Exception ex) {
       fail("Expected update to recover");
     }
-    verify(mockumentClient, times(3)).upsertDocument(anyString(), any(Object.class), any(RequestOptions.class),
-        anyBoolean());
+    verify(mockCosmosAsyncContainer, times(3)).upsertItem(any(), any(), any());
     assertEquals("Expected two recoveries", 3, azureMetrics.blobUpdateRecoverCount.getCount());
   }
 
@@ -366,8 +380,9 @@ public class AzureCloudDestinationTest {
     // Rig Cosmos to return us a deleted blob on read request
     long deletionTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
     CloudBlobMetadata deletedMetadata = new CloudBlobMetadata().setId(blobId.getID()).setDeletionTime(deletionTime);
-    Observable<ResourceResponse<Document>> mockResponse = getMockedObservableForSingleResource(deletedMetadata);
-    when(mockumentClient.readDocument(anyString(), any(RequestOptions.class))).thenReturn(mockResponse);
+    CosmosItemResponse mockResponse = mock(CosmosItemResponse.class);
+    when(mockResponse.getItem()).thenReturn(deletedMetadata);
+    when(mockCosmosAsyncContainer.readItem(anyString(), any(), any())).thenReturn(Mono.just(mockResponse));
     // Now delete the puppy, Cosmos record should get purged.
     try {
       assertFalse("Expected update to recover and return false",
@@ -377,21 +392,25 @@ public class AzureCloudDestinationTest {
       assertEquals(((BlobStorageException) cex.getCause()).getErrorCode(), BlobErrorCode.BLOB_NOT_FOUND);
     }
     assertEquals("Expected recovery", 1, azureMetrics.blobUpdateRecoverCount.getCount());
-    verify(mockumentClient).deleteDocument(anyString(), any());
+    verify(mockCosmosAsyncContainer).deleteItem(anyString(), (PartitionKey) any());
   }
 
   /** Test update methods when Cosmos throws other exception. */
   @Test
   public void testUpdateCosmosException() {
     mockBlobExistence(true);
-    when(mockumentClient.readDocument(anyString(), any())).thenThrow(
-        new RuntimeException("Document not Found", new DocumentClientException(500)));
+    Duration mockDuration = mock(Duration.class);
+    when(mockDuration.toMillis()).thenReturn(Long.valueOf(10));
+    CosmosException cosmosException = mock(CosmosException.class);
+    when(cosmosException.getStatusCode()).thenReturn(500);
+    when(cosmosException.getRetryAfterDuration()).thenReturn(mockDuration);
+    when(mockCosmosAsyncContainer.readItem(anyString(), any(), any())).thenReturn(Mono.error(cosmosException));
     expectCloudStorageException(() -> azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator),
-        DocumentClientException.class);
+        CosmosException.class);
     expectCloudStorageException(() -> azureDest.updateBlobExpiration(blobId, expirationTime, dummyCloudUpdateValidator),
-        DocumentClientException.class);
+        CosmosException.class);
     expectCloudStorageException(() -> azureDest.undeleteBlob(blobId, (short) 0, dummyCloudUpdateValidator),
-        DocumentClientException.class);
+        CosmosException.class);
     verifyUpdateErrorMetrics(3, true);
   }
 
@@ -426,7 +445,7 @@ public class AzureCloudDestinationTest {
     Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertEquals("Expected map of one", 1, metadataMap.size());
     verify(mockBlockBlobClient).getPropertiesWithResponse(any(), any(), any());
-    verifyZeroInteractions(mockumentClient);
+    verifyZeroInteractions(mockCosmosAsyncContainer);
 
     // Get for nonexistent blob
     BlobStorageException ex = mockStorageException(BlobErrorCode.BLOB_NOT_FOUND);
@@ -434,24 +453,23 @@ public class AzureCloudDestinationTest {
     metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertTrue("Expected empty map", metadataMap.isEmpty());
     verify(mockBlockBlobClient, times(2)).getPropertiesWithResponse(any(), any(), any());
-    verifyZeroInteractions(mockumentClient);
+    verifyZeroInteractions(mockCosmosAsyncContainer);
 
     //
     // Test 2: isVcr = true
     //
     azureDest.close();
-    azureDest =
-        new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-            azureMetrics, defaultAzureReplicationFeedType, clusterMap, true, configProps);
+    azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockCosmosAsyncClient,
+        mockCosmosAsyncDatabase, mockCosmosAsyncContainer, "ambry", "metadata", "deletedContainer", clusterName,
+        azureMetrics, defaultAzureReplicationFeedType, clusterMap, true, configProps);
     // Existing blob
-    List<Document> docList = Collections.singletonList(createDocumentFromCloudBlobMetadata(blobMetadata));
-    Observable<FeedResponse<Document>> feedResponse = mock(Observable.class);
-    mockObservableForQuery(docList, feedResponse);
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        feedResponse);
+    FeedResponse feedResponse = mock(FeedResponse.class);
+    when(feedResponse.getResults()).thenReturn(Collections.singletonList(blobMetadata));
+    CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
+    when(cosmosPagedFlux.byPage()).thenReturn(Flux.just(feedResponse));
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(cosmosPagedFlux);
     metadataMap = azureDest.getBlobMetadata(singleBlobList);
     assertEquals("Expected map of one", 1, metadataMap.size());
-    verify(mockumentClient).queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class));
     verify(mockBlockBlobClient, times(2)).getPropertiesWithResponse(any(), any(), any());
   }
 
@@ -476,24 +494,25 @@ public class AzureCloudDestinationTest {
     // Reset metrics
     azureMetrics = new AzureMetrics(new MetricRegistry());
     try {
-      azureDest =
-          new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
-              azureMetrics, defaultAzureReplicationFeedType, clusterMap, false, configProps);
+      azureDest = new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockCosmosAsyncClient,
+          mockCosmosAsyncDatabase, mockCosmosAsyncContainer, "ambry", "metadata", "deletedContainer", clusterName,
+          azureMetrics, defaultAzureReplicationFeedType, clusterMap, false, configProps);
       List<BlobId> blobIdList = new ArrayList<>();
-      List<Document> docList = new ArrayList<>();
+      List<CloudBlobMetadata> cloudBlobMetadataList = new ArrayList<>();
       for (int j = 0; j < numBlobs; j++) {
         BlobId blobId = generateBlobId();
         blobIdList.add(blobId);
         CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
             CloudBlobMetadata.EncryptionOrigin.NONE);
-        docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata));
+        cloudBlobMetadataList.add(inputMetadata);
       }
 
-      Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-      mockObservableForQuery(docList, mockResponse);
+      FeedResponse feedResponse = mock(FeedResponse.class);
+      when(feedResponse.getResults()).thenReturn(cloudBlobMetadataList);
+      CosmosPagedFlux cosmosPagedFlux = mock(CosmosPagedFlux.class);
+      when(cosmosPagedFlux.byPage()).thenReturn(Flux.just(feedResponse));
+      when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(cosmosPagedFlux);
 
-      when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-          mockResponse);
       Set<BlobId> blobIdSet = new HashSet<>(blobIdList);
       assertEquals(blobIdList.size(), blobIdSet.size());
       Map<String, CloudBlobMetadata> metadataMap = azureDest.getBlobMetadata(blobIdList);
@@ -613,7 +632,8 @@ public class AzureCloudDestinationTest {
     AzureCloudDestination updateTimeBasedAzureCloudDestination = null;
     try {
       updateTimeBasedAzureCloudDestination =
-          new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockumentClient, "foo", "bar", clusterName,
+          new AzureCloudDestination(mockServiceClient, mockBlobBatchClient, mockCosmosAsyncClient,
+              mockCosmosAsyncDatabase, mockCosmosAsyncContainer, "ambry", "metadata", "deletedContainer", clusterName,
               azureMetrics, AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME, clusterMap, false, configProps);
       testFindEntriesSinceWithUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
       testFindEntriesSinceWithNonUniqueUpdateTimes(updateTimeBasedAzureCloudDestination);
@@ -689,7 +709,7 @@ public class AzureCloudDestinationTest {
     int totalBlobs = 20;
 
     // create metadata list where total size > maxTotalSize
-    List<Document> docList = new ArrayList<>();
+    List<CloudBlobMetadata> docList = new ArrayList<>();
     List<String> blobIdList = new ArrayList<>();
     for (int j = 0; j < totalBlobs; j++) {
       BlobId blobId = generateBlobId();
@@ -697,14 +717,16 @@ public class AzureCloudDestinationTest {
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
       inputMetadata.setUploadTime(startTime + j);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + j));
+      inputMetadata.setLastUpdateTime(startTime + j);
+      docList.add(inputMetadata);
     }
 
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    mockObservableForQuery(docList, mockResponse);
+    FeedResponse mockFeedResponse = mock(FeedResponse.class);
+    when(mockFeedResponse.getResults()).thenReturn(docList);
+    CosmosPagedFlux mockCosmosPagedFlux = mock(CosmosPagedFlux.class);
+    when(mockCosmosPagedFlux.byPage()).thenReturn(Flux.just(mockFeedResponse));
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(mockCosmosPagedFlux);
 
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
     CosmosUpdateTimeFindToken findToken = new CosmosUpdateTimeFindToken();
     // Run the query
     FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
@@ -718,14 +740,18 @@ public class AzureCloudDestinationTest {
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", findToken.getLastUpdateTimeReadBlobIds(),
         new HashSet<>(Collections.singletonList(firstResult.get(firstResult.size() - 1).getId())));
 
-    mockObservableForQuery(docList, mockResponse);
+    reset(mockFeedResponse);
+    when(mockFeedResponse.getResults()).thenReturn(docList);
+
     findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
     findToken = (CosmosUpdateTimeFindToken) findResult.getUpdatedFindToken();
     assertEquals("Unexpected doc count", maxTotalSize / chunkSize, secondResult.size());
     assertEquals("Unexpected first blobId", blobIdList.get(firstResult.size()), secondResult.get(0).getId());
 
-    mockObservableForQuery(docList, mockResponse);
+    reset(mockFeedResponse);
+    when(mockFeedResponse.getResults()).thenReturn(docList);
+
     findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2);
     // Rerun with max size below blob size, and make sure it returns one result
     assertEquals("Expected one result", 1, findResult.getMetadataList().size());
@@ -742,26 +768,29 @@ public class AzureCloudDestinationTest {
     int totalBlobs = 20;
 
     // create metadata list where total size > maxTotalSize
-    List<Document> docList = new ArrayList<>();
+    List<CloudBlobMetadata> docList = new ArrayList<>();
     List<String> blobIdList = new ArrayList<>();
     for (int j = 0; j < totalBlobs - 1; j++) {
       BlobId blobId = generateBlobId();
       blobIdList.add(blobId.getID());
       CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
           CloudBlobMetadata.EncryptionOrigin.NONE);
-      docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime));
+      inputMetadata.setLastUpdateTime(startTime);
+      docList.add(inputMetadata);
     }
     BlobId blobId = generateBlobId();
     blobIdList.add(blobId.getID());
     CloudBlobMetadata inputMetadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, chunkSize,
         CloudBlobMetadata.EncryptionOrigin.NONE);
-    docList.add(AzureTestUtils.createDocumentFromCloudBlobMetadata(inputMetadata, startTime + 1));
+    inputMetadata.setLastUpdateTime(startTime + 1);
+    docList.add(inputMetadata);
 
-    Observable<FeedResponse<Document>> mockResponse = mock(Observable.class);
-    mockObservableForQuery(docList, mockResponse);
+    FeedResponse mockFeedResponse = mock(FeedResponse.class);
+    when(mockFeedResponse.getResults()).thenReturn(docList);
+    CosmosPagedFlux mockCosmosPagedFlux = mock(CosmosPagedFlux.class);
+    when(mockCosmosPagedFlux.byPage()).thenReturn(Flux.just(mockFeedResponse));
+    when(mockCosmosAsyncContainer.queryItems((SqlQuerySpec) any(), any(), any())).thenReturn(mockCosmosPagedFlux);
 
-    when(mockumentClient.queryDocuments(anyString(), any(SqlQuerySpec.class), any(FeedOptions.class))).thenReturn(
-        mockResponse);
     CosmosUpdateTimeFindToken findToken = new CosmosUpdateTimeFindToken();
     // Run the query
     FindResult findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
@@ -775,7 +804,6 @@ public class AzureCloudDestinationTest {
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", findToken.getLastUpdateTimeReadBlobIds(),
         resultBlobIdSet);
 
-    mockObservableForQuery(docList, mockResponse);
     findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, maxTotalSize);
     List<CloudBlobMetadata> secondResult = findResult.getMetadataList();
     CosmosUpdateTimeFindToken secondFindToken = (CosmosUpdateTimeFindToken) findResult.getUpdatedFindToken();
@@ -788,13 +816,11 @@ public class AzureCloudDestinationTest {
     assertEquals("Find token has wrong lastUpdateTimeReadBlobIds", secondFindToken.getLastUpdateTimeReadBlobIds(),
         resultBlobIdSet);
 
-    mockObservableForQuery(docList, mockResponse);
     // Rerun with max size below blob size, and make sure it returns one result
     findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), findToken, chunkSize / 2);
     List<CloudBlobMetadata> finalResult = findResult.getMetadataList();
     assertEquals("Expected one result", 1, finalResult.size());
 
-    mockObservableForQuery(docList, mockResponse);
     // Rerun final time, and make sure that it returns all the remaining blobs
     findResult = azureDest.findEntriesSince(blobId.getPartition().toPathString(), secondFindToken, maxTotalSize);
     List<CloudBlobMetadata> thirdResult = findResult.getMetadataList();
@@ -863,7 +889,7 @@ public class AzureCloudDestinationTest {
   }
 
   /** Test initializing AzureCloudDestination with a proxy. This is currently ignored because there is no good way to
-   * instantiate a {@link AsyncDocumentClient} without it attempting to contact the proxy.
+   * instantiate a {@link CosmosAsyncClient} without it attempting to contact the proxy.
    * @throws Exception
    */
   @Ignore
@@ -877,8 +903,6 @@ public class AzureCloudDestinationTest {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
           defaultAzureReplicationFeedType, clusterMap);
       assertNull("Expected null proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
-      assertNull("Expected null proxy for Cosmos",
-          dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy());
     } finally {
       if (dest != null) {
         dest.close();
@@ -895,10 +919,6 @@ public class AzureCloudDestinationTest {
       dest = new AzureCloudDestination(cloudConfig, azureConfig, clusterName, vcrMetrics, azureMetrics,
           defaultAzureReplicationFeedType, clusterMap);
       assertNotNull("Expected proxy for ABS", dest.getAzureBlobDataAccessor().getProxyOptions());
-      InetSocketAddress proxy = dest.getCosmosDataAccessor().getAsyncDocumentClient().getConnectionPolicy().getProxy();
-      assertNotNull("Expected proxy for Cosmos", proxy);
-      assertEquals("Wrong host", proxyHost, proxy.getHostName());
-      assertEquals("Wrong port", proxyPort, proxy.getPort());
     } finally {
       if (dest != null) {
         dest.close();
@@ -908,7 +928,7 @@ public class AzureCloudDestinationTest {
 
   /**
    * Verify the metric values after an upload error.
-   * @param isDocument Flag indicating a DocumentClientException thrown.
+   * @param isDocument Flag indicating a CosmosException thrown.
    */
   private void verifyUploadErrorMetrics(boolean isDocument) {
     assertEquals(1, azureMetrics.blobUploadRequestCount.getCount());
@@ -932,7 +952,7 @@ public class AzureCloudDestinationTest {
   /**
    * Verify the metric values after an update error.
    * @param numUpdates the number of update operations made.
-   * @param isDocument Flag indicating a DocumentClientException thrown.
+   * @param isDocument Flag indicating a CosmosException thrown.
    */
   private void verifyUpdateErrorMetrics(int numUpdates, boolean isDocument) {
     assertEquals(0, azureMetrics.blobUpdatedCount.getCount());

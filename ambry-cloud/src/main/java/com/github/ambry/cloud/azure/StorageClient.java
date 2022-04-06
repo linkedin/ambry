@@ -46,7 +46,6 @@ import com.azure.storage.common.policy.RetryPolicyType;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
-import com.microsoft.azure.cosmosdb.RetryOptions;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;

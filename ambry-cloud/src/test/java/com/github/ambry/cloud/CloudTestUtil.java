@@ -13,24 +13,24 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.models.CosmosQueryRequestOptions;
+import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.SqlQuerySpec;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.utils.TestUtils;
-import com.microsoft.azure.cosmosdb.ConnectionPolicy;
-import com.microsoft.azure.cosmosdb.ConsistencyLevel;
-import com.microsoft.azure.cosmosdb.Document;
-import com.microsoft.azure.cosmosdb.FeedOptions;
-import com.microsoft.azure.cosmosdb.FeedResponse;
-import com.microsoft.azure.cosmosdb.PartitionKey;
-import com.microsoft.azure.cosmosdb.RequestOptions;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
-import com.microsoft.azure.cosmosdb.rx.AsyncDocumentClient;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
+import reactor.core.publisher.Flux;
 
 import static com.github.ambry.commons.BlobId.*;
 
@@ -131,30 +131,31 @@ public class CloudTestUtil {
    * @param partitionId partition to be deleted.
    */
   static void cleanupPartition(AzureCloudConfig azureCloudConfig, PartitionId partitionId) {
-    ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-    AsyncDocumentClient asyncDocumentClient =
-        new AsyncDocumentClient.Builder().withServiceEndpoint(azureCloudConfig.cosmosEndpoint)
-            .withMasterKeyOrResourceToken(azureCloudConfig.cosmosKey)
-            .withConnectionPolicy(connectionPolicy)
-            .withConsistencyLevel(ConsistencyLevel.Session)
-            .build();
+    CosmosAsyncClient cosmosAsyncClient = new CosmosClientBuilder().endpoint(azureCloudConfig.cosmosEndpoint)
+        .key(azureCloudConfig.cosmosKey)
+        .consistencyLevel(ConsistencyLevel.SESSION)
+        .buildAsyncClient();
+    CosmosAsyncContainer cosmosAsyncContainer = cosmosAsyncClient.getDatabase(azureCloudConfig.cosmosDatabase)
+        .getContainer(azureCloudConfig.cosmosCollection);
+
+    List<CloudBlobMetadata> cloudBlobMetadataList = new ArrayList<>();
+
+    // Query items
     SqlQuerySpec sqlQuerySpec =
         new SqlQuerySpec("select * from c where c.partitionId=\"" + partitionId.toPathString() + "\"");
-    FeedOptions feedOptions = new FeedOptions();
-    feedOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
-    Iterator<FeedResponse<Document>> iterator =
-        asyncDocumentClient.queryDocuments(azureCloudConfig.cosmosCollectionLink, sqlQuerySpec, feedOptions)
-            .toBlocking()
-            .getIterator();
-    RequestOptions requestOptions = new RequestOptions();
-    requestOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
-    while (iterator.hasNext()) {
-      FeedResponse<Document> response = iterator.next();
-      response.getResults()
-          .forEach(document -> asyncDocumentClient.deleteDocument(
-              azureCloudConfig.cosmosCollectionLink + "/docs/" + document.getId(), requestOptions)
-              .toBlocking()
-              .single());
-    }
+    CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
+    cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionId.toPathString()));
+
+    cosmosAsyncContainer.queryItems(sqlQuerySpec, cosmosQueryRequestOptions, CloudBlobMetadata.class)
+        .byPage()
+        .flatMapSequential(feedResponse -> {
+          cloudBlobMetadataList.addAll(feedResponse.getResults());
+          return Flux.empty();
+        })
+        .blockLast();
+
+    // Delete items
+    cloudBlobMetadataList.forEach(cloudBlobMetadata -> cosmosAsyncContainer.deleteItem(cloudBlobMetadata.getId(),
+        new PartitionKey(partitionId.toPathString())).block());
   }
 }

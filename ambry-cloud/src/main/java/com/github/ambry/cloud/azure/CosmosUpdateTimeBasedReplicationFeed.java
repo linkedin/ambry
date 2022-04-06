@@ -13,14 +13,13 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.models.SqlParameter;
+import com.azure.cosmos.models.SqlQuerySpec;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
-import com.microsoft.azure.cosmosdb.DocumentClientException;
-import com.microsoft.azure.cosmosdb.SqlParameter;
-import com.microsoft.azure.cosmosdb.SqlParameterCollection;
-import com.microsoft.azure.cosmosdb.SqlQuerySpec;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
@@ -61,15 +60,17 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
 
   @Override
   public FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries,
-      String partitionPath) throws DocumentClientException {
+      String partitionPath) throws CosmosException {
     Timer.Context operationTimer = azureMetrics.replicationFeedQueryTime.time();
     try {
       CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
-      SqlQuerySpec entriesSinceQuery = new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE,
-          new SqlParameterCollection(new SqlParameter(LIMIT_PARAM, queryBatchSize),
-              new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime())));
+
+      SqlQuerySpec sqlQuerySpec =
+          new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE, new SqlParameter(LIMIT_PARAM, queryBatchSize),
+              new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime()));
+
       List<CloudBlobMetadata> queryResults =
-          cosmosDataAccessor.queryMetadata(partitionPath, entriesSinceQuery, azureMetrics.findSinceQueryTime);
+          cosmosDataAccessor.queryMetadata(partitionPath, sqlQuerySpec, azureMetrics.findSinceQueryTime);
       if (queryResults.isEmpty()) {
         return new FindResult(new ArrayList<>(), findToken);
       }

@@ -433,7 +433,7 @@ project(':ambry-cloud') {
         compile "com.azure:azure-security-keyvault-secrets:$azureSecurityKeyvaultSecretsVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
-        compile "com.microsoft.azure:azure-cosmosdb:$azureCosmosDbVersion"
+        compile "com.azure:azure-cosmos:$azureCosmosDbAsyncVersion"
         compile "com.microsoft.azure:msal4j:$azureMsal4jVersion"
         compile "org.apache.helix:helix-lock:$helixVersion"
         testCompile project(':ambry-router')

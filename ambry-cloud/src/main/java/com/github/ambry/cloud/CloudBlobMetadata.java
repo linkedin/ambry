@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,6 +55,8 @@ public class CloudBlobMetadata {
   public static final String FIELD_ENCRYPTED_SIZE = "encryptedSize";
   public static final String FIELD_NAME_SCHEME_VERSION = "nameSchemeVersion";
   public static final String FIELD_LIFE_VERSION = "lifeVersion";
+  // Used for getting system generated last modified time field
+  public static final String SYSTEM_GENERATED_FIELD_LAST_UPDATED_TIME = "_ts";
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -74,6 +77,7 @@ public class CloudBlobMetadata {
   private short lifeVersion;
   // this field is derived from the system generated last Update Time in the cloud db
   // and hence shouldn't be serializable.
+  @JsonProperty(SYSTEM_GENERATED_FIELD_LAST_UPDATED_TIME)
   @JsonIgnore
   private long lastUpdateTime;
 

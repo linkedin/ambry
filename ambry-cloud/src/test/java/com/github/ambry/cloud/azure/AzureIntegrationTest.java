@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.implementation.HttpConstants;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -35,7 +36,6 @@ import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.microsoft.azure.cosmosdb.internal.HttpConstants;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

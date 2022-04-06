@@ -132,9 +132,10 @@ public class CosmosContainerDeletionEntry {
   /**
    * Remove a delete pending partition.
    * @param partitionId partition to remove.
+   * @return true if partition is removed.
    */
-  public void removePartition(String partitionId) {
-    deletePendingPartitions.remove(partitionId);
+  public boolean removePartition(String partitionId) {
+    return deletePendingPartitions.remove(partitionId);
   }
 
   /**
