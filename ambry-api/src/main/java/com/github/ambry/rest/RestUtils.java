@@ -460,7 +460,7 @@ public class RestUtils {
   }
 
   /**
-   * An util method to get ttl from arguments associated with a request.
+   * An util method to get ttl from arguments associated with a request. CHUNK_UPLOAD_TTL takes precedence over TTL.
    * @param args the arguments associated with the request. Cannot be {@code null}.
    * @return the ttl extracted from the arguments.
    * @throws RestServiceException if required arguments aren't present or if they aren't in the format expected.
@@ -470,6 +470,10 @@ public class RestUtils {
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
     Long chunkUploadTtlFromHeader = getLongHeader(args, Headers.CHUNK_UPLOAD_TTL, false);
     if (chunkUploadTtlFromHeader != null) {
+      if (chunkUploadTtlFromHeader < -1) {
+        throw new RestServiceException(Headers.CHUNK_UPLOAD_TTL + "[" + chunkUploadTtlFromHeader + "] is not valid (has to be >= -1)",
+            RestServiceErrorCode.InvalidArgs);
+      }
       ttl = chunkUploadTtlFromHeader;
     } else {
       if (ttlFromHeader != null) {
