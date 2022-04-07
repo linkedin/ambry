@@ -16,8 +16,9 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Context;
+import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
-import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
@@ -41,6 +42,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,34 +95,35 @@ public class AzureBlobDataAccessor {
 
   /**
    * Test constructor
-   * @param blobServiceClient the {@link BlobServiceClient} to use.
-   * @param blobBatchClient the {@link BlobBatchClient} to use.
+   * @param blobServiceAsyncClient the {@link BlobServiceAsyncClient} to use.
+   * @param blobBatchAsyncClient the {@link BlobBatchAsyncClient} to use.
    * @param clusterName the cluster name to use.
    * @param azureMetrics the {@link AzureMetrics} to use.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param cloudConfig {@link CloudConfig} object.
    */
-  AzureBlobDataAccessor(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient, String clusterName,
-      AzureMetrics azureMetrics, AzureCloudConfig azureCloudConfig) {
+  AzureBlobDataAccessor(BlobServiceAsyncClient blobServiceAsyncClient, BlobBatchAsyncClient blobBatchAsyncClient,
+      String clusterName, AzureMetrics azureMetrics, AzureCloudConfig azureCloudConfig, CloudConfig cloudConfig) {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     try {
       this.storageClient =
-          Utils.getObj(AzureCloudConfig.DEFAULT_AZURE_STORAGE_CLIENT_CLASS, blobServiceClient, blobBatchClient,
+          Utils.getObj(azureCloudConfig.azureStorageClientClass, blobServiceAsyncClient, blobBatchAsyncClient,
               azureMetrics, blobLayoutStrategy, azureCloudConfig);
     } catch (ReflectiveOperationException roEx) {
       throw new IllegalArgumentException("Unable to instantiate storage client: " + roEx.getMessage(), roEx);
     }
     this.azureMetrics = azureMetrics;
     this.purgeBatchSize = AzureCloudConfig.DEFAULT_PURGE_BATCH_SIZE;
-    requestTimeout = null;
-    uploadTimeout = null;
-    batchTimeout = null;
+    requestTimeout = Duration.ofMillis(cloudConfig.cloudRequestTimeout);
+    uploadTimeout = Duration.ofMillis(cloudConfig.cloudUploadRequestTimeout);
+    batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
   }
 
   /**
    * Visible for testing.
    * @return the underlying {@link BlobServiceClient}.
    */
-  public BlobServiceClient getStorageClient() {
+  public BlobServiceAsyncClient getStorageClient() {
     return storageClient.getStorageClient();
   }
 
@@ -152,21 +158,26 @@ public class AzureBlobDataAccessor {
     try {
       Map<String, String> metadata = cloudBlobMetadata.toMap();
       storageClient.uploadWithResponse(blobId, blobInputStream, inputLength, null, metadata, null, null,
-          blobRequestConditions, uploadTimeout);
+          blobRequestConditions).get(uploadTimeout.toMillis(), TimeUnit.MILLISECONDS);
       logger.debug("Uploaded blob {} to ABS", blobId);
       azureMetrics.blobUploadSuccessCount.inc();
       return true;
-    } catch (UncheckedIOException e) {
-      // error processing input stream
-      throw e.getCause();
-    } catch (BlobStorageException e) {
-      if (e.getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
-        logger.debug("Skipped upload of existing blob {}", blobId);
-        azureMetrics.blobUploadConflictCount.inc();
-        return false;
-      } else {
-        throw e;
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
+      Exception ex = Utils.extractFutureExceptionCause(e);
+      if (ex instanceof BlobStorageException) {
+        BlobStorageException bse = (BlobStorageException) ex;
+        if (bse.getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
+          logger.debug("Skipped upload of existing blob {}", blobId);
+          azureMetrics.blobUploadConflictCount.inc();
+          return false;
+        } else {
+          throw bse;
+        }
+      } else if (ex instanceof UncheckedIOException) {
+        // error processing input stream
+        throw ((UncheckedIOException) ex).getCause();
       }
+      throw new RuntimeException(ex);
     } finally {
       storageTimer.stop();
     }
@@ -184,10 +195,16 @@ public class AzureBlobDataAccessor {
       throws BlobStorageException, IOException {
     try {
       storageClient.uploadWithResponse(containerName, fileName, true, inputStream, inputStream.available(), null, null,
-          null, null, defaultRequestConditions, uploadTimeout);
-    } catch (UncheckedIOException e) {
-      // error processing input stream
-      throw e.getCause();
+          null, null, defaultRequestConditions).get(uploadTimeout.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
+      Exception ex = Utils.extractFutureExceptionCause(e);
+      if (ex instanceof BlobStorageException) {
+        throw (BlobStorageException) ex;
+      } else if (ex instanceof UncheckedIOException) {
+        // error processing input stream
+        throw ((UncheckedIOException) ex).getCause();
+      }
+      throw new RuntimeException(ex);
     }
   }
 
@@ -202,17 +219,25 @@ public class AzureBlobDataAccessor {
    * @throws UncheckedIOException for any error with supplied data stream.
    */
   public boolean downloadFile(String containerName, String fileName, OutputStream outputStream, boolean errorOnNotFound)
-      throws BlobStorageException {
+      throws BlobStorageException, IOException {
     try {
       storageClient.downloadWithResponse(containerName, fileName, false, outputStream, null, null,
-          defaultRequestConditions, false, uploadTimeout);
+          defaultRequestConditions, false).get(uploadTimeout.toMillis(), TimeUnit.MILLISECONDS);
       return true;
-    } catch (BlobStorageException e) {
-      if (!errorOnNotFound && isNotFoundError(e.getErrorCode())) {
-        return false;
-      } else {
-        throw e;
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
+      Exception ex = Utils.extractFutureExceptionCause(e);
+      if (ex instanceof BlobStorageException) {
+        BlobStorageException bse = (BlobStorageException) ex;
+        if (!errorOnNotFound && isNotFoundError(bse.getErrorCode())) {
+          return false;
+        } else {
+          throw bse;
+        }
+      } else if (ex instanceof UncheckedIOException) {
+        // error processing input stream
+        throw ((UncheckedIOException) ex).getCause();
       }
+      throw new RuntimeException(ex);
     }
   }
 
@@ -221,10 +246,17 @@ public class AzureBlobDataAccessor {
    * @param containerName name of the container containing file to delete.
    * @param fileName name of the file to delete.
    * @return true if the file was deleted, otherwise false.
-   * @throws BlobStorageException for any error on ABS side.
    */
   boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
-    return storageClient.deleteFile(containerName, fileName);
+    try {
+      return storageClient.deleteFile(containerName, fileName).join();
+    } catch (CompletionException e) {
+      Exception ex = Utils.extractFutureExceptionCause(e);
+      if (ex instanceof BlobStorageException) {
+        throw (BlobStorageException) ex;
+      }
+      throw new RuntimeException(ex);
+    }
   }
 
   /**
@@ -247,7 +279,7 @@ public class AzureBlobDataAccessor {
    * @throws BlobStorageException on Azure side error.
    * @throws UncheckedIOException on error writing to the output stream.
    */
-  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws BlobStorageException {
+  public void downloadBlob(BlobId blobId, OutputStream outputStream) throws BlobStorageException, IOException {
     azureMetrics.blobDownloadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     try {
@@ -269,22 +301,28 @@ public class AzureBlobDataAccessor {
    * @throws BlobStorageException
    */
   public CloudBlobMetadata getBlobMetadata(BlobId blobId) throws BlobStorageException {
-    BlobProperties blobProperties = null;
+    BlobProperties blobProperties;
     try {
-      blobProperties = storageClient.getPropertiesWithResponse(blobId, defaultRequestConditions, requestTimeout);
+      blobProperties = storageClient.getPropertiesWithResponse(blobId, defaultRequestConditions)
+          .get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
       if (blobProperties == null) {
         logger.debug("Blob {} not found.", blobId);
         return null;
       }
-    } catch (BlobStorageException e) {
-      if (isNotFoundError(e.getErrorCode())) {
-        logger.debug("Blob {} not found.", blobId);
-        return null;
+      Map<String, String> metadata = blobProperties.getMetadata();
+      return CloudBlobMetadata.fromMap(metadata);
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
+      Exception ex = Utils.extractFutureExceptionCause(e);
+      if (ex instanceof BlobStorageException) {
+        BlobStorageException bse = (BlobStorageException) ex;
+        if (isNotFoundError(bse.getErrorCode())) {
+          logger.debug("Blob {} not found.", blobId);
+          return null;
+        }
+        throw bse;
       }
-      throw e;
+      throw new RuntimeException(ex);
     }
-    Map<String, String> metadata = blobProperties.getMetadata();
-    return CloudBlobMetadata.fromMap(metadata);
   }
 
   /**
@@ -297,7 +335,7 @@ public class AzureBlobDataAccessor {
    * @throws IllegalStateException on request timeout.
    */
   public AzureCloudDestination.UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields,
-      CloudUpdateValidator cloudUpdateValidator) throws Exception {
+      CloudUpdateValidator cloudUpdateValidator) throws BlobStorageException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     updateFields.keySet()
         .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));
@@ -305,8 +343,8 @@ public class AzureBlobDataAccessor {
     try {
       Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
       try {
-        BlobProperties blobProperties =
-            storageClient.getPropertiesWithResponse(blobId, defaultRequestConditions, requestTimeout);
+        BlobProperties blobProperties = storageClient.getPropertiesWithResponse(blobId, defaultRequestConditions)
+            .get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
         // Note: above throws 404 exception if blob does not exist.
         String etag = blobProperties.getETag();
         Map<String, String> metadata = blobProperties.getMetadata();
@@ -331,7 +369,8 @@ public class AzureBlobDataAccessor {
           }
           // Set condition to ensure we don't clobber a concurrent update
           BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
-          storageClient.setMetadataWithResponse(blobId, metadata, blobRequestConditions, requestTimeout, Context.NONE);
+          storageClient.setMetadataWithResponse(blobId, metadata, blobRequestConditions, Context.NONE)
+              .get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
           return new AzureCloudDestination.UpdateResponse(true, metadata);
         } else {
           return new AzureCloudDestination.UpdateResponse(false, metadata);
@@ -339,14 +378,19 @@ public class AzureBlobDataAccessor {
       } finally {
         storageTimer.stop();
       }
-    } catch (BlobStorageException e) {
-      if (isNotFoundError(e.getErrorCode())) {
-        logger.warn("Blob {} not found, cannot update {}.", blobId, updateFields.keySet());
+    } catch (Exception e) {
+      Exception ex = Utils.extractFutureExceptionCause(e);
+      if (ex instanceof BlobStorageException) {
+        BlobStorageException bse = (BlobStorageException) ex;
+        if (isNotFoundError(bse.getErrorCode())) {
+          logger.warn("Blob {} not found, cannot update {}.", blobId, updateFields.keySet());
+        }
+        if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+          azureMetrics.blobUpdateConflictCount.inc();
+        }
+        throw bse;
       }
-      if (e.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        azureMetrics.blobUpdateConflictCount.inc();
-      }
-      throw e;
+      throw new RuntimeException(ex);
     }
   }
 
@@ -362,22 +406,31 @@ public class AzureBlobDataAccessor {
     List<CloudBlobMetadata> deletedBlobs = new ArrayList<>();
     List<List<CloudBlobMetadata>> partitionedLists = Utils.partitionList(blobMetadataList, purgeBatchSize);
     for (List<CloudBlobMetadata> batchOfBlobs : partitionedLists) {
-      List<Response<Void>> responseList = storageClient.deleteBatch(batchOfBlobs, batchTimeout);
-      for (int j = 0; j < responseList.size(); j++) {
-        Response<Void> response = responseList.get(j);
-        CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
-        // Note: Response.getStatusCode() throws exception on any error.
-        try {
-          response.getStatusCode();
-        } catch (BlobStorageException bex) {
-          int statusCode = bex.getStatusCode();
-          // Don't worry if blob is already gone
-          if (statusCode != HttpURLConnection.HTTP_NOT_FOUND && statusCode != HttpURLConnection.HTTP_GONE) {
-            logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
-            throw bex;
+      List<Response<Void>> responseList;
+      try {
+        responseList = storageClient.deleteBatch(batchOfBlobs).get(batchTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        for (int j = 0; j < responseList.size(); j++) {
+          Response<Void> response = responseList.get(j);
+          CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
+          // Note: Response.getStatusCode() throws exception on any error.
+          try {
+            response.getStatusCode();
+          } catch (BlobStorageException bex) {
+            int statusCode = bex.getStatusCode();
+            // Don't worry if blob is already gone
+            if (statusCode != HttpURLConnection.HTTP_NOT_FOUND && statusCode != HttpURLConnection.HTTP_GONE) {
+              logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
+              throw bex;
+            }
           }
+          deletedBlobs.add(blobMetadata);
         }
-        deletedBlobs.add(blobMetadata);
+      } catch (ExecutionException | InterruptedException | TimeoutException e) {
+        Exception ex = Utils.extractFutureExceptionCause(e);
+        if (ex instanceof BlobStorageException) {
+          throw (BlobStorageException) ex;
+        }
+        throw new RuntimeException(ex);
       }
     }
     return deletedBlobs;

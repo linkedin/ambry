@@ -14,7 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.cosmos.CosmosException;
-import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobContainerAsyncClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -338,10 +338,10 @@ public class AzureStorageCompactor {
    */
   List<Pair<String, Long>> getAllCompactionProgress() throws Exception {
     // Read all checkpoint files and dump results into sortable table.
-    BlobContainerClient containerClient =
-        azureBlobDataAccessor.getStorageClient().getBlobContainerClient(AzureCloudDestination.CHECKPOINT_CONTAINER);
+    BlobContainerAsyncClient containerAsyncClient = azureBlobDataAccessor.getStorageClient()
+        .getBlobContainerAsyncClient(AzureCloudDestination.CHECKPOINT_CONTAINER);
     List<String> checkpoints = new ArrayList<>();
-    containerClient.listBlobs().forEach(item -> {
+    containerAsyncClient.listBlobs().toIterable().forEach(item -> {
       checkpoints.add(item.getName());
     });
     logger.info("Retrieving checkpoints for {} partitions", checkpoints.size());

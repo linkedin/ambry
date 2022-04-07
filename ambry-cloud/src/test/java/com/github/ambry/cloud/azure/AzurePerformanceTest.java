@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -77,7 +76,7 @@ public class AzurePerformanceTest {
     }
   }
 
-  public static void testPerformance() throws IOException, BlobStorageException {
+  public static void testPerformance() throws Exception {
     // create container with this class name
     String containerName = commandName.toLowerCase();
 

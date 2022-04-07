@@ -70,7 +70,6 @@ public class AzureCloudConfig {
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
   public static final String DEFAULT_AZURE_STORAGE_CLIENT_CLASS =
       "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient";
-  public static final String USE_ASYNC_AZURE_APIS = "use.async.azure.apis";
 
   /**
    * The Azure Blob Storage connection string.
@@ -263,14 +262,6 @@ public class AzureCloudConfig {
   @Config(AZURE_STORAGE_CLIENT_REFRESH_FACTOR)
   public double azureStorageClientRefreshFactor;
 
-  /**
-   * Flag indicating whether to use asynchronous Azure APIs for uploading and downloading of blobs. This is
-   * temporary and can be removed once we move to use only asynchronous methods.
-   */
-  @Config(USE_ASYNC_AZURE_APIS)
-  @Default("false")
-  public final boolean useAsyncAzureAPIs;
-
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
@@ -312,6 +303,5 @@ public class AzureCloudConfig {
         DEFAULT_CONTAINER_COMPACTION_COSMOS_QUERY_LIMIT, 1, Integer.MAX_VALUE);
     azureStorageClientRefreshFactor = verifiableProperties.getDoubleInRange(AZURE_STORAGE_CLIENT_REFRESH_FACTOR,
         DEFAULT_AZURE_STORAGE_CLIENT_REFRESH_FACTOR, 0.0, 1.0);
-    useAsyncAzureAPIs = verifiableProperties.getBoolean(USE_ASYNC_AZURE_APIS, false);
   }
 }

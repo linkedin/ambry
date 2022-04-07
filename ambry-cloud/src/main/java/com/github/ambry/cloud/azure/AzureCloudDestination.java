@@ -19,8 +19,8 @@ import com.azure.cosmos.CosmosAsyncDatabase;
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.models.CosmosItemResponse;
-import com.azure.storage.blob.BlobServiceClient;
-import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.BlobServiceAsyncClient;
+import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.MetricRegistry;
@@ -116,7 +116,8 @@ class AzureCloudDestination implements CloudDestination {
 
   /**
    * Test constructor.
-   * @param storageClient the {@link BlobServiceClient} to use.
+   * @param storageAsyncClient the {@link BlobServiceAsyncClient} to use.
+   * @param blobBatchAsyncClient the {@link BlobBatchAsyncClient} to use.
    * @param cosmosAsyncClient the {@link CosmosAsyncClient} to use.
    * @param cosmosAsyncDatabase the {@link CosmosAsyncDatabase} to use.
    * @param cosmosAsyncContainer the {@link CosmosAsyncContainer} to use.
@@ -129,7 +130,7 @@ class AzureCloudDestination implements CloudDestination {
    * @param clusterMap {@link ClusterMap} object.
    * @param isVcr whether this instance is a VCR.
    */
-  AzureCloudDestination(BlobServiceClient storageClient, BlobBatchClient blobBatchClient,
+  AzureCloudDestination(BlobServiceAsyncClient storageAsyncClient, BlobBatchAsyncClient blobBatchAsyncClient,
       CosmosAsyncClient cosmosAsyncClient, CosmosAsyncDatabase cosmosAsyncDatabase,
       CosmosAsyncContainer cosmosAsyncContainer, String cosmosDatabase, String cosmosCollection,
       String cosmosDeletedContainerCollection, String clusterName, AzureMetrics azureMetrics,
@@ -140,7 +141,8 @@ class AzureCloudDestination implements CloudDestination {
     this.cloudConfig = new CloudConfig(new VerifiableProperties(configProps));
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(configProps));
     this.azureBlobDataAccessor =
-        new AzureBlobDataAccessor(storageClient, blobBatchClient, clusterName, azureMetrics, azureCloudConfig);
+        new AzureBlobDataAccessor(storageAsyncClient, blobBatchAsyncClient, clusterName, azureMetrics, azureCloudConfig,
+            cloudConfig);
     this.queryBatchSize = AzureCloudConfig.DEFAULT_QUERY_BATCH_SIZE;
     VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
     this.cosmosDataAccessor =
@@ -284,7 +286,12 @@ class AzureCloudDestination implements CloudDestination {
     // previous upload could have resulted in a missing record in Cosmos; the findMissingKeys result
     // needs to include that store key to replay the upload.
     if (!isVcr && blobIds.size() == 1) {
-      CloudBlobMetadata metadata = azureBlobDataAccessor.getBlobMetadata(blobIds.get(0));
+      CloudBlobMetadata metadata = null;
+      try {
+        metadata = azureBlobDataAccessor.getBlobMetadata(blobIds.get(0));
+      } catch (Exception ex) {
+        throw toCloudStorageException("Failed to query metadata for blob" + blobIds.get(0), ex);
+      }
       return metadata == null ? Collections.emptyMap() : Collections.singletonMap(metadata.getId(), metadata);
     }
 
@@ -434,7 +441,7 @@ class AzureCloudDestination implements CloudDestination {
     try {
       BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
       azureBlobDataAccessor.uploadFile(tokenLayout.containerName, tokenLayout.blobFilePath, inputStream);
-    } catch (IOException | BlobStorageException e) {
+    } catch (Exception e) {
       azureMetrics.absTokenPersistFailureCount.inc();
       throw toCloudStorageException("Could not persist token: " + partitionPath, e);
     }
@@ -447,7 +454,7 @@ class AzureCloudDestination implements CloudDestination {
       BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
       return azureBlobDataAccessor.downloadFile(tokenLayout.containerName, tokenLayout.blobFilePath, outputStream,
           false);
-    } catch (BlobStorageException e) {
+    } catch (Exception e) {
       throw toCloudStorageException("Could not retrieve token: " + partitionPath, e);
     }
   }

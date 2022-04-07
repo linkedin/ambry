@@ -17,9 +17,8 @@ import com.azure.core.credential.AccessToken;
 import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
 import com.azure.storage.blob.BlobServiceAsyncClient;
-import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
-import com.azure.storage.blob.batch.BlobBatchClient;
+import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.github.ambry.config.CloudConfig;
@@ -68,40 +67,18 @@ public class ADAuthBasedStorageClient extends StorageClient {
 
   /**
    * Constructor for {@link ADAuthBasedStorageClient} object for testing.
-   * @param blobServiceClient {@link BlobServiceClient} object.
-   * @param blobBatchClient {@link BlobBatchClient} object.
+   * @param blobServiceAsyncClient {@link BlobServiceAsyncClient} object.
+   * @param blobBatchAsyncClient {@link BlobBatchAsyncClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param accessToken {@link AccessToken} object.
    */
-  public ADAuthBasedStorageClient(BlobServiceClient blobServiceClient, BlobBatchClient blobBatchClient,
-      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
-    super(blobServiceClient, blobBatchClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
-  }
-
-  /**
-   * Note that this method is not thread safe. Its need to be called from a thread safe context.
-   * @param httpClient {@link HttpClient} object.
-   * @param configuration {@link Configuration} object.
-   * @param retryOptions {@link RequestRetryOptions} object.
-   * @param azureCloudConfig {@link AzureCloudConfig} object.
-   * @return BlobServiceClient object.
-   */
-  @Override
-  protected BlobServiceClient buildBlobServiceClient(HttpClient httpClient, Configuration configuration,
-      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
-      throws MalformedURLException, ExecutionException, InterruptedException {
-    if (accessTokenRef == null) {
-      // This means the token is not yet created because we are building storage client for the first time from
-      //base class's constructor. Create token before building storage client.
-      refreshToken();
-    }
-    return new BlobServiceClientBuilder().credential(request -> Mono.just(accessTokenRef.get()))
-        .endpoint(azureCloudConfig.azureStorageEndpoint)
-        .httpClient(httpClient)
-        .retryOptions(retryOptions)
-        .configuration(configuration)
-        .buildClient();
+  public ADAuthBasedStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
+      BlobBatchAsyncClient blobBatchAsyncClient, AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
+      AzureCloudConfig azureCloudConfig, AccessToken accessToken) {
+    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
+    accessTokenRef = new AtomicReference<>(accessToken);
   }
 
   @Override
@@ -188,14 +165,9 @@ public class ADAuthBasedStorageClient extends StorageClient {
       // Refresh Token
       refreshToken();
 
-      // Create new sync and async storage clients with refreshed token.
-      if (azureCloudConfig.useAsyncAzureAPIs) {
-        BlobServiceAsyncClient blobServiceAsyncClient = createBlobStorageAsyncClient();
-        setAsyncClientReferences(blobServiceAsyncClient);
-      } else {
-        BlobServiceClient blobServiceClient = createBlobStorageClient();
-        setClientReferences(blobServiceClient);
-      }
+      // Create new async storage clients with refreshed token.
+      BlobServiceAsyncClient blobServiceAsyncClient = createBlobStorageAsyncClient();
+      setAsyncClientReferences(blobServiceAsyncClient);
 
       logger.info("Token refresh done.");
 
