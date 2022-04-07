@@ -265,12 +265,17 @@ class PostBlobHandler {
           frontendMetrics.postBlobMetricsGroup);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+      Long chunkUploadTtl =
+          RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.CHUNK_UPLOAD_TTL, false);
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
         LOGGER.debug("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
         frontendMetrics.ttlTooLargeError.inc();
       } else if (container.isTtlRequired() && (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time
-          || blobProperties.getTimeToLiveInSeconds() > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
+          || chunkUploadTtl == null
+          && blobProperties.getTimeToLiveInSeconds() > frontendConfig.maxAcceptableTtlSecsIfTtlRequired
+          || chunkUploadTtl != null
+          && blobProperties.getTimeToLiveInSeconds() > frontendConfig.chunkUploadMaxChunkTtlSecs)) {
         String descriptor = RestUtils.getAccountFromArgs(restRequest.getArgs()).getName() + ":" + container.getName();
         if (frontendConfig.failIfTtlRequiredButNotProvided) {
           throw new RestServiceException(
@@ -339,9 +344,12 @@ class PostBlobHandler {
         RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true);
         // validate that a max chunk size is set.
         RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, true);
+        Long chunkUploadTtl =
+            RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.CHUNK_UPLOAD_TTL, false);
         // validate that the TTL for the chunk is set correctly.
         long chunkTtl = blobProperties.getTimeToLiveInSeconds();
-        if (chunkTtl <= 0 || chunkTtl > frontendConfig.chunkUploadInitialChunkTtlSecs) {
+        if (chunkTtl <= 0 || chunkUploadTtl == null && chunkTtl > frontendConfig.chunkUploadInitialChunkTtlSecs
+            || chunkUploadTtl != null && chunkUploadTtl > frontendConfig.chunkUploadMaxChunkTtlSecs) {
           throw new RestServiceException("Invalid chunk upload TTL: " + chunkTtl, RestServiceErrorCode.InvalidArgs);
         }
       }

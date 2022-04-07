@@ -18,7 +18,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.ThrottlingRecommendation;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
@@ -202,6 +201,10 @@ public class RestUtils {
      * The TTL (in secs) of the signed URL.
      */
     public static final String URL_TTL = "x-ambry-url-ttl-secs";
+    /**
+     * The TTL (in secs) of the chunk upload.
+     */
+    public static final String CHUNK_UPLOAD_TTL = "x-ambry-chunk-upload-ttl";
     /**
      * The maximum size of the blob that can be uploaded using the URL.
      */
@@ -465,12 +468,17 @@ public class RestUtils {
   public static long getTtlFromRequestHeader(Map<String, Object> args) throws RestServiceException {
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
-    if (ttlFromHeader != null) {
-      if (ttlFromHeader < -1) {
-        throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",
-            RestServiceErrorCode.InvalidArgs);
+    Long chunkUploadTtlFromHeader = getLongHeader(args, Headers.CHUNK_UPLOAD_TTL, false);
+    if (chunkUploadTtlFromHeader != null) {
+      ttl = chunkUploadTtlFromHeader;
+    } else {
+      if (ttlFromHeader != null) {
+        if (ttlFromHeader < -1) {
+          throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",
+              RestServiceErrorCode.InvalidArgs);
+        }
+        ttl = ttlFromHeader;
       }
-      ttl = ttlFromHeader;
     }
     return ttl;
   }
