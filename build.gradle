@@ -33,6 +33,7 @@ allprojects {
     apply plugin: 'idea'
     apply plugin: 'project-report'
     apply plugin: 'jacoco'
+    apply plugin: 'org.gradle.test-retry'
 
     repositories {
         mavenCentral()
@@ -115,6 +116,12 @@ subprojects {
         testLogging {
             exceptionFormat = 'full'
         }
+        retry {
+            // Allow for retrying flaky tests.
+            maxRetries = 3
+            maxFailures = 20
+            failOnPassedAfterRetry = false
+        }
         maxHeapSize = "3g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
         systemProperty 'io.netty.allocator.tinyCacheSize', '0'
@@ -132,6 +139,12 @@ subprojects {
             exceptionFormat = 'full'
             events 'started', 'failed', 'passed', 'skipped'
             showStandardStreams = false
+        }
+        retry {
+            // Allow for retrying flaky integration tests.
+            maxRetries = 3
+            maxFailures = 20
+            failOnPassedAfterRetry = false
         }
         maxHeapSize = "3g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
