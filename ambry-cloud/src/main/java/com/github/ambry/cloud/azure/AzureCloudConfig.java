@@ -103,7 +103,8 @@ public class AzureCloudConfig {
      * @param partitionRangeStart the lower bound (inclusive) of the partition range this storage account covers.
      * @param partitionRangeEnd the upper bound (exclusive) of the partition range this storage account covers.
      * @param storageScope the Azure scope.
-     * @param storageEndpoint the Azure end-point
+     * @param storageEndpoint the Azure end-point.
+     * @param storageConnectionString the Azure end-point in the form of connection string.
      */
     StorageAccountInfo(String name, int partitionRangeStart, int partitionRangeEnd, String storageScope, String storageEndpoint, String storageConnectionString) {
       this.name = name;
