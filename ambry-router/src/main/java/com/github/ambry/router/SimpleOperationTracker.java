@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -106,7 +107,8 @@ class SimpleOperationTracker implements OperationTracker {
   private int originatingDcTotalReplicaCount = 0;
   private int totalOfflineReplicaCount = 0;
   private int allReplicaCount = 0;
-  private Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
+  private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
+  private final List<ReplicaId> allReplicas;
 
   /**
    * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
@@ -156,13 +158,13 @@ class SimpleOperationTracker implements OperationTracker {
     // Note that we get a snapshot of replicas by state only once in this class, and use the same snapshot everywhere
     // to avoid the case where a replica state might change in between an operation.
     allDcReplicasByState =
-        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(EnumSet.of(ReplicaState.BOOTSTRAP,
-            ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE, ReplicaState.OFFLINE), null);
+        (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(EnumSet.allOf(ReplicaState.class), null);
     List<ReplicaId> eligibleReplicas;
     List<ReplicaId> offlineReplicas = new ArrayList<>();
     totalOfflineReplicaCount = getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE))
             .getOrDefault(ReplicaState.OFFLINE, Collections.emptyList()).size();
-    allReplicaCount = partitionId.getReplicaIds().size();
+    allReplicas = allDcReplicasByState.values().stream().flatMap(Collection::stream).collect(Collectors.toList());
+    allReplicaCount = allReplicas.size();
 
     switch (routerOperation) {
       case GetBlobOperation:
@@ -225,7 +227,7 @@ class SimpleOperationTracker implements OperationTracker {
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas =
-        routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas : partitionId.getReplicaIds();
+        routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas : allReplicas;
 
     // In a case where a certain dc is decommissioned and blobs previously uploaded to this dc now have a unrecognizable
     // dc id. Current clustermap code will treat originating dc as null if dc id is not identifiable. To improve success
@@ -317,7 +319,7 @@ class SimpleOperationTracker implements OperationTracker {
     originatingDcOfflineReplicaCount =
         getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
     originatingDcTotalReplicaCount =
-        partitionId.getReplicaIds().stream().filter(replicaId -> replicaId.getDataNodeId().getDatacenterName()
+        allReplicas.stream().filter(replicaId -> replicaId.getDataNodeId().getDatacenterName()
             .equals(this.originatingDcName)).collect(Collectors.toList()).size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
