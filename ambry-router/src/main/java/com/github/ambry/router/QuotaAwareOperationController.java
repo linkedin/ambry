@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -149,12 +150,15 @@ public class QuotaAwareOperationController extends OperationController {
    */
   private void pollQuotaCompliantRequests(List<RequestInfo> requestsToSend,
       Map<QuotaResource, LinkedList<RequestInfo>> requestQueue) {
-    for (QuotaResource quotaResource : requestQueue.keySet()) {
+    Iterator<Map.Entry<QuotaResource, LinkedList<RequestInfo>>> requestQueueIterator =
+        requestQueue.entrySet().iterator();
+    while (requestQueueIterator.hasNext()) {
+      QuotaResource quotaResource = requestQueueIterator.next().getKey();
       if (quotaResource.equals(UNKNOWN_QUOTA_RESOURCE)) {
         // If there are requests for which QuotaResource couldn't be found, this is most likely a bug.
         // As a temporary hack, we will consider all those requests to be quota compliant.
         requestsToSend.addAll(requestQueue.get(UNKNOWN_QUOTA_RESOURCE));
-        requestQueue.remove(UNKNOWN_QUOTA_RESOURCE);
+        requestQueueIterator.remove();
         continue;
       }
       boolean quotaAvailable = true;
@@ -178,7 +182,7 @@ public class QuotaAwareOperationController extends OperationController {
         }
       }
       if (requestQueue.get(quotaResource).isEmpty()) {
-        requestQueue.remove(quotaResource);
+        requestQueueIterator.remove();
       }
     }
   }
