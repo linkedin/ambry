@@ -419,8 +419,11 @@ class SimpleOperationTracker implements OperationTracker {
     }
     if (hasFailedOnOriginatingDcNotFound()) {
       logger.info(
-          "Terminating {} on {} due to Not_Found failure. OriginatingDC Not_Found count: {}, failure threshold: {}",
-          routerOperation, partitionId, originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold);
+          "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {},"
+              + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
+              + "diskReplicaSuccessTarget: {}, allReplicaCount: {}", routerOperation.name(), partitionId,
+          originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount,
+          originatingDcTotalReplicaCount, diskReplicaSuccessTarget, allReplicaCount);
       routerMetrics.failedOnOriginatingDcNotFoundCount.inc();
       return true;
     }
@@ -429,8 +432,10 @@ class SimpleOperationTracker implements OperationTracker {
     // failures responses other than not found.
     if (hasFailedOnCrossColoNotFound()) {
       logger.info(
-          "Terminating {} on {} due to disk down count and total Not_Found count. DiskDownCount: {}, TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}",
-          routerOperation, partitionId, diskDownCount, totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget);
+          "Terminating {} on {} due to disk down count and total Not_Found. CrossColoEnabled: {}, DiskDownCount: {},"
+              + "TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {},"
+              + "allReplicaCount: {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
+          totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount);
       routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
     }
