@@ -222,14 +222,22 @@ public class NonBlockingRouterTestBase {
   }
 
   /**
+   * Setup test suite to perform a {@link Router#putBlob} call using random account and container ids.
+   */
+  protected void setOperationParams(int putContentSize, long ttlSecs) {
+    setOperationParams(putContentSize, ttlSecs, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+  }
+
+  /**
    * Setup test suite to perform a {@link Router#putBlob} call.
    * @param putContentSize the size of the content to put
    * @param ttlSecs the TTL in seconds for the blob.
+   * @param accountId account id for the blob.
+   * @param containerId container id for the blob.
    */
-  protected void setOperationParams(int putContentSize, long ttlSecs) {
+  protected void setOperationParams(int putContentSize, long ttlSecs, short accountId, short containerId) {
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, ttlSecs,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption, null, null,
-        null);
+        accountId, containerId, testEncryption, null, null, null);
     putUserMetadata = new byte[USER_METADATA_SIZE];
     random.nextBytes(putUserMetadata);
     putContent = new byte[putContentSize];

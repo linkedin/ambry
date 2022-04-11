@@ -54,7 +54,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
   private static final long DEFAULT_WCU_FOR_NEW_RESOURCE = 0;
   protected final CapacityUnit feQuota; // Ambry frontend's CU capacity.
   protected final AtomicReference<CapacityUnit> feUsage; // Ambry frontend's CU usage.
-  private final ConcurrentMap<String, CapacityUnit> cuQuota; // in memory quota for all resources.
+  protected final ConcurrentMap<String, CapacityUnit> cuQuota; // in memory quota for all resources.
   protected final ConcurrentMap<String, CapacityUnit> cuUsage; // in memory quota usage for all resources.
   private final ScheduledExecutorService usageRefresher;
   private final long aggregationWindowsInSecs;

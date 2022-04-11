@@ -41,10 +41,10 @@ import java.util.concurrent.Callable;
 public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   private final static List<QuotaName> SUPPORTED_QUOTA_NAMES =
       Collections.unmodifiableList(Arrays.asList(QuotaName.READ_CAPACITY_UNIT, QuotaName.WRITE_CAPACITY_UNIT));
-  private final static int MAX_USAGE_PERCENTAGE_ALLOWED = 100;
+  protected final static int MAX_USAGE_PERCENTAGE_ALLOWED = 100;
   private final QuotaSource quotaSource;
   private final float maxFrontendCuUsageToAllowExceed;
-  private final long throttleRetryAfterMs;
+  protected final long throttleRetryAfterMs;
 
   /**
    * Constructor for {@link AmbryCUQuotaEnforcer}.
@@ -118,7 +118,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
    * @param quotaName {@link QuotaName} object.
    * @return QuotaRecommendation object.
    */
-  private QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName) {
+  protected QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName) {
     QuotaAction quotaAction = (usage >= MAX_USAGE_PERCENTAGE_ALLOWED) ? QuotaAction.DELAY : QuotaAction.ALLOW;
     return new QuotaRecommendation(quotaAction, usage, quotaName,
         (quotaAction == QuotaAction.DELAY) ? throttleRetryAfterMs : QuotaRecommendation.NO_THROTTLE_RETRY_AFTER_MS);

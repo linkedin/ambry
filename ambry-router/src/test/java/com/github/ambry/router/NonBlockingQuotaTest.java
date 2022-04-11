@@ -14,29 +14,46 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaMetrics;
+import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaResource;
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
+import com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcer;
+import com.github.ambry.quota.capacityunit.CapacityUnit;
+import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.UnsupportedEncodingException;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -44,6 +61,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -56,22 +76,25 @@ import static org.junit.Assert.*;
 
 
 /**
- * Class to test the {@link NonBlockingRouter} with quota callbacks.
+ * Class to test the {@link NonBlockingRouter} with {@link com.github.ambry.quota.PostProcessQuotaChargeCallback}.
  */
 @RunWith(Parameterized.class)
-public class NonBlockingRouterPostProcessQuotaCallbackTest extends NonBlockingRouterTestBase {
-  private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterPostProcessQuotaCallbackTest.class);
+public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
+  private static final Logger logger = LoggerFactory.getLogger(NonBlockingQuotaTest.class);
+  private final QuotaMode quotaMode;
   private final long quotaAccountingSize = 1024L;
 
   /**
    * Initialize parameters common to all tests.
    * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise.
    * @param metadataContentVersion the metadata content version to test with.
+   * @param quotaMode {@link QuotaMode} object.
    * @throws Exception if initialization fails.
    */
-  public NonBlockingRouterPostProcessQuotaCallbackTest(boolean testEncryption, int metadataContentVersion)
+  public NonBlockingQuotaTest(boolean testEncryption, int metadataContentVersion, QuotaMode quotaMode)
       throws Exception {
     super(testEncryption, metadataContentVersion, false);
+    this.quotaMode = quotaMode;
   }
 
   /**
@@ -80,11 +103,31 @@ public class NonBlockingRouterPostProcessQuotaCallbackTest extends NonBlockingRo
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(
-        new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2},
-            {false, MessageFormatRecord.Metadata_Content_Version_V3},
-            {true, MessageFormatRecord.Metadata_Content_Version_V2},
-            {true, MessageFormatRecord.Metadata_Content_Version_V3}});
+    return Arrays.asList(new Object[][]{{true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING},
+        {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.THROTTLING},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.THROTTLING},
+        {true, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING},
+        {true, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING},
+        {false, MessageFormatRecord.Metadata_Content_Version_V2, QuotaMode.TRACKING},
+        {false, MessageFormatRecord.Metadata_Content_Version_V3, QuotaMode.TRACKING}});
+  }
+
+  /**
+   * Build the default quota enforcer and source pair json.
+   * @return JSONObject representing the pair json.
+   */
+  private static String buildQuotaEnforcerSourceInfoPair() {
+    JSONObject jsonObject = new JSONObject();
+    JSONArray jsonArray = new JSONArray();
+    jsonObject.put(QuotaConfig.ENFORCER_STR, "com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcerFactory");
+    jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.router.TestCUQuotaSourceFactory");
+    jsonArray.put(jsonObject);
+    jsonObject = new JSONObject();
+    jsonObject.put(QuotaConfig.ENFORCER_STR, "com.github.ambry.router.RejectingQuotaEnforcerFactory");
+    jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.router.TestCUQuotaSourceFactory");
+    jsonArray.put(jsonObject);
+    return new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString();
   }
 
   /**
@@ -271,6 +314,105 @@ public class NonBlockingRouterPostProcessQuotaCallbackTest extends NonBlockingRo
   }
 
   /**
+   * Test for {@link com.github.ambry.quota.PreProcessQuotaChargeCallback}.
+   */
+  @Test
+  public void testRouterWithPreProcessQuotaCallback() throws Exception {
+    try {
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty(QuotaConfig.BANDWIDTH_THROTTLING_FEATURE_ENABLED, "true");
+      properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
+          buildQuotaEnforcerSourceInfoPair());
+      properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
+      properties.setProperty(QuotaConfig.CU_QUOTA_AGGREGATION_WINDOW_IN_SECS, "86400");
+      properties.setProperty(RouterConfig.OPERATION_CONTROLLER, QuotaAwareOperationController.class.getCanonicalName());
+      setRouter(properties, mockServerLayout, new LoggingNotificationSystem());
+      assertExpectedThreadCounts(2, 1);
+      AtomicInteger listenerCalledCount = new AtomicInteger(0);
+
+      QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
+      Account account = accountService.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
+      ChargeTesterQuotaManager chargeTesterQuotaManager =
+          new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+              accountService, null, new QuotaMetrics(new MetricRegistry()), listenerCalledCount);
+      chargeTesterQuotaManager.init();
+      TestCUQuotaSource quotaSource = chargeTesterQuotaManager.getTestCuQuotaSource();
+      RestRequest restRequest = createRestRequest(RestMethod.POST.name(), null, account, account.getAllContainers().iterator().next());
+      QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
+      int blobSize = 3000;
+      setOperationParams(blobSize, TTL_SECS, account.getId(), account.getAllContainers().iterator().next().getId());
+      quotaSource.getCuQuota().put(String.valueOf(account.getId()), new CapacityUnit(8, 8));
+      quotaSource.getCuUsage().put(String.valueOf(account.getId()), new CapacityUnit());
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
+              quotaChargeCallback).get();
+        CapacityUnit quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
+        Assert.assertEquals(8, quotaUsage.getWcu());
+        Assert.assertEquals(0, quotaUsage.getRcu());
+        RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+        restRequest = createRestRequest(RestMethod.GET.name(), null, account, account.getAllContainers().iterator().next());
+        quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
+        router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+            .get()
+            .getBlobDataChannel()
+            .readInto(retainingAsyncWritableChannel, null)
+            .get();
+        // read out all the chunks.
+        retainingAsyncWritableChannel.consumeContentAsInputStream().close();
+        quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
+        Assert.assertEquals(8, quotaUsage.getWcu());
+        Assert.assertEquals(8, quotaUsage.getRcu());
+        retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+        try {
+          router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
+          if(quotaMode == QuotaMode.THROTTLING) {
+            fail("getBlob should throw exception if request is be rejected by an enforcer and quota mode is throttling.");
+          }
+      } catch (ExecutionException ex) {
+        if(quotaMode == QuotaMode.TRACKING) {
+          fail("getBlob should throw exception if request is be rejected by an enforcer and quota mode is tracking.");
+        } else {
+          Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException) ex.getCause()).getErrorCode());
+        }
+      }
+      retainingAsyncWritableChannel.consumeContentAsInputStream().close();
+    } finally {
+      if (router != null) {
+        router.close();
+        assertExpectedThreadCounts(0, 0);
+
+        //submission after closing should return a future that is already done.
+        assertClosed();
+      }
+    }
+  }
+
+  /**
+   * Method to easily create {@link RestRequest} objects containing a specific request, account and container.
+   * @param restMethod string representation of the rest method.
+   * @param uri string representation of the desired URI.
+   * @param account {@link Account} object associated with the request.
+   * @param container {@link Container} object associated with the request.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  private RestRequest createRestRequest(String restMethod, String uri, Account account, Container container)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException, RestServiceException {
+    JSONObject request = new JSONObject();
+    request.put(MockRestRequest.REST_METHOD_KEY, (restMethod == null) ? JSONObject.NULL : restMethod);
+    request.put(MockRestRequest.URI_KEY, ((uri == null) ? JSONObject.NULL : uri));
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, ((account == null) ? JSONObject.NULL : account));
+    headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, ((container == null) ? JSONObject.NULL : container));
+    headers.putOpt(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse("/", Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    return new MockRestRequest(request, null);
+  }
+
+  /**
    * {@link AmbryQuotaManager} extension to test behavior with default implementation.
    */
   static class ChargeTesterQuotaManager extends AmbryQuotaManager {
@@ -298,6 +440,18 @@ public class NonBlockingRouterPostProcessQuotaCallbackTest extends NonBlockingRo
         boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException {
       chargeCalledCount.incrementAndGet();
       return super.chargeAndRecommend(restRequest, requestCostMap, shouldCheckIfQuotaExceedAllowed, forceCharge);
+    }
+
+    /**
+     * @return TestCUQuotaSource object from the {@link QuotaEnforcer}s.
+     */
+    public TestCUQuotaSource getTestCuQuotaSource() {
+      for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
+        if (quotaEnforcer instanceof AmbryCUQuotaEnforcer && !(quotaEnforcer instanceof RejectingQuotaEnforcer)) {
+          return (TestCUQuotaSource) quotaEnforcer.getQuotaSource();
+        }
+      }
+      throw new IllegalStateException("could not find TestCUQuotaSource in QuotaManager.");
     }
   }
 }
