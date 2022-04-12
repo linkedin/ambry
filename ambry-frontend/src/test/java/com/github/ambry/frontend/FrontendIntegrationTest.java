@@ -448,9 +448,9 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
   public void stitchedUploadTest() throws Exception {
     Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container container = account.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
-    Pair<List<String>, byte[]> idsAndContent = uploadDataChunksAndVerify(account, container, 50, 50, 50, 50, 17);
+    Pair<List<String>, byte[]> idsAndContent = uploadDataChunksAndVerify(account, container, null, 50, 50, 50, 50, 17);
     stitchBlobAndVerify(account, container, idsAndContent.getFirst(), idsAndContent.getSecond(), 217);
-    idsAndContent = uploadDataChunksAndVerify(account, container, 167);
+    idsAndContent = uploadDataChunksAndVerify(account, container, FRONTEND_CONFIG.chunkUploadMaxChunkTtlSecs, 167);
     stitchBlobAndVerify(account, container, idsAndContent.getFirst(), idsAndContent.getSecond(), 167);
   }
 
@@ -594,18 +594,20 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
    * Upload data chunks using chunk upload signed URL.
    * @param account the {@link Account} to upload into.
    * @param container the {@link Container} to upload into.
+   * @param chunkBlobTtl
    * @param chunkSizes The sizes for each data chunk to upload.
    * @return the list of signed chunk IDs for the uploaded chunks and an array containing the concatenated content of
    *         the data chunks.
    * @throws Exception
    */
-  private Pair<List<String>, byte[]> uploadDataChunksAndVerify(Account account, Container container, int... chunkSizes)
+  private Pair<List<String>, byte[]> uploadDataChunksAndVerify(Account account, Container container, Long chunkBlobTtl,
+      int... chunkSizes)
       throws Exception {
     IdSigningService idSigningService = new AmbryIdSigningService();
     HttpHeaders chunkUploadHeaders = new DefaultHttpHeaders();
     chunkUploadHeaders.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
     chunkUploadHeaders.add(RestUtils.Headers.CHUNK_UPLOAD, "true");
-    setAmbryHeadersForPut(chunkUploadHeaders, TTL_SECS, !container.isCacheable(), "chunkUploader",
+    setAmbryHeadersForPut(chunkUploadHeaders, chunkBlobTtl, !container.isCacheable(), "chunkUploader",
         "application/octet-stream", "stitchedUploadTest", account.getName(), container.getName());
 
     // POST
@@ -640,8 +642,12 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
       HttpHeaders expectedGetHeaders = new DefaultHttpHeaders().add(chunkUploadHeaders);
       // Use signed ID and blob ID for GET request
       expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
-      // Blob TTL for chunk upload is fixed
-      expectedGetHeaders.set(RestUtils.Headers.TTL, FRONTEND_CONFIG.chunkUploadInitialChunkTtlSecs);
+      // Blob TTL for chunk upload default is chunkUploadInitialChunkTtlSecs if x-ambry-ttl == null.
+      if (chunkBlobTtl == null) {
+        expectedGetHeaders.set(RestUtils.Headers.TTL, FRONTEND_CONFIG.chunkUploadInitialChunkTtlSecs);
+      } else {
+        expectedGetHeaders.set(RestUtils.Headers.TTL, chunkBlobTtl);
+      }
       expectedGetHeaders.set(RestUtils.Headers.LIFE_VERSION, "0");
       for (String id : new String[]{signedId, idAndMetadata.getFirst()}) {
         getBlobAndVerify(id, null, GetOption.None, false, expectedGetHeaders, !container.isCacheable(), content,

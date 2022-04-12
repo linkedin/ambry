@@ -32,6 +32,7 @@ public class FrontendConfig {
   // Property keys
   public static final String URL_SIGNER_ENDPOINTS = PREFIX + "url.signer.endpoints";
   public static final String CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY = PREFIX + "chunk.upload.initial.chunk.ttl.secs";
+  public static final String CHUNK_UPLOAD_MAX_CHUNK_TTL_SECS_KEY = PREFIX + "chunk.upload.max.chunk.ttl.secs";
   public static final String FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY =
       PREFIX + "fail.if.ttl.required.but.not.provided";
   public static final String MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY =
@@ -192,11 +193,18 @@ public class FrontendConfig {
   public final GetOption defaultRouterGetOption;
 
   /**
-   * The blob TTL in seconds to use for data chunks uploaded in a stitched upload session.
+   * The default blob TTL in seconds to use for data chunks uploaded in a stitched upload session.
    */
   @Config(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY)
   @Default("28 * 24 * 60 * 60")
   public final long chunkUploadInitialChunkTtlSecs;
+
+  /**
+   * Maximum value of the blob TTL in seconds to use for data chunks uploaded in a stitched upload session.
+   */
+  @Config(CHUNK_UPLOAD_MAX_CHUNK_TTL_SECS_KEY)
+  @Default("90 * 24 * 60 * 60")
+  public final long chunkUploadMaxChunkTtlSecs;
 
   @Config(FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY)
   @Default("false")
@@ -301,6 +309,7 @@ public class FrontendConfig {
         GetOption.valueOf(verifiableProperties.getString("frontend.default.router.get.option", GetOption.None.name()));
     chunkUploadInitialChunkTtlSecs =
         verifiableProperties.getLong(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY, TimeUnit.DAYS.toSeconds(28));
+    chunkUploadMaxChunkTtlSecs = verifiableProperties.getLong(CHUNK_UPLOAD_MAX_CHUNK_TTL_SECS_KEY, TimeUnit.DAYS.toSeconds(90));
     failIfTtlRequiredButNotProvided = verifiableProperties.getBoolean(FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, false);
     maxAcceptableTtlSecsIfTtlRequired = verifiableProperties.getIntInRange(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY,
         (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);

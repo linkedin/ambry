@@ -205,7 +205,11 @@ public class PostBlobHandlerTest {
     // invalid TTL
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, Utils.Infinite_Time,
         restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs));
+    // TTL > default chunkUploadInitialChunkTtlSecs
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs + 1,
+        null);
+    // TTL > chunkUploadMaxChunkTtlSecs
+    doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadMaxChunkTtlSecs + 1,
         restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs));
     // ensure that the chunk upload request requirements are not enforced for non chunk uploads.
     doChunkUploadTest(1024, false, null, null, Utils.Infinite_Time, null);
