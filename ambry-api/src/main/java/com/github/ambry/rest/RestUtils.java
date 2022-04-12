@@ -202,10 +202,6 @@ public class RestUtils {
      */
     public static final String URL_TTL = "x-ambry-url-ttl-secs";
     /**
-     * The TTL (in secs) of the chunk upload.
-     */
-    public static final String CHUNK_UPLOAD_TTL = "x-ambry-chunk-upload-ttl";
-    /**
      * The maximum size of the blob that can be uploaded using the URL.
      */
     public static final String MAX_UPLOAD_SIZE = "x-ambry-max-upload-size";
@@ -460,7 +456,7 @@ public class RestUtils {
   }
 
   /**
-   * An util method to get ttl from arguments associated with a request. CHUNK_UPLOAD_TTL takes precedence over TTL.
+   * An util method to get ttl from arguments associated with a request.
    * @param args the arguments associated with the request. Cannot be {@code null}.
    * @return the ttl extracted from the arguments.
    * @throws RestServiceException if required arguments aren't present or if they aren't in the format expected.
@@ -468,21 +464,12 @@ public class RestUtils {
   public static long getTtlFromRequestHeader(Map<String, Object> args) throws RestServiceException {
     long ttl = Utils.Infinite_Time;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
-    Long chunkUploadTtlFromHeader = getLongHeader(args, Headers.CHUNK_UPLOAD_TTL, false);
-    if (chunkUploadTtlFromHeader != null) {
-      if (chunkUploadTtlFromHeader < -1) {
-        throw new RestServiceException(Headers.CHUNK_UPLOAD_TTL + "[" + chunkUploadTtlFromHeader + "] is not valid (has to be >= -1)",
+    if (ttlFromHeader != null) {
+      if (ttlFromHeader < -1) {
+        throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",
             RestServiceErrorCode.InvalidArgs);
       }
-      ttl = chunkUploadTtlFromHeader;
-    } else {
-      if (ttlFromHeader != null) {
-        if (ttlFromHeader < -1) {
-          throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",
-              RestServiceErrorCode.InvalidArgs);
-        }
-        ttl = ttlFromHeader;
-      }
+      ttl = ttlFromHeader;
     }
     return ttl;
   }

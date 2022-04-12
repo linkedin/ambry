@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.UUID;
 
 
+
 /**
  * Default implementation of {@link UrlSigningService} that currently only converts all headers that start with
  * "x-ambry-" into query parameters and does not actually sign the URL.
@@ -139,7 +140,9 @@ public class AmbryUrlSigningService implements UrlSigningService {
         maxUploadSize = chunkUploadMaxChunkSize;
         // They also have a non-optional blob TTL to ensure that chunks that were not stitched within a reasonable time
         // span are cleaned up.
-        argsForUrl.put(RestUtils.Headers.TTL, chunkUploadInitialChunkTtlSecs);
+        if (RestUtils.getLongHeader(args, RestUtils.Headers.TTL, false) == null) {
+          argsForUrl.put(RestUtils.Headers.TTL, chunkUploadInitialChunkTtlSecs);
+        }
         argsForUrl.put(RestUtils.Headers.CHUNK_UPLOAD, true);
         argsForUrl.put(RestUtils.Headers.SESSION, UUID.randomUUID().toString());
       }
