@@ -59,7 +59,8 @@ public class QuotaAwareOperationControllerTest {
   private static final Port PORT = new Port(80, PortType.PLAINTEXT);
   private static final SendWithCorrelationId SEND = Mockito.mock(SendWithCorrelationId.class);
   private static final ReplicaId REPLICA_ID = Mockito.mock(ReplicaId.class);
-  private static final QuotaResource TEST_QUOTA_RESOURCE = new QuotaResource("test", QuotaResourceType.ACCOUNT);
+  private static final QuotaResource TEST_QUOTA_RESOURCE1 = new QuotaResource("test1", QuotaResourceType.ACCOUNT);
+  private static final QuotaResource TEST_QUOTA_RESOURCE2 = new QuotaResource("test2", QuotaResourceType.ACCOUNT);
 
   private final PutManager putManager = Mockito.mock(PutManager.class);
   private final GetManager getManager = Mockito.mock(GetManager.class);
@@ -128,7 +129,7 @@ public class QuotaAwareOperationControllerTest {
 
   @Test
   public void testSimpleDrainageEmpty() {
-    TestChargeable chargeable = new TestChargeable(QuotaAction.ALLOW, TEST_QUOTA_RESOURCE, quotaMethod);
+    TestChargeable chargeable = new TestChargeable(QuotaAction.ALLOW, TEST_QUOTA_RESOURCE1, quotaMethod);
     doAnswer((Answer<Void>) invocation -> {
       List<RequestInfo> requestsToSend = (List<RequestInfo>) invocation.getArguments()[0];
       requestsToSend.add(new RequestInfo(HOST, PORT, SEND, REPLICA_ID, chargeable));
@@ -141,27 +142,42 @@ public class QuotaAwareOperationControllerTest {
 
   @Test
   public void testSimpleDrainageOutOfQuota() {
-    TestChargeable testChargeable = new TestChargeable(
+    TestChargeable testChargeable1 = new TestChargeable(
         Arrays.asList(QuotaAction.DELAY, QuotaAction.DELAY, QuotaAction.ALLOW, QuotaAction.DELAY, QuotaAction.DELAY,
-            QuotaAction.ALLOW), TEST_QUOTA_RESOURCE, quotaMethod);
+            QuotaAction.ALLOW), TEST_QUOTA_RESOURCE1, quotaMethod);
     doAnswer((Answer<Void>) invocation -> {
       List<RequestInfo> requestsToSend = (List<RequestInfo>) invocation.getArguments()[0];
-      requestsToSend.add(new RequestInfo(HOST, PORT, SEND, REPLICA_ID, testChargeable));
+      requestsToSend.add(new RequestInfo(HOST, PORT, SEND, REPLICA_ID, testChargeable1));
       return null;
     }).when(putManager).poll(requestsToSend, requestsToDrop);
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
     assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
-    assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).get(TEST_QUOTA_RESOURCE).size());
-    testChargeable.verifyCalls(2, 1);
+    assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).get(TEST_QUOTA_RESOURCE1).size());
+    testChargeable1.verifyCalls(2, 1);
 
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
     assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
-    assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).get(TEST_QUOTA_RESOURCE).size());
-    testChargeable.verifyCalls(5, 2);
+    assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).get(TEST_QUOTA_RESOURCE1).size());
+    testChargeable1.verifyCalls(5, 2);
 
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
     assertEquals(0, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
-    testChargeable.verifyCalls(6, 2);
+    testChargeable1.verifyCalls(6, 2);
+  }
+
+  @Test
+  public void testSimpleDrainageOutOfQuotaMultipleAccounts() {
+    TestChargeable testChargeable1 = new TestChargeable(QuotaAction.ALLOW, TEST_QUOTA_RESOURCE1, quotaMethod);
+    TestChargeable testChargeable2 = new TestChargeable(QuotaAction.ALLOW, TEST_QUOTA_RESOURCE2, quotaMethod);
+    doAnswer((Answer<Void>) invocation -> {
+      List<RequestInfo> requestsToSend = (List<RequestInfo>) invocation.getArguments()[0];
+      requestsToSend.add(new RequestInfo(HOST, PORT, SEND, REPLICA_ID, testChargeable1));
+      requestsToSend.add(new RequestInfo(HOST, PORT, SEND, REPLICA_ID, testChargeable2));
+      return null;
+    }).when(putManager).poll(requestsToSend, requestsToDrop);
+
+    quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
+    assertEquals(0, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
   }
 
   @Test
@@ -169,7 +185,7 @@ public class QuotaAwareOperationControllerTest {
     doAnswer((Answer<Void>) invocation -> {
       List<RequestInfo> requestsToSend = (List<RequestInfo>) invocation.getArguments()[0];
       requestsToSend.add(new RequestInfo(HOST, PORT, SEND, REPLICA_ID,
-          new TestChargeable(QuotaAction.ALLOW, TEST_QUOTA_RESOURCE, quotaMethod)));
+          new TestChargeable(QuotaAction.ALLOW, TEST_QUOTA_RESOURCE1, quotaMethod)));
       return null;
     }).when(putManager).poll(requestsToSend, requestsToDrop);
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
