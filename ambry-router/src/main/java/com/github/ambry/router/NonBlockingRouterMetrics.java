@@ -690,6 +690,16 @@ public class NonBlockingRouterMetrics {
     operationControllerQueueSize = () -> Math.addExact(readQueueSizeSupplier.get(), writeQueueSizeSupplier.get());
     readQueuedQuotaResourceCount = () -> readQueue.size();
     writeQueuedQuotaResourceCount = () -> writeQueue.size();
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "OperationControllerReadQueueSize"),
+        operationControllerReadQueueSize);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "OperationControllerWriteQueueSize"),
+        operationControllerWriteQueueSize);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "OperationControllerQueueSize"),
+        operationControllerQueueSize);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "ReadQueuedQuotaResourceCount"),
+        readQueuedQuotaResourceCount);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "WriteQueuedQuotaResourceCount"),
+        writeQueuedQuotaResourceCount);
   }
 
   /**
