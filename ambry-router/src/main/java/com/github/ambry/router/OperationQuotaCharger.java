@@ -98,6 +98,7 @@ public class OperationQuotaCharger implements Chargeable {
   @Override
   public QuotaResource getQuotaResource() {
     if (Objects.isNull(quotaChargeCallback)) {
+      LOGGER.warn("quota charge callback is null for operation: {}", operationName);
       return null;
     }
     try {
@@ -116,6 +117,10 @@ public class OperationQuotaCharger implements Chargeable {
 
   @Override
   public QuotaMethod getQuotaMethod() {
+    if (Objects.isNull(quotaChargeCallback)) {
+      LOGGER.warn("quota charge callback is null for operation: {}", operationName);
+      return null;
+    }
     return quotaChargeCallback.getQuotaMethod();
   }
 
