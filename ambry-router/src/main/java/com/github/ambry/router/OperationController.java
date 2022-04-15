@@ -645,7 +645,7 @@ class BackgroundDeleter extends OperationController {
       super.deleteBlob(blobIdStr, serviceId, futureResult, (Void result, Exception e) -> {
         callback.onCompletion(result, e);
         concurrentBackgroundDeleteOperationCount.decrementAndGet();
-      }, attemptChunkDeletes, null);
+      }, attemptChunkDeletes, quotaChargeCallback);
       return null;
     };
     if (routerConfig.routerBackgroundDeleterMaxConcurrentOperations > 0) {

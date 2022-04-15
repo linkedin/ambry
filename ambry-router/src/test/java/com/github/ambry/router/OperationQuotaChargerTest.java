@@ -23,6 +23,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -85,6 +86,28 @@ public class OperationQuotaChargerTest {
     Assert.assertNull("getQuotaResource should return null if quotaChargeCallback is null.",
         operationQuotaCharger.getQuotaResource());
     Assert.assertEquals(1, routerMetrics.unknownExceptionInChargeableRate.getCount());
+  }
+
+  @Test
+  public void testGetQuotaMethod() throws Exception {
+    ClusterMap clusterMap = new MockClusterMap();
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
+    // getQuotaResource should return null if quotaChargeCallback is null.
+    OperationQuotaCharger operationQuotaCharger =
+        new OperationQuotaCharger(null, BLOBID, GetOperation.class.getSimpleName(), routerMetrics);
+    Assert.assertNull("getQuotaResource should return null if quotaChargeCallback is null.",
+        operationQuotaCharger.getQuotaMethod());
+
+    QuotaChargeCallback quotaChargeCallback = Mockito.mock(QuotaChargeCallback.class);
+    Mockito.when(quotaChargeCallback.getQuotaMethod()).thenReturn(QuotaMethod.READ);
+    operationQuotaCharger =
+        new OperationQuotaCharger(quotaChargeCallback, BLOBID, GetOperation.class.getSimpleName(), routerMetrics);
+    Assert.assertEquals(QuotaMethod.READ, operationQuotaCharger.getQuotaMethod());
+
+    Mockito.when(quotaChargeCallback.getQuotaMethod()).thenReturn(QuotaMethod.WRITE);
+    operationQuotaCharger =
+        new OperationQuotaCharger(quotaChargeCallback, BLOBID, GetOperation.class.getSimpleName(), routerMetrics);
+    Assert.assertEquals(QuotaMethod.WRITE, operationQuotaCharger.getQuotaMethod());
   }
 
   private void testCheckAndCharge(boolean shouldCheckExceedAllowed) throws Exception {
