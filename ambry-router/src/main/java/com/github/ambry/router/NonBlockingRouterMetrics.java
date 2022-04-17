@@ -680,9 +680,10 @@ public class NonBlockingRouterMetrics {
    * Initialize metrics related to read and write queue size of {@link QuotaAwareOperationController}.
    * @param readQueue {@link Map} of {@link LinkedList} of {@link RequestInfo} representing read queue.
    * @param writeQueue {@link Map} of {@link LinkedList} of {@link RequestInfo} representing write queue.
+   * @param suffix the suffix to associate with the metric names of this OperationController.
    */
   public void initializeRequestQueueMetrics(Map<QuotaResource, LinkedList<RequestInfo>> readQueue,
-      Map<QuotaResource, LinkedList<RequestInfo>> writeQueue) {
+      Map<QuotaResource, LinkedList<RequestInfo>> writeQueue, String suffix) {
     Supplier<Integer> readQueueSizeSupplier = () -> readQueue.entrySet().stream().flatMap(entry -> Stream.of(entry.getValue())).map(l-> l.size()).reduce(0, Integer::sum);
     Supplier<Integer> writeQueueSizeSupplier = () -> writeQueue.entrySet().stream().flatMap(entry -> Stream.of(entry.getValue())).map(l-> l.size()).reduce(0, Integer::sum);
     operationControllerReadQueueSize = () -> readQueueSizeSupplier.get();
@@ -690,16 +691,16 @@ public class NonBlockingRouterMetrics {
     operationControllerQueueSize = () -> Math.addExact(readQueueSizeSupplier.get(), writeQueueSizeSupplier.get());
     readQueuedQuotaResourceCount = () -> readQueue.size();
     writeQueuedQuotaResourceCount = () -> writeQueue.size();
-    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "OperationControllerReadQueueSize"),
-        operationControllerReadQueueSize);
-    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "OperationControllerWriteQueueSize"),
-        operationControllerWriteQueueSize);
-    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "OperationControllerQueueSize"),
-        operationControllerQueueSize);
-    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "ReadQueuedQuotaResourceCount"),
-        readQueuedQuotaResourceCount);
-    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class, "WriteQueuedQuotaResourceCount"),
-        writeQueuedQuotaResourceCount);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class,
+        String.format("OperationController-%s-ReadQueueSize", suffix)), operationControllerReadQueueSize);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class,
+        String.format("OperationController-%s-WriteQueueSize", suffix)), operationControllerWriteQueueSize);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class,
+        String.format("OperationController-%s-QueueSize", suffix)), operationControllerQueueSize);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class,
+        String.format("OperationController-%s-ReadQueuedQuotaResourceCount", suffix)), readQueuedQuotaResourceCount);
+    metricRegistry.register(MetricRegistry.name(QuotaAwareOperationController.class,
+        String.format("OperationController-%s-WriteQueuedQuotaResourceCount", suffix)), writeQueuedQuotaResourceCount);
   }
 
   /**

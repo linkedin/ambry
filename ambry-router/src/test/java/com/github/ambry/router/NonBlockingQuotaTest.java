@@ -388,6 +388,41 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test that multiple scaling units can be instantiated, exercised and closed.
+   */
+  @Test
+  public void testMultipleScalingUnit() throws Exception {
+    try {
+      final int SCALING_UNITS = 3;
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.scaling.unit.count", Integer.toString(SCALING_UNITS));
+      properties.setProperty(QuotaConfig.BANDWIDTH_THROTTLING_FEATURE_ENABLED, "true");
+      properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
+          buildQuotaEnforcerSourceInfoPair());
+      properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
+      properties.setProperty(QuotaConfig.CU_QUOTA_AGGREGATION_WINDOW_IN_SECS, "86400");
+      properties.setProperty(RouterConfig.OPERATION_CONTROLLER, QuotaAwareOperationController.class.getCanonicalName());
+      setRouter(properties, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem());
+      assertExpectedThreadCounts(SCALING_UNITS + 1, SCALING_UNITS);
+
+      // Submit a few jobs so that all the scaling units get exercised.
+      for (int i = 0; i < SCALING_UNITS * 10; i++) {
+        setOperationParams();
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+      }
+    } finally {
+      if (router != null) {
+        router.close();
+        assertExpectedThreadCounts(0, 0);
+
+        //submission after closing should return a future that is already done.
+        setOperationParams();
+        assertClosed();
+      }
+    }
+  }
+
+  /**
    * Method to easily create {@link RestRequest} objects containing a specific request, account and container.
    * @param restMethod string representation of the rest method.
    * @param uri string representation of the desired URI.
