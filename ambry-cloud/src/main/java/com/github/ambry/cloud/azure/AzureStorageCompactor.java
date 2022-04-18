@@ -23,6 +23,7 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -38,6 +39,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.cloud.azure.AzureCloudDestination.*;
 
 
 /**
@@ -258,10 +261,10 @@ public class AzureStorageCompactor {
   List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
       int maxEntries) throws CloudStorageException {
     try {
-      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries);
-    } catch (CosmosException cex) {
-      throw AzureCloudDestination.toCloudStorageException(
-          "Failed to query deleted blobs for partition " + partitionPath, cex, azureMetrics);
+      return cosmosDataAccessor.getDeadBlobs(partitionPath, fieldName, startTime, endTime, maxEntries).join();
+    } catch (Exception e) {
+      throw toCloudStorageException("Failed to query deleted blobs for partition " + partitionPath,
+          Utils.extractFutureExceptionCause(e), null);
     }
   }
 
@@ -275,10 +278,18 @@ public class AzureStorageCompactor {
     // TODO: change return type to POJO with getters and serde methods
     String payload = requestAgent.doWithRetries(() -> {
       ByteArrayOutputStream baos = new ByteArrayOutputStream(CHECKPOINT_BUFFER_SIZE);
-      boolean hasCheckpoint =
-          azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, baos, false);
-      return hasCheckpoint ? baos.toString() : null;
+      boolean hasCheckpoint;
+      try {
+        hasCheckpoint =
+            azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, baos, false)
+                .join();
+        return hasCheckpoint ? baos.toString() : null;
+      } catch (Exception e) {
+        throw toCloudStorageException("Error downloading compaction check point for partition" + partitionPath,
+            Utils.extractFutureExceptionCause(e), null);
+      }
     }, "Download compaction checkpoint", partitionPath);
+
     if (payload == null) {
       return new HashMap(emptyCheckpoints);
     }
@@ -318,8 +329,13 @@ public class AzureStorageCompactor {
       String json = objectMapper.writeValueAsString(checkpoints);
       ByteArrayInputStream bais = new ByteArrayInputStream(json.getBytes());
       requestAgent.doWithRetries(() -> {
-        azureBlobDataAccessor.uploadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, bais);
-        return null;
+        try {
+          azureBlobDataAccessor.uploadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, bais).join();
+          return null;
+        } catch (Exception e) {
+          throw toCloudStorageException("Error updating compaction progress for partition" + partitionPath,
+              Utils.extractFutureExceptionCause(e), null);
+        }
       }, "Update compaction progress", partitionPath);
       logger.info("Marked compaction of partition {} complete up to {} {}", partitionPath, fieldName,
           new Date(progressTime));

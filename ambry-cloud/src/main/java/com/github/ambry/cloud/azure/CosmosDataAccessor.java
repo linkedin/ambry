@@ -60,6 +60,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -230,36 +232,53 @@ public class CosmosDataAccessor {
   /**
    * Upsert the blob metadata document in the CosmosDB collection.
    * @param blobMetadata the blob metadata document.
-   * @return the {@link CosmosItemResponse} containing {@link CloudBlobMetadata} returned by the operation, if successful.
+   * @return a {@link CompletableFuture} that will eventually contain either the {@link CloudBlobMetadata} returned by
+   *         the operation, if successful or an exception if an error occurred.
    * @throws CosmosException if the operation failed.
    */
-  CosmosItemResponse<CloudBlobMetadata> upsertMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
-    return executeCosmosAction(
-        () -> cosmosAsyncContainer.upsertItem(blobMetadata, new PartitionKey(blobMetadata.getPartitionId()),
-            new CosmosItemRequestOptions()).block(), azureMetrics.documentCreateTime);
+  CompletableFuture<CloudBlobMetadata> upsertMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
+
+    CompletableFuture<CloudBlobMetadata> completableFuture = new CompletableFuture<>();
+    Timer.Context operationTimer = azureMetrics.documentCreateTime.time();
+    return cosmosAsyncContainer.upsertItem(blobMetadata, getPartitionKey(blobMetadata.getPartitionId()),
+        new CosmosItemRequestOptions()).toFuture().handle((response, throwable) -> {
+      operationTimer.stop();
+      if (throwable != null) {
+        throw new CompletionException(throwable);
+      } else {
+        completableFuture.complete(response.getItem());
+        return response.getItem();
+      }
+    });
   }
 
   /**
    * Delete the blob metadata document in the CosmosDB collection, if it exists.
    * @param blobMetadata the blob metadata document to delete.
-   * @return {@code true} if the record was deleted, {@code false} if it was not found.
-   * @throws CosmosException if the operation failed.
+   * @return a {@link CompletableFuture} that will eventually contain {@link Boolean} flag indicating if the record was
+   *         deleted, or an exception if an error occurred.
    */
-  boolean deleteMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
+  CompletableFuture<Boolean> deleteMetadata(CloudBlobMetadata blobMetadata) throws CosmosException {
     // Note: not timing here since bulk deletions are timed.
-    try {
-      executeCosmosAction(
-          () -> cosmosAsyncContainer.deleteItem(blobMetadata.getId(), new PartitionKey(blobMetadata.getPartitionId()))
-              .block(), null);
-      return true;
-    } catch (CosmosException cex) {
-      if (cex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
-        // Can happen on retry
-        logger.debug("Could not find metadata for blob {} to delete", blobMetadata.getId());
-        return false;
-      }
-      throw cex;
-    }
+    return cosmosAsyncContainer.deleteItem(blobMetadata.getId(), getPartitionKey(blobMetadata.getPartitionId()))
+        .toFuture()
+        .handle(((response, throwable) -> {
+          if (throwable != null) {
+            Exception ex = Utils.extractFutureExceptionCause(throwable);
+            if (ex instanceof CosmosException && ((CosmosException) ex).getStatusCode() == STATUS_NOT_FOUND) {
+              // Can happen on retry
+              logger.debug("Could not find metadata for blob {} to delete", blobMetadata.getId());
+              return false;
+            }
+            throw new CompletionException(ex);
+          } else {
+            return true;
+          }
+        }));
+  }
+
+  private PartitionKey getPartitionKey(String partitionId) {
+    return new PartitionKey(partitionId);
   }
 
   /**
@@ -349,95 +368,120 @@ public class CosmosDataAccessor {
   /**
    * Get the metadata record for a single blob.
    * @param blobId the blob to read.
-   * @return the {@link CloudBlobMetadata} for the blob if it is found, otherwise null.
-   * @throws CosmosException on any other error.
+   * @return a {@link CompletableFuture} that will eventually contain the {@link CloudBlobMetadata} for the blob if
+   *         it is found or otherwise null. If an error occurred, it will contain an exception.
    */
-  CloudBlobMetadata getMetadataOrNull(BlobId blobId) throws CosmosException {
-    try {
-      CosmosItemResponse<CloudBlobMetadata> readResponse = executeCosmosAction(
-          () -> cosmosAsyncContainer.readItem(blobId.getID(), new PartitionKey(blobId.getPartition().toPathString()),
-              CloudBlobMetadata.class).block(), azureMetrics.documentReadTime);
-      return readResponse.getItem();
-    } catch (CosmosException cex) {
-      if (cex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
-        return null;
+  CompletableFuture<CloudBlobMetadata> getMetadataOrNull(BlobId blobId) {
+    Timer.Context operationTimer = azureMetrics.documentReadTime.time();
+    return cosmosAsyncContainer.readItem(blobId.getID(), getPartitionKey(blobId.getPartition().toPathString()),
+        CloudBlobMetadata.class).toFuture().handle(((response, throwable) -> {
+      operationTimer.stop();
+      if (throwable != null) {
+        Exception ex = Utils.extractFutureExceptionCause(throwable);
+        if (ex instanceof CosmosException && ((CosmosException) ex).getStatusCode() == STATUS_NOT_FOUND) {
+          // return null if exception is due to blob not being found
+          return null;
+        }
+        // rethrow all other exceptions
+        throw new CompletionException(ex);
+      } else {
+        // return the blob metadata
+        return response.getItem();
       }
-      throw cex;
-    }
+    }));
   }
 
   /**
    * Update the blob metadata document in the CosmosDB collection.
    * @param blobId the {@link BlobId} for which metadata is replaced.
    * @param updateFields Map of field names and new values to update.
-   * @return the {@link CosmosItemResponse} containing {@link CloudBlobMetadata} object returned by the operation, if successful.
-   * Returns Null if the field already has the specified value.
-   * @throws CosmosException if the record was not found or if the operation failed.
+   * @return a {@link CompletableFuture} that will eventually contain the {@link CloudBlobMetadata} returned by the
+   *         operation, if successful or {@code Null} if the field already has the specified value. If the record is not
+   *         found or an error occurred, it will contain an exception.
    */
-  CosmosItemResponse<CloudBlobMetadata> updateMetadata(BlobId blobId, Map<String, String> updateFields)
-      throws CosmosException {
+  CompletableFuture<CloudBlobMetadata> updateMetadata(BlobId blobId, Map<String, String> updateFields) {
+
+    CompletableFuture<CloudBlobMetadata> resultFuture = new CompletableFuture<>();
+    Timer.Context documentReadTimer = azureMetrics.documentReadTime.time();
 
     // Read the existing record
-    CosmosItemResponse<CloudBlobMetadata> cosmosItemResponse = executeCosmosAction(
-        () -> cosmosAsyncContainer.readItem(blobId.getID(), new PartitionKey(blobId.getPartition().toPathString()),
-            CloudBlobMetadata.class).block(), azureMetrics.documentReadTime);
-    CloudBlobMetadata receivedMetadata = cosmosItemResponse.getItem();
+    cosmosAsyncContainer.readItem(blobId.getID(), getPartitionKey(blobId.getPartition().toPathString()),
+        CloudBlobMetadata.class).toFuture().whenCompleteAsync(((response, throwable) -> {
+      documentReadTimer.stop();
+      if (throwable != null) {
+        // If there is an error in reading the current metadata record, complete the result exceptionally.
+        resultFuture.completeExceptionally(throwable);
+      } else {
+        CloudBlobMetadata receivedMetadata = response.getItem();
+        // Update the metadata record only if value has changed
+        Map<String, String> receivedFields = receivedMetadata.toMap();
+        Map<String, String> fieldsToUpdate = updateFields.entrySet()
+            .stream()
+            .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(receivedFields.get(map.getKey())))
+            .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
+        if (fieldsToUpdate.size() == 0) {
+          logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
+          // If there is no change in value of metadata, complete the result.
+          resultFuture.complete(null);
+        }
 
-    // Update only if value has changed
-    Map<String, String> receivedFields = receivedMetadata.toMap();
-    Map<String, String> fieldsToUpdate = updateFields.entrySet()
-        .stream()
-        .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(receivedFields.get(map.getKey())))
-        .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
-    if (fieldsToUpdate.size() == 0) {
-      logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
-      return null;
-    }
+        // For testing conflict handling
+        if (updateCallback != null) {
+          try {
+            updateCallback.call();
+          } catch (Exception ex) {
+            logger.error("Error in update callback", ex);
+          }
+        }
 
-    // For testing conflict handling
-    if (updateCallback != null) {
-      try {
-        updateCallback.call();
-      } catch (Exception ex) {
-        logger.error("Error in update callback", ex);
+        // Perform the update
+        fieldsToUpdate.forEach(receivedFields::put);
+        // Set condition to ensure we don't clobber a concurrent update
+        CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
+        requestOptions.setIfMatchETag(response.getETag());
+
+        Timer.Context documentUpdateTimer = azureMetrics.documentUpdateTime.time();
+        cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
+            getPartitionKey(blobId.getPartition().toPathString()), requestOptions)
+            .toFuture()
+            .whenComplete(((cosmosItemResponse, throwableDuringReplace) -> {
+              documentUpdateTimer.stop();
+              if (throwableDuringReplace != null) {
+                Exception ex = Utils.extractFutureExceptionCause(throwableDuringReplace);
+                if (((CosmosException) ex).getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+                  // Received an exception during metadata replacement due to concurrent update. Increase the conflict counter
+                  azureMetrics.blobUpdateConflictCount.inc();
+                }
+                // Complete the result exceptionally
+                resultFuture.completeExceptionally(ex);
+              } else {
+                // Updated the metadata record successfully
+                resultFuture.complete(cosmosItemResponse.getItem());
+              }
+            }));
       }
-    }
+    }));
 
-    // Update the modified fields
-    fieldsToUpdate.forEach(receivedFields::put);
-    // Set condition to ensure we don't clobber a concurrent update
-    CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
-    requestOptions.setIfMatchETag(cosmosItemResponse.getETag());
-
-    // Replace the record
-    try {
-      return executeCosmosAction(
-          () -> cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
-              new PartitionKey(blobId.getPartition().toPathString()), requestOptions).block(),
-          azureMetrics.documentUpdateTime);
-    } catch (CosmosException cex) {
-      if (cex.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
-        azureMetrics.blobUpdateConflictCount.inc();
-      }
-      throw cex;
-    }
+    return resultFuture;
   }
 
   /**
    * Get the list of blobs in the specified partition that have been deleted or expired for at least the
-   * configured retention period.
+   * configured retention period asynchronously.
    * @param partitionPath the partition to query.
    * @param fieldName the field name to query on. Allowed values are {@link CloudBlobMetadata#FIELD_DELETION_TIME} and
    *                  {@link CloudBlobMetadata#FIELD_EXPIRATION_TIME}.
    * @param startTime the start of the query time range.
    * @param endTime the end of the query time range.
    * @param maxEntries the max number of metadata records to return.
-   * @return a List of {@link CloudBlobMetadata} objects referencing the dead blobs found.
+   * @return a {@link CompletableFuture} that will eventually contain a list of {@link CloudBlobMetadata} referencing
+   *         the dead blobs found or an exception if an error occurred.
    * @throws CosmosException if the operation failed.
    */
-  List<CloudBlobMetadata> getDeadBlobs(String partitionPath, String fieldName, long startTime, long endTime,
-      int maxEntries) throws CosmosException {
+  CompletableFuture<List<CloudBlobMetadata>> getDeadBlobs(String partitionPath, String fieldName, long startTime,
+      long endTime, int maxEntries) {
 
+    CompletableFuture<List<CloudBlobMetadata>> resultFuture = new CompletableFuture<>();
     String deadBlobsQuery;
     if (fieldName.equals(CloudBlobMetadata.FIELD_DELETION_TIME)) {
       deadBlobsQuery = DELETED_BLOBS_QUERY;
@@ -453,36 +497,32 @@ public class CosmosDataAccessor {
     queryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
     queryRequestOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
 
-    try {
-      List<CloudBlobMetadata> deadBlobsList = new ArrayList<>();
-      AtomicReference<Double> requestCharge = new AtomicReference<>(0.0);
+    List<CloudBlobMetadata> deadBlobsList = new ArrayList<>();
+    AtomicReference<Double> requestCharge = new AtomicReference<>(0.0);
 
-      // Execute cosmos query
-      CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
-          executeCosmosQuery(sqlQuerySpec, queryRequestOptions, azureMetrics.deadBlobsQueryTime);
-
-      //Set the maximum entries to be as returned in each page. There seems to be no way to set maximum number of entries across all pages.
-      pagedFluxResponse.byPage(maxEntries).flatMapSequential(fluxResponse -> {
-        requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
-        deadBlobsList.addAll(fluxResponse.getResults());
-        return Flux.empty();
-      }).blockLast();
-
+    // Execute cosmos query
+    CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
+        executeCosmosQuery(sqlQuerySpec, queryRequestOptions, azureMetrics.deadBlobsQueryTime);
+    //Set the maximum entries to be as returned in each page. There seems to be no way to set maximum number of entries across all pages.
+    pagedFluxResponse.byPage(maxEntries).flatMapSequential(fluxResponse -> {
+      requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
+      deadBlobsList.addAll(fluxResponse.getResults());
+      return Flux.empty();
+    }).doOnError((throwable -> {
+      Exception ex = Utils.extractFutureExceptionCause(throwable);
+      if (ex instanceof CosmosException) {
+        logger.warn("Dead blobs query {} partition {} got {}", deadBlobsQuery, partitionPath,
+            ((CosmosException) ex).getStatusCode());
+      }
+      resultFuture.completeExceptionally(ex);
+    })).doOnComplete(() -> {
       if (requestCharge.get() >= requestChargeThreshold) {
         logger.info("Dead blobs query partition {} endTime {} request charge {} for {} records", partitionPath,
             new Date(endTime), requestCharge.get(), deadBlobsList.size());
       }
-
-      return deadBlobsList;
-    } catch (Exception ex) {
-      if (ex instanceof CosmosException) {
-        //Client-specific errors
-        CosmosException cex = (CosmosException) ex;
-        logger.warn("Dead blobs query {} partition {} got {}", deadBlobsQuery, partitionPath, cex.getStatusCode());
-        throw cex;
-      }
-      throw ex;
-    }
+      resultFuture.complete(deadBlobsList);
+    });
+    return resultFuture;
   }
 
   /**
@@ -491,50 +531,44 @@ public class CosmosDataAccessor {
    * @param accountId account id of the container.
    * @param containerId container id of the container.
    * @param queryLimit max number of blobs to return.
-   * @return a List of {@link CloudBlobMetadata} objects referencing the blobs belonging to the deprecated containers.
-   * @throws CosmosException in case of any error.
+   * @return a {@link CompletableFuture} that will eventually contain a list of {@link CloudBlobMetadata} referencing
+   *         the blobs belonging to the specified container or an exception if an error occurred.
    */
-  List<CloudBlobMetadata> getContainerBlobs(String partitionPath, short accountId, short containerId, int queryLimit)
-      throws CosmosException {
-
+  CompletableFuture<List<CloudBlobMetadata>> getContainerBlobs(String partitionPath, short accountId, short containerId,
+      int queryLimit) {
+    CompletableFuture<List<CloudBlobMetadata>> resultFuture = new CompletableFuture<>();
     SqlQuerySpec sqlQuerySpec = new SqlQuerySpec(CONTAINER_BLOBS_QUERY, new SqlParameter(LIMIT_PARAM, queryLimit),
         new SqlParameter(ACCOUNT_ID_PARAM, accountId), new SqlParameter(CONTAINER_ID_PARAM, containerId));
 
     CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
     queryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
     queryRequestOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
+    List<CloudBlobMetadata> containerBlobsList = new ArrayList<>();
+    AtomicReference<Double> requestCharge = new AtomicReference<>(0.0);
 
-    try {
-      List<CloudBlobMetadata> containerBlobsList = new ArrayList<>();
-      AtomicReference<Double> requestCharge = new AtomicReference<>(0.0);
-
-      // Execute cosmos query
-      CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
-          executeCosmosQuery(sqlQuerySpec, queryRequestOptions, azureMetrics.deletedContainerBlobsQueryTime);
-
-      //Set the queryLimit as preferred number of items to be fetched in each page. There seems to be no way to set limit across all pages.
-      pagedFluxResponse.byPage(queryLimit).flatMapSequential(fluxResponse -> {
-        requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
-        containerBlobsList.addAll(fluxResponse.getResults());
-        return Flux.empty();
-      }).blockLast();
-
+    // Execute cosmos query
+    CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
+        executeCosmosQuery(sqlQuerySpec, queryRequestOptions, azureMetrics.deletedContainerBlobsQueryTime);
+    //Set the queryLimit as preferred number of items to be fetched in each page. There seems to be no way to set limit across all pages.
+    pagedFluxResponse.byPage(queryLimit).flatMapSequential(fluxResponse -> {
+      requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
+      containerBlobsList.addAll(fluxResponse.getResults());
+      return Flux.empty();
+    }).doOnError((throwable -> {
+      Exception ex = Utils.extractFutureExceptionCause(throwable);
+      if (ex instanceof CosmosException) {
+        logger.warn("Container blobs query {} partition {} got {}", sqlQuerySpec.getQueryText(), partitionPath,
+            ((CosmosException) ex).getStatusCode());
+      }
+      resultFuture.completeExceptionally(ex);
+    })).doOnComplete(() -> {
       if (requestCharge.get() >= requestChargeThreshold) {
         logger.info("Container blobs query partition {} containerId {} accountId {} request charge {} for {} records",
             partitionPath, containerId, accountId, requestCharge, containerBlobsList.size());
       }
-
-      return containerBlobsList;
-    } catch (Exception ex) {
-      if (ex instanceof CosmosException) {
-        //Client-specific errors
-        CosmosException cex = (CosmosException) ex;
-        logger.warn("Container blobs query {} partition {} got {}", sqlQuerySpec.getQueryText(), partitionPath,
-            cex.getStatusCode());
-        throw cex;
-      }
-      throw ex;
-    }
+      resultFuture.complete(containerBlobsList);
+    });
+    return resultFuture;
   }
 
   /**
@@ -559,7 +593,8 @@ public class CosmosDataAccessor {
    * @param timer the {@link Timer} to use to record query time (excluding waiting).
    * @return a List of {@link CloudBlobMetadata} referencing the matching blobs.
    */
-  List<CloudBlobMetadata> queryMetadata(String partitionPath, String queryText, Timer timer) throws CosmosException {
+  CompletableFuture<List<CloudBlobMetadata>> queryMetadata(String partitionPath, String queryText, Timer timer)
+      throws CosmosException {
     return queryMetadata(partitionPath, new SqlQuerySpec(queryText), timer);
   }
 
@@ -570,44 +605,40 @@ public class CosmosDataAccessor {
    * @param timer the {@link Timer} to use to record query time (excluding waiting).
    * @return a List of {@link CloudBlobMetadata} referencing the matching blobs.
    */
-  List<CloudBlobMetadata> queryMetadata(String partitionPath, SqlQuerySpec sqlQuerySpec, Timer timer)
+  CompletableFuture<List<CloudBlobMetadata>> queryMetadata(String partitionPath, SqlQuerySpec sqlQuerySpec, Timer timer)
       throws CosmosException {
 
+    CompletableFuture<List<CloudBlobMetadata>> resultFuture = new CompletableFuture<>();
     CosmosQueryRequestOptions queryRequestOptions = new CosmosQueryRequestOptions();
     queryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
     queryRequestOptions.setResponseContinuationTokenLimitInKb(continuationTokenLimitKb);
 
-    try {
-      List<CloudBlobMetadata> metadataList = new ArrayList<>();
+    List<CloudBlobMetadata> metadataList = new ArrayList<>();
 
-      // Since the requestCharge is being used inside lambda expression below, it needs to be atomic.
-      AtomicReference<Double> requestCharge = new AtomicReference<>(0.0);
+    // Since the requestCharge is being used inside lambda expression below, it needs to be atomic.
+    AtomicReference<Double> requestCharge = new AtomicReference<>(0.0);
 
-      // Execute cosmos query
-      CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
-          executeCosmosQuery(sqlQuerySpec, queryRequestOptions, timer);
-
-      pagedFluxResponse.byPage().flatMapSequential(fluxResponse -> {
-        requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
-        metadataList.addAll(fluxResponse.getResults());
-        return Flux.empty();
-      }).blockLast();
-
+    // Execute cosmos query
+    CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse = executeCosmosQuery(sqlQuerySpec, queryRequestOptions, timer);
+    pagedFluxResponse.byPage().flatMapSequential(fluxResponse -> {
+      requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
+      metadataList.addAll(fluxResponse.getResults());
+      return Flux.empty();
+    }).doOnError((throwable -> {
+      Exception ex = Utils.extractFutureExceptionCause(throwable);
+      if (ex instanceof CosmosException) {
+        logger.warn("Query {} on partition {} got {}", sqlQuerySpec.getQueryText(), partitionPath,
+            ((CosmosException) ex).getStatusCode());
+      }
+      resultFuture.completeExceptionally(ex);
+    })).doOnComplete(() -> {
       if (requestCharge.get() >= requestChargeThreshold) {
         logger.info("Query partition {} request charge {} for {} records", partitionPath, requestCharge,
             metadataList.size());
       }
-
-      return metadataList;
-    } catch (Exception ex) {
-      if (ex instanceof CosmosException) {
-        //Client-specific errors
-        CosmosException cex = (CosmosException) ex;
-        logger.warn("Query {} on partition {} got {}", sqlQuerySpec.getQueryText(), partitionPath, cex.getStatusCode());
-        throw cex;
-      }
-      throw ex;
-    }
+      resultFuture.complete(metadataList);
+    });
+    return resultFuture;
   }
 
   /**
@@ -622,8 +653,11 @@ public class CosmosDataAccessor {
    * @return next continuation token.
    * @throws CosmosException in case of any error.
    */
-  public String queryChangeFeed(String requestContinuationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
-      String partitionPath, Timer timer) throws CosmosException {
+  public CompletableFuture<String> queryChangeFeed(String requestContinuationToken, int maxFeedSize,
+      List<CloudBlobMetadata> changeFeed, String partitionPath, Timer timer) throws CosmosException {
+
+    azureMetrics.changeFeedQueryCount.inc();
+
     CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions;
     if (Utils.isNullOrEmpty(requestContinuationToken)) {
       cosmosChangeFeedRequestOptions =
@@ -644,32 +678,34 @@ public class CosmosDataAccessor {
    * @param timer the {@link Timer} to use to record query time (excluding waiting).
    * @return timer the {@link Timer} to use to record query time (excluding waiting).
    */
-  String queryChangeFeed(CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions,
+  CompletableFuture<String> queryChangeFeed(CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions,
       List<CloudBlobMetadata> changeFeed, Timer timer) {
 
+    CompletableFuture<String> resultFuture = new CompletableFuture<>();
     azureMetrics.changeFeedQueryCount.inc();
+    Timer.Context operationTimer = timer.time();
 
     // Since the requestCharge is being used inside lambda expression below, it needs to be atomic.
     AtomicReference<String> continuationToken = new AtomicReference<>();
 
-    try {
-      CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
-          executeCosmosChangeFeedQuery(cosmosChangeFeedRequestOptions, timer);
+    // Query change feed
+    CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
+        cosmosAsyncContainer.queryChangeFeed(cosmosChangeFeedRequestOptions, CloudBlobMetadata.class);
 
-      pagedFluxResponse.byPage().flatMapSequential(fluxResponse -> {
-        changeFeed.addAll(fluxResponse.getResults());
-        continuationToken.set(fluxResponse.getContinuationToken());
-        return Flux.empty();
-      }).blockLast();
-
-      return continuationToken.get();
-    } catch (Exception ex) {
+    // Read the pages containing the cosmos change feed asynchronously and update the continuation token as we are reading.
+    pagedFluxResponse.byPage().concatMap(fluxResponse -> {
+      changeFeed.addAll(fluxResponse.getResults());
+      continuationToken.set(fluxResponse.getContinuationToken());
+      return Flux.empty();
+    }).doOnError((throwable -> {
       azureMetrics.changeFeedQueryFailureCount.inc();
-      if (ex instanceof CosmosException) {
-        throw (CosmosException) ex;
-      }
-      throw ex;
-    }
+      resultFuture.completeExceptionally(throwable);
+      operationTimer.stop();
+    })).doOnComplete(() -> {
+      operationTimer.stop();
+      resultFuture.complete(continuationToken.get());
+    });
+    return resultFuture;
   }
 
   /**
@@ -848,24 +884,6 @@ public class CosmosDataAccessor {
     try {
       return cosmosAsyncDatabase.getContainer(containerName)
           .queryItems(sqlQuerySpec, cosmosQueryRequestOptions, classType);
-    } finally {
-      operationTimer.stop();
-    }
-  }
-
-  /**
-   * Utility method to call Cosmos change feed query method and record the query time.
-   * @param changeFeedOptions {@link CosmosChangeFeedRequestOptions} object specifying the options associated with the method.
-   * @param timer the {@link Timer} to use to record query time (excluding waiting).
-   * @return {@link CosmosPagedFlux} object representing the query response in the form of pages.
-   */
-  private CosmosPagedFlux<CloudBlobMetadata> executeCosmosChangeFeedQuery(
-      CosmosChangeFeedRequestOptions changeFeedOptions, Timer timer) {
-    Timer.Context operationTimer = timer.time();
-    try {
-      // FIXME: Using single() for the observable returned by toBlocking() works for now. But if a high enough maxFeedSize
-      //  is passed, to result in multiple feed pages, single() will throw an exception.
-      return cosmosAsyncContainer.queryChangeFeed(changeFeedOptions, CloudBlobMetadata.class);
     } finally {
       operationTimer.stop();
     }

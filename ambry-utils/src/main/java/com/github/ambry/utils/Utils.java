@@ -426,10 +426,10 @@ public class Utils {
     if (throwable == null) {
       return null;
     }
-    if (throwable instanceof CompletionException || throwable instanceof ExecutionException) {
-      if (throwable.getCause() != null) {
-        throwable = throwable.getCause();
-      }
+    while ((throwable instanceof CompletionException || throwable instanceof ExecutionException)
+        && throwable.getCause() != null) {
+      // Extract nested exception for CompletionException and ExecutionException
+      throwable = throwable.getCause();
     }
     return throwable instanceof Exception ? (Exception) throwable : new Exception(throwable);
   }

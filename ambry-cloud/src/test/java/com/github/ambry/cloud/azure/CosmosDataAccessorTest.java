@@ -174,7 +174,7 @@ public class CosmosDataAccessorTest {
   /** Utility method to run metadata query with default parameters. */
   private List<CloudBlobMetadata> doQueryMetadata() {
     return cosmosAccessor.queryMetadata(blobId.getPartition().toPathString(), "select * from c",
-        azureMetrics.missingKeysQueryTime);
+        azureMetrics.missingKeysQueryTime).join();
   }
 
   /** Utility method to run metadata query with default parameters. */

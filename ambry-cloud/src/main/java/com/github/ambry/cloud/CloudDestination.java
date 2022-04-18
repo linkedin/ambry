@@ -22,6 +22,7 @@ import java.io.OutputStream;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -42,12 +43,33 @@ public interface CloudDestination extends Closeable {
       throws CloudStorageException;
 
   /**
+   * Upload blob to the cloud destination asynchronously.
+   * @param blobId id of the Ambry blob
+   * @param inputLength the length of the input stream, if known, -1 if unknown.
+   * @param cloudBlobMetadata the {@link CloudBlobMetadata} for the blob being uploaded.
+   * @param blobInputStream the stream to read blob data
+   * @return a {@link CompletableFuture} that will eventually contain {@link Boolean} flag indicating whether the blob
+   *         was uploaded successfully or an exception if an error occurred.
+   */
+  CompletableFuture<Boolean> uploadBlobAsync(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
+      InputStream blobInputStream);
+
+  /**
    * Download blob from the cloud destination.
    * @param blobId id of the Ambry blob to be downloaded
    * @param outputStream outputstream to populate the downloaded data with
    * @throws CloudStorageException if the download encounters an error.
    */
   void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException;
+
+  /**
+   * Download blob from the cloud destination asynchronously.
+   * @param blobId id of the Ambry blob to be downloaded
+   * @param outputStream outputstream to populate the downloaded data with
+   * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete when the blob was downloaded
+   *        successfully or an exception if an error occurred.
+   */
+  CompletableFuture<Void> downloadBlobAsync(BlobId blobId, OutputStream outputStream);
 
   /**
    * Mark a blob as deleted in the cloud destination, if {@code lifeVersion} is less than or equal to life version of
@@ -63,6 +85,19 @@ public interface CloudDestination extends Closeable {
       throws CloudStorageException;
 
   /**
+   * Mark a blob as deleted in the cloud destination asynchronously, if {@code lifeVersion} is less than or equal to
+   * life version of the existing blob.
+   * @param blobId id of the Ambry blob
+   * @param deletionTime time of blob deletion
+   * @param lifeVersion life version of the blob to be deleted.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by caller to validate the delete.
+   * @return a {@link CompletableFuture} that will eventually contain {@link Boolean} flag indicating whether the blob
+   *         was deleted successfully or an exception if an error occurred.
+   */
+  CompletableFuture<Boolean> deleteBlobAsync(BlobId blobId, long deletionTime, short lifeVersion,
+      CloudUpdateValidator cloudUpdateValidator);
+
+  /**
    * Undelete the blob from cloud destination, and update the new life version.
    * @param blobId id of the Ambry blob.
    * @param lifeVersion new life version to update.
@@ -72,6 +107,17 @@ public interface CloudDestination extends Closeable {
    */
   short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException;
+
+  /**
+   * Undelete the blob from cloud destination, and update the new life version asynchronously.
+   * @param blobId id of the Ambry blob.
+   * @param lifeVersion new life version to update.
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by caller to validate the undelete.
+   * @return a {@link CompletableFuture} that will eventually contain final live version of the undeleted blob if the
+   *         blob was undeleted successfully or an exception if an error occurred.
+   */
+  CompletableFuture<Short> undeleteBlobAsync(BlobId blobId, short lifeVersion,
+      CloudUpdateValidator cloudUpdateValidator);
 
   /**
    * Update expiration time of blob in the cloud destination.
@@ -85,12 +131,32 @@ public interface CloudDestination extends Closeable {
       throws CloudStorageException;
 
   /**
+   * Update expiration time of blob in the cloud destination asynchronously.
+   * @param blobId id of the Ambry blob
+   * @param expirationTime the new expiration time
+   * @param cloudUpdateValidator {@link CloudUpdateValidator} object passed by caller to validate the update.
+   * @return a {@link CompletableFuture} that will eventually contain the life version of the blob if the blob was updated
+   *         successfully, otherwise -1 or an exception if an error occurred.
+   */
+  CompletableFuture<Short> updateBlobExpirationAsync(BlobId blobId, long expirationTime,
+      CloudUpdateValidator cloudUpdateValidator);
+
+  /**
    * Query the blob metadata for the specified blobs.
    * @param blobIds list of blob Ids to query.
    * @return a {@link Map} of blobId strings to {@link CloudBlobMetadata}.  If metadata for a blob could not be found,
    * it will not be included in the returned map.
    */
   Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException;
+
+  /**
+   * Query the blob metadata for the specified blobs asynchronously.
+   * @param blobIds list of blob Ids to query.
+   * @return a {@link CompletableFuture} that will eventually contain a {@link Map} of blobId strings to {@link CloudBlobMetadata}
+   *         or an exception if an error occurred. If metadata for a blob could not be found, it will not be included in
+   *         the returned map.
+   */
+  CompletableFuture<Map<String, CloudBlobMetadata>> getBlobMetadataAsync(List<BlobId> blobIds);
 
   /**
    * Returns an ordered sequenced list of blobs within the specified partition and updated

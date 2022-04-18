@@ -21,6 +21,7 @@ import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.FutureUtils;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreErrorCodes;
@@ -43,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -112,8 +114,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   @Override
   synchronized public boolean uploadBlob(BlobId blobId, long blobSize, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) throws CloudStorageException {
-    StoreErrorCodes serverError =
-        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
       throw new CloudStorageException("uploadBlob simulated error",
           new StoreException("uploadBlob simulated error", serverError));
@@ -149,9 +150,17 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public CompletableFuture<Boolean> uploadBlobAsync(BlobId blobId, long inputLength,
+      CloudBlobMetadata cloudBlobMetadata, InputStream blobInputStream) {
+    CompletableFuture<Boolean> completableFuture = new CompletableFuture<>();
+    FutureUtils.completeFromCallable(completableFuture,
+        () -> uploadBlob(blobId, inputLength, cloudBlobMetadata, blobInputStream));
+    return completableFuture;
+  }
+
+  @Override
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
-    StoreErrorCodes serverError =
-        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
       throw new CloudStorageException("downloadBlob simulated error for blobid :" + blobId,
           new StoreException("downloadBlob simulated error for blobid :" + blobId, serverError));
@@ -171,10 +180,19 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public CompletableFuture<Void> downloadBlobAsync(BlobId blobId, OutputStream outputStream) {
+    CompletableFuture<Void> completableFuture = new CompletableFuture<>();
+    FutureUtils.completeFromCallable(completableFuture, () -> {
+      downloadBlob(blobId, outputStream);
+      return null;
+    });
+    return completableFuture;
+  }
+
+  @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
       CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
-    StoreErrorCodes serverError =
-        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
       throw new CloudStorageException("deleteBlob simulated error",
           new StoreException("deleteBlob simulated error", serverError));
@@ -196,10 +214,18 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public CompletableFuture<Boolean> deleteBlobAsync(BlobId blobId, long deletionTime, short lifeVersion,
+      CloudUpdateValidator cloudUpdateValidator) {
+    CompletableFuture<Boolean> completableFuture = new CompletableFuture<>();
+    FutureUtils.completeFromCallable(completableFuture,
+        () -> deleteBlob(blobId, deletionTime, lifeVersion, cloudUpdateValidator));
+    return completableFuture;
+  }
+
+  @Override
   public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
-    StoreErrorCodes serverError =
-        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
       throw new CloudStorageException("updateBlobExpiration simulated error",
           new StoreException("updateBlobExpiration simulated error", serverError));
@@ -215,10 +241,18 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public CompletableFuture<Short> updateBlobExpirationAsync(BlobId blobId, long expirationTime,
+      CloudUpdateValidator cloudUpdateValidator) {
+    CompletableFuture<Short> completableFuture = new CompletableFuture<>();
+    FutureUtils.completeFromCallable(completableFuture,
+        () -> updateBlobExpiration(blobId, expirationTime, cloudUpdateValidator));
+    return completableFuture;
+  }
+
+  @Override
   public short undeleteBlob(BlobId blobId, short lifeVersion, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
-    StoreErrorCodes serverError =
-        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+    StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
       throw new CloudStorageException("undeleteBlob simulated error",
           new StoreException("undeleteBlob simulated error", serverError));
@@ -242,9 +276,16 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException  {
-    StoreErrorCodes serverError =
-        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
+  public CompletableFuture<Short> undeleteBlobAsync(BlobId blobId, short lifeVersion,
+      CloudUpdateValidator cloudUpdateValidator) {
+    CompletableFuture<Short> completableFuture = new CompletableFuture<>();
+    FutureUtils.completeFromCallable(completableFuture, () -> undeleteBlob(blobId, lifeVersion, cloudUpdateValidator));
+    return completableFuture;
+  }
+
+  @Override
+  public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
+    StoreErrorCodes serverError = hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : null;
     if (serverError != null) {
       throw new CloudStorageException("getBlobMetadata simulated error",
           new StoreException("getBlobMetadata simulated error", serverError));
@@ -257,6 +298,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
       }
     }
     return result;
+  }
+
+  @Override
+  public CompletableFuture<Map<String, CloudBlobMetadata>> getBlobMetadataAsync(List<BlobId> blobIds) {
+    CompletableFuture<Map<String, CloudBlobMetadata>> completableFuture = new CompletableFuture<>();
+    FutureUtils.completeFromCallable(completableFuture, () -> getBlobMetadata(blobIds));
+    return completableFuture;
   }
 
   @Override
@@ -299,7 +347,6 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   public void setServerErrorForAllRequests(StoreErrorCodes serverError) {
     this.hardError = serverError;
   }
-
 
   /**
    * Clear the error for subsequent requests. That is all responses from this point onwards will be successful

@@ -201,17 +201,17 @@ public class AzureMetrics {
     compactionProgressWriteErrorCount =
         registry.counter(MetricRegistry.name(AzureStorageCompactor.class, COMPACTION_PROGRESS_WRITE_ERROR_COUNT));
     absTokenRefreshAttemptCount =
-        registry.counter(MetricRegistry.name(StorageClient.class, ABS_TOKEN_REFRESH_ATTEMPT_COUNT));
+        registry.counter(MetricRegistry.name(AsyncStorageClient.class, ABS_TOKEN_REFRESH_ATTEMPT_COUNT));
     absTokenPersistFailureCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, ABS_TOKEN_PERSIST_FAILURE_COUNT));
     absForbiddenExceptionCount =
-        registry.counter(MetricRegistry.name(StorageClient.class, ABS_FORBIDDEN_EXCEPTION_COUNT));
+        registry.counter(MetricRegistry.name(AsyncStorageClient.class, ABS_FORBIDDEN_EXCEPTION_COUNT));
     storageClientOperationRetryCount =
-        registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_OPERATION_RETRY_COUNT));
+        registry.counter(MetricRegistry.name(AsyncStorageClient.class, STORAGE_CLIENT_OPERATION_RETRY_COUNT));
     storageClientOperationExceptionCount =
-        registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT));
+        registry.counter(MetricRegistry.name(AsyncStorageClient.class, STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT));
     storageClientFailureAfterRetryCount =
-        registry.counter(MetricRegistry.name(StorageClient.class, STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT));
+        registry.counter(MetricRegistry.name(AsyncStorageClient.class, STORAGE_CLIENT_FAILURE_AFTER_RETRY_COUNT));
     deprecatedContainerCompactionFailureCount = registry.counter(
         MetricRegistry.name(AzureContainerCompactor.class, DEPRECATED_CONTAINER_COMPACTION_FAILURE_COUNT));
     deprecatedContainerCompactionSuccessCount = registry.counter(

@@ -71,7 +71,7 @@ class AzureTestUtils {
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_SECRET, "client-secret");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ENDPOINT, "https://azure_storage.blob.core.windows.net");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
-        "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient");
+        "com.github.ambry.cloud.azure.ConnectionStringBasedAsyncStorageClient");
     configProps.setProperty("clustermap.cluster.name", "main");
     configProps.setProperty("clustermap.datacenter.name", "uswest");
     configProps.setProperty("clustermap.host.name", "localhost");

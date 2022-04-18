@@ -65,8 +65,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Abstract class to encapsulate ABS client operations. Please note that all its operations are asynchronous.
  */
-public abstract class StorageClient {
-  Logger logger = LoggerFactory.getLogger(StorageClient.class);
+public abstract class AsyncStorageClient {
+  Logger logger = LoggerFactory.getLogger(AsyncStorageClient.class);
   private final AtomicReference<BlobServiceAsyncClient> storageAsyncClientRef;
   private final AtomicReference<BlobBatchAsyncClient> blobBatchAsyncClientRef;
   private final CloudConfig cloudConfig;
@@ -82,13 +82,13 @@ public abstract class StorageClient {
           (BlobStorageException) throwable);
 
   /**
-   * Constructor for {@link StorageClient}.
+   * Constructor for {@link AsyncStorageClient}.
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
-  public StorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
+  public AsyncStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
     this.azureCloudConfig = azureCloudConfig;
     this.cloudConfig = cloudConfig;
@@ -100,14 +100,14 @@ public abstract class StorageClient {
   }
 
   /**
-   * Constructor for {@link StorageClient}.
+   * Constructor for {@link AsyncStorageClient}.
    * @param storageAsyncClient {@link BlobServiceAsyncClient} object.
    * @param blobBatchAsyncClient {@link BlobBatchAsyncClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
-  public StorageClient(BlobServiceAsyncClient storageAsyncClient, BlobBatchAsyncClient blobBatchAsyncClient,
+  public AsyncStorageClient(BlobServiceAsyncClient storageAsyncClient, BlobBatchAsyncClient blobBatchAsyncClient,
       AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;

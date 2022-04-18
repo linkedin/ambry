@@ -15,8 +15,6 @@ package com.github.ambry.cloud.azure;
 
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudContainerCompactor;
@@ -25,13 +23,13 @@ import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
@@ -40,6 +38,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.cloud.azure.AzureCloudDestination.*;
 
 
 /**
@@ -176,9 +176,14 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
     try {
       ByteArrayOutputStream baos = new ByteArrayOutputStream(Long.BYTES);
       requestAgent.doWithRetries(() -> {
-        azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER,
-            CONTAINER_DELETION_CHECKPOINT_FILE, baos, false);
-        return null;
+        try {
+          azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER,
+              CONTAINER_DELETION_CHECKPOINT_FILE, baos, false).join();
+          return null;
+        } catch (Exception e) {
+          throw toCloudStorageException("Error downloading checkpoint file for container deletion",
+              Utils.extractFutureExceptionCause(e), null);
+        }
       }, "read-container-deletion-checkpoint", null);
       ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
       buffer.put(baos.toByteArray());
@@ -208,9 +213,14 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
       buffer.putLong(latestContainerDeletionTimestamp);
       ByteArrayInputStream bais = new ByteArrayInputStream(buffer.array());
       requestAgent.doWithRetries(() -> {
-        azureBlobDataAccessor.uploadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, CONTAINER_DELETION_CHECKPOINT_FILE,
-            bais);
-        return null;
+        try {
+          azureBlobDataAccessor.uploadFile(AzureCloudDestination.CHECKPOINT_CONTAINER,
+              CONTAINER_DELETION_CHECKPOINT_FILE, bais).join();
+          return null;
+        } catch (Exception e) {
+          throw toCloudStorageException("Error uploading checkpoint file for container deletion",
+              Utils.extractFutureExceptionCause(e), null);
+        }
       }, "update-container-deletion-checkpoint", null);
     } catch (CloudStorageException e) {
       logger.error("Could not save update deprecated container progress", e);
@@ -229,9 +239,15 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
   private int compactContainer(short containerId, short accountId, String partitionPath) throws CloudStorageException {
     int totalPurged = 0;
     while (!isShuttingDown()) {
-      List<CloudBlobMetadata> blobs = requestAgent.doWithRetries(
-          () -> cosmosDataAccessor.getContainerBlobs(partitionPath, accountId, containerId, queryLimit),
-          "GetDeprecatedContainerBlobs", partitionPath);
+      List<CloudBlobMetadata> blobs = requestAgent.doWithRetries(() -> {
+        try {
+          return cosmosDataAccessor.getContainerBlobs(partitionPath, accountId, containerId, queryLimit).join();
+        } catch (Exception e) {
+          throw toCloudStorageException(
+              "Error getting blobs for container " + accountId + " and container " + containerId,
+              Utils.extractFutureExceptionCause(e), null);
+        }
+      }, "GetDeprecatedContainerBlobs", partitionPath);
 
       if (blobs.isEmpty()) {
         // this means all the blobs of this container have been purged from the partition

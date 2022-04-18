@@ -91,14 +91,14 @@ public class AzureIntegrationTest {
   private final String azureStorageClientClass;
 
   /**
-   * Run for both {@link ADAuthBasedStorageClient} and {@link ConnectionStringBasedStorageClient} azure storage clients.
+   * Run for both {@link ADAuthBasedAsyncStorageClient} and {@link ConnectionStringBasedAsyncStorageClient} azure storage clients.
    * @return an array with factory class for storage client factory.
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{ADAuthBasedStorageClient.class.getCanonicalName()},
-        {ConnectionStringBasedStorageClient.class.getCanonicalName()},
-        {ClientSecretCredentialStorageClient.class.getCanonicalName()}});
+    return Arrays.asList(new Object[][]{{ADAuthBasedAsyncStorageClient.class.getCanonicalName()},
+        {ConnectionStringBasedAsyncStorageClient.class.getCanonicalName()},
+        {ClientSecretCredentialAsyncStorageClient.class.getCanonicalName()}});
   }
 
   /**
@@ -504,7 +504,8 @@ public class AzureIntegrationTest {
     azureDest.updateBlobExpiration(blobId, Utils.Infinite_Time, dummyCloudUpdateValidator);
     List<CloudBlobMetadata> resultList = azureDest.getCosmosDataAccessor()
         .queryMetadata(partitionId.toPathString(), "SELECT * FROM c WHERE c.id = '" + blobId.getID() + "'",
-            azureDest.getAzureMetrics().missingKeysQueryTime);
+            azureDest.getAzureMetrics().missingKeysQueryTime)
+        .join();
     assertEquals("Expected record to exist", 1, resultList.size());
   }
 
@@ -574,12 +575,14 @@ public class AzureIntegrationTest {
     String partitionPath = String.valueOf(testPartition);
     Timer dummyTimer = new Timer();
     List<CloudBlobMetadata> allBlobsInPartition = cloudRequestAgent.doWithRetries(
-        () -> azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, "SELECT * FROM c", dummyTimer),
+        () -> azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, "SELECT * FROM c", dummyTimer).join(),
         "QueryMetadata", partitionPath);
     int numPurged = purgeBlobsWithRetry(allBlobsInPartition, partitionPath);
     logger.info("Cleaned up {} blobs", numPurged);
     // Delete compaction checkpoint blob
-    if (azureDest.getAzureBlobDataAccessor().deleteFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath)) {
+    if (azureDest.getAzureBlobDataAccessor()
+        .deleteFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath)
+        .join()) {
       logger.info("Deleted compaction checkpoint");
     }
   }

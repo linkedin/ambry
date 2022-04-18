@@ -69,7 +69,7 @@ public class AzureCloudConfig {
   public static final int DEFAULT_NAME_SCHEME_VERSION = 0;
   public static final String DEFAULT_CONTAINER_STRATEGY = "Partition";
   public static final String DEFAULT_AZURE_STORAGE_CLIENT_CLASS =
-      "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient";
+      "com.github.ambry.cloud.azure.ConnectionStringBasedAsyncStorageClient";
 
   /**
    * The Azure Blob Storage connection string.

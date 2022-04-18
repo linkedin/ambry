@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.utils.Utils;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -40,7 +41,7 @@ public class AzureCompactionUtil {
     azureMetrics.blobDeleteRequestCount.inc(blobMetadataList.size());
     long t0 = System.currentTimeMillis();
     try {
-      List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobs(blobMetadataList);
+      List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobs(blobMetadataList).join();
       long t1 = System.currentTimeMillis();
       int deletedCount = deletedBlobs.size();
       azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedCount);
@@ -59,9 +60,10 @@ public class AzureCompactionUtil {
       azureMetrics.documentDeleteTime.update((t2 - t1) / deletedCount, TimeUnit.MILLISECONDS);
       azureMetrics.blobDeletedCount.inc(deletedCount);
       return deletedCount;
-    } catch (Exception ex) {
+    } catch (Exception e) {
       azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size());
-      throw AzureCloudDestination.toCloudStorageException("Failed to purge all blobs", ex, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException("Failed to purge all blobs",
+          Utils.extractFutureExceptionCause(e), azureMetrics);
     }
   }
 }

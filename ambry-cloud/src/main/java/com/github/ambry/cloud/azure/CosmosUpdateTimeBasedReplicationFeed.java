@@ -20,6 +20,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
@@ -70,7 +71,7 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
               new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime()));
 
       List<CloudBlobMetadata> queryResults =
-          cosmosDataAccessor.queryMetadata(partitionPath, sqlQuerySpec, azureMetrics.findSinceQueryTime);
+          cosmosDataAccessor.queryMetadata(partitionPath, sqlQuerySpec, azureMetrics.findSinceQueryTime).join();
       if (queryResults.isEmpty()) {
         return new FindResult(new ArrayList<>(), findToken);
       }
@@ -80,6 +81,13 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
       List<CloudBlobMetadata> cappedResults =
           CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
       return new FindResult(cappedResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedResults));
+    } catch (Exception ex) {
+      ex = Utils.extractFutureExceptionCause(ex);
+      if (ex instanceof CosmosException) {
+        throw (CosmosException) ex;
+      } else {
+        throw new RuntimeException(ex);
+      }
     } finally {
       operationTimer.stop();
     }

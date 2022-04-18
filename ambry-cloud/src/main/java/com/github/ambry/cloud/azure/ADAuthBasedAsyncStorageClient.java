@@ -40,9 +40,9 @@ import reactor.core.publisher.Mono;
 
 
 /**
- * {@link StorageClient} implementation for AD based authentication.
+ * {@link AsyncStorageClient} implementation for AD based authentication.
  */
-public class ADAuthBasedStorageClient extends StorageClient {
+public class ADAuthBasedAsyncStorageClient extends AsyncStorageClient {
   private static final String AD_AUTH_TOKEN_REFRESHER_PREFIX = "AdAuthTokenRefresher";
   private final ScheduledExecutorService tokenRefreshScheduler =
       Utils.newScheduler(1, AD_AUTH_TOKEN_REFRESHER_PREFIX, false);
@@ -50,13 +50,13 @@ public class ADAuthBasedStorageClient extends StorageClient {
   private AtomicReference<AccessToken> accessTokenRef;
 
   /**
-   * Constructor for {@link ADAuthBasedStorageClient} object.
+   * Constructor for {@link ADAuthBasedAsyncStorageClient} object.
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
-  public ADAuthBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
+  public ADAuthBasedAsyncStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
       AzureBlobLayoutStrategy blobLayoutStrategy) {
     super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
     // schedule a task to refresh token and create new storage sync and async clients before it expires.
@@ -66,7 +66,7 @@ public class ADAuthBasedStorageClient extends StorageClient {
   }
 
   /**
-   * Constructor for {@link ADAuthBasedStorageClient} object for testing.
+   * Constructor for {@link ADAuthBasedAsyncStorageClient} object for testing.
    * @param blobServiceAsyncClient {@link BlobServiceAsyncClient} object.
    * @param blobBatchAsyncClient {@link BlobBatchAsyncClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
@@ -74,7 +74,7 @@ public class ADAuthBasedStorageClient extends StorageClient {
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param accessToken {@link AccessToken} object.
    */
-  public ADAuthBasedStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
+  public ADAuthBasedAsyncStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
       BlobBatchAsyncClient blobBatchAsyncClient, AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
       AzureCloudConfig azureCloudConfig, AccessToken accessToken) {
     super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
@@ -121,7 +121,7 @@ public class ADAuthBasedStorageClient extends StorageClient {
   private IAuthenticationResult getAccessTokenByClientCredentialGrant(AzureCloudConfig azureCloudConfig)
       throws MalformedURLException, InterruptedException, ExecutionException {
     // If a proxy is required, properties must either be set at the jvm level,
-    // or ClientSecretCredentialStorageClient should be used
+    // or ClientSecretCredentialAsyncStorageClient should be used
     ConfidentialClientApplication app = ConfidentialClientApplication.builder(azureCloudConfig.azureStorageClientId,
         ClientCredentialFactory.createFromSecret(azureCloudConfig.azureStorageSecret))
         .authority(azureCloudConfig.azureStorageAuthority)

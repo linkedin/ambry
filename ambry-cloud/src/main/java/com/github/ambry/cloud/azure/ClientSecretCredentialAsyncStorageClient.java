@@ -1,5 +1,5 @@
-/**
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+/*
+ * Copyright 2021 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
+import com.azure.identity.ClientSecretCredential;
 import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
@@ -26,59 +27,64 @@ import com.github.ambry.config.CloudConfig;
 
 
 /**
- * {@link StorageClient} implementation based on connection string authentication.
+ * {@link AsyncStorageClient} implementation for AD based authentication using a {@link ClientSecretCredential} instead
+ * of the lower level msal4j library. The credential impl internally handles refreshing the token before it expires.
  */
-public class ConnectionStringBasedStorageClient extends StorageClient {
+public class ClientSecretCredentialAsyncStorageClient extends AsyncStorageClient {
 
   /**
-   * Constructor for {@link ConnectionStringBasedStorageClient}.
+   * Constructor for {@link ClientSecretCredentialAsyncStorageClient} object.
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
-  public ConnectionStringBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+  public ClientSecretCredentialAsyncStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
       AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
     super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
   }
 
   /**
-   * Constructor for {@link ConnectionStringBasedStorageClient} object for testing.
+   * Constructor for {@link ClientSecretCredentialAsyncStorageClient} object for testing.
    * @param blobServiceAsyncClient {@link BlobServiceClient} object.
    * @param blobBatchAsyncClient {@link BlobBatchClient} object.
    * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
-  public ConnectionStringBasedStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
+  public ClientSecretCredentialAsyncStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
       BlobBatchAsyncClient blobBatchAsyncClient, AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
       AzureCloudConfig azureCloudConfig) {
     super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
   }
 
+  /**
+   * Build {@link BlobServiceAsyncClient}.
+   * @param httpClient {@link HttpClient} object.
+   * @param configuration {@link Configuration} object.
+   * @param retryOptions {@link RequestRetryOptions} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @return {@link BlobServiceAsyncClient} object.
+   */
   @Override
   protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
-    return new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
+    return new BlobServiceClientBuilder().credential(AzureUtils.getClientSecretCredential(azureCloudConfig))
+        .endpoint(azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
         .buildAsyncClient();
   }
 
-  /**
-   * Validate that all the required configs for connection string based authentication are present.
-   * @param azureCloudConfig {@link AzureCloudConfig} object.
-   */
+  @Override
   protected void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig) {
-    if (azureCloudConfig.azureStorageConnectionString.isEmpty()) {
-      throw new IllegalArgumentException(
-          "Missing connection string config " + AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING);
-    }
+    AzureUtils.validateAzureIdentityConfigs(azureCloudConfig);
   }
 
   @Override
   protected boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException) {
+    // no need to request a retry on 403 since the credential impl handles token refresh internally.
     return false;
   }
 }
