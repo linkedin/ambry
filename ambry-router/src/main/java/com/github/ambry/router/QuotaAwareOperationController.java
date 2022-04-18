@@ -81,7 +81,7 @@ public class QuotaAwareOperationController extends OperationController {
     super(suffix, defaultPartitionClass, accountService, networkClientFactory, clusterMap, routerConfig,
         responseHandler, notificationSystem, routerMetrics, kms, cryptoService, cryptoJobHandler, time,
         nonBlockingRouter);
-    routerMetrics.initializeRequestQueueMetrics(readRequestQueue, writeRequestQueue);
+    routerMetrics.initializeRequestQueueMetrics(readRequestQueue, writeRequestQueue, suffix);
   }
 
   @Override
