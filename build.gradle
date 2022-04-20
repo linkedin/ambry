@@ -124,7 +124,7 @@ subprojects {
             // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
             // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).
             // If 5 or more tests were to fail initially then no retry would be attempted.
-            maxFailures = 20
+            maxFailures = 10
             // Whether tests that initially fail and then pass on retry should fail the task.
             failOnPassedAfterRetry = false
         }
@@ -154,7 +154,7 @@ subprojects {
             // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
             // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).
             // If 5 or more tests were to fail initially then no retry would be attempted.
-            maxFailures = 20
+            maxFailures = 10
             // Whether tests that initially fail and then pass on retry should fail the task.
             failOnPassedAfterRetry = false
         }
