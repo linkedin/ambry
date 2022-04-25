@@ -33,6 +33,7 @@ allprojects {
     apply plugin: 'idea'
     apply plugin: 'project-report'
     apply plugin: 'jacoco'
+    apply plugin: 'org.gradle.test-retry'
 
     repositories {
         mavenCentral()
@@ -115,6 +116,18 @@ subprojects {
         testLogging {
             exceptionFormat = 'full'
         }
+        // Plugin for retrying flaky tests. Reference: https://github.com/gradle/test-retry-gradle-plugin
+        retry {
+            // The maximum number of times to retry an individual test
+            maxRetries = 3
+            // The maximum number of test failures that are allowed (per module) before retrying is disabled. The count applies to
+            // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
+            // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).
+            // If 5 or more tests were to fail initially then no retry would be attempted.
+            maxFailures = 10
+            // Whether tests that initially fail and then pass on retry should fail the task.
+            failOnPassedAfterRetry = false
+        }
         maxHeapSize = "3g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
         systemProperty 'io.netty.allocator.tinyCacheSize', '0'
@@ -132,6 +145,18 @@ subprojects {
             exceptionFormat = 'full'
             events 'started', 'failed', 'passed', 'skipped'
             showStandardStreams = false
+        }
+        // Allow for retrying flaky integration tests.
+        retry {
+            // The maximum number of times to retry an individual test
+            maxRetries = 3
+            // The maximum number of test failures that are allowed (per module) before retrying is disabled. The count applies to
+            // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
+            // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).
+            // If 5 or more tests were to fail initially then no retry would be attempted.
+            maxFailures = 10
+            // Whether tests that initially fail and then pass on retry should fail the task.
+            failOnPassedAfterRetry = false
         }
         maxHeapSize = "3g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
