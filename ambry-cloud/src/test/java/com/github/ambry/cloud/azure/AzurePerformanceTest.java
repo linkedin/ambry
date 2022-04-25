@@ -121,7 +121,7 @@ public class AzurePerformanceTest {
         String blobName = String.format("Test-%s-%d", label, j);
         OutputStream outputStream = new ByteArrayOutputStream(blobSizes[sizeIndex]);
         long startTime = System.currentTimeMillis();
-        blobDataAccessor.downloadFile(containerName, blobName, outputStream, true);
+        blobDataAccessor.downloadFile(containerName, blobName, null, outputStream, true);
         long downloadTime = System.currentTimeMillis() - startTime;
         totalTime += downloadTime;
         maxTime = Math.max(maxTime, downloadTime);
