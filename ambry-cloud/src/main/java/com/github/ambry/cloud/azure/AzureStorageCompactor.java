@@ -276,7 +276,7 @@ public class AzureStorageCompactor {
     String payload = requestAgent.doWithRetries(() -> {
       ByteArrayOutputStream baos = new ByteArrayOutputStream(CHECKPOINT_BUFFER_SIZE);
       boolean hasCheckpoint =
-          azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, baos, false);
+          azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath, null, baos, false);
       return hasCheckpoint ? baos.toString() : null;
     }, "Download compaction checkpoint", partitionPath);
     if (payload == null) {

@@ -308,14 +308,14 @@ public class AzureBlobDataAccessorTest {
     when(mockBlockBlobAsyncClient.downloadWithResponse(any(), any(), any(), anyBoolean())).thenReturn(
         Mono.error(mockBlobStorageException), Mono.just(response));
 
-    adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", false,
+    adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", null,false,
         new ByteArrayOutputStream(blobSize), null, null, null, false).join();
     verify(mockBlockBlobAsyncClient, times(2)).downloadWithResponse(any(), any(), any(), anyBoolean());
 
     // verify that BlockBlobAsyncClient.downloadWithResponse is called only once when not throwing any exception.
     when(mockBlockBlobAsyncClient.downloadWithResponse(any(), any(), any(), anyBoolean())).thenReturn(
         Mono.just(response));
-    adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", false,
+    adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", null, false,
         new ByteArrayOutputStream(blobSize), null, null, null, false).join();
     verify(mockBlockBlobAsyncClient, times(3)).downloadWithResponse(any(), any(), any(), anyBoolean());
 
@@ -324,7 +324,7 @@ public class AzureBlobDataAccessorTest {
     when(mockBlockBlobAsyncClient.downloadWithResponse(any(), any(), any(), anyBoolean())).thenReturn(
         Mono.error(mockBlobStorageException)).thenReturn(Mono.just(response));
     expectBlobStorageException(
-        () -> adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", false,
+        () -> adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", null, false,
             new ByteArrayOutputStream(blobSize), null, null, null, false).join());
     verify(mockBlockBlobAsyncClient, times(4)).downloadWithResponse(any(), any(), any(), anyBoolean());
   }

@@ -177,7 +177,7 @@ public class AzureContainerCompactor implements CloudContainerCompactor {
       ByteArrayOutputStream baos = new ByteArrayOutputStream(Long.BYTES);
       requestAgent.doWithRetries(() -> {
         azureBlobDataAccessor.downloadFile(AzureCloudDestination.CHECKPOINT_CONTAINER,
-            CONTAINER_DELETION_CHECKPOINT_FILE, baos, false);
+            CONTAINER_DELETION_CHECKPOINT_FILE, null, baos, false);
         return null;
       }, "read-container-deletion-checkpoint", null);
       ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
