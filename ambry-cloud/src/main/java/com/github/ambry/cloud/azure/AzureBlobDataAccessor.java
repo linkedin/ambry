@@ -335,7 +335,7 @@ public class AzureBlobDataAccessor {
    * @throws IllegalStateException on request timeout.
    */
   public AzureCloudDestination.UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields,
-      CloudUpdateValidator cloudUpdateValidator) throws BlobStorageException {
+      CloudUpdateValidator cloudUpdateValidator) throws Exception {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     updateFields.keySet()
         .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));
@@ -349,6 +349,8 @@ public class AzureBlobDataAccessor {
         String etag = blobProperties.getETag();
         Map<String, String> metadata = blobProperties.getMetadata();
 
+        // Validate the sanity of update operation by comparing the fields we want to update against existing metadata
+        // fields in Azure. This can throw StoreExceptions which are propagated to caller.
         if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(metadata), blobId, updateFields)) {
           return new AzureCloudDestination.UpdateResponse(false, metadata);
         }
@@ -378,7 +380,8 @@ public class AzureBlobDataAccessor {
       } finally {
         storageTimer.stop();
       }
-    } catch (Exception e) {
+    } catch (ExecutionException | InterruptedException | TimeoutException e) {
+      // Catch exceptions thrown during the Azure operation.
       Exception ex = Utils.extractFutureExceptionCause(e);
       if (ex instanceof BlobStorageException) {
         BlobStorageException bse = (BlobStorageException) ex;
