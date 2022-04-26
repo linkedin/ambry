@@ -29,6 +29,7 @@ import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -335,7 +336,7 @@ public class AzureBlobDataAccessor {
    * @throws IllegalStateException on request timeout.
    */
   public AzureCloudDestination.UpdateResponse updateBlobMetadata(BlobId blobId, Map<String, Object> updateFields,
-      CloudUpdateValidator cloudUpdateValidator) throws Exception {
+      CloudUpdateValidator cloudUpdateValidator) throws BlobStorageException, StoreException {
     Objects.requireNonNull(blobId, "BlobId cannot be null");
     updateFields.keySet()
         .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));

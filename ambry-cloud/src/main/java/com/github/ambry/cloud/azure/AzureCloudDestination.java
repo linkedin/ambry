@@ -401,7 +401,7 @@ class AzureCloudDestination implements CloudDestination {
         CosmosItemResponse<CloudBlobMetadata> response = cosmosDataAccessor.updateMetadata(blobId, metadataMap);
         // cosmosDataAccessor.updateMetadata() can return null response if there is nothing to update, i.e. fields
         // already have specified value. Check for null response to see if metadata was updated.
-        updatedCosmos = response != null;
+        updatedCosmos = response != null && response.getItem() != null;
       } catch (CosmosException cex) {
         if (cex.getStatusCode() == HttpConstants.StatusCodes.NOTFOUND) {
           // blob exists in ABS but not Cosmos - inconsistent state
