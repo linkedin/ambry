@@ -685,15 +685,25 @@ public class CosmosDataAccessor {
     CosmosContainerResponse cosmosContainerResponse = cosmosContainer.read().block();
     if (cosmosContainerResponse == null) {
       throw new IllegalStateException(
-          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosCollection);
+          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosDeletedContainerCollection);
     }
 
     for (CosmosContainerDeletionEntry containerDeletionEntry : deprecatedContainers) {
-      executeCosmosAction(
-          () -> cosmosContainer.createItem(containerDeletionEntry, new PartitionKey(containerDeletionEntry.getId()),
-              new CosmosItemRequestOptions()).block(), azureMetrics.containerDeprecationDocumentCreateTime);
-      if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
-        latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
+      try {
+        executeCosmosAction(
+            () -> cosmosContainer.createItem(containerDeletionEntry, new PartitionKey(containerDeletionEntry.getId()),
+                new CosmosItemRequestOptions()).block(), azureMetrics.containerDeprecationDocumentCreateTime);
+        if (containerDeletionEntry.getDeleteTriggerTimestamp() > latestContainerDeletionTimestamp) {
+          latestContainerDeletionTimestamp = containerDeletionEntry.getDeleteTriggerTimestamp();
+        }
+      } catch (CosmosException cex) {
+        if (cex.getStatusCode() == HttpConstants.StatusCodes.CONFLICT) {
+          // If the cosmos exception is due to container being already deprecated, continue.
+          logger.info("Container with accountid {} and containerid {} already deprecated. Skipping.",
+              containerDeletionEntry.getAccountId(), containerDeletionEntry.getContainerId());
+        } else {
+          throw cex;
+        }
       }
     }
     return latestContainerDeletionTimestamp;
@@ -749,7 +759,7 @@ public class CosmosDataAccessor {
     CosmosContainerResponse cosmosContainerResponse = cosmosContainer.read().block();
     if (cosmosContainerResponse == null) {
       throw new IllegalStateException(
-          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosCollection);
+          "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosDeletedContainerCollection);
     }
 
     // Read the existing record
@@ -779,9 +789,17 @@ public class CosmosDataAccessor {
     // Set condition to ensure we don't clobber a concurrent update and replace the record.
     CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
     requestOptions.setIfMatchETag(cosmosItemResponse.getETag());
-    return executeCosmosAction(
-        () -> cosmosAsyncContainer.replaceItem(containerDeletionEntry, id, new PartitionKey(id), requestOptions)
-            .block(), azureMetrics.documentUpdateTime).getItem();
+    try {
+      return executeCosmosAction(
+          () -> cosmosAsyncContainer.replaceItem(containerDeletionEntry, id, new PartitionKey(id), requestOptions)
+              .block(), azureMetrics.documentUpdateTime).getItem();
+    } catch (CosmosException cex) {
+      if (cex.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+        // Keep track of failures due to conflicts.
+        azureMetrics.blobUpdateConflictCount.inc();
+      }
+      throw cex;
+    }
   }
 
   /**
