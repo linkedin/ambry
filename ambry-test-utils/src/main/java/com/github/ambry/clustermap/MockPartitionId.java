@@ -124,6 +124,7 @@ public class MockPartitionId implements PartitionId {
   @Override
   public Map<ReplicaState, List<ReplicaId>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName) {
     Map<ReplicaState, List<ReplicaId>> replicasByState = new HashMap<>();
+    updateReplicaAndStateIfNeeded();
     for (Map.Entry<ReplicaId, ReplicaState> entry : replicaAndState.entrySet()) {
       if (states.contains(entry.getValue())) {
         replicasByState.computeIfAbsent(entry.getValue(), k -> new ArrayList<>()).add(entry.getKey());
@@ -241,5 +242,22 @@ public class MockPartitionId implements PartitionId {
 
   public void onPartitionReadOnly() {
     /* noop for now */
+  }
+
+  /**
+   * Updates the mapping of {@link ReplicaState} to {@link ReplicaState} if needed.
+   */
+  private void updateReplicaAndStateIfNeeded() {
+    if(replicaAndState.isEmpty()) {
+      Set<String> datacenterNames = new HashSet<>();
+      for(ReplicaId replicaId : replicaIds) {
+        if(!datacenterNames.contains(replicaId.getDataNodeId().getDatacenterName())) {
+          replicaAndState.put(replicaId, ReplicaState.LEADER);
+          datacenterNames.add(replicaId.getDataNodeId().getDatacenterName());
+        } else {
+          replicaAndState.put(replicaId, ReplicaState.STANDBY);
+        }
+      }
+    }
   }
 }
