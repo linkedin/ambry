@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -75,10 +74,10 @@ public class CloudBlobMetadata {
   private String cryptoAgentFactory;
   private long encryptedSize;
   private short lifeVersion;
-  // this field is derived from the system generated last Update Time in the cloud db
-  // and hence shouldn't be serializable.
+  // this field is derived from the system generated last modified Time in the cosmos db which is present as "_ts" in
+  // the incoming JSON. Since we are using custom serializer, this field won't be included in the outgoing JSON when
+  // writing to cosmos.
   @JsonProperty(SYSTEM_GENERATED_FIELD_LAST_UPDATED_TIME)
-  @JsonIgnore
   private long lastUpdateTime;
 
   /**
