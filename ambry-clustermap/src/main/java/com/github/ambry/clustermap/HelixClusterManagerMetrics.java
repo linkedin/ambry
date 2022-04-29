@@ -134,14 +134,6 @@ class HelixClusterManagerMetrics {
 
     Gauge<Long> diskDownCount = clusterMapCallback::getDownDisksCount;
     registry.register(MetricRegistry.name(HelixClusterManager.class, "diskDownCount"), diskDownCount);
-
-    for (final AmbryDisk disk : clusterMapCallback.getDisks(null)) {
-      final String metricName =
-          disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
-              + "-DiskResourceState";
-      Gauge<Long> diskState = () -> disk.getState() == HardwareState.AVAILABLE ? 1L : 0L;
-      registry.register(MetricRegistry.name(HelixClusterManager.class, metricName), diskState);
-    }
   }
 
   /**
