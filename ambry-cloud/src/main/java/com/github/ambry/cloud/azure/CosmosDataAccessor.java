@@ -755,8 +755,9 @@ public class CosmosDataAccessor {
   CosmosContainerDeletionEntry updateContainerDeletionEntry(short containerId, short accountId,
       BiConsumer<CosmosContainerDeletionEntry, AtomicBoolean> updateFields) throws CosmosException {
 
-    CosmosAsyncContainer cosmosContainer = cosmosAsyncDatabase.getContainer(cosmosDeletedContainerCollection);
-    CosmosContainerResponse cosmosContainerResponse = cosmosContainer.read().block();
+    CosmosAsyncContainer cosmosContainerForDeletedCollection =
+        cosmosAsyncDatabase.getContainer(cosmosDeletedContainerCollection);
+    CosmosContainerResponse cosmosContainerResponse = cosmosContainerForDeletedCollection.read().block();
     if (cosmosContainerResponse == null) {
       throw new IllegalStateException(
           "CosmosDB container for storing deprecated Ambry containers not found: " + cosmosDeletedContainerCollection);
@@ -765,8 +766,8 @@ public class CosmosDataAccessor {
     // Read the existing record
     String id = CosmosContainerDeletionEntry.generateContainerDeletionEntryId(accountId, containerId);
     CosmosItemResponse<CosmosContainerDeletionEntry> cosmosItemResponse = executeCosmosAction(
-        () -> cosmosContainer.readItem(id, new PartitionKey(id), CosmosContainerDeletionEntry.class).block(),
-        azureMetrics.continerDeletionEntryReadTime);
+        () -> cosmosContainerForDeletedCollection.readItem(id, new PartitionKey(id), CosmosContainerDeletionEntry.class)
+            .block(), azureMetrics.continerDeletionEntryReadTime);
     CosmosContainerDeletionEntry containerDeletionEntry = cosmosItemResponse.getItem();
 
     // Update the record
@@ -791,8 +792,8 @@ public class CosmosDataAccessor {
     requestOptions.setIfMatchETag(cosmosItemResponse.getETag());
     try {
       return executeCosmosAction(
-          () -> cosmosAsyncContainer.replaceItem(containerDeletionEntry, id, new PartitionKey(id), requestOptions)
-              .block(), azureMetrics.documentUpdateTime).getItem();
+          () -> cosmosContainerForDeletedCollection.replaceItem(containerDeletionEntry, id, new PartitionKey(id),
+              requestOptions).block(), azureMetrics.documentUpdateTime).getItem();
     } catch (CosmosException cex) {
       if (cex.getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
         // Keep track of failures due to conflicts.
@@ -856,7 +857,9 @@ public class CosmosDataAccessor {
   <T> CosmosPagedFlux<T> executeCosmosQuery(String containerName, SqlQuerySpec sqlQuerySpec,
       CosmosQueryRequestOptions cosmosQueryRequestOptions, Class<T> classType, Timer timer) {
     azureMetrics.documentQueryCount.inc();
-    if (!Utils.isNullOrEmpty(cosmosQueryRequestOptions.getPartitionKey().toString())) {
+    // Check for null value of partition key.
+    if (cosmosQueryRequestOptions.getPartitionKey() != null && !Utils.isNullOrEmpty(
+        cosmosQueryRequestOptions.getPartitionKey().toString())) {
       logger.debug("Running query on partition {}: {}", cosmosQueryRequestOptions.getPartitionKey().toString(),
           sqlQuerySpec.getQueryText());
     } else {

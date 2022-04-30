@@ -156,6 +156,7 @@ public class AzureIntegrationTest {
    */
   @Test
   public void testNormalFlow() throws Exception {
+    cleanup();
     PartitionId partitionId = new MockPartitionId(testPartition, MockClusterMap.DEFAULT_PARTITION_CLASS);
     BlobId blobId = new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, false,
         BlobDataType.DATACHUNK);
@@ -225,8 +226,8 @@ public class AzureIntegrationTest {
     assertEquals(metadata.getDeletionTime(), Utils.Infinite_Time);
     assertEquals(metadata.getLifeVersion(), 2);
 
-    // delete after undelete.
-    long newDeletionTime = now + 20000;
+    // delete after undelete. Set the deletion time to some value which is before the retentionPeriodDays time period.
+    long newDeletionTime = now - TimeUnit.DAYS.toMillis(retentionPeriodDays + 1);
     //TODO add a test case here to verify life version after delete.
     assertTrue("Expected deletion to return true", cloudRequestAgent.doWithRetries(
         () -> azureDest.deleteBlob(blobId, newDeletionTime, (short) 3, dummyCloudUpdateValidator), "DeleteBlob",
