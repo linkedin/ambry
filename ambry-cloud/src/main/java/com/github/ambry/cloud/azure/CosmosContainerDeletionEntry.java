@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import java.util.Collection;
@@ -26,7 +25,6 @@ import org.json.JSONObject;
 /**
  * Class representing container deletion status in cloud.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class CosmosContainerDeletionEntry {
   static final String VERSION_KEY = "version";
   static final String CONTAINER_ID_KEY = "containerId";
