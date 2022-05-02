@@ -454,7 +454,7 @@ class AzureCloudDestination implements CloudDestination {
       throws CloudStorageException {
     try {
       BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
-      return azureBlobDataAccessor.downloadFile(tokenLayout.containerName, tokenLayout.blobFilePath, outputStream,
+      return azureBlobDataAccessor.downloadFile(tokenLayout.containerName, tokenLayout.blobFilePath, null, outputStream,
           false);
     } catch (Exception e) {
       throw toCloudStorageException("Could not retrieve token: " + partitionPath, e);

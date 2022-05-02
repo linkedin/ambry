@@ -179,6 +179,8 @@ public abstract class StorageClient {
    * Downloads a range of bytes from a blob asynchronously into an output stream.
    * @param containerName name of the Azure container where the blob lives.
    * @param blobName name of the blob.
+   * @param blobId Ambry {@link BlobId} associated with the {@code fileName}. Null value indicates blobName refers
+   *               to a metadata blob owned by Ambry.
    * @param autoCreateContainer flag indicating whether to create the container if it does not exist.
    * @param stream A non-null {@link OutputStream} instance where the downloaded data will be written.
    * @param range {@link BlobRange}
@@ -188,7 +190,7 @@ public abstract class StorageClient {
    * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete when blob is downloaded
    *         or an exception if an error occurred.
    */
-  public CompletableFuture<Void> downloadWithResponse(String containerName, String blobName,
+  public CompletableFuture<Void> downloadWithResponse(String containerName, String blobName, BlobId blobId,
       boolean autoCreateContainer, OutputStream stream, BlobRange range, DownloadRetryOptions options,
       BlobRequestConditions requestConditions, boolean getRangeContentMd5) {
     // Might as well use same timeout for upload and download
@@ -215,7 +217,7 @@ public abstract class StorageClient {
    * @return a {@link CompletableFuture} of type {@link Boolean} that will eventually complete successfully when the file
    *         is deleted or will complete exceptionally if an error occurs.
    */
-  CompletableFuture<Boolean> deleteFile(String containerName, String fileName) throws BlobStorageException {
+ public CompletableFuture<Boolean> deleteFile(String containerName, String fileName) throws BlobStorageException {
     return FutureUtils.retry(() -> {
       CompletableFuture<Boolean> completableFuture = new CompletableFuture<>();
       BlockBlobAsyncClient blobAsyncClient = getBlockBlobAsyncClient(containerName, fileName, false);
@@ -233,7 +235,7 @@ public abstract class StorageClient {
   /**
    * Perform basic connectivity test.
    */
-  void testConnectivity() {
+ public void testConnectivity() {
     CompletableFuture<Response<Boolean>> completableFuture = FutureUtils.retry(
         () -> storageAsyncClientRef.get().getBlobContainerAsyncClient("partition-0").existsWithResponse().toFuture(),
         retries, retryPredicate, this::onRetriableError, this::onError);

@@ -213,16 +213,17 @@ public class AzureBlobDataAccessor {
    * Download a file from blob storage.
    * @param containerName name of the container containing blob to download.
    * @param fileName name of the blob.
+   * @param blobId Ambry {@link BlobId} associated with the {@code fileName}.
    * @param outputStream the output stream to use for download.
    * @param errorOnNotFound If {@code true}, throw BlobStorageException on blob not found, otherwise return false.
    * @return {@code true} if the download was successful, {@code false} if the blob was not found.
    * @throws BlobStorageException for any error on ABS side.
    * @throws UncheckedIOException for any error with supplied data stream.
    */
-  public boolean downloadFile(String containerName, String fileName, OutputStream outputStream, boolean errorOnNotFound)
-      throws BlobStorageException, IOException {
+  public boolean downloadFile(String containerName, String fileName, BlobId blobId, OutputStream outputStream,
+      boolean errorOnNotFound) throws BlobStorageException, IOException {
     try {
-      storageClient.downloadWithResponse(containerName, fileName, false, outputStream, null, null,
+      storageClient.downloadWithResponse(containerName, fileName, blobId, false, outputStream, null, null,
           defaultRequestConditions, false).get(uploadTimeout.toMillis(), TimeUnit.MILLISECONDS);
       return true;
     } catch (ExecutionException | InterruptedException | TimeoutException e) {
@@ -285,7 +286,7 @@ public class AzureBlobDataAccessor {
     Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
     try {
       BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobId);
-      downloadFile(blobLayout.containerName, blobLayout.blobFilePath, outputStream, true);
+      downloadFile(blobLayout.containerName, blobLayout.blobFilePath, blobId, outputStream, true);
       azureMetrics.blobDownloadSuccessCount.inc();
     } catch (Exception e) {
       azureMetrics.blobDownloadErrorCount.inc();
