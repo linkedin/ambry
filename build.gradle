@@ -218,7 +218,8 @@ project(':ambry-account') {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
-                project(':ambry-mysql')
+                project(':ambry-mysql'),
+                project(':ambry-quota')
         compile "org.apache.helix:helix-core:$helixVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"

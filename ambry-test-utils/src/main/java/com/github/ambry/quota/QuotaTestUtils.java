@@ -21,6 +21,7 @@ import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestUtils;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
@@ -68,7 +69,8 @@ public class QuotaTestUtils {
 
       @Override
       public ThrottlingRecommendation recommend(RestRequest restRequest) {
-        return null;
+        return new ThrottlingRecommendation(QuotaAction.ALLOW,
+            Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 10.0f), -1, QuotaUsageLevel.HEALTHY);
       }
 
       @Override
@@ -78,21 +80,22 @@ public class QuotaTestUtils {
 
       @Override
       public QuotaMode getQuotaMode() {
-        return null;
+        return QuotaMode.TRACKING;
       }
 
       @Override
-      public void setQuotaMode(QuotaMode mode) {
-
-      }
-
-      @Override
-      public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap, boolean checkQuotaExceedAllowed, boolean forceCharge) {
-        return null;
+      public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
+          boolean checkQuotaExceedAllowed, boolean forceCharge) {
+        return QuotaAction.ALLOW;
       }
 
       @Override
       public void shutdown() {
+
+      }
+
+      @Override
+      public void setQuotaMode(QuotaMode mode) {
 
       }
     };
@@ -113,6 +116,26 @@ public class QuotaTestUtils {
    */
   public static TestQuotaChargeCallback createTestQuotaChargeCallback(QuotaConfig quotaConfig) {
     return new TestQuotaChargeCallback(quotaConfig);
+  }
+
+  /**
+   * Create an implementation of {@link QuotaChargeCallback} object for test.
+   * @param quotaMethod {@link QuotaMethod} object.
+   * @return TestQuotaChargeCallback object.
+   */
+  public static TestQuotaChargeCallback createTestQuotaChargeCallback(QuotaMethod quotaMethod) {
+    return new TestQuotaChargeCallback(quotaMethod);
+  }
+
+  /**
+   * Create an implementation of {@link QuotaChargeCallback} object for test.
+   * @param quotaConfig for the {@link QuotaChargeCallback} implementation.
+   * @param quotaMethod {@link QuotaMethod} object.
+   * @return TestQuotaChargeCallback object.
+   */
+  public static TestQuotaChargeCallback createTestQuotaChargeCallback(QuotaConfig quotaConfig,
+      QuotaMethod quotaMethod) {
+    return new TestQuotaChargeCallback(quotaConfig, quotaMethod);
   }
 
   /**
@@ -139,14 +162,16 @@ public class QuotaTestUtils {
    * An implementation of {@link QuotaChargeCallback} for tests.
    */
   public static class TestQuotaChargeCallback implements QuotaChargeCallback {
-    public int numCheckAndChargeCalls = 0;
     private final QuotaConfig quotaConfig;
+    private final QuotaMethod quotaMethod;
+    public int numCheckAndChargeCalls = 0;
 
     /**
      * Default constructor for {@link TestQuotaChargeCallback}.
      */
     public TestQuotaChargeCallback() {
       this.quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+      this.quotaMethod = QuotaMethod.READ;
     }
 
     /**
@@ -155,8 +180,27 @@ public class QuotaTestUtils {
      */
     public TestQuotaChargeCallback(QuotaConfig quotaConfig) {
       this.quotaConfig = quotaConfig;
+      this.quotaMethod = QuotaMethod.READ;
     }
 
+    /**
+     * Constructor for {@link TestQuotaChargeCallback} with the specified {@link QuotaMethod}.
+     * @param quotaMethod {@link QuotaMethod} object.
+     */
+    public TestQuotaChargeCallback(QuotaMethod quotaMethod) {
+      this.quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+      this.quotaMethod = quotaMethod;
+    }
+
+    /**
+     * Constructor for {@link TestQuotaChargeCallback} with the specified {@link QuotaConfig} and {@link QuotaMethod}.
+     * @param quotaConfig {@link QuotaConfig} object.
+     * @param quotaMethod {@link QuotaMethod} object.
+     */
+    public TestQuotaChargeCallback(QuotaConfig quotaConfig, QuotaMethod quotaMethod) {
+      this.quotaConfig = quotaConfig;
+      this.quotaMethod = quotaMethod;
+    }
 
     @Override
     public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge, long chunkSize) {
@@ -176,7 +220,7 @@ public class QuotaTestUtils {
 
     @Override
     public QuotaMethod getQuotaMethod() {
-      return null;
+      return quotaMethod;
     }
 
     @Override

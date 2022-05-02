@@ -24,6 +24,9 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.TestUtils;
@@ -241,9 +244,10 @@ class RouterTestHelpers {
   static void assertTtl(Router router, Collection<String> blobIds, long expectedTtlSecs) throws Exception {
     GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(),
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build()};
+    QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createTestQuotaChargeCallback();
     for (String blobId : blobIds) {
       for (GetBlobOptions option : options) {
-        GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        GetBlobResult result = router.getBlob(blobId, option, quotaChargeCallback).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         Assert.assertEquals("TTL not as expected", expectedTtlSecs,
             result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
         if (result.getBlobDataChannel() != null) {

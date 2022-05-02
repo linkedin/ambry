@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.network.NetworkClient;
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.store.StoreKey;
 import java.util.List;
 
@@ -54,10 +55,11 @@ class RouterCallback {
    * Schedule the deletes of ids in the given list.
    * @param idsToDelete the list of ids that need to be deleted.
    * @param serviceIdSuffix the suffix to append to the service ID when deleting these blobs.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} object to perform quota compliance checks.
    */
-  void scheduleDeletes(List<StoreKey> idsToDelete, String serviceIdSuffix) {
+  void scheduleDeletes(List<StoreKey> idsToDelete, String serviceIdSuffix, QuotaChargeCallback quotaChargeCallback) {
     for (StoreKey storeKey : idsToDelete) {
-      backgroundDeleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceIdSuffix));
+      backgroundDeleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceIdSuffix, quotaChargeCallback));
     }
   }
 

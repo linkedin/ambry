@@ -697,6 +697,13 @@ class PutOperation {
   }
 
   /**
+   * @return QuotaChargeCallback object associated with this operation.
+   */
+  QuotaChargeCallback getQuotaChargeCallback() {
+    return quotaChargeCallback;
+  }
+
+  /**
    * Called whenever the channel has data but no free or building chunk is available to be filled.
    */
   private void maybeStartTrackingWaitForChunkTime() {

@@ -229,7 +229,7 @@ public class OperationController implements Runnable {
           (Void result, Exception exception) -> {
             if (exception == null && attemptChunkDeletes) {
               try {
-                nonBlockingRouter.initiateChunkDeletesIfAny(blobIdStr, serviceId);
+                nonBlockingRouter.initiateChunkDeletesIfAny(blobIdStr, serviceId, quotaChargeCallback);
               } catch (RouterException e) {
                 logger.warn(
                     "RouterException for same reason should have been thrown by submitDeleteBlobOperation() and no callback should be triggered.",
@@ -264,7 +264,7 @@ public class OperationController implements Runnable {
               doUndeleteOperation(blobIds, serviceId, futureResult, callback, quotaChargeCallback);
             }, (exception) -> {
           nonBlockingRouter.completeUndeleteBlobOperation(exception, futureResult, callback);
-        }));
+        }), quotaChargeCallback);
   }
 
   /**
@@ -285,7 +285,7 @@ public class OperationController implements Runnable {
           doUpdateTtlOperation(blobIds, serviceId, expiresAtMs, futureResult, callback, quotaChargeCallback);
         }, (exception) -> {
           nonBlockingRouter.completeUpdateBlobTtlOperation(exception, futureResult, callback);
-        }));
+        }), quotaChargeCallback);
   }
 
   /**
@@ -295,9 +295,10 @@ public class OperationController implements Runnable {
    * @param futureResult A future that would contain the BlobId eventually.
    * @param callback The {@link Callback} which will be invoked on the completion of the request.
    * @param helper The {@link CompositeBlobOperationHelper} that carries other information about this operation.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object to help with quota enforcement.
    */
   protected void doOperationTowardsMaybeCompositeBlob(final String blobIdStr, FutureResult<Void> futureResult,
-      Callback<Void> callback, CompositeBlobOperationHelper helper) {
+      Callback<Void> callback, CompositeBlobOperationHelper helper, QuotaChargeCallback quotaChargeCallback) {
     // Can skip GET if we can determine this is not a metadata blob
     if (NonBlockingRouter.isMaybeMetadataBlob(blobIdStr)) {
       Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
@@ -324,7 +325,7 @@ public class OperationController implements Runnable {
           .build();
       GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, helper.getMetrics());
       try {
-        getBlob(blobIdStr, optionsInternal, internalCallback, null);
+        getBlob(blobIdStr, optionsInternal, internalCallback, quotaChargeCallback);
       } catch (RouterException e) {
         helper.getCompleteOperationAtException().accept(e);
       }

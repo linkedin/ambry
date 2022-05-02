@@ -51,7 +51,7 @@ public class QuotaConfig {
   public static final float DEFAULT_MAX_FRONTEND_CU_USAGE_TO_ALLOW_EXCEED = 80.0f;
   public static final String DEFAULT_CU_QUOTA_IN_JSON = "{}";
   public static final String DEFAULT_FRONTEND_BANDWIDTH_CAPACITY_IN_JSON = "{}";
-  public static final boolean DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED = false;
+  public static final boolean DEFAULT_BANDWIDTH_THROTTLING_FEATURE_ENABLED = true;
   public static final long DEFAULT_CU_QUOTA_AGGREGATION_WINDOW_IN_SECS = 10;
   public static final int DEFAULT_QUOTA_USAGE_WARNING_THRESHOLD_IN_PERCENTAGE = 80;
   public StorageQuotaConfig storageQuotaConfig;

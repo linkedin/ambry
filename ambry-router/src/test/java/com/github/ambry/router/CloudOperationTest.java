@@ -48,16 +48,17 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaMethod;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import java.nio.ByteBuffer;
-import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -114,6 +115,10 @@ public class CloudOperationTest {
   private final MockCompositeNetworkClient mockNetworkClient;
   private final RouterCallback routerCallback;
   private final String operationTrackerType;
+  private final QuotaChargeCallback quotaChargeCallbackForRead =
+      QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.READ);
+  private final QuotaChargeCallback quotaChargeCallbackForWrite =
+      QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE);
 
   // Mock servers include disk backed "mockServers" and cloud backed "cloudDestination"
   private final LatchBasedInMemoryCloudDestination cloudDestination;
@@ -366,7 +371,8 @@ public class CloudOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
-            routerCallback, blobIdFactory, null, null, null, time, false, null);
+            routerCallback, blobIdFactory, null, null, null, time, false,
+            quotaChargeCallbackForRead);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
 
     // Wait operation to complete
@@ -491,7 +497,7 @@ public class CloudOperationTest {
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.ID_Not_Found);
 
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build(), quotaChargeCallbackForRead).get();
       fail("Expecting exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();
@@ -553,12 +559,12 @@ public class CloudOperationTest {
     // configure all the disk backed server will return failure
     mockServers.forEach(s -> s.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error));
     // although all disk colo will fail, cloud colo will return it successfully.
-    router.updateBlobTtl(blobId, null, Utils.Infinite_Time).get();
+    router.updateBlobTtl(blobId, null, Utils.Infinite_Time, quotaChargeCallbackForWrite).get();
 
     // inject error for cloud colo as well. Now will fail
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.TTL_Expired);
     try {
-      router.updateBlobTtl(blobId, null, Utils.Infinite_Time).get();
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, quotaChargeCallbackForWrite).get();
       fail("Expecting exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();
@@ -578,12 +584,12 @@ public class CloudOperationTest {
 
     mockServers.forEach(s -> s.setServerErrorForAllRequests(ServerErrorCode.Data_Corrupt));
     // although all disk colo will fail, cloud colo will return it successfully.
-    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build(), quotaChargeCallbackForRead).get();
 
     // inject error for cloud colo as well.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.ID_Not_Found);
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build(), quotaChargeCallbackForRead).get();
       fail("Expecting exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();
@@ -604,14 +610,14 @@ public class CloudOperationTest {
 
     mockServers.forEach(s -> s.setServerErrorForAllRequests(ServerErrorCode.Data_Corrupt));
     // although all disk colo will fail, cloud colo will return it successfully.
-    router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
-        .get();
+    router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
+        quotaChargeCallbackForRead).get();
 
     // inject error for cloud colo as well.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.ID_Not_Found);
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
-          .get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
+          quotaChargeCallbackForRead).get();
       fail("Expecting exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();
@@ -632,12 +638,12 @@ public class CloudOperationTest {
 
     mockServers.forEach(s -> s.setServerErrorForAllRequests(ServerErrorCode.IO_Error));
     // although all disk colo will fail, cloud colo will return it successfully.
-    router.deleteBlob(blobId, null).get();
+    router.deleteBlob(blobId, null, quotaChargeCallbackForWrite).get();
 
     // inject error for cloud colo as well.
     cloudDestination.setServerErrorForAllRequests(StoreErrorCodes.Unknown_Error);
     try {
-      router.deleteBlob(blobId, null).get();
+      router.deleteBlob(blobId, null, quotaChargeCallbackForWrite).get();
       fail("Expecting exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();

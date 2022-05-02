@@ -31,6 +31,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaMetrics;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMode;
@@ -465,7 +466,11 @@ public class PostBlobHandlerTest {
               null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
-              new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
+              new PutBlobOptionsBuilder().chunkUpload(true).build(),
+              QuotaUtils.buildQuotaChargeCallback(
+                  QuotaTestUtils.createRestRequest(REF_ACCOUNT, REF_CONTAINER, RestMethod.POST),
+                  QuotaTestUtils.createDummyQuotaManager(), true))
+              .get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
       chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
     }

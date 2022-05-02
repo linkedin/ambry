@@ -14,6 +14,7 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.store.StoreKey;
 
 
@@ -24,15 +25,18 @@ class BackgroundDeleteRequest {
   static final String SERVICE_ID_PREFIX = "ambry-background-delete-";
   private final StoreKey storeKey;
   private final String serviceId;
+  private final QuotaChargeCallback quotaChargeCallback;
 
   /**
    * @param storeKey The {@link StoreKey} to delete.
    * @param serviceIdSuffix The suffix to attach to the delete service ID. This can be used to convey information about
    *                        the the delete requester.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} object for quota compliance checks.
    */
-  BackgroundDeleteRequest(StoreKey storeKey, String serviceIdSuffix) {
+  BackgroundDeleteRequest(StoreKey storeKey, String serviceIdSuffix, QuotaChargeCallback quotaChargeCallback) {
     this.serviceId = SERVICE_ID_PREFIX + serviceIdSuffix;
     this.storeKey = storeKey;
+    this.quotaChargeCallback = quotaChargeCallback;
   }
 
   /**
@@ -47,5 +51,12 @@ class BackgroundDeleteRequest {
    */
   public String getServiceId() {
     return serviceId;
+  }
+
+  /**
+   * @return QuotaChargeCallback object.
+   */
+  public QuotaChargeCallback getQuotaChargeCallback() {
+    return quotaChargeCallback;
   }
 }

@@ -14,10 +14,6 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountService;
-import com.github.ambry.account.Container;
-import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.QuotaConfig;
@@ -25,45 +21,30 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.quota.AmbryQuotaManager;
+import com.github.ambry.quota.AmbryQuotaManagerFactory;
 import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaMethod;
-import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaMode;
-import com.github.ambry.quota.QuotaName;
-import com.github.ambry.quota.QuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
-import com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcer;
 import com.github.ambry.quota.capacityunit.CapacityUnit;
-import com.github.ambry.rest.MockRestRequest;
-import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.UnsupportedEncodingException;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -114,23 +95,6 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
   }
 
   /**
-   * Build the default quota enforcer and source pair json.
-   * @return JSONObject representing the pair json.
-   */
-  private static String buildQuotaEnforcerSourceInfoPair() {
-    JSONObject jsonObject = new JSONObject();
-    JSONArray jsonArray = new JSONArray();
-    jsonObject.put(QuotaConfig.ENFORCER_STR, "com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcerFactory");
-    jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.router.TestCUQuotaSourceFactory");
-    jsonArray.put(jsonObject);
-    jsonObject = new JSONObject();
-    jsonObject.put(QuotaConfig.ENFORCER_STR, "com.github.ambry.router.RejectingQuotaEnforcerFactory");
-    jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.router.TestCUQuotaSourceFactory");
-    jsonArray.put(jsonObject);
-    return new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString();
-  }
-
-  /**
    * Test Router with single scaling unit for correct accounting in {@link QuotaChargeCallback}.
    */
   @Test
@@ -159,12 +123,12 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
 
         @Override
         public QuotaResource getQuotaResource() {
-          return null;
+          return new QuotaResource(String.valueOf(account.getId()), QuotaResourceType.ACCOUNT);
         }
 
         @Override
         public QuotaMethod getQuotaMethod() {
-          return null;
+          return QuotaMethod.READ;
         }
 
         @Override
@@ -175,11 +139,12 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
 
       // test for a composite blob.
       int blobSize = 3000;
+      int metadataSize = (metadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2) ? 116 : 140;
       setOperationParams(blobSize, TTL_SECS);
       String compositeBlobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
               quotaChargeCallback).get();
-      expectedChargeCallbackCount += blobSize;
+      expectedChargeCallbackCount += (blobSize + metadataSize);
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
@@ -187,7 +152,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
           .get();
-      expectedChargeCallbackCount += blobSize;
+      expectedChargeCallbackCount += (blobSize + quotaAccountingSize);
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
@@ -207,16 +172,17 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
 
       for (String blobId : blobIds) {
         router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
-        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE + 24), listenerCalledCount.get());
         router.updateBlobTtl(blobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
-        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE + 24), listenerCalledCount.get());
         router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
             null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
         router.deleteBlob(blobId, null, null, quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
+        expectedChargeCallbackCount += quotaAccountingSize;
         try {
           router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
           fail("Get blob should fail");
@@ -227,10 +193,10 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
         }
         router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build(), null,
             quotaChargeCallback).get();
-        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE + 24), listenerCalledCount.get());
         router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build(), null,
             quotaChargeCallback).get();
-        assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
+        assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE + 24), listenerCalledCount.get());
       }
 
       // test for stitched blobs.
@@ -248,6 +214,8 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, blobIds.stream()
           .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
           .collect(Collectors.toList()), null, quotaChargeCallback).get();
+      expectedChargeCallbackCount +=
+          (metadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2) ? 82 : 98;
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 
       retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
@@ -258,10 +226,12 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
           .get();
       // read out all the chunks to make sure all the chunks are consumed and accounted for.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
-      assertEquals(expectedChargeCallbackCount += (PUT_CONTENT_SIZE * stitchedBlobCount), listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount += ((PUT_CONTENT_SIZE * stitchedBlobCount) + quotaAccountingSize),
+          listenerCalledCount.get());
 
       router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
-      assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount += ((3 * quotaAccountingSize) + quotaAccountingSize),
+          listenerCalledCount.get());
 
       router.deleteBlob(stitchedBlobId, null, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
@@ -282,15 +252,18 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
     try {
       setRouter();
       assertExpectedThreadCounts(2, 1);
-      AtomicInteger listenerCalledCount = new AtomicInteger(0);
       QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
-      QuotaManager quotaManager =
-          new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
-              accountService, null, new QuotaMetrics(new MetricRegistry()), listenerCalledCount);
-      QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(null, quotaManager, true);
+      ChargeTesterQuotaManager quotaManager =
+          (ChargeTesterQuotaManager) new ChargeTesterQuotaManagerFactory(quotaConfig,
+              new SimpleQuotaRecommendationMergePolicy(quotaConfig), accountService, null,
+              new MetricRegistry()).getQuotaManager();
+      AtomicInteger listenerCalledCount = quotaManager.getChargeCalledCount();
+      QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(
+          QuotaTestUtils.createRestRequest(account, account.getAllContainers().iterator().next(), RestMethod.POST),
+          quotaManager, true);
 
       int blobSize = 3000;
-      setOperationParams(blobSize, TTL_SECS);
+      setOperationParams(blobSize, TTL_SECS, account.getId(), account.getAllContainers().iterator().next().getId());
       String compositeBlobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
               quotaChargeCallback).get();
@@ -328,17 +301,18 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       properties.setProperty(RouterConfig.OPERATION_CONTROLLER, QuotaAwareOperationController.class.getCanonicalName());
       setRouter(properties, mockServerLayout, new LoggingNotificationSystem());
       assertExpectedThreadCounts(2, 1);
-      AtomicInteger listenerCalledCount = new AtomicInteger(0);
 
       QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
-      Account account = accountService.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
       ChargeTesterQuotaManager chargeTesterQuotaManager =
-          new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
-              accountService, null, new QuotaMetrics(new MetricRegistry()), listenerCalledCount);
+          (ChargeTesterQuotaManager) new ChargeTesterQuotaManagerFactory(quotaConfig,
+              new SimpleQuotaRecommendationMergePolicy(quotaConfig), accountService, null,
+              new MetricRegistry()).getQuotaManager();
       chargeTesterQuotaManager.init();
       TestCUQuotaSource quotaSource = chargeTesterQuotaManager.getTestCuQuotaSource();
-      RestRequest restRequest = createRestRequest(RestMethod.POST.name(), null, account, account.getAllContainers().iterator().next());
-      QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
+      RestRequest restRequest =
+          createRestRequest(RestMethod.POST.name(), null, account, account.getAllContainers().iterator().next());
+      QuotaChargeCallback quotaChargeCallback =
+          QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
       int blobSize = 3000;
       setOperationParams(blobSize, TTL_SECS, account.getId(), account.getAllContainers().iterator().next().getId());
       quotaSource.getCuQuota().put(String.valueOf(account.getId()), new CapacityUnit(8, 8));
@@ -346,30 +320,31 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       String compositeBlobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
               quotaChargeCallback).get();
-        CapacityUnit quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
-        Assert.assertEquals(8, quotaUsage.getWcu());
-        Assert.assertEquals(0, quotaUsage.getRcu());
-        RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-        restRequest = createRestRequest(RestMethod.GET.name(), null, account, account.getAllContainers().iterator().next());
-        quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
-        router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
-            .get()
-            .getBlobDataChannel()
-            .readInto(retainingAsyncWritableChannel, null)
-            .get();
-        // read out all the chunks.
-        retainingAsyncWritableChannel.consumeContentAsInputStream().close();
-        quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
-        Assert.assertEquals(8, quotaUsage.getWcu());
-        Assert.assertEquals(8, quotaUsage.getRcu());
-        retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-        try {
-          router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
-          if(quotaMode == QuotaMode.THROTTLING) {
-            fail("getBlob should throw exception if request is be rejected by an enforcer and quota mode is throttling.");
-          }
+      CapacityUnit quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
+      Assert.assertEquals(8, quotaUsage.getWcu());
+      Assert.assertEquals(0, quotaUsage.getRcu());
+      RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+      restRequest =
+          createRestRequest(RestMethod.GET.name(), null, account, account.getAllContainers().iterator().next());
+      quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
+      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+          .get()
+          .getBlobDataChannel()
+          .readInto(retainingAsyncWritableChannel, null)
+          .get();
+      // read out all the chunks.
+      retainingAsyncWritableChannel.consumeContentAsInputStream().close();
+      quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
+      Assert.assertEquals(8, quotaUsage.getWcu());
+      Assert.assertEquals(8, quotaUsage.getRcu());
+      retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+      try {
+        router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback).get();
+        if (quotaMode == QuotaMode.THROTTLING) {
+          fail("getBlob should throw exception if request is be rejected by an enforcer and quota mode is throttling.");
+        }
       } catch (ExecutionException ex) {
-        if(quotaMode == QuotaMode.TRACKING) {
+        if (quotaMode == QuotaMode.TRACKING) {
           fail("getBlob should throw exception if request is be rejected by an enforcer and quota mode is tracking.");
         } else {
           Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException) ex.getCause()).getErrorCode());
@@ -404,11 +379,18 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       properties.setProperty(RouterConfig.OPERATION_CONTROLLER, QuotaAwareOperationController.class.getCanonicalName());
       setRouter(properties, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem());
       assertExpectedThreadCounts(SCALING_UNITS + 1, SCALING_UNITS);
+      QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
+      QuotaManager ambryQuotaManager =
+          new AmbryQuotaManagerFactory(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+              accountService, null, new MetricRegistry()).getQuotaManager();
 
       // Submit a few jobs so that all the scaling units get exercised.
       for (int i = 0; i < SCALING_UNITS * 10; i++) {
         setOperationParams();
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        RestRequest restRequest =
+            createRestRequest(RestMethod.POST.name(), null, account, account.getAllContainers().iterator().next());
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            QuotaUtils.buildQuotaChargeCallback(restRequest, ambryQuotaManager, true)).get();
       }
     } finally {
       if (router != null) {
@@ -419,74 +401,6 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
         setOperationParams();
         assertClosed();
       }
-    }
-  }
-
-  /**
-   * Method to easily create {@link RestRequest} objects containing a specific request, account and container.
-   * @param restMethod string representation of the rest method.
-   * @param uri string representation of the desired URI.
-   * @param account {@link Account} object associated with the request.
-   * @param container {@link Container} object associated with the request.
-   * @return A {@link RestRequest} object that defines the request required by the input.
-   * @throws JSONException
-   * @throws UnsupportedEncodingException
-   * @throws URISyntaxException
-   */
-  private RestRequest createRestRequest(String restMethod, String uri, Account account, Container container)
-      throws JSONException, UnsupportedEncodingException, URISyntaxException, RestServiceException {
-    JSONObject request = new JSONObject();
-    request.put(MockRestRequest.REST_METHOD_KEY, (restMethod == null) ? JSONObject.NULL : restMethod);
-    request.put(MockRestRequest.URI_KEY, ((uri == null) ? JSONObject.NULL : uri));
-    JSONObject headers = new JSONObject();
-    headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, ((account == null) ? JSONObject.NULL : account));
-    headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, ((container == null) ? JSONObject.NULL : container));
-    headers.putOpt(RestUtils.InternalKeys.REQUEST_PATH,
-        RequestPath.parse("/", Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
-    request.put(MockRestRequest.HEADERS_KEY, headers);
-    return new MockRestRequest(request, null);
-  }
-
-  /**
-   * {@link AmbryQuotaManager} extension to test behavior with default implementation.
-   */
-  static class ChargeTesterQuotaManager extends AmbryQuotaManager {
-    private final AtomicInteger chargeCalledCount;
-
-    /**
-     * Constructor for {@link ChargeTesterQuotaManager}.
-     * @param quotaConfig {@link QuotaConfig} object.
-     * @param quotaRecommendationMergePolicy {@link QuotaRecommendationMergePolicy} object that makes the overall recommendation.
-     * @param accountService {@link AccountService} object to get all the accounts and container information.
-     * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
-     * @param quotaMetrics {@link QuotaMetrics} object.
-     * @throws ReflectiveOperationException in case of any exception.
-     */
-    public ChargeTesterQuotaManager(QuotaConfig quotaConfig,
-        QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
-        AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics, AtomicInteger chargeCalledCount)
-        throws ReflectiveOperationException {
-      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, quotaMetrics);
-      this.chargeCalledCount = chargeCalledCount;
-    }
-
-    @Override
-    public QuotaAction chargeAndRecommend(RestRequest restRequest, Map<QuotaName, Double> requestCostMap,
-        boolean shouldCheckIfQuotaExceedAllowed, boolean forceCharge) throws QuotaException {
-      chargeCalledCount.incrementAndGet();
-      return super.chargeAndRecommend(restRequest, requestCostMap, shouldCheckIfQuotaExceedAllowed, forceCharge);
-    }
-
-    /**
-     * @return TestCUQuotaSource object from the {@link QuotaEnforcer}s.
-     */
-    public TestCUQuotaSource getTestCuQuotaSource() {
-      for (QuotaEnforcer quotaEnforcer : quotaEnforcers) {
-        if (quotaEnforcer instanceof AmbryCUQuotaEnforcer && !(quotaEnforcer instanceof RejectingQuotaEnforcer)) {
-          return (TestCUQuotaSource) quotaEnforcer.getQuotaSource();
-        }
-      }
-      throw new IllegalStateException("could not find TestCUQuotaSource in QuotaManager.");
     }
   }
 }

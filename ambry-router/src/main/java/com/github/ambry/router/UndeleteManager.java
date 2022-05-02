@@ -116,7 +116,7 @@ public class UndeleteManager {
       for (BlobId blobId : blobIds) {
         UndeleteOperation undeleteOperation =
             new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, operationTimeMs,
-                tracker.getCallback(blobId), time, BatchOperationCallbackTracker.DUMMY_FUTURE);
+                tracker.getCallback(blobId), time, BatchOperationCallbackTracker.DUMMY_FUTURE, quotaChargeCallback);
         undeleteOperations.add(undeleteOperation);
       }
     }

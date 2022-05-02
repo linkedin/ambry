@@ -26,6 +26,7 @@ import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import java.util.Properties;
@@ -57,6 +58,7 @@ public class OperationQuotaChargerTest {
   public void testGetQuotaResource() throws Exception {
     ClusterMap clusterMap = new MockClusterMap();
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
+
     // getQuotaResource should return null if quotaChargeCallback is null.
     OperationQuotaCharger operationQuotaCharger =
         new OperationQuotaCharger(null, BLOBID, GetOperation.class.getSimpleName(), routerMetrics);
@@ -115,7 +117,8 @@ public class OperationQuotaChargerTest {
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     // checkAndCharge should return allow if quotaChargeCallback is null.
     OperationQuotaCharger operationQuotaCharger =
-        new OperationQuotaCharger(null, BLOBID, GetOperation.class.getSimpleName(), routerMetrics);
+        new OperationQuotaCharger(QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.READ), BLOBID,
+            GetOperation.class.getSimpleName(), routerMetrics);
     Assert.assertEquals("checkAndCharge should return allow if quotaChargeCallback is null.", QuotaAction.ALLOW,
         operationQuotaCharger.checkAndCharge(shouldCheckExceedAllowed));
 

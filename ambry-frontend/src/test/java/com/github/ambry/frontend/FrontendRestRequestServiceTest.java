@@ -43,6 +43,7 @@ import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaMetrics;
+import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaManager;
@@ -722,8 +723,11 @@ public class FrontendRestRequestServiceTest {
         new BlobProperties(0, "userMetadataTestOldStyleServiceID", Account.UNKNOWN_ACCOUNT_ID,
             Container.UNKNOWN_CONTAINER_ID, false);
     byte[] usermetadata = TestUtils.getRandomBytes(25);
+    QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(
+        QuotaTestUtils.createRestRequest(refAccount, refContainer, RestMethod.POST),
+        QuotaTestUtils.createDummyQuotaManager(), true);
     String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content),
-        new PutBlobOptionsBuilder().build()).get();
+        new PutBlobOptionsBuilder().build(), quotaChargeCallback).get();
 
     RestUtils.SubResource[] subResources = {RestUtils.SubResource.UserMetadata, RestUtils.SubResource.BlobInfo};
     for (RestUtils.SubResource subResource : subResources) {

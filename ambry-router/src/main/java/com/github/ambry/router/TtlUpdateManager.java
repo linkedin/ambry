@@ -113,7 +113,8 @@ class TtlUpdateManager {
       for (BlobId blobId : blobIds) {
         TtlUpdateOperation ttlUpdateOperation =
             new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs,
-                operationTimeMs, tracker.getCallback(blobId), time, BatchOperationCallbackTracker.DUMMY_FUTURE);
+                operationTimeMs, tracker.getCallback(blobId), time, BatchOperationCallbackTracker.DUMMY_FUTURE,
+                quotaChargeCallback);
         ttlUpdateOperations.add(ttlUpdateOperation);
       }
     }

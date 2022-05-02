@@ -34,6 +34,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.MockTime;
@@ -164,7 +165,8 @@ public class GetBlobInfoOperationTest {
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     String blobIdStr =
-        router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
     localReplica = RouterTestHelpers.getAnyReplica(blobId, true, localDcName);
     remoteReplica = RouterTestHelpers.getAnyReplica(blobId, false, localDcName);

@@ -17,6 +17,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.AdminRequestQuotaChargeCallback;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.PutBlobOptions;
@@ -42,6 +43,7 @@ import org.apache.helix.AccessOption;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.apache.zookeeper.data.Stat;
+import org.apache.helix.zookeeper.zkclient.DataUpdater;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -127,7 +129,8 @@ class RouterStore extends AccountMetadataStore {
    */
   Map<String, String> readAccountMetadataFromBlobID(String blobID) {
     long startTimeMs = System.currentTimeMillis();
-    Future<GetBlobResult> resultF = router.get().getBlob(blobID, new GetBlobOptionsBuilder().build());
+    Future<GetBlobResult> resultF = router.get().getBlob(blobID, new GetBlobOptionsBuilder().build(),
+        new AdminRequestQuotaChargeCallback(true));
     try {
       GetBlobResult result = resultF.get();
       accountServiceMetrics.accountFetchFromAmbryTimeInMs.update(System.currentTimeMillis() - startTimeMs);
@@ -234,7 +237,8 @@ class RouterStore extends AccountMetadataStore {
     ByteBufferReadableStreamChannel channel =
         new ByteBufferReadableStreamChannel(ByteBuffer.wrap(object.toString().getBytes(Charsets.UTF_8)));
     BlobProperties properties = new BlobProperties(channel.getSize(), SERVICE_ID, ACCOUNT_ID, CONTAINER_ID, false);
-    return router.putBlob(properties, null, channel, PutBlobOptions.DEFAULT).get();
+    return router.putBlob(properties, null, channel, PutBlobOptions.DEFAULT,
+        new AdminRequestQuotaChargeCallback(false)).get();
   }
 
   /**
@@ -389,7 +393,7 @@ class RouterStore extends AccountMetadataStore {
         try {
           logger.info("Removing blob {} since the update failed", newBlobID);
           // Block this execution? or maybe wait for a while then get out?
-          router.get().deleteBlob(newBlobID, SERVICE_ID).get();
+          router.get().deleteBlob(newBlobID, SERVICE_ID, new AdminRequestQuotaChargeCallback(false)).get();
         } catch (Exception e) {
           logger.error("Failed to delete blob={}", newBlobID, e);
           accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();
@@ -402,7 +406,7 @@ class RouterStore extends AccountMetadataStore {
           try {
             logger.info("Removing blob {}", blobID);
             // Block this execution? or maybe wait for a while then get out?
-            router.get().deleteBlob(blobID, SERVICE_ID).get();
+            router.get().deleteBlob(blobID, SERVICE_ID, new AdminRequestQuotaChargeCallback(false)).get();
           } catch (Exception e) {
             logger.error("Failed to delete blob={}", blobID, e);
             accountServiceMetrics.accountDeletesToAmbryServerErrorCount.inc();

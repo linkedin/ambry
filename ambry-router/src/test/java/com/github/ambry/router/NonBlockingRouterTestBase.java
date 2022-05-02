@@ -13,6 +13,9 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
@@ -21,6 +24,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -35,6 +39,21 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMethod;
+import com.github.ambry.quota.QuotaMetrics;
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
+import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
@@ -45,6 +64,8 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,6 +82,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -96,8 +120,11 @@ public class NonBlockingRouterTestBase {
   protected final int metadataContentVersion;
   protected final boolean includeCloudDc;
   protected final InMemAccountService accountService;
+  protected final Account account;
   protected final Random random = new Random();
   protected NonBlockingRouter router;
+  AtomicInteger quotaListenerCalledCount = new AtomicInteger(0);
+  protected QuotaManager quotaManager;
   protected NonBlockingRouterMetrics routerMetrics;
   protected RouterConfig routerConfig;
   protected CryptoJobHandler cryptoJobHandler;
@@ -111,6 +138,11 @@ public class NonBlockingRouterTestBase {
   protected GetManager getManager;
   protected DeleteManager deleteManager;
   protected final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  protected final QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+  protected final QuotaChargeCallback quotaChargeCallbackForWrite =
+      QuotaTestUtils.createTestQuotaChargeCallback(quotaConfig, QuotaMethod.WRITE);
+  protected final QuotaChargeCallback quotaChargeCallbackForRead =
+      QuotaTestUtils.createTestQuotaChargeCallback(quotaConfig, QuotaMethod.READ);
 
   /**
    * Initialize parameters common to all tests. This constructor is exposed for use by {@link CloudRouterTest}.
@@ -134,6 +166,7 @@ public class NonBlockingRouterTestBase {
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     accountService = new InMemAccountService(false, true);
+    account = accountService.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
   }
 
   @Before
@@ -146,6 +179,49 @@ public class NonBlockingRouterTestBase {
     Assert.assertEquals("Current operations count should be 0", 0, NonBlockingRouter.currentOperationsCount.get());
     nettyByteBufLeakHelper.afterTest();
     nettyByteBufLeakHelper.setDisabled(false);
+  }
+
+  /**
+   * Method to easily create {@link RestRequest} objects containing a specific request, account and container.
+   * @param restMethod string representation of the rest method.
+   * @param uri string representation of the desired URI.
+   * @param account {@link Account} object associated with the request.
+   * @param container {@link Container} object associated with the request.
+   * @return A {@link RestRequest} object that defines the request required by the input.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  public RestRequest createRestRequest(String restMethod, String uri, Account account, Container container)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException, RestServiceException {
+    JSONObject request = new JSONObject();
+    request.put(MockRestRequest.REST_METHOD_KEY, (restMethod == null) ? JSONObject.NULL : restMethod);
+    request.put(MockRestRequest.URI_KEY, ((uri == null) ? JSONObject.NULL : uri));
+    JSONObject headers = new JSONObject();
+    headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, ((account == null) ? JSONObject.NULL : account));
+    headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, ((container == null) ? JSONObject.NULL : container));
+    headers.putOpt(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse("/", Collections.emptyMap(), Collections.emptyList(), "ambry-test"));
+    request.put(MockRestRequest.HEADERS_KEY, headers);
+    return new MockRestRequest(request, null);
+  }
+
+  /**
+   * Method to create {@link RestRequest} object for POST requests.
+   * @return RestRequest object.
+   * @throws Exception in case of any error.
+   */
+  public RestRequest createRestRequestForPutOperation() throws Exception {
+    return createRestRequest(RestMethod.POST.name(), "/", account, account.getAllContainers().iterator().next());
+  }
+
+  /**
+   * Method to create {@link RestRequest} object for GET requests.
+   * @return RestRequest object.
+   * @throws Exception in case of any error.
+   */
+  public RestRequest createRestRequestForGetOperation() throws Exception {
+    return createRestRequest(RestMethod.POST.name(), "/something.bin", account, account.getAllContainers().iterator().next());
   }
 
   /**
@@ -186,6 +262,11 @@ public class NonBlockingRouterTestBase {
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(128));
     properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
+
+    // configs for bandwidth throttling.
+    properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
+        buildQuotaEnforcerSourceInfoPair());
+    properties.setProperty(QuotaConfig.CU_QUOTA_AGGREGATION_WINDOW_IN_SECS, "86400");
     return properties;
   }
 
@@ -212,6 +293,10 @@ public class NonBlockingRouterTestBase {
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    QuotaConfig quotaConfig = new QuotaConfig(verifiableProperties);
+    quotaManager =
+        new ChargeTesterQuotaManagerFactory(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+            accountService, null, new MetricRegistry()).getQuotaManager();
   }
 
   /**
@@ -532,9 +617,12 @@ public class NonBlockingRouterTestBase {
    * Assert that submission after closing the router returns a future that is already done and an appropriate
    * exception.
    */
-  protected void assertClosed() {
+  protected void assertClosed() throws Exception {
+    RestRequest restRequest = createRestRequestForPutOperation();
+    QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true);
     Future<String> future =
-        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            quotaChargeCallback);
     Assert.assertTrue(future.isDone());
     RouterException e = (RouterException) ((FutureResult<String>) future).error();
     Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
@@ -556,10 +644,16 @@ public class NonBlockingRouterTestBase {
     setOperationParams();
     Assert.assertFalse("The original ttl should not be infinite for this test to work",
         putBlobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+    RestRequest restRequest = createRestRequestForPutOperation();
+    QuotaChargeCallback quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true);
+    String blobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            quotaChargeCallback)
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertTtl(router, Collections.singleton(blobId), TTL_SECS);
-    router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    restRequest = createRestRequest(RestMethod.PUT.name(), "/", account, account.getAllContainers().iterator().next());
+    quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true);
+    router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, quotaChargeCallback).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     // if more than one chunk is created, also account for metadata blob
     notificationSystem.checkNotifications(numChunks == 1 ? 1 : numChunks + 1, updateServiceId, Utils.Infinite_Time);
     assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
@@ -571,7 +665,7 @@ public class NonBlockingRouterTestBase {
     }
     router.close();
     // check that ttl update won't work after router close
-    Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time);
+    Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, quotaChargeCallback);
     Assert.assertTrue(future.isDone());
     RouterException e = (RouterException) ((FutureResult<Void>) future).error();
     Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
@@ -623,18 +717,18 @@ public class NonBlockingRouterTestBase {
           futureResult = new FutureResult<String>();
           ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
           putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
-              futureResult, null, null);
+              futureResult, null, quotaChargeCallbackForWrite);
           break;
         case GET:
           final FutureResult<GetBlobResultInternal> getFutureResult = new FutureResult<>();
           getManager.submitGetBlobOperation(blobId.getID(), new GetBlobOptionsInternal(
               new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
-              routerMetrics.ageAtGet), getFutureResult::done, null);
+              routerMetrics.ageAtGet), getFutureResult::done, quotaChargeCallbackForWrite);
           futureResult = getFutureResult;
           break;
         case DELETE:
           futureResult = new FutureResult<Void>();
-          deleteManager.submitDeleteBlobOperation(blobId.getID(), null, futureResult, null, null);
+          deleteManager.submitDeleteBlobOperation(blobId.getID(), null, futureResult, null, quotaChargeCallbackForWrite);
           break;
       }
       NonBlockingRouter.currentOperationsCount.incrementAndGet();
@@ -695,5 +789,22 @@ public class NonBlockingRouterTestBase {
           break;
       }
     }
+  }
+
+  /**
+   * Build quota enforcer and source pair json.
+   * @return JSONObject representing the pair json.
+   */
+  public static String buildQuotaEnforcerSourceInfoPair() {
+    JSONObject jsonObject = new JSONObject();
+    JSONArray jsonArray = new JSONArray();
+    jsonObject.put(QuotaConfig.ENFORCER_STR, "com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcerFactory");
+    jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.router.TestCUQuotaSourceFactory");
+    jsonArray.put(jsonObject);
+    jsonObject = new JSONObject();
+    jsonObject.put(QuotaConfig.ENFORCER_STR, "com.github.ambry.router.RejectingQuotaEnforcerFactory");
+    jsonObject.put(QuotaConfig.SOURCE_STR, "com.github.ambry.router.TestCUQuotaSourceFactory");
+    jsonArray.put(jsonObject);
+    return new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString();
   }
 }

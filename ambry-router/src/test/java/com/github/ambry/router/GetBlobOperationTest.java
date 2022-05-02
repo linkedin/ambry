@@ -51,6 +51,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -263,7 +264,8 @@ public class GetBlobOperationTest {
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     // TODO fix null quota charge event listener
-    blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+    blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
   }
 
@@ -501,7 +503,8 @@ public class GetBlobOperationTest {
     // We can't just delete the data chunks by calling router.deleteBlob, we have to remove them from the mock servers.
     mockServerLayout.getMockServers()
         .forEach(server -> dataChunkIds.forEach(chunkId -> server.getBlobs().remove(chunkId)));
-    GetBlobResult result = router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build()).get();
+    GetBlobResult result = router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(),
+        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.READ)).get();
     Future<Long> future = result.getBlobDataChannel().readInto(new ByteBufferAsyncWritableChannel(), null);
     try {
       future.get();

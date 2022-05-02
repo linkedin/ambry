@@ -676,7 +676,7 @@ public class RouterConfig {
     routerPutRequestUseJavaNativeCrc32 =
         verifiableProperties.getBoolean(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32, false);
     operationController =
-        verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
+        verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.QuotaAwareOperationController");
     routerRequestHandlerNumOfThreads = verifiableProperties.getInt(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS, 7);
     routerStoreKeyConverterFactory = verifiableProperties.getString(ROUTER_STORE_KEY_CONVERTER_FACTORY,
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");

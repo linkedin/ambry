@@ -77,7 +77,7 @@ public class DeleteManagerTest {
   private final ErrorCodeChecker deleteErrorCodeChecker = new ErrorCodeChecker() {
     @Override
     public void testAndAssert(RouterErrorCode expectedError) throws Exception {
-      future = router.deleteBlob(blobIdString, null);
+      future = router.deleteBlob(blobIdString, null, quotaChargeCallback);
       if (expectedError == null) {
         future.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       } else {
@@ -156,7 +156,7 @@ public class DeleteManagerTest {
                   }
                 }, quotaChargeCallback));
               } else {
-                futures.add(router.deleteBlob(blobIdString, null));
+                futures.add(router.deleteBlob(blobIdString, null, quotaChargeCallback));
               }
             }
             for (Future future : futures) {
@@ -172,7 +172,7 @@ public class DeleteManagerTest {
             Assert.assertTrue("Router should not be closed", router.isOpen());
 
             //Test that DeleteManager is still operational
-            router.deleteBlob(blobIdString, null).get();
+            router.deleteBlob(blobIdString, null, quotaChargeCallback).get();
           }
         });
   }
@@ -184,7 +184,7 @@ public class DeleteManagerTest {
   public void testBlobIdNotValid() throws Exception {
     String[] input = {"123", "abcd", "", "/"};
     for (String s : input) {
-      future = router.deleteBlob(s, null);
+      future = router.deleteBlob(s, null, quotaChargeCallback);
       assertFailureAndCheckErrorCode(future, RouterErrorCode.InvalidBlobId);
     }
   }
@@ -469,7 +469,7 @@ public class DeleteManagerTest {
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
-            future = router.deleteBlob(blobIdString, null);
+            future = router.deleteBlob(blobIdString, null, quotaChargeCallback);
             router.close();
             assertFailureAndCheckErrorCode(future, expectedError);
           }

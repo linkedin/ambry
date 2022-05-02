@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.HelixStoreOperator;
 import com.github.ambry.clustermap.MockHelixPropertyStore;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.AdminRequestQuotaChargeCallback;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
@@ -234,7 +235,8 @@ public class RouterStoreTest {
           blobIDAndVersionsAfterUpdate.get(i - 1));
     }
     try {
-      router.getBlob(blobIDAndVersions.get(0).getBlobID(), new GetBlobOptionsBuilder().build()).get();
+      router.getBlob(blobIDAndVersions.get(0).getBlobID(), new GetBlobOptionsBuilder().build(),
+          new AdminRequestQuotaChargeCallback(true)).get();
       fail("Expecting not found exception");
     } catch (ExecutionException e) {
       Throwable t = e.getCause();

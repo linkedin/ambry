@@ -27,7 +27,6 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -38,11 +37,11 @@ import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMethod;
-import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -123,6 +122,7 @@ public class PutManagerTest {
   private final int successTarget;
   private boolean instantiateNewRouterForPuts;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private final QuotaChargeCallback quotaChargeCallback;
 
   /**
    * Pre-initialization common to all tests.
@@ -142,6 +142,11 @@ public class PutManagerTest {
     notificationSystem = new TestNotificationSystem();
     instantiateNewRouterForPuts = true;
     accountService = new InMemAccountService(false, true);
+    Account account = accountService.generateRandomAccount(QuotaResourceType.ACCOUNT);
+    Container container = account.getAllContainers().iterator().next();
+    quotaChargeCallback = QuotaUtils.buildQuotaChargeCallback(
+        QuotaTestUtils.createRestRequest(account, container, RestMethod.POST),
+        QuotaTestUtils.createDummyQuotaManager(), true);
   }
 
   /**
@@ -704,7 +709,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options);
+            putChannel, requestAndResult.options, quotaChargeCallback);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
     future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
@@ -724,7 +729,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options);
+            putChannel, requestAndResult.options, quotaChargeCallback);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
 
     //Make the channel act bad.
@@ -761,7 +766,8 @@ public class PutManagerTest {
     MockReadableStreamChannel channel =
         new MockReadableStreamChannel(chunkSize / 2, false); // make sure we are not sending the entire chunk
     FutureResult<String> future = new FutureResult<>();
-    manager.submitPutBlobOperation(blobProperties, userMetadata, channel, PutBlobOptions.DEFAULT, future, null, null);
+    manager.submitPutBlobOperation(blobProperties, userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
+        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE));
     channel.write(ByteBuffer.wrap(content));
 
     // Sleep until
@@ -833,7 +839,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options);
+            putChannel, requestAndResult.options, quotaChargeCallback);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
@@ -1055,10 +1061,10 @@ public class PutManagerTest {
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
           if (requestAndResult.chunksToStitch == null) {
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, requestAndResult.options);
+                requestAndResult.putUserMetadata, putChannel, requestAndResult.options, quotaChargeCallback);
           } else {
             requestAndResult.result = (FutureResult<String>) router.stitchBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch);
+                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch, quotaChargeCallback);
           }
           requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {

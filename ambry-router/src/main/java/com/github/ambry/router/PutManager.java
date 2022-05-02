@@ -271,7 +271,8 @@ class PutManager {
       op.cleanupChunks();
       blobId = null;
       routerMetrics.onPutBlobError(e, op.isEncryptionEnabled(), op.isStitchOperation());
-      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload(), op.getServiceId());
+      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload(), op.getServiceId(),
+          op.getQuotaChargeCallback());
     } else {
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
@@ -291,7 +292,8 @@ class PutManager {
     }
     // Regardless of the result of the operation, clean up the blobs that may have been put as the result of slipped
     // puts.
-    routerCallback.scheduleDeletes(Lists.newArrayList(op.getSlippedPutBlobIds()), op.getServiceId());
+    routerCallback.scheduleDeletes(Lists.newArrayList(op.getSlippedPutBlobIds()), op.getServiceId(),
+        op.getQuotaChargeCallback());
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
