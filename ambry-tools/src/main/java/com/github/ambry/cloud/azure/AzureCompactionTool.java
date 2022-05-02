@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Tool to purge dead blobs for an Ambry partition from Azure storage,
  * or to report the compaction progress of all partitions.
- * Usage: java -cp /path/to/ambry.jar AzureCompactionTool -propsFile <property-file-path> [-purge partitionPath...]
+ * Usage: java -cp /path/to/ambry.jar AzureCompactionTool -propsFile <property-file-path> [-purge partitionId...]
  */
 public class AzureCompactionTool {
 
@@ -80,7 +80,7 @@ public class AzureCompactionTool {
     }
 
     Set<PartitionId> partitionIdSet =
-        partitions.stream().map(path -> new PartitionPathId(path)).collect(Collectors.toSet());
+        partitions.stream().map(id -> new PartitionPathId(Long.parseLong(id))).collect(Collectors.toSet());
 
     AzureCloudDestination azureDest = null;
     try {
@@ -119,13 +119,17 @@ public class AzureCompactionTool {
   }
 
   /**
-   * PartitionId implementation that returns only its path.
+   * PartitionId implementation that refers to an Azure partition.
    */
   private static class PartitionPathId implements PartitionId {
-    private final String path;
+    private final long id;
 
-    private PartitionPathId(String path) {
-      this.path = path;
+    /**
+     * Constructor for the class.
+     * @param id numeric id of this partition
+     */
+    private PartitionPathId(Long id) {
+      this.id =  id;
     }
 
     @Override
@@ -135,7 +139,7 @@ public class AzureCompactionTool {
 
     @Override
     public long getId()  {
-      return -1;
+      return id;
     }
 
     @Override
@@ -166,7 +170,7 @@ public class AzureCompactionTool {
 
     @Override
     public String toPathString() {
-      return path;
+      return Long.toString(id);
     }
 
     @Override
