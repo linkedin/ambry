@@ -2139,7 +2139,7 @@ final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       // Now send the undelete operation through router, and it should fail because of not deleted error.
-      Future<Void> future = router.undeleteBlob(blobId1.toString(), "service");
+      Future<Void> future = router.undeleteBlob(blobId1.toString(), "service", QUOTA_CHARGE_EVENT_LISTENER);
       try {
         future.get();
         fail("Undelete blob " + blobId1.toString() + " should fail");
@@ -2250,7 +2250,7 @@ final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       // Now send the undelete operation through router, and it should fail because of lifeVersion conflict error.
-      future = router.undeleteBlob(blobId2.toString(), "service");
+      future = router.undeleteBlob(blobId2.toString(), "service", QUOTA_CHARGE_EVENT_LISTENER);
       try {
         future.get();
         fail("Undelete blob " + blobId2.toString() + " should fail");
@@ -2594,7 +2594,7 @@ final class ServerTestUtil {
 
   private static void checkBlobId(Router router, BlobId blobId, byte[] data) throws Exception {
     GetBlobResult result =
-        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build())
+        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build(), QUOTA_CHARGE_EVENT_LISTENER)
             .get(20, TimeUnit.SECONDS);
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
