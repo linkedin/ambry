@@ -405,7 +405,7 @@ class NonBlockingRouter implements Router {
               logger.error("Background delete operation failed with exception", exception);
             }
             currentBackgroundOperationsCount.decrementAndGet();
-          }, false, null);
+          }, false, deleteRequest.getQuotaChargeCallback());
     }
   }
 
@@ -414,8 +414,10 @@ class NonBlockingRouter implements Router {
    * blob. Note that this causes the rate of gets to increase at the servers.
    * @param blobIdStr the original string of a {@link BlobId} which associated with the possibly composite blob.
    * @param serviceId the service ID associated with the original delete request.
+   * @param quotaChargeCallback {@link QuotaChargeCallback} object for performing quota compliance checks.
    */
-  void initiateChunkDeletesIfAny(final String blobIdStr, final String serviceId) throws RouterException {
+  void initiateChunkDeletesIfAny(final String blobIdStr, final String serviceId,
+      final QuotaChargeCallback quotaChargeCallback) throws RouterException {
     Callback<GetBlobResultInternal> callback = (GetBlobResultInternal result, Exception exception) -> {
       if (exception != null) {
         // It is expected that these requests will not always succeed. For example, this may have been triggered by a
@@ -429,7 +431,7 @@ class NonBlockingRouter implements Router {
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
         for (StoreKey storeKey : result.storeKeys) {
           logger.trace("Initiating delete of chunk blob: {}", storeKey);
-          deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId));
+          deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId, quotaChargeCallback));
         }
         initiateBackgroundDeletes(deleteRequests);
       }
@@ -441,7 +443,7 @@ class NonBlockingRouter implements Router {
         .getOption(GetOption.Include_All)
         .build();
     GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, routerMetrics.ageAtDelete);
-    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback, null);
+    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback, quotaChargeCallback);
   }
 
   /**

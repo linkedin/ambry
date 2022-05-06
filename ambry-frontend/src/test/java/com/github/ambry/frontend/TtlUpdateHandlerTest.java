@@ -24,6 +24,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.quota.QuotaMethod;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
@@ -91,8 +92,8 @@ public class TtlUpdateHandlerTest {
         new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
             accountAndContainerInjector, metrics, CLUSTER_MAP, QuotaTestUtils.createDummyQuotaManager());
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
-    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
-        .get(1, TimeUnit.SECONDS);
+    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build(), null,
+        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
   }
 
@@ -148,7 +149,8 @@ public class TtlUpdateHandlerTest {
    * @throws Exception
    */
   private void assertTtl(long expectedTtlSecs) throws Exception {
-    GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(1, TimeUnit.SECONDS);
+    GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null,
+        QuotaTestUtils.createTestQuotaChargeCallback(QuotaMethod.WRITE)).get(1, TimeUnit.SECONDS);
     assertEquals("TTL not as expected", expectedTtlSecs,
         result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
   }

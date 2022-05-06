@@ -116,6 +116,15 @@ public class QuotaTestUtils {
   }
 
   /**
+   * Create an implementation of {@link QuotaChargeCallback} object for test.
+   * @param quotaMethod {@link QuotaMethod} object.
+   * @return TestQuotaChargeCallback object.
+   */
+  public static TestQuotaChargeCallback createTestQuotaChargeCallback(QuotaMethod quotaMethod) {
+    return new TestQuotaChargeCallback(quotaMethod);
+  }
+
+  /**
    * Create {@link MockRestRequest} object using the specified {@link Account}, {@link Container} and {@link RestMethod}.
    * @param account {@link Account} object.
    * @param container {@link Container} object.
@@ -141,12 +150,14 @@ public class QuotaTestUtils {
   public static class TestQuotaChargeCallback implements QuotaChargeCallback {
     public int numCheckAndChargeCalls = 0;
     private final QuotaConfig quotaConfig;
+    private final QuotaMethod quotaMethod;
 
     /**
      * Default constructor for {@link TestQuotaChargeCallback}.
      */
     public TestQuotaChargeCallback() {
       this.quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+      this.quotaMethod = QuotaMethod.READ;
     }
 
     /**
@@ -155,6 +166,16 @@ public class QuotaTestUtils {
      */
     public TestQuotaChargeCallback(QuotaConfig quotaConfig) {
       this.quotaConfig = quotaConfig;
+      this.quotaMethod = QuotaMethod.READ;
+    }
+
+    /**
+     * Constructor for {@link TestQuotaChargeCallback} with the specified {@link QuotaConfig}.
+     * @param quotaMethod {@link QuotaMethod} object.
+     */
+    public TestQuotaChargeCallback(QuotaMethod quotaMethod) {
+      this.quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+      this.quotaMethod = quotaMethod;
     }
 
 
