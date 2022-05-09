@@ -38,8 +38,9 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public ConnectionStringBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
-      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
+      AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy, storageAccountInfo);
   }
 
   /**
@@ -52,14 +53,14 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
    */
   public ConnectionStringBasedStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
       BlobBatchAsyncClient blobBatchAsyncClient, AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
-      AzureCloudConfig azureCloudConfig) {
-    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
+      AzureCloudConfig azureCloudConfig, AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig, storageAccountInfo);
   }
 
   @Override
   protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
-    return new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
+    return new BlobServiceClientBuilder().connectionString(storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString() : azureCloudConfig.azureStorageConnectionString)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
@@ -71,7 +72,13 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
   protected void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig) {
-    if (azureCloudConfig.azureStorageConnectionString.isEmpty()) {
+    if (storageAccountInfo() != null) {
+      if (storageAccountInfo().getStorageConnectionString().isEmpty()) {
+        throw new IllegalArgumentException(
+            String.format("Missing connection string config %s for the storage account %s ",
+                AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO_STORAGE_CONNECTION_STRING, storageAccountInfo().getName()));
+      }
+    } else if (azureCloudConfig.azureStorageConnectionString.isEmpty()) {
       throw new IllegalArgumentException(
           "Missing connection string config " + AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING);
     }

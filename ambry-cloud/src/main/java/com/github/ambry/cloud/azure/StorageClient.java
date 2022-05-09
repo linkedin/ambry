@@ -65,12 +65,13 @@ import org.slf4j.LoggerFactory;
 /**
  * Abstract class to encapsulate ABS client operations. Please note that all its operations are asynchronous.
  */
-public abstract class StorageClient {
+public abstract class StorageClient implements AzureStorageClient {
   Logger logger = LoggerFactory.getLogger(StorageClient.class);
   private final AtomicReference<BlobServiceAsyncClient> storageAsyncClientRef;
   private final AtomicReference<BlobBatchAsyncClient> blobBatchAsyncClientRef;
   private final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
+  private final AzureCloudConfig.StorageAccountInfo storageAccountInfo;
   private final AzureBlobLayoutStrategy blobLayoutStrategy;
   protected final AzureMetrics azureMetrics;
   // Containers known to exist in the storage account
@@ -89,7 +90,8 @@ public abstract class StorageClient {
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public StorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
-      AzureBlobLayoutStrategy blobLayoutStrategy) {
+      AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    this.storageAccountInfo = storageAccountInfo;
     this.azureCloudConfig = azureCloudConfig;
     this.cloudConfig = cloudConfig;
     this.blobLayoutStrategy = blobLayoutStrategy;
@@ -108,13 +110,19 @@ public abstract class StorageClient {
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
   public StorageClient(BlobServiceAsyncClient storageAsyncClient, BlobBatchAsyncClient blobBatchAsyncClient,
-      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig) {
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig azureCloudConfig,
+      AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    this.storageAccountInfo = storageAccountInfo;
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
     this.cloudConfig = null;
     this.azureCloudConfig = azureCloudConfig;
     this.storageAsyncClientRef = new AtomicReference<>(storageAsyncClient);
     this.blobBatchAsyncClientRef = new AtomicReference<>(blobBatchAsyncClient);
+  }
+
+  AzureCloudConfig.StorageAccountInfo storageAccountInfo() {
+    return storageAccountInfo;
   }
 
   /**

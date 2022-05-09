@@ -40,9 +40,11 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
+import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +55,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnitRunner;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Flux;
@@ -64,7 +68,7 @@ import static org.mockito.BDDMockito.*;
 
 
 /** Test cases for {@link AzureStorageCompactor} */
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(Parameterized.class)
 public class AzureStorageCompactorTest {
 
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());
@@ -88,9 +92,15 @@ public class AzureStorageCompactorTest {
   private AzureMetrics azureMetrics;
   private AzureBlobDataAccessor azureBlobDataAccessor;
   private CosmosDataAccessor cosmosDataAccessor;
+  private final Integer numStorageAccountParameter;
+
+  public AzureStorageCompactorTest(final Integer numStorageAccountParameter) {
+    this.numStorageAccountParameter = numStorageAccountParameter;
+  }
 
   @Before
   public void setup() throws Exception {
+    MockitoAnnotations.initMocks(this);
     mockCosmosAsyncClient = mock(CosmosAsyncClient.class);
     mockCosmosAsyncDatabase = mock(CosmosAsyncDatabase.class);
     mockCosmosAsyncContainer = mock(CosmosAsyncContainer.class);
@@ -102,7 +112,7 @@ public class AzureStorageCompactorTest {
     int lookbackDays =
         CloudConfig.DEFAULT_RETENTION_DAYS + numQueryBuckets * CloudConfig.DEFAULT_COMPACTION_QUERY_BUCKET_DAYS;
     configProps.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, String.valueOf(lookbackDays));
-    AzureTestUtils.setConfigProperties(configProps);
+    AzureTestUtils.setConfigProperties(configProps, numStorageAccountParameter);
     buildCompactor(configProps);
   }
 
@@ -373,5 +383,15 @@ public class AzureStorageCompactorTest {
     BlobStorageException mockException = mock(BlobStorageException.class);
     lenient().when(mockException.getErrorCode()).thenReturn(errorCode);
     return mockException;
+  }
+
+  /**
+   * Parameters determine the number of storage accounts to use during the sharded storage account testing.
+   * The value of zero refers to no storage account sharding.
+   * @return The number of storage accounts to use.
+   */
+  @Parameterized.Parameters
+  public static Collection<Integer[]> getParameters() {
+    return Lists.newArrayList(new Integer[] { 0 }, new Integer[] { 1 });
   }
 }
