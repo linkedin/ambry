@@ -38,6 +38,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.http.HttpStatus;
 import reactor.core.publisher.Mono;
 
+import static com.github.ambry.cloud.azure.AzureCloudConfig.*;
+
 
 /**
  * {@link StorageClient} implementation for AD based authentication.
@@ -57,8 +59,8 @@ public class ADAuthBasedStorageClient extends StorageClient {
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public ADAuthBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
-      AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
+      AzureBlobLayoutStrategy blobLayoutStrategy, AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy, storageAccountInfo);
     // schedule a task to refresh token and create new storage sync and async clients before it expires.
     scheduledFutureRef.set(tokenRefreshScheduler.schedule(() -> refreshTokenAndStorageClients(),
         (long) ((accessTokenRef.get().getExpiresAt().toEpochSecond() - OffsetDateTime.now().toEpochSecond())
@@ -76,8 +78,8 @@ public class ADAuthBasedStorageClient extends StorageClient {
    */
   public ADAuthBasedStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
       BlobBatchAsyncClient blobBatchAsyncClient, AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
-      AzureCloudConfig azureCloudConfig, AccessToken accessToken) {
-    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
+      AzureCloudConfig azureCloudConfig, AccessToken accessToken, AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig, storageAccountInfo);
     accessTokenRef = new AtomicReference<>(accessToken);
   }
 
@@ -91,7 +93,7 @@ public class ADAuthBasedStorageClient extends StorageClient {
       refreshToken();
     }
     return new BlobServiceClientBuilder().credential(request -> Mono.just(accessTokenRef.get()))
-        .endpoint(azureCloudConfig.azureStorageEndpoint)
+        .endpoint(storageAccountInfo() != null ? storageAccountInfo().getStorageEndpoint() : azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
@@ -100,6 +102,18 @@ public class ADAuthBasedStorageClient extends StorageClient {
 
   @Override
   protected void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig) {
+    if (storageAccountInfo() != null) {
+      if (storageAccountInfo().getStorageScope().isEmpty()) {
+        throw new IllegalArgumentException(String.format("Storage account %s is missing the %s setting",
+            storageAccountInfo().getName(), AZURE_STORAGE_ACCOUNT_INFO_STORAGE_SCOPE));
+      }
+      if (storageAccountInfo().getStorageEndpoint().isEmpty()) {
+        throw new IllegalArgumentException(
+            String.format("Storage account %s is missing the %s setting", storageAccountInfo().getName(),
+                AZURE_STORAGE_ACCOUNT_INFO_STORAGE_ENDPOINT));
+      }
+      return;
+    }
     if (azureCloudConfig.azureStorageAuthority.isEmpty() || azureCloudConfig.azureStorageClientId.isEmpty()
         || azureCloudConfig.azureStorageSecret.isEmpty() || azureCloudConfig.azureStorageEndpoint.isEmpty()
         || azureCloudConfig.azureStorageScope.isEmpty()) {

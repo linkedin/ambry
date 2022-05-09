@@ -40,8 +40,9 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public ClientSecretCredentialStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
-      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy) {
-    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
+      AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
+      AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    super(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy, storageAccountInfo);
   }
 
   /**
@@ -54,8 +55,8 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
    */
   public ClientSecretCredentialStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
       BlobBatchAsyncClient blobBatchAsyncClient, AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
-      AzureCloudConfig azureCloudConfig) {
-    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig);
+      AzureCloudConfig azureCloudConfig, AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
+    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig, storageAccountInfo);
   }
 
   /**
@@ -70,7 +71,7 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
   protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
     return new BlobServiceClientBuilder().credential(AzureUtils.getClientSecretCredential(azureCloudConfig))
-        .endpoint(azureCloudConfig.azureStorageEndpoint)
+        .endpoint(storageAccountInfo() != null ? storageAccountInfo().getStorageEndpoint() : azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)

@@ -29,7 +29,7 @@ public class AzureCloudConfigTest {
 
   @Before
   public void setup() throws Exception {
-    AzureTestUtils.setConfigProperties(configProps);
+    AzureTestUtils.setConfigProperties(configProps, 0);
   }
 
   /** Test Azure cloud config for a single storage account */

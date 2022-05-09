@@ -17,17 +17,19 @@ import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy.BlobLayout;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
+import com.google.common.collect.Lists;
+import java.util.Collection;
 import java.util.Properties;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
 
 /** Test cases for {@link AzureBlobLayoutStrategy} */
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(Parameterized.class)
 public class AzureBlobLayoutStrategyTest {
 
   private Properties configProps = new Properties();
@@ -35,11 +37,15 @@ public class AzureBlobLayoutStrategyTest {
   private final String clusterName = "main";
   private final String tokenFileName = "replicaTokens";
   private final String partitionPath = String.valueOf(AzureTestUtils.partition);
+  private final Integer numStorageAccountParameter;
 
+  public AzureBlobLayoutStrategyTest(final Integer numStorageAccountParameter) {
+    this.numStorageAccountParameter = numStorageAccountParameter;
+  }
   @Before
   public void setup() {
     blobId = AzureTestUtils.generateBlobId();
-    AzureTestUtils.setConfigProperties(configProps);
+    AzureTestUtils.setConfigProperties(configProps, numStorageAccountParameter);
   }
 
   /** Test default strategy and make sure it is partition-based */
@@ -116,5 +122,15 @@ public class AzureBlobLayoutStrategyTest {
   private static void checkLayout(BlobLayout layout, String expectedContainerName, String expectedBlobPath) {
     assertEquals("Unexpected container name", expectedContainerName, layout.containerName);
     assertEquals("Unexpected blob path", expectedBlobPath, layout.blobFilePath);
+  }
+
+  /**
+   * Parameters determine the number of storage accounts to use during the sharded storage account testing.
+   * The value of zero refers to no storage account sharding.
+   * @return The number of storage accounts to use.
+   */
+  @Parameterized.Parameters
+  public static Collection<Integer[]> getParameters() {
+    return Lists.newArrayList(new Integer[] { 0 }, new Integer[] { 1 });
   }
 }

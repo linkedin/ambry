@@ -64,7 +64,7 @@ public class AzureBlobDataAccessor {
   private final int purgeBatchSize;
   private final Duration requestTimeout, uploadTimeout, batchTimeout;
   private final BlobRequestConditions defaultRequestConditions = null;
-  private final StorageClient storageClient;
+  private final AzureStorageClient storageClient;
   private Callable<?> updateCallback = null;
 
   /**
@@ -90,8 +90,12 @@ public class AzureBlobDataAccessor {
     uploadTimeout = Duration.ofMillis(cloudConfig.cloudUploadRequestTimeout);
     batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
 
-    storageClient = Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics,
-        blobLayoutStrategy);
+    if (!azureCloudConfig.azureStorageAccountInfo.isEmpty()) {
+      storageClient = new ShardedStorageClient(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
+    } else {
+      storageClient = Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics,
+          blobLayoutStrategy, null);
+    }
   }
 
   /**
@@ -107,9 +111,14 @@ public class AzureBlobDataAccessor {
       String clusterName, AzureMetrics azureMetrics, AzureCloudConfig azureCloudConfig, CloudConfig cloudConfig) {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     try {
-      this.storageClient =
-          Utils.getObj(azureCloudConfig.azureStorageClientClass, blobServiceAsyncClient, blobBatchAsyncClient,
-              azureMetrics, blobLayoutStrategy, azureCloudConfig);
+      if (!azureCloudConfig.azureStorageAccountInfo.isEmpty()) {
+        this.storageClient = new ShardedStorageClient(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics,
+            blobLayoutStrategy, azureCloudConfig);
+      } else {
+        this.storageClient =
+            Utils.getObj(azureCloudConfig.azureStorageClientClass, blobServiceAsyncClient, blobBatchAsyncClient,
+                azureMetrics, blobLayoutStrategy, azureCloudConfig, null);
+      }
     } catch (ReflectiveOperationException roEx) {
       throw new IllegalArgumentException("Unable to instantiate storage client: " + roEx.getMessage(), roEx);
     }
@@ -249,7 +258,7 @@ public class AzureBlobDataAccessor {
    * @param fileName name of the file to delete.
    * @return true if the file was deleted, otherwise false.
    */
-  boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
+  public boolean deleteFile(String containerName, String fileName) throws BlobStorageException {
     try {
       return storageClient.deleteFile(containerName, fileName).join();
     } catch (CompletionException e) {
@@ -264,7 +273,7 @@ public class AzureBlobDataAccessor {
   /**
    * Perform basic connectivity test.
    */
-  void testConnectivity() {
+  public void testConnectivity() {
     try {
       // TODO: Turn on verbose logging during this call (how to do in v12?)
       storageClient.testConnectivity();
