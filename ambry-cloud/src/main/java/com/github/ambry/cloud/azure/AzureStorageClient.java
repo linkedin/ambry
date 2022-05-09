@@ -41,7 +41,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-
+/**
+ * Abstract class to encapsulate ABS client operations.
+ */
 public interface AzureStorageClient {
   /**
    * Visible for testing.

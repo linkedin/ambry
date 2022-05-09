@@ -43,7 +43,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
-
+/**
+ * Implements AzureStorageClient interface to handle multiple Azure storage accounts.
+ */
 public class ShardedStorageClient implements AzureStorageClient {
   public final List<StorageClient> storageClientList;
   public final List<Integer> storageClientPartitionBoundaries;
@@ -106,6 +108,7 @@ public class ShardedStorageClient implements AzureStorageClient {
    * @return {@link StorageClient} corresponds to Azure storage account holding Ambry metadata blobs.
    */
   private StorageClient getAzureStorageClient(BlobId blobId) {
+    // TODO Find the storage account corresponding to blobId.
     return storageClientList.get(0);
   }
 
