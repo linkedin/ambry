@@ -27,6 +27,7 @@ import com.microsoft.aad.msal4j.ClientCredentialFactory;
 import com.microsoft.aad.msal4j.ClientCredentialParameters;
 import com.microsoft.aad.msal4j.ConfidentialClientApplication;
 import com.microsoft.aad.msal4j.IAuthenticationResult;
+import com.mysql.cj.util.StringUtils;
 import java.net.MalformedURLException;
 import java.time.OffsetDateTime;
 import java.util.Collections;
@@ -103,11 +104,11 @@ public class ADAuthBasedStorageClient extends StorageClient {
   @Override
   protected void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig) {
     if (storageAccountInfo() != null) {
-      if (storageAccountInfo().getStorageScope().isEmpty()) {
+      if (StringUtils.isNullOrEmpty(storageAccountInfo().getStorageScope())) {
         throw new IllegalArgumentException(String.format("Storage account %s is missing the %s setting",
             storageAccountInfo().getName(), AZURE_STORAGE_ACCOUNT_INFO_STORAGE_SCOPE));
       }
-      if (storageAccountInfo().getStorageEndpoint().isEmpty()) {
+      if (StringUtils.isNullOrEmpty(storageAccountInfo().getStorageEndpoint())) {
         throw new IllegalArgumentException(
             String.format("Storage account %s is missing the %s setting", storageAccountInfo().getName(),
                 AZURE_STORAGE_ACCOUNT_INFO_STORAGE_ENDPOINT));

@@ -13,43 +13,35 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.azure.core.exception.UnexpectedLengthException;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Context;
-import com.azure.core.util.FluxUtil;
 import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
-import com.azure.storage.blob.batch.BlobBatch;
-import com.azure.storage.blob.batch.BlobBatchStorageException;
 import com.azure.storage.blob.models.AccessTier;
 import com.azure.storage.blob.models.BlobHttpHeaders;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
-import com.azure.storage.blob.models.BlockBlobItem;
 import com.azure.storage.blob.models.DownloadRetryOptions;
-import com.azure.storage.blob.specialized.BlockBlobAsyncClient;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.FutureUtils;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Abstract class to encapsulate ABS client operations.
+ * Interface to encapsulate ABS client operations.
  */
 public interface AzureStorageClient {
   /**
    * Visible for testing.
    * @return the underlying {@link BlobServiceClient}.
    */
-  public BlobServiceAsyncClient getStorageClient();
+  BlobServiceAsyncClient getStorageClient();
 
   /**
    * Creates a new block blob, or updates the content of an existing block blob asynchronously.
@@ -65,7 +57,7 @@ public interface AzureStorageClient {
    * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete when block blob is uploaded
    *         or will contain an exception if an error occurred.
    */
-  public CompletableFuture<Void> uploadWithResponse(BlobId blobId, InputStream data, long length,
+  CompletableFuture<Void> uploadWithResponse(BlobId blobId, InputStream data, long length,
       BlobHttpHeaders headers, Map<String, String> metadata, AccessTier tier, byte[] contentMd5,
       BlobRequestConditions requestConditions);
 
@@ -85,7 +77,7 @@ public interface AzureStorageClient {
    * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete when block blob is uploaded
    *         or an exception if an error occurred.
    */
-  public CompletableFuture<Void> uploadWithResponse(String containerName, String blobName, boolean autoCreateContainer,
+   CompletableFuture<Void> uploadWithResponse(String containerName, String blobName, boolean autoCreateContainer,
       InputStream data, long length, BlobHttpHeaders headers, Map<String, String> metadata, AccessTier tier,
       byte[] contentMd5, BlobRequestConditions requestConditions);
 
@@ -103,7 +95,7 @@ public interface AzureStorageClient {
    * @throws UncheckedIOException If an I/O error occurs.
    * @throws NullPointerException if {@code stream} is null
    */
-  public CompletableFuture<Void> downloadWithResponse(String containerName, String blobName, BlobId blobId,
+  CompletableFuture<Void> downloadWithResponse(String containerName, String blobName, BlobId blobId,
       boolean autoCreateContainer, OutputStream stream, BlobRange range, DownloadRetryOptions options,
       BlobRequestConditions requestConditions, boolean getRangeContentMd5);
 
@@ -114,7 +106,7 @@ public interface AzureStorageClient {
    * @return a {@link CompletableFuture} that will eventually contain blob properties and metadata or an exception
    *         if an error occurred.
    */
-  public CompletableFuture<BlobProperties> getPropertiesWithResponse(BlobId blobId,
+  CompletableFuture<BlobProperties> getPropertiesWithResponse(BlobId blobId,
       BlobRequestConditions requestConditions);
 
   /**
@@ -127,7 +119,7 @@ public interface AzureStorageClient {
    * @return a {@link CompletableFuture} of type {@link Void} that will eventually complete successfully when blob
    *         metadata is changed or completes exceptionally if an error occurred.
    */
-  public CompletableFuture<Void> setMetadataWithResponse(BlobId blobId, Map<String, String> metadata,
+  CompletableFuture<Void> setMetadataWithResponse(BlobId blobId, Map<String, String> metadata,
       BlobRequestConditions requestConditions, Context context);
 
   /**
@@ -137,7 +129,7 @@ public interface AzureStorageClient {
    * @return a {@link CompletableFuture} that will eventually contain {@link List} of {@link Response}s for the blobs
    *         in the batch or an exception if an error occurred.
    */
-  public CompletableFuture<List<Response<Void>>>  deleteBatch(List<CloudBlobMetadata> batchOfBlobs);
+  CompletableFuture<List<Response<Void>>>  deleteBatch(List<CloudBlobMetadata> batchOfBlobs);
 
   /**
    * Delete a file from blob storage asynchronously, if it exists.
@@ -146,10 +138,10 @@ public interface AzureStorageClient {
    * @return a {@link CompletableFuture} of type {@link Boolean} that will eventually complete successfully when the file
    *         is deleted or will complete exceptionally if an error occurs.
    */
-  public CompletableFuture<Boolean> deleteFile(String containerName, String fileName) throws BlobStorageException;
+  CompletableFuture<Boolean> deleteFile(String containerName, String fileName) throws BlobStorageException;
 
   /**
    * Perform basic connectivity test.
    */
-  public void testConnectivity();
+  void testConnectivity();
 }

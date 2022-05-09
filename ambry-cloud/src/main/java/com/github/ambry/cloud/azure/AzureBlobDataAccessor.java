@@ -90,7 +90,7 @@ public class AzureBlobDataAccessor {
     uploadTimeout = Duration.ofMillis(cloudConfig.cloudUploadRequestTimeout);
     batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
 
-    if (!azureCloudConfig.azureStorageAccountInfo.isEmpty()) {
+    if (azureCloudConfig.azureStorageAccountInfo != null && !azureCloudConfig.azureStorageAccountInfo.isEmpty()) {
       storageClient = new ShardedStorageClient(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
     } else {
       storageClient = Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics,
@@ -111,7 +111,7 @@ public class AzureBlobDataAccessor {
       String clusterName, AzureMetrics azureMetrics, AzureCloudConfig azureCloudConfig, CloudConfig cloudConfig) {
     this.blobLayoutStrategy = new AzureBlobLayoutStrategy(clusterName);
     try {
-      if (!azureCloudConfig.azureStorageAccountInfo.isEmpty()) {
+      if (azureCloudConfig.azureStorageAccountInfo != null && !azureCloudConfig.azureStorageAccountInfo.isEmpty()) {
         this.storageClient = new ShardedStorageClient(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics,
             blobLayoutStrategy, azureCloudConfig);
       } else {

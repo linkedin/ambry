@@ -54,13 +54,16 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
   public ConnectionStringBasedStorageClient(BlobServiceAsyncClient blobServiceAsyncClient,
       BlobBatchAsyncClient blobBatchAsyncClient, AzureMetrics azureMetrics, AzureBlobLayoutStrategy blobLayoutStrategy,
       AzureCloudConfig azureCloudConfig, AzureCloudConfig.StorageAccountInfo storageAccountInfo) {
-    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig, storageAccountInfo);
+    super(blobServiceAsyncClient, blobBatchAsyncClient, azureMetrics, blobLayoutStrategy, azureCloudConfig,
+        storageAccountInfo);
   }
 
   @Override
   protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
-    return new BlobServiceClientBuilder().connectionString(storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString() : azureCloudConfig.azureStorageConnectionString)
+    return new BlobServiceClientBuilder().connectionString(
+        storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString()
+            : azureCloudConfig.azureStorageConnectionString)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)

@@ -13,12 +13,9 @@
  */
 package com.github.ambry.cloud.azure;
 
-import com.azure.core.http.HttpClient;
 import com.azure.core.http.rest.Response;
-import com.azure.core.util.Configuration;
 import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobServiceAsyncClient;
-import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.models.AccessTier;
 import com.azure.storage.blob.models.BlobHttpHeaders;
@@ -26,22 +23,20 @@ import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
-import com.azure.storage.blob.models.BlockBlobItem;
 import com.azure.storage.blob.models.DownloadRetryOptions;
-import com.azure.storage.common.policy.RequestRetryOptions;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.MalformedURLException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /**
  * Implements AzureStorageClient interface to handle multiple Azure storage accounts.
@@ -49,6 +44,7 @@ import java.util.concurrent.ExecutionException;
 public class ShardedStorageClient implements AzureStorageClient {
   public final List<StorageClient> storageClientList;
   public final List<Integer> storageClientPartitionBoundaries;
+  private static final Logger logger = LoggerFactory.getLogger(ShardedStorageClient.class);
 
   /**
    * Constructor for {@link ShardedStorageClient}.
@@ -60,14 +56,19 @@ public class ShardedStorageClient implements AzureStorageClient {
   public ShardedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
       AzureBlobLayoutStrategy blobLayoutStrategy) throws ReflectiveOperationException {
     List<AzureCloudConfig.StorageAccountInfo> storageAccountInfoList = azureCloudConfig.azureStorageAccountInfo;
-
+    if (storageAccountInfoList.isEmpty()) {
+      throw new IllegalArgumentException("No storage account provided to ShardedStorageClient");
+    }
     storageClientList = new ArrayList<>();
     storageClientPartitionBoundaries = new ArrayList<>();
     for (AzureCloudConfig.StorageAccountInfo storageAccountInfo : storageAccountInfoList) {
       storageClientList.add(Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig,
           azureMetrics, blobLayoutStrategy, storageAccountInfo));
       storageClientPartitionBoundaries.add(storageAccountInfo.getPartitionRangeStart());
+      logger.info("Added storage account {} to the list with starting boundary {}",
+          storageAccountInfo.getName(), storageAccountInfo.getPartitionRangeStart());
     }
+    logger.info("Added {} storage accounts to the list", storageClientList.size());
     storageClientPartitionBoundaries.add(Integer.MAX_VALUE);
   }
   /**
@@ -223,7 +224,6 @@ public class ShardedStorageClient implements AzureStorageClient {
   /**
    * Deletes a list of blobs asynchronously.
    * @param batchOfBlobs {@link List} of {@link CloudBlobMetadata} objects.
-   * @return {@link List} of {@link Response}s for the blobs in the batch.
    * @return a {@link CompletableFuture} that will eventually contain {@link List} of {@link Response}s for the blobs
    *         in the batch or an exception if an error occurred.
    */
