@@ -82,24 +82,6 @@ public class UndeleteOperation {
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
-   */
-  UndeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      BlobId blobId, String serviceId, long operationTimeMs, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult) {
-    this(clusterMap, routerConfig, routerMetrics, blobId, serviceId, operationTimeMs, callback, time, futureResult, null);
-  }
-
-  /**
-   * Instantiates a {@link UndeleteOperation}.
-   * @param clusterMap the {@link ClusterMap} to use.
-   * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
-   * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
-   * @param blobId The {@link BlobId} needs to be undeleted by this {@link UndeleteOperation}.
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @param operationTimeMs the time at which the operation occurred.
-   * @param callback The {@link Callback} that is supplied by the caller.
-   * @param time A {@link Time} reference.
-   * @param futureResult The {@link FutureResult} that is returned to the caller.
    * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    */
   UndeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,

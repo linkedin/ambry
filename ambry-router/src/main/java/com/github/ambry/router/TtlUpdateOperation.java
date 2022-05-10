@@ -80,26 +80,6 @@ class TtlUpdateOperation {
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
-   */
-  TtlUpdateOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      BlobId blobId, String serviceId, long expiresAtMs, long operationTimeMs, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult) {
-    this(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs, operationTimeMs, callback, time,
-        futureResult, null);
-  }
-
-  /**
-   * Instantiates a {@link TtlUpdateOperation}.
-   * @param clusterMap the {@link ClusterMap} to use.
-   * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
-   * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
-   * @param blobId The {@link BlobId} whose TTL needs to be updated by this {@link TtlUpdateOperation}.
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @param expiresAtMs the new time at which the blob should expire.
-   * @param operationTimeMs the time at which the operation occurred.
-   * @param callback The {@link Callback} that is supplied by the caller.
-   * @param time A {@link Time} reference.
-   * @param futureResult The {@link FutureResult} that is returned to the caller.
    * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    */
   TtlUpdateOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
