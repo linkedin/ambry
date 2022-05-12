@@ -42,6 +42,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CompletionException;
 import org.apache.http.HttpStatus;
 import org.junit.Before;
 import org.junit.Test;
@@ -139,8 +140,8 @@ public class AzureBlobDataAccessorTest {
   @Test
   public void testMarkDelete() throws Exception {
     AzureCloudDestination.UpdateResponse updateResponse =
-        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("deletionTime", deletionTime),
-            dummyCloudUpdateValidator);
+        dataAccessor.updateBlobMetadataAsync(blobId, Collections.singletonMap("deletionTime", deletionTime),
+            dummyCloudUpdateValidator).join();
     assertTrue("Expected was updated", updateResponse.wasUpdated);
     assertNotNull("Expected metadata", updateResponse.metadata);
   }
@@ -149,8 +150,8 @@ public class AzureBlobDataAccessorTest {
   @Test
   public void testExpire() throws Exception {
     AzureCloudDestination.UpdateResponse updateResponse =
-        dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime),
-            dummyCloudUpdateValidator);
+        dataAccessor.updateBlobMetadataAsync(blobId, Collections.singletonMap("expirationTime", expirationTime),
+            dummyCloudUpdateValidator).join();
     assertTrue("Expected was updated", updateResponse.wasUpdated);
     assertNotNull("Expected metadata", updateResponse.metadata);
   }
@@ -185,17 +186,19 @@ public class AzureBlobDataAccessorTest {
     when(mockBatchAsyncClient.submitBatchWithResponse(any(), anyBoolean())).thenReturn(Mono.just(response));
 
     // Purge first 2 and expect success
-    List<CloudBlobMetadata> purgeResponseList = dataAccessor.purgeBlobs(purgeList);
+    List<CloudBlobMetadata> purgeResponseList = dataAccessor.purgeBlobsAsync(purgeList).join();
     assertEquals("Wrong response size", 2, purgeResponseList.size());
     assertEquals("Wrong blob name", blobNameOkStatus, purgeResponseList.get(0).getId());
     assertEquals("Wrong blob name", blobNameNotFoundStatus, purgeResponseList.get(1).getId());
     // Including last one should fail
     purgeList.add(new CloudBlobMetadata().setId(blobNameErrorStatus));
     try {
-      dataAccessor.purgeBlobs(purgeList);
+      dataAccessor.purgeBlobsAsync(purgeList).join();
       fail("Expected purge to fail");
-    } catch (BlobStorageException bex) {
-      assertEquals("Unexpected status code", 503, bex.getStatusCode());
+    } catch (CompletionException ex) {
+      Exception e = Utils.extractFutureExceptionCause(ex);
+      assertTrue("Unexpected exception", e instanceof BlobStorageException);
+      assertEquals("Unexpected status code", 503, ((BlobStorageException) e).getStatusCode());
     }
   }
 
@@ -252,8 +255,8 @@ public class AzureBlobDataAccessorTest {
     when(ex.getErrorCode()).thenReturn(BlobErrorCode.BLOB_NOT_FOUND);
     when(mockBlockBlobAsyncClient.getPropertiesWithResponse(any())).thenReturn(Mono.error(ex));
     expectBlobStorageException(
-        () -> dataAccessor.updateBlobMetadata(blobId, Collections.singletonMap("expirationTime", expirationTime),
-            eq(dummyCloudUpdateValidator)));
+        () -> dataAccessor.updateBlobMetadataAsync(blobId, Collections.singletonMap("expirationTime", expirationTime),
+            eq(dummyCloudUpdateValidator)).join());
   }
 
   /** Test file deletion. */
@@ -261,9 +264,9 @@ public class AzureBlobDataAccessorTest {
   public void testFileDelete() throws Exception {
     mockBlobExistence(true);
     when(mockBlockBlobAsyncClient.delete()).thenReturn(Mono.just("EMPTY").then());
-    assertTrue("Expected delete to return true", dataAccessor.deleteFile("containerName", "fileName"));
+    assertTrue("Expected delete to return true", dataAccessor.deleteFileAsync("containerName", "fileName").join());
     mockBlobExistence(false);
-    assertFalse("Expected delete to return false", dataAccessor.deleteFile("containerName", "fileName"));
+    assertFalse("Expected delete to return false", dataAccessor.deleteFileAsync("containerName", "fileName").join());
   }
 
   @Test
@@ -334,7 +337,7 @@ public class AzureBlobDataAccessorTest {
     when(mockBlockBlobAsyncClient.downloadWithResponse(any(), any(), any(), anyBoolean())).thenReturn(
         Mono.error(mockBlobStorageException), Mono.just(response));
 
-    adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", null,false,
+    adAuthBasedStorageClient.downloadWithResponse("containerName", "blobName", null, false,
         new ByteArrayOutputStream(blobSize), null, null, null, false).join();
     verify(mockBlockBlobAsyncClient, times(2)).downloadWithResponse(any(), any(), any(), anyBoolean());
 
@@ -379,7 +382,7 @@ public class AzureBlobDataAccessorTest {
     InputStream inputStream = AzureTestUtils.getBlobInputStream(blobSize);
     CloudBlobMetadata metadata = new CloudBlobMetadata(blobId, creationTime, Utils.Infinite_Time, blobSize,
         CloudBlobMetadata.EncryptionOrigin.NONE);
-    return dataAccessor.uploadIfNotExists(blobId, blobSize, metadata, inputStream);
+    return dataAccessor.uploadAsyncIfNotExists(blobId, blobSize, metadata, inputStream).join();
   }
 
   /**
@@ -387,7 +390,7 @@ public class AzureBlobDataAccessorTest {
    * @param blobId blobid of the blob to be downloaded.
    */
   private void downloadBlob(BlobId blobId) throws Exception {
-    dataAccessor.downloadBlob(blobId, new ByteArrayOutputStream(blobSize));
+    dataAccessor.downloadBlobAsync(blobId, new ByteArrayOutputStream(blobSize)).join();
   }
 
   /**
