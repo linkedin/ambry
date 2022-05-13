@@ -58,8 +58,7 @@ class AzureTestUtils {
   static final long partition = 666;
   static final ObjectMapper objectMapper = new ObjectMapper();
 
-  static void setConfigProperties(Properties configProps) {
-    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
+  static void setConfigProperties(Properties configProps, int numberStorageAccounts) {
     configProps.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "http://ambry.beyond-the-cosmos.com");
     configProps.setProperty(AzureCloudConfig.COSMOS_DATABASE, "ambry");
     configProps.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "metadata");
@@ -69,7 +68,20 @@ class AzureTestUtils {
         "https://login.microsoftonline.com/test-account/");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "client-id");
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_SECRET, "client-secret");
-    configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ENDPOINT, "https://azure_storage.blob.core.windows.net");
+
+    if (numberStorageAccounts == 0) {
+      configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, storageConnection);
+      configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ENDPOINT, "https://azure_storage.blob.core.windows.net");
+    } else if (numberStorageAccounts == 1) {
+      configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO, String.format(
+          "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"ambry\",\n"
+              + "        \"partitionRange\":\"0-1000000\",\n"
+              + "        \"storageConnectionString\":\"%s\",\n"
+              + "        \"storageEndpoint\":\"https://azure_storage.blob.core.windows.net\",\n" + "      }\n"
+              + "    ]\n" + "    }", storageConnection));
+    } else {
+      throw new IllegalArgumentException("Illegal numberStorageAccounts parameter. Current value:" + numberStorageAccounts);
+    }
     configProps.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
         "com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient");
     configProps.setProperty("clustermap.cluster.name", "main");

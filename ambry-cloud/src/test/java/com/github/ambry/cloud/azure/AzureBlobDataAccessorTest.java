@@ -33,10 +33,12 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.google.common.collect.Lists;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -44,7 +46,8 @@ import org.apache.http.HttpStatus;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.runners.Parameterized;
+import org.mockito.MockitoAnnotations;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -54,7 +57,7 @@ import static org.mockito.Mockito.*;
 
 
 /** Test cases for {@link AzureCloudDestination} */
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(Parameterized.class)
 public class AzureBlobDataAccessorTest {
 
   private final String clusterName = "main";
@@ -70,9 +73,15 @@ public class AzureBlobDataAccessorTest {
   private long creationTime = System.currentTimeMillis();
   private long deletionTime = creationTime + 10000;
   private long expirationTime = Utils.Infinite_Time;
+  private final Integer numStorageAccountParameter;
+
+  public AzureBlobDataAccessorTest(final Integer numStorageAccountParameter) {
+    this.numStorageAccountParameter = numStorageAccountParameter;
+  }
 
   @Before
   public void setup() throws Exception {
+    MockitoAnnotations.initMocks(this);
 
     mockServiceAsyncClient = mock(BlobServiceAsyncClient.class);
     mockBlockBlobAsyncClient = setupMockBlobAsyncClient(mockServiceAsyncClient);
@@ -92,7 +101,7 @@ public class AzureBlobDataAccessorTest {
     when(mockBlockBlobAsyncClient.setMetadataWithResponse(any(), any())).thenReturn(Mono.just(mock(Response.class)));
 
     blobId = AzureTestUtils.generateBlobId();
-    AzureTestUtils.setConfigProperties(configProps);
+    AzureTestUtils.setConfigProperties(configProps, numStorageAccountParameter);
     azureMetrics = new AzureMetrics(new MetricRegistry());
     dataAccessor = new AzureBlobDataAccessor(mockServiceAsyncClient, mockBatchAsyncClient, clusterName, azureMetrics,
         new AzureCloudConfig(new VerifiableProperties(configProps)),
@@ -260,32 +269,49 @@ public class AzureBlobDataAccessorTest {
   @Test
   public void testStorageClientFactoriesConfigValidation() throws Exception {
     Properties properties = new Properties();
-    AzureTestUtils.setConfigProperties(properties);
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
-        ConnectionStringBasedStorageClient.class.getCanonicalName());
-    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, "");
-    try {
-      AzureBlobDataAccessor azureBlobDataAccessor =
-          new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
-              new AzureBlobLayoutStrategy("test"), azureMetrics);
-      fail("Creating azure blob data accessor with ConnectionStringBasedStorageClientFactory should throw exception"
-          + "without connection string config");
-    } catch (ReflectiveOperationException roEx) {
+    if (numStorageAccountParameter == 0) {
+      AzureTestUtils.setConfigProperties(properties, 0);
+      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS, ConnectionStringBasedStorageClient.class.getCanonicalName());
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, "");
+      try {
+        AzureBlobDataAccessor azureBlobDataAccessor =
+            new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
+                new AzureBlobLayoutStrategy("test"), azureMetrics);
+        fail("Creating azure blob data accessor with ConnectionStringBasedStorageClientFactory should throw exception" + "without connection string config");
+      } catch (ReflectiveOperationException roEx) {
+      }
+
+      AzureTestUtils.setConfigProperties(properties, 0);
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
+          ADAuthBasedStorageClient.class.getCanonicalName());
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "");
+      verifiableProperties = new VerifiableProperties(properties);
+      try {
+        AzureBlobDataAccessor azureBlobDataAccessor =
+            new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
+                new AzureBlobLayoutStrategy("test"), azureMetrics);
+        fail("Creating azure blob data accessor with ADAuthBasedStorageClientFactory should throw exception"
+            + "without one of the required configs");
+      } catch (ReflectiveOperationException roEx) {
+      }
     }
 
-    AzureTestUtils.setConfigProperties(properties);
-    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS,
-        ADAuthBasedStorageClient.class.getCanonicalName());
-    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENTID, "");
-    verifiableProperties = new VerifiableProperties(properties);
-    try {
-      AzureBlobDataAccessor azureBlobDataAccessor =
-          new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
-              new AzureBlobLayoutStrategy("test"), azureMetrics);
-      fail("Creating azure blob data accessor with ADAuthBasedStorageClientFactory should throw exception"
-          + "without one of the required configs");
-    } catch (ReflectiveOperationException roEx) {
+    if (numStorageAccountParameter == 1) {
+      AzureTestUtils.setConfigProperties(properties, 1);
+      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CLIENT_CLASS, ConnectionStringBasedStorageClient.class.getCanonicalName());
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_ACCOUNT_INFO,
+          "{\n" + "    \"storageAccountInfo\":[\n" + "      {\n" + "        \"name\":\"ambry\",\n" + "        \"partitionRange\":\"0-1000000\",\n"
+              + "        \"storageConnectionString\":\"\",\n" + "        \"storageEndpoint\":\"https://azure_storage.blob.core.windows.net\",\n" + "      }\n"
+              + "    ]\n" + "    }");
+      try {
+        AzureBlobDataAccessor azureBlobDataAccessor =
+            new AzureBlobDataAccessor(new CloudConfig(verifiableProperties), new AzureCloudConfig(verifiableProperties),
+                new AzureBlobLayoutStrategy("test"), azureMetrics);
+        fail("Creating azure blob data accessor with ConnectionStringBasedStorageClientFactory should throw exception" + "without connection string config");
+      } catch (ReflectiveOperationException roEx) {
+      }
     }
   }
 
@@ -298,7 +324,7 @@ public class AzureBlobDataAccessorTest {
     when(accessToken.isExpired()).thenReturn(false);
     ADAuthBasedStorageClient adAuthBasedStorageClient =
         spy(new ADAuthBasedStorageClient(mockServiceAsyncClient, mockBatchAsyncClient, azureMetrics, blobLayoutStrategy,
-            new AzureCloudConfig(new VerifiableProperties(configProps)), accessToken));
+            new AzureCloudConfig(new VerifiableProperties(configProps)), accessToken, null));
     BlobStorageException mockBlobStorageException = mock(BlobStorageException.class);
     when(mockBlobStorageException.getStatusCode()).thenReturn(HttpStatus.SC_FORBIDDEN);
     BlobDownloadAsyncResponse response = mock(BlobDownloadAsyncResponse.class);
@@ -380,5 +406,15 @@ public class AzureBlobDataAccessorTest {
         throw e;
       }
     }
+  }
+
+  /**
+   * Parameters determine the number of storage accounts to use during the sharded storage account testing.
+   * The value of zero refers to no storage account sharding.
+   * @return The number of storage accounts to use.
+   */
+  @Parameterized.Parameters
+  public static Collection<Integer[]> getParameters() {
+    return Lists.newArrayList(new Integer[] { 0 }, new Integer[] { 1 });
   }
 }
