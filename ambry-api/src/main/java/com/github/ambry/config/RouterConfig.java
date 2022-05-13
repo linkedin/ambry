@@ -566,6 +566,13 @@ public class RouterConfig {
   /**
    * Expiration time for Blob IDs stored in not-found cache. Default value is 15 seconds.
    * Setting it to 0 would disable the cache and avoid storing any blob IDs.
+   * TODO: With PR https://github.com/linkedin/ambry/pull/2072, when operation tracker fails due to blob-not-found and
+   *  some of eligible replicas are offline during the time of operation, we differentiate it with unavailable error and
+   *  and return 503 to client instead of 404. But we seem to do it only for 'ttl_update' & 'delete' but not for 'Get'.
+   *  When this cache is introduced, it is possible that blobs are cached for not-found on 'Get' and that could interfere
+   *  with above logic for 'TTL_Update' and 'Delete' as we would return 404 instead of 503. We might need to keep this
+   *  cache disabled (by setting it to 0 in configs) until we fix to return 503 for 'Get' calls as well when replicas are
+   *  offline.
    */
   @Config(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS)
   @Default("15*1000")
