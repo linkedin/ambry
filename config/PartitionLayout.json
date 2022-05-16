@@ -11,7 +11,7 @@
                 {
                     "hostname": "localhost",
                     "mountPath": "/tmp",
-                    "port": 6661
+                    "port": 6667
                 }
             ]
         }

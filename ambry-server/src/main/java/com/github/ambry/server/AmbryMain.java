@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.config.CloudConfig;
@@ -45,7 +46,9 @@ public class AmbryMain {
           Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping AmbryServer");
-      VcrClusterAgentsFactory vcrClusterAgentsFactory = Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass);
+      VcrClusterAgentsFactory vcrClusterAgentsFactory =
+          Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, null, null, null, null, null, null,
+              new MetricRegistry());
       ambryServer = new AmbryServer(verifiableProperties, clusterAgentsFactory, vcrClusterAgentsFactory,
           SystemTime.getInstance());
       // attach shutdown handler to catch control-c
