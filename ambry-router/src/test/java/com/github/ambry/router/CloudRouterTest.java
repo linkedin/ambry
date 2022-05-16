@@ -286,4 +286,10 @@ public class CloudRouterTest extends NonBlockingRouterTest {
   @Ignore
   public void testResponseHandling() throws Exception {
   }
+
+  @Override
+  @Ignore
+  public void testBlobNotFoundCache() throws Exception {
+
+  }
 }

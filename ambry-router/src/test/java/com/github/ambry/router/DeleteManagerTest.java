@@ -298,6 +298,8 @@ public class DeleteManagerTest {
       }
     }
     for (Map.Entry<ServerErrorCode, RouterErrorCode> entity : map.entrySet()) {
+      // Reset not-found cache after each test since we are using same blob ID for all error codes
+      router.getNotFoundCache().invalidateAll();
       testWithErrorCodes(Collections.singletonMap(entity.getKey(), 9), serverLayout, entity.getValue(),
           deleteErrorCodeChecker);
     }
@@ -416,8 +418,8 @@ public class DeleteManagerTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-            future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch),
-                quotaChargeCallback);
+            future =
+                router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeCallback);
             do {
               // increment mock time
               mockTime.sleep(1000);
@@ -595,6 +597,8 @@ public class DeleteManagerTest {
         serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
         serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
       }
+      // Reset not-found cache after each test since we are using same blob ID for all error codes
+      router.getNotFoundCache().invalidateAll();
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }

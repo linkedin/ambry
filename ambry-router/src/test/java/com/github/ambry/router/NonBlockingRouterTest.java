@@ -1118,6 +1118,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         TestCallback<Void> testCallback = new TestCallback<>();
         Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
         assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
+
+        // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+        router.getNotFoundCache().invalidateAll();
+
       }
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
       // bad blob id
@@ -1359,6 +1363,80 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
       if (deleteManager != null) {
         deleteManager.close();
+      }
+    }
+  }
+
+  /**
+   * Test that blobs not found are cached and we don't get them from servers again
+   * @throws Exception
+   */
+  @Test
+  public void testBlobNotFoundCache() throws Exception {
+    try {
+      String updateServiceId = "update-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
+      testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
+
+      layout.getMockServers()
+          .forEach(mockServer -> mockServer.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found));
+      TestCallback<Void> testCallback = new TestCallback<>();
+      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
+      assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.BlobDoesNotExist);
+
+      // Verify that not-found cache is populated with the blob ID.
+      assertNotNull("Cache should contain the blob ID", router.getNotFoundCache().getIfPresent(blobId));
+
+      // Reset server error but we should still receive error since the ID is present in cache
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+
+      // Verify that operations on the same blob ID are retrieved from cache.
+      TestCallback<GetBlobResult> getTestCallback = new TestCallback<>();
+      Future<GetBlobResult> getBlobFuture =
+          router.getBlob(blobId, new GetBlobOptionsBuilder().build(), getTestCallback, null);
+      assertFailureAndCheckErrorCode(getBlobFuture, getTestCallback, RouterErrorCode.BlobDoesNotExist);
+
+      TestCallback<GetBlobResult> getBlobInfoTestCallback = new TestCallback<>();
+      Future<GetBlobResult> getBlobInfoFuture = router.getBlob(blobId,
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
+          getBlobInfoTestCallback, null);
+      assertFailureAndCheckErrorCode(getBlobInfoFuture, getBlobInfoTestCallback, RouterErrorCode.BlobDoesNotExist);
+
+      TestCallback<Void> ttlUpdateTestCallback = new TestCallback<>();
+      Future<Void> ttlUpdateFuture =
+          router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, ttlUpdateTestCallback, null);
+      assertFailureAndCheckErrorCode(ttlUpdateFuture, ttlUpdateTestCallback, RouterErrorCode.BlobDoesNotExist);
+
+      TestCallback<Void> deleteTestCallback = new TestCallback<>();
+      Future<Void> deleteFuture = router.deleteBlob(blobId, updateServiceId, deleteTestCallback, null);
+      assertFailureAndCheckErrorCode(deleteFuture, deleteTestCallback, RouterErrorCode.BlobDoesNotExist);
+
+      TestCallback<Void> unDeleteTestCallback = new TestCallback<>();
+      Future<Void> unDeleteFuture = router.undeleteBlob(blobId, updateServiceId, unDeleteTestCallback, null);
+      assertFailureAndCheckErrorCode(unDeleteFuture, unDeleteTestCallback, RouterErrorCode.BlobDoesNotExist);
+
+      // wait for auto expiration of blob ID in cache
+      Thread.sleep(NOT_FOUND_CACHE_TTL_MS + 100);
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
+
+      router.deleteBlob(blobId, null).get();
+      try {
+        router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+        fail("Get blob should fail");
+      } catch (ExecutionException e) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+      }
+    } finally {
+      if (router != null) {
+        router.close();
       }
     }
   }
