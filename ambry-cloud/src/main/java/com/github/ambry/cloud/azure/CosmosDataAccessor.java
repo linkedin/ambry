@@ -626,14 +626,15 @@ public class CosmosDataAccessor {
       String partitionPath, Timer timer) throws CosmosException {
     CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions;
     if (Utils.isNullOrEmpty(requestContinuationToken)) {
-      cosmosChangeFeedRequestOptions =
-          CosmosChangeFeedRequestOptions.createForProcessingFromBeginning(FeedRange.forFullRange());
+      cosmosChangeFeedRequestOptions = CosmosChangeFeedRequestOptions.createForProcessingFromBeginning(
+          FeedRange.forLogicalPartition(new PartitionKey(partitionPath)));
     } else {
       cosmosChangeFeedRequestOptions =
           CosmosChangeFeedRequestOptions.createForProcessingFromContinuation(requestContinuationToken);
     }
     // Set the maximum number of items to be returned in this change feed request.
     cosmosChangeFeedRequestOptions.setMaxItemCount(maxFeedSize);
+
     return queryChangeFeed(cosmosChangeFeedRequestOptions, changeFeed, timer);
   }
 
