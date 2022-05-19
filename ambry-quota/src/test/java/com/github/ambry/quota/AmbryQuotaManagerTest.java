@@ -28,7 +28,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
@@ -45,10 +44,11 @@ public class AmbryQuotaManagerTest {
   private final static InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
   private final static Account ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
   private final static Account ANOTHER_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
-  private final TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy testQuotaRecommendationMergePolicy =
-      new TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy(
-          new QuotaConfig(new VerifiableProperties(new Properties())));
+  private final TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy testQuotaRecommendationMergePolicy;
   private final boolean isAtomic;
+  private final boolean isRequestThrottlingEnabled;
+  private final QuotaAction expectedDelayRecommendationQuotaExceed;
+  private final QuotaAction expectedRejectRecommendationQuotaExceed;
   private TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer testAmbryCUQuotaEnforcer;
   private QuotaConfig quotaConfig;
 
@@ -56,10 +56,19 @@ public class AmbryQuotaManagerTest {
    * Constructor for {@link AmbryQuotaManagerTest}.
    * @param isAtomic flag. If set to {@code true} {@link AtomicAmbryQuotaManager} is tested.
    *                 Otherwise {@link AmbryQuotaManager} is tested.
+   * @param isRequestThrottlingEnabled flag to disable and enable request throttling enabled in tests.
    */
-  public AmbryQuotaManagerTest(boolean isAtomic) {
-    this.isAtomic = isAtomic;
+  public AmbryQuotaManagerTest(boolean isAtomic, boolean isRequestThrottlingEnabled) {
     TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy.quotaRecommendationsCount = 0;
+    this.isAtomic = isAtomic;
+    this.isRequestThrottlingEnabled = isRequestThrottlingEnabled;
+    // If request throttling is disabled, then even though quota is exceeded, the recommendation should be ALLOW.
+    this.expectedDelayRecommendationQuotaExceed = isRequestThrottlingEnabled ? QuotaAction.DELAY : QuotaAction.ALLOW;
+    this.expectedRejectRecommendationQuotaExceed = isRequestThrottlingEnabled ? QuotaAction.REJECT : QuotaAction.ALLOW;
+    Properties properties = new Properties();
+    properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, Boolean.toString(isRequestThrottlingEnabled));
+    QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
+    testQuotaRecommendationMergePolicy = new TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy(quotaConfig);
   }
 
   /**
@@ -69,9 +78,7 @@ public class AmbryQuotaManagerTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.stream(new Boolean[]{Boolean.TRUE, Boolean.FALSE})
-        .map(isAtomic -> new Object[]{isAtomic})
-        .collect(Collectors.toList());
+    return Arrays.asList(new Object[][]{{true, true}, {false, true}, {true, false}, {false, false}});
   }
 
   @Test
@@ -168,7 +175,7 @@ public class AmbryQuotaManagerTest {
     throttlingRecommendation = ambryQuotaManager.recommend(restRequest);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer1.recommendCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer2.recommendCallCount);
-    Assert.assertEquals(throttlingRecommendation.getQuotaAction(), QuotaAction.DELAY);
+    Assert.assertEquals(throttlingRecommendation.getQuotaAction(), expectedDelayRecommendationQuotaExceed);
     Assert.assertEquals(5, TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy.quotaRecommendationsCount);
 
     // 5. test that if any quota enforcer recommends REJECT action, then that's the recommendation
@@ -181,7 +188,7 @@ public class AmbryQuotaManagerTest {
     throttlingRecommendation = ambryQuotaManager.recommend(restRequest);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer1.recommendCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer2.recommendCallCount);
-    Assert.assertEquals(throttlingRecommendation.getQuotaAction(), QuotaAction.REJECT);
+    Assert.assertEquals(throttlingRecommendation.getQuotaAction(), expectedRejectRecommendationQuotaExceed);
     Assert.assertEquals(7, TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy.quotaRecommendationsCount);
 
     // 6. test if all the enforcers throw exception.
@@ -235,11 +242,11 @@ public class AmbryQuotaManagerTest {
     ambryQuotaManager.init();
     costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 1.0);
     quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, false, false);
-    Assert.assertEquals(QuotaAction.DELAY, quotaAction);
+    Assert.assertEquals(expectedDelayRecommendationQuotaExceed, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
-    Assert.assertEquals(0, testAmbryCUQuotaEnforcer.chargeCallCount);
-    Assert.assertEquals(110, testAmbryCUQuotaEnforcer.getQuotaSource()
+    Assert.assertEquals(isRequestThrottlingEnabled ? 0 : 1, testAmbryCUQuotaEnforcer.chargeCallCount);
+    Assert.assertEquals(isRequestThrottlingEnabled ? 110 : 120, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
 
     // 4. test that if one enforcer recommends reject then no charge is done and reject is returned.
@@ -401,13 +408,13 @@ public class AmbryQuotaManagerTest {
     testAmbryCUQuotaEnforcer.resetDefaults();
     costMap = Collections.singletonMap(QuotaName.READ_CAPACITY_UNIT, 100.0);
     quotaAction = ambryQuotaManager.chargeAndRecommend(restRequest, costMap, true, false);
-    Assert.assertEquals(QuotaAction.DELAY, quotaAction);
+    Assert.assertEquals(expectedDelayRecommendationQuotaExceed, quotaAction);
     Assert.assertEquals(0, testAmbryCUQuotaEnforcer.initCallCount);
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.recommendCallCount);
-    Assert.assertEquals(0, testAmbryCUQuotaEnforcer.chargeCallCount);
-    Assert.assertEquals(1110, testAmbryCUQuotaEnforcer.getQuotaSource()
+    Assert.assertEquals(isRequestThrottlingEnabled ? 0 : 1, testAmbryCUQuotaEnforcer.chargeCallCount);
+    Assert.assertEquals(isRequestThrottlingEnabled ? 1110 : 2110, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(111,
+    Assert.assertEquals(isRequestThrottlingEnabled ? 111 : 211,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
 
     // 5. test that even if quota exceed allowed might have returned false, if a request is within its limits, the recommendation is allow
@@ -423,7 +430,7 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(1000, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(211,
+    Assert.assertEquals(isRequestThrottlingEnabled ? 211 : 311,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
   }
 
@@ -517,6 +524,7 @@ public class AmbryQuotaManagerTest {
         10, String.valueOf(ANOTHER_ACCOUNT.getId()), 10, 10));
     properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON,
         String.format("{\n" + "  \"wcu\": %d,\n" + "  \"rcu\": %d\n" + "}", 100, 100));
+    properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, Boolean.toString(isRequestThrottlingEnabled));
     quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     quotaConfig.requestQuotaEnforcerSourcePairInfoJson = buildDefaultQuotaEnforcerSourceInfoPairJson().toString();
     QuotaMetrics quotaMetrics = new QuotaMetrics(new MetricRegistry());
@@ -536,7 +544,9 @@ public class AmbryQuotaManagerTest {
    * @throws ReflectiveOperationException in case the {@link AmbryQuotaManager} object could not be created.
    */
   private AmbryQuotaManager buildAmbryQuotaManager() throws ReflectiveOperationException {
-    quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
+    Properties properties = new Properties();
+    properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, Boolean.toString(isRequestThrottlingEnabled));
+    quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     quotaConfig.requestQuotaEnforcerSourcePairInfoJson = buildTestQuotaEnforcerSourceInfoPairJson().toString();
     QuotaMetrics quotaMetrics = new QuotaMetrics(new MetricRegistry());
     AmbryQuotaManager ambryQuotaManager = createAmbryQuotaManager(quotaConfig, quotaMetrics);

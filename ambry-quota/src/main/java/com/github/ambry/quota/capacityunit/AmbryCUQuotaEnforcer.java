@@ -39,12 +39,13 @@ import java.util.concurrent.Callable;
  * where needed.
  */
 public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
+  protected final static int MAX_USAGE_PERCENTAGE_ALLOWED = 100;
   private final static List<QuotaName> SUPPORTED_QUOTA_NAMES =
       Collections.unmodifiableList(Arrays.asList(QuotaName.READ_CAPACITY_UNIT, QuotaName.WRITE_CAPACITY_UNIT));
-  protected final static int MAX_USAGE_PERCENTAGE_ALLOWED = 100;
-  private final QuotaSource quotaSource;
-  private final float maxFrontendCuUsageToAllowExceed;
   protected final long throttleRetryAfterMs;
+  private final QuotaSource quotaSource;
+  private final boolean requestThrottlingEnabled;
+  private final float maxFrontendCuUsageToAllowExceed;
 
   /**
    * Constructor for {@link AmbryCUQuotaEnforcer}.
@@ -55,6 +56,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
     this.quotaSource = quotaSource;
     this.throttleRetryAfterMs = quotaConfig.cuQuotaAggregationWindowInSecs;
     this.maxFrontendCuUsageToAllowExceed = quotaConfig.maxFrontendCuUsageToAllowExceed;
+    this.requestThrottlingEnabled = quotaConfig.requestThrottlingEnabled;
   }
 
   @Override
@@ -119,7 +121,10 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
    * @return QuotaRecommendation object.
    */
   protected QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName) {
-    QuotaAction quotaAction = (usage >= MAX_USAGE_PERCENTAGE_ALLOWED) ? QuotaAction.DELAY : QuotaAction.ALLOW;
+    QuotaAction quotaAction = QuotaAction.ALLOW;
+    if (requestThrottlingEnabled && usage >= MAX_USAGE_PERCENTAGE_ALLOWED) {
+      quotaAction = QuotaAction.DELAY;
+    }
     return new QuotaRecommendation(quotaAction, usage, quotaName,
         (quotaAction == QuotaAction.DELAY) ? throttleRetryAfterMs : QuotaRecommendation.NO_THROTTLE_RETRY_AFTER_MS);
   }
