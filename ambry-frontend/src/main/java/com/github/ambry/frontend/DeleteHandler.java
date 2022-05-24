@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -93,7 +94,7 @@ public class DeleteHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.deleteBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -132,11 +133,10 @@ public class DeleteHandler {
      */
     private Callback<Void> routerCallback() {
       return buildCallback(metrics.deleteBlobRouterMetrics, result -> {
-        LOGGER.debug("Deleted {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
+        LOGGER.debug("Deleted {}", getRequestPath(restRequest).getOperationOrBlobId(false));
         restResponseChannel.setStatus(ResponseStatus.Accepted);
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-        securityService.processRequestCharges(restRequest, restResponseChannel, null);
         securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }

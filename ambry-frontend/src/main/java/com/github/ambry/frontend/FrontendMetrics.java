@@ -86,6 +86,11 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics headBlobIdConversionMetrics;
   public final AsyncOperationTracker.Metrics headBlobSecurityProcessResponseMetrics;
 
+  public final AsyncOperationTracker.Metrics getBlobSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getBlobSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getBlobRouterMetrics;
+  public final AsyncOperationTracker.Metrics getBlobIdConversionMetrics;
+  public final AsyncOperationTracker.Metrics getBlobSecurityProcessResponseMetrics;
 
   public final AsyncOperationTracker.Metrics putSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics putSecurityPostProcessRequestMetrics;
@@ -255,8 +260,8 @@ public class FrontendMetrics {
     getSignedUrlMetricsGroup =
         new RestRequestMetricsGroup(GetSignedUrlHandler.class, "GetSignedUrl", false, metricRegistry, frontendConfig);
     getClusterMapSnapshotMetricsGroup =
-        new RestRequestMetricsGroup(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot",
-            false, metricRegistry, frontendConfig);
+        new RestRequestMetricsGroup(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot", false, metricRegistry,
+            frontendConfig);
     getAccountsMetricsGroup =
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, metricRegistry, frontendConfig);
     getStatsReportMetricsGroup =
@@ -332,10 +337,19 @@ public class FrontendMetrics {
     headBlobSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(HeadHandler.class, "securityPostProcessRequest", metricRegistry);
     headBlobRouterMetrics = new AsyncOperationTracker.Metrics(HeadHandler.class, "router", metricRegistry);
-    headBlobIdConversionMetrics =
-        new AsyncOperationTracker.Metrics(HeadHandler.class, "idConversion", metricRegistry);
+    headBlobIdConversionMetrics = new AsyncOperationTracker.Metrics(HeadHandler.class, "idConversion", metricRegistry);
     headBlobSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(HeadHandler.class, "securityProcessResponse", metricRegistry);
+
+    getBlobSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetBlobHandler.class, "securityProcessRequest", metricRegistry);
+    getBlobSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetBlobHandler.class, "securityPostProcessRequest", metricRegistry);
+    getBlobRouterMetrics = new AsyncOperationTracker.Metrics(GetBlobHandler.class, "router", metricRegistry);
+    getBlobIdConversionMetrics =
+        new AsyncOperationTracker.Metrics(GetBlobHandler.class, "idConversion", metricRegistry);
+    getBlobSecurityProcessResponseMetrics =
+        new AsyncOperationTracker.Metrics(GetBlobHandler.class, "securityProcessResponse", metricRegistry);
 
     putSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putSecurityProcessRequest", metricRegistry);

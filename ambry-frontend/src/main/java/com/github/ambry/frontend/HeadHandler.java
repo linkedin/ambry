@@ -23,12 +23,12 @@ import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.Router;
-import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +61,12 @@ public class HeadHandler {
     this.quotaManager = quotaManager;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+      throws RestServiceException {
+    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+    if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
+      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metrics.headBlobMetricsGroup);
+    }
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -97,7 +102,7 @@ public class HeadHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.headBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -144,12 +149,11 @@ public class HeadHandler {
      */
     private Callback<GetBlobResult> routerCallback() {
       return buildCallback(metrics.headBlobRouterMetrics, result -> {
-        LOGGER.debug("Head {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        LOGGER.debug("Head {}", getRequestPath(restRequest).getOperationOrBlobId(false));
         accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
             result.getBlobInfo().getBlobProperties(), metrics.headBlobMetricsGroup);
-        securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(), securityProcessResponseCallback());
+        securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
+            securityProcessResponseCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 

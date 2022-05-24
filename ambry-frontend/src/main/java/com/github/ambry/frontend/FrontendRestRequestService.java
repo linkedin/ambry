@@ -239,7 +239,6 @@ class FrontendRestRequestService implements RestRequestService {
         listNamedBlobsHandler.handle(restRequest, restResponseChannel,
             ((result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception)));
       } else {
-
         getBlobHandler.handle(requestPath, restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, r, e);
         });
@@ -315,11 +314,7 @@ class FrontendRestRequestService implements RestRequestService {
       RestRequestMetrics requestMetrics =
           frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
-      if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-        accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
-            frontendMetrics.headBlobMetricsGroup);
-      }
+
       headHandler.handle(restRequest, restResponseChannel, (r, e) -> {
         submitResponse(restRequest, restResponseChannel, null, e);
       });
@@ -433,33 +428,6 @@ class FrontendRestRequestService implements RestRequestService {
     } catch (Exception e) {
       errorCallback.onCompletion(null, e);
     }
-  }
-
-  /**
-   * Fetch {@link RestRequestMetricsGroup} for GetRequest based on the {@link SubResource}.
-   * @param frontendMetrics instance of {@link FrontendMetrics} to use
-   * @param subResource {@link SubResource} corresponding to the GetRequest
-   * @return the appropriate {@link RestRequestMetricsGroup} based on the given params
-   */
-  private static RestRequestMetricsGroup getMetricsGroupForGet(FrontendMetrics frontendMetrics,
-      SubResource subResource) {
-    RestRequestMetricsGroup group = null;
-    if (subResource == null || subResource.equals(SubResource.Segment)) {
-      group = frontendMetrics.getBlobMetricsGroup;
-    } else {
-      switch (subResource) {
-        case BlobInfo:
-          group = frontendMetrics.getBlobInfoMetricsGroup;
-          break;
-        case UserMetadata:
-          group = frontendMetrics.getUserMetadataMetricsGroup;
-          break;
-        case Replicas:
-          group = frontendMetrics.getReplicasMetricsGroup;
-          break;
-      }
-    }
-    return group;
   }
 
   /**

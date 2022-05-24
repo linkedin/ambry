@@ -195,7 +195,8 @@ class AmbrySecurityService implements SecurityService {
       }
       RequestPath requestPath = RestUtils.getRequestPath(restRequest);
       RestMethod restMethod = restRequest.getRestMethod();
-      if (blobInfo == null && !restMethod.equals(RestMethod.OPTIONS) && !restMethod.equals(RestMethod.PUT)) {
+      if (blobInfo == null && !restMethod.equals(RestMethod.OPTIONS) && !restMethod.equals(RestMethod.PUT)
+          && !restMethod.equals(RestMethod.DELETE)) {
         if (!requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
           throw new IllegalArgumentException("BlobInfo is null");
         }
@@ -268,6 +269,9 @@ class AmbrySecurityService implements SecurityService {
               responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
             }
+            break;
+          case DELETE:
+            // There is nothing to do with delete
             break;
           default:
             exception = new RestServiceException("Cannot process response for request with method " + restMethod,
