@@ -1,3 +1,16 @@
+/**
+ * Copyright 2022 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
@@ -59,6 +72,7 @@ public class GetBlobHandler {
 
   void handle(RequestPath requestPath, RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
+    System.out.println("Calling handle-==-====");
     SubResource subResource = requestPath.getSubResource();
     GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,
         getGetOption(restRequest, frontendConfig.defaultRouterGetOption), restRequest, requestPath.getBlobSegmentIdx());
@@ -130,6 +144,7 @@ public class GetBlobHandler {
      * Start the chain by calling {@link SecurityService#processRequest}.
      */
     private void start() {
+      System.out.println("Calling callchain start==-====");
       securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
 
@@ -140,7 +155,8 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.headBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        System.out.println("Calling security process request callback==-====");
+        String blobIdStr = requestPath.getOperationOrBlobId(true);
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -152,6 +168,7 @@ public class GetBlobHandler {
      */
     private Callback<String> idConverterCallback() {
       return buildCallback(metrics.headBlobIdConversionMetrics, convertedBlobId -> {
+        System.out.println("Calling ic converter callback==-====");
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
         accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
@@ -166,6 +183,7 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.getSecurityPostProcessRequestMetrics, result -> {
+        System.out.println("Calling security post process request callback==-====");
         // inject encryption metrics if need be
         if (BlobId.isEncrypted(blobId.getID())) {
           RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
@@ -196,14 +214,14 @@ public class GetBlobHandler {
      */
     private Callback<GetBlobResult> routerCallback() {
       return buildCallback(metrics.headBlobRouterMetrics, result -> {
+        System.out.println("Calling router callback==-====");
         LOGGER.debug("Get {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-        accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
-            result.getBlobInfo().getBlobProperties(), metricsGroup);
 
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
         accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
             result.getBlobInfo().getBlobProperties(), metrics.headBlobMetricsGroup);
+        System.out.println("After ensure account and container");
         securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
             securityProcessResponseCallback(result));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -215,6 +233,7 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityProcessResponseCallback(GetBlobResult result) {
       return buildCallback(metrics.headBlobSecurityProcessResponseMetrics, securityCheckResult -> {
+        System.out.println("Calling security process response callback==-====");
         ReadableStreamChannel response = result.getBlobDataChannel();
         if (subResource != null && !subResource.equals(SubResource.Segment)) {
           BlobInfo blobInfo = result.getBlobInfo();
