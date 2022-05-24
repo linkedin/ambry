@@ -32,6 +32,7 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -206,13 +207,17 @@ public class GetBlobHandler {
      * @return a {@link Callback} to be used with {@link Router#getBlob}.
      */
     private Callback<GetBlobResult> routerCallback() {
+      final AtomicReference<GetBlobResult> resultRef = new AtomicReference(null);
       return buildCallback(metrics.getBlobRouterMetrics, result -> {
-        LOGGER.debug("Get {}", requestPath.getOperationOrBlobId(false));
-        accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
-            result.getBlobInfo().getBlobProperties(), metricsGroup);
-        securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
-            securityProcessResponseCallback(result));
-      }, restRequest.getUri(), LOGGER, finalCallback);
+            resultRef.set(result);
+            accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
+                result.getBlobInfo().getBlobProperties(), metricsGroup);
+            securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
+                securityProcessResponseCallback(result));
+          }, restRequest.getUri(), LOGGER,
+          // Still pass result.getBlobDataChannel() to finalCallback if we already have it.
+          (r, e) -> finalCallback.onCompletion(resultRef.get() != null ? resultRef.get().getBlobDataChannel() : null,
+              e));
     }
 
     /**
@@ -221,26 +226,28 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityProcessResponseCallback(GetBlobResult result) {
       return buildCallback(metrics.getBlobSecurityProcessResponseMetrics, securityCheckResult -> {
-        ReadableStreamChannel response = result.getBlobDataChannel();
-        if (subResource != null && !subResource.equals(SubResource.Segment)) {
-          BlobInfo blobInfo = result.getBlobInfo();
-          if (restRequest.getArgs().containsKey(SEND_USER_METADATA_AS_RESPONSE_BODY) && (boolean) restRequest.getArgs()
-              .get(SEND_USER_METADATA_AS_RESPONSE_BODY)) {
-            restResponseChannel.setHeader(Headers.CONTENT_TYPE, "application/octet-stream");
-            restResponseChannel.setHeader(Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
-            response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
-          } else {
-            restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
-            response = new ByteBufferReadableStreamChannel(EMPTY_BUFFER);
-          }
-        } else if (restResponseChannel.getStatus() == ResponseStatus.NotModified) {
-          response = null;
-          // If the blob was not modified, we need to close the channel, as it will not be submitted to
-          // the RestResponseHandler
-          result.getBlobDataChannel().close();
-        }
-        finalCallback.onCompletion(response, null);
-      }, restRequest.getUri(), LOGGER, finalCallback);
+            ReadableStreamChannel response = result.getBlobDataChannel();
+            if (subResource != null && !subResource.equals(SubResource.Segment)) {
+              BlobInfo blobInfo = result.getBlobInfo();
+              if (restRequest.getArgs().containsKey(SEND_USER_METADATA_AS_RESPONSE_BODY) && (boolean) restRequest.getArgs()
+                  .get(SEND_USER_METADATA_AS_RESPONSE_BODY)) {
+                restResponseChannel.setHeader(Headers.CONTENT_TYPE, "application/octet-stream");
+                restResponseChannel.setHeader(Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
+              } else {
+                restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
+                response = new ByteBufferReadableStreamChannel(EMPTY_BUFFER);
+              }
+            } else if (restResponseChannel.getStatus() == ResponseStatus.NotModified) {
+              response = null;
+              // If the blob was not modified, we need to close the channel, as it will not be submitted to
+              // the RestResponseHandler
+              result.getBlobDataChannel().close();
+            }
+            finalCallback.onCompletion(response, null);
+          }, restRequest.getUri(), LOGGER,
+          // Still pass result.getBlobDataChannel() to finalCallback since we already have it.
+          (r, e) -> finalCallback.onCompletion(result != null ? result.getBlobDataChannel() : null, e));
     }
   }
 }
