@@ -52,6 +52,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
 
 
@@ -122,6 +123,7 @@ public class NamedBlobPutHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+    restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
     new NamedBlobPutHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
