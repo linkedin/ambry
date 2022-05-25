@@ -390,7 +390,7 @@ public class StaticClusterManagerTest {
             partitionLayoutSer)).getClusterMap();
     assertEquals(clusterMapManager.getWritablePartitionIds(null).size(), 1);
     assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
-    assertNotNull(clusterMapManager.getDataNodeId("localhost", 6661));
+    assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
   }
 
   /**
