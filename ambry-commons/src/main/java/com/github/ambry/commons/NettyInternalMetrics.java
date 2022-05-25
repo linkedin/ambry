@@ -69,6 +69,8 @@ public class NettyInternalMetrics {
   private volatile int numThreadLocalCaches;
   private volatile long usedHeapMemory;
   private volatile long usedDirectMemory;
+  private volatile long pinnedHeapMemory;
+  private volatile long pinnedDirectMemory;
   private volatile long numHeapTotalAllocations;
   private volatile long numHeapTotalDeallocations;
   private volatile long numHeapTotalActiveAllocations;
@@ -94,6 +96,14 @@ public class NettyInternalMetrics {
 
   private long getUsedDirectMemory() {
     return usedDirectMemory;
+  }
+
+  private long getPinnedHeapMemory() {
+    return pinnedHeapMemory;
+  }
+
+  private long getPinnedDirectMemory() {
+    return pinnedDirectMemory;
   }
 
   private long getNumHeapTotalAllocations() {
@@ -131,6 +141,10 @@ public class NettyInternalMetrics {
         (Gauge<Long>) this::getUsedHeapMemory);
     registry.register(MetricRegistry.name(NettyInternalMetrics.class, "UsedDirectMemory"),
         (Gauge<Long>) this::getUsedDirectMemory);
+    registry.register(MetricRegistry.name(NettyInternalMetrics.class, "PinnedHeapMemory"),
+        (Gauge<Long>) this::getPinnedHeapMemory);
+    registry.register(MetricRegistry.name(NettyInternalMetrics.class, "PinnedDirectMemory"),
+        (Gauge<Long>) this::getPinnedDirectMemory);
     registry.register(MetricRegistry.name(NettyInternalMetrics.class, "NumberHeapTotalAllocations"),
         (Gauge<Long>) this::getNumHeapTotalAllocations);
     registry.register(MetricRegistry.name(NettyInternalMetrics.class, "NumberHeapTotalDeallocations"),
@@ -181,6 +195,8 @@ public class NettyInternalMetrics {
       numThreadLocalCaches = metric.numThreadLocalCaches();
       usedHeapMemory = metric.usedHeapMemory();
       usedDirectMemory = metric.usedDirectMemory();
+      pinnedHeapMemory = PooledByteBufAllocator.DEFAULT.pinnedHeapMemory();
+      pinnedDirectMemory = PooledByteBufAllocator.DEFAULT.pinnedDirectMemory();
       List<PoolArenaMetric> heapArenaMetrics = metric.heapArenas();
       List<PoolArenaMetric> directArenaMetrics = metric.directArenas();
       numHeapTotalAllocations = heapArenaMetrics.stream().mapToLong(PoolArenaMetric::numAllocations).sum();
