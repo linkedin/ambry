@@ -196,8 +196,15 @@ class MockHelixManager implements HelixManager {
    */
   void triggerLiveInstanceNotification(boolean init) {
     List<LiveInstance> liveInstances = new ArrayList<>();
-    for (String instance : mockAdmin.getUpInstances()) {
-      liveInstances.add(new LiveInstance(instance));
+    for (int i = 0; i < mockAdmin.getUpInstances().size(); i++) {
+      // Need set LiveInstance.ZNRecord.setEphemeralOwner to non-zero unique value.
+      // Otherwise new RoutingTableProvider(manager, PropertyType.CURRENTSTATES) will throw null pointer exception.
+      // The exception is due to ZNRecord.getSimpleField is null in the below code.
+      // https://jarvis.corp.linkedin.com/codesearch/result/?name=LiveInstance.java&path=helix-lib%2Fhelix%2Fhelix-core%2Fsrc%2Fmain%2Fjava%2Forg%2Fapache%2Fhelix%2Fmodel&reponame=multiproducts%2Fhelix-lib#115
+      String instance = mockAdmin.getUpInstances().get(i);
+      ZNRecord znRecord = new ZNRecord(instance);
+      znRecord.setEphemeralOwner(i+1);
+      liveInstances.add(new LiveInstance(znRecord));
     }
     NotificationContext notificationContext = new NotificationContext(this);
     if (init) {
