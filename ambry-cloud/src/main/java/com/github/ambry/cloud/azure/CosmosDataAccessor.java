@@ -770,7 +770,6 @@ public class CosmosDataAccessor {
   public Set<CosmosContainerDeletionEntry> getDeprecatedContainers(int maxEntries) throws CosmosException {
     SqlQuerySpec sqlQuerySpec =
         new SqlQuerySpec(DEPRECATED_CONTAINERS_QUERY, new SqlParameter(LIMIT_PARAM, maxEntries));
-    Timer timer = new Timer();
     Set<CosmosContainerDeletionEntry> containerDeletionEntries = new HashSet<>();
 
     try {

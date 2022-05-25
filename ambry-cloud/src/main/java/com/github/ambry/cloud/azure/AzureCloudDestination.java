@@ -242,9 +242,9 @@ class AzureCloudDestination implements CloudDestination {
           if (throwableOnBlobUpload != null) {
             // Received an error when uploading to Azure blob storage
             azureMetrics.backupErrorCount.inc();
+            backupTimer.stop();
             Exception ex = Utils.extractFutureExceptionCause(throwableOnBlobUpload);
             resultFuture.completeExceptionally(toCloudStorageException("Error uploading blob " + blobId, ex));
-            backupTimer.stop();
           } else {
             // Note: Even if upload to ABS returned false, still attempt to insert the metadata document since it is possible that
             // a previous attempt to insert metadata to Cosmos failed.
@@ -522,38 +522,42 @@ class AzureCloudDestination implements CloudDestination {
               // in Cosmos but not ABS.  If that happens, a late arriving update event can get stuck in a loop
               // where findMissingKeys says the blob exists (because Cosmos has it), but the subsequent update
               // attempt fails.  So we check for that case here.
-              cosmosDataAccessor.getMetadataOrNullAsync(blobId).whenComplete(((cosmosMetadata, throwableOnCosmosGet) -> {
-                if (throwableOnCosmosGet != null) {
-                  // Received an exception when trying to find blob metadata in cosmos. Complete the result future with the original exception from ABS.
-                  resultFuture.completeExceptionally(
-                      toCloudStorageException("Error updating blob metadata: " + blobId, blobUpdateException));
-                } else {
-                  if (cosmosMetadata != null) {
-                    // If the blob is found in cosmos. Check if it is a compaction candidate. If yes, delete the record in the cosmos.
-                    if (cosmosMetadata.isCompactionCandidate(
-                        TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours))) {
-                      logger.warn("Inconsistency: Cosmos contains record for inactive blob {}, removing it.",
-                          blobId.getID());
-                      cosmosDataAccessor.deleteMetadataAsync(cosmosMetadata)
-                          .whenComplete(
-                              ((deleteMetadataResponse, throwableOnCosmosDelete) -> resultFuture.completeExceptionally(
-                                  toCloudStorageException("Error updating blob metadata: " + blobId,
-                                      blobUpdateException))));
-                      azureMetrics.blobUpdateRecoverCount.inc();
-                    } else {
-                      // If the blob is still active but ABS does not have it, we are in deeper trouble.
-                      logger.error("Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!",
-                          blobId.getID());
+              cosmosDataAccessor.getMetadataOrNullAsync(blobId)
+                  .whenComplete(((cosmosMetadata, throwableOnCosmosGet) -> {
+                    if (throwableOnCosmosGet != null) {
+                      // Received an exception when trying to find blob metadata in cosmos. Complete the result future with the original exception from ABS.
                       resultFuture.completeExceptionally(
                           toCloudStorageException("Error updating blob metadata: " + blobId, blobUpdateException));
+                    } else {
+                      if (cosmosMetadata != null) {
+                        // If the blob is found in cosmos. Check if it is a compaction candidate. If yes, delete the record in the cosmos.
+                        if (cosmosMetadata.isCompactionCandidate(
+                            TimeUnit.HOURS.toMillis(cloudConfig.cloudBlobCompactionIntervalHours))) {
+                          logger.warn("Inconsistency: Cosmos contains record for inactive blob {}, removing it.",
+                              blobId.getID());
+                          cosmosDataAccessor.deleteMetadataAsync(cosmosMetadata)
+                              .whenComplete(((deleteMetadataResponse, throwableOnCosmosDelete) -> {
+                                // Blob is deleted in cosmos too now.
+                                azureMetrics.blobUpdateRecoverCount.inc();
+                                resultFuture.completeExceptionally(
+                                    toCloudStorageException("Error updating blob metadata: " + blobId,
+                                        blobUpdateException));
+                              }));
+                        } else {
+                          // If the blob is still active but ABS does not have it, we are in deeper trouble.
+                          logger.error(
+                              "Inconsistency: Cosmos contains record for active blob {} that is missing from ABS!",
+                              blobId.getID());
+                          resultFuture.completeExceptionally(
+                              toCloudStorageException("Error updating blob metadata: " + blobId, blobUpdateException));
+                        }
+                      } else {
+                        // Blob is not found in cosmos too. Complete the result future.
+                        resultFuture.completeExceptionally(
+                            toCloudStorageException("Error updating blob metadata: " + blobId, blobUpdateException));
+                      }
                     }
-                  } else {
-                    // Blob is not found in cosmos too. Complete the result future.
-                    resultFuture.completeExceptionally(
-                        toCloudStorageException("Error updating blob metadata: " + blobId, blobUpdateException));
-                  }
-                }
-              }));
+                  }));
             } else {
               // If the exception from ABS is any thing other than NOT_FOUND, complete the result future immediately.
               CloudStorageException cse =
@@ -636,8 +640,8 @@ class AzureCloudDestination implements CloudDestination {
       throws CloudStorageException {
     try {
       BlobLayout tokenLayout = blobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
-      return azureBlobDataAccessor.downloadFileAsync(tokenLayout.containerName, tokenLayout.blobFilePath, null, outputStream,
-          false).join();
+      return azureBlobDataAccessor.downloadFileAsync(tokenLayout.containerName, tokenLayout.blobFilePath, null,
+          outputStream, false).join();
     } catch (Exception e) {
       throw toCloudStorageException("Could not retrieve token: " + partitionPath, Utils.extractFutureExceptionCause(e));
     }

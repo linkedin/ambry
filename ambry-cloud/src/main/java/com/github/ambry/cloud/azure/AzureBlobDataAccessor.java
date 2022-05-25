@@ -353,13 +353,13 @@ public class AzureBlobDataAccessor {
               // Validate the sanity of update operation by comparing the fields we want to update against existing metadata
               // fields in Azure. This can throw StoreExceptions which are propagated to caller.
               if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(metadata), blobId, updateFields)) {
-                resultFuture.complete(new UpdateResponse(false, metadata));
                 storageTimer.stop();
+                resultFuture.complete(new UpdateResponse(false, metadata));
               }
             } catch (StoreException e) {
               // Received an exception during the update validation. Complete the response future.
-              resultFuture.completeExceptionally(e);
               storageTimer.stop();
+              resultFuture.completeExceptionally(e);
             }
 
             if (!resultFuture.isDone()) {
@@ -390,6 +390,7 @@ public class AzureBlobDataAccessor {
                 FutureUtils.orTimeout(
                     storageClient.setMetadataWithResponse(blobId, metadata, blobRequestConditions, Context.NONE),
                     requestTimeout).whenComplete((response, throwableOnUpdate) -> {
+                  storageTimer.stop();
                   if (throwableOnUpdate != null) {
                     Exception exOnUpdate = Utils.extractFutureExceptionCause(throwableOnUpdate);
                     if (exOnUpdate instanceof BlobStorageException
@@ -400,12 +401,11 @@ public class AzureBlobDataAccessor {
                   } else {
                     resultFuture.complete(new UpdateResponse(true, metadata));
                   }
-                  storageTimer.stop();
                 });
               } else {
                 // There are no changed fields to update
-                resultFuture.complete(new UpdateResponse(false, metadata));
                 storageTimer.stop();
+                resultFuture.complete(new UpdateResponse(false, metadata));
               }
             }
           }
