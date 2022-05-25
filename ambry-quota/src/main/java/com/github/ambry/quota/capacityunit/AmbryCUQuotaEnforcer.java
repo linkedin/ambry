@@ -86,7 +86,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
     float usage = doAndHandleException(() -> {
       final QuotaResource quotaResource = QuotaResource.fromRestRequest(restRequest);
       return quotaSource.getUsage(quotaResource, quotaName);
-    }, String.format("Could not recommend for request %s due to", restRequest));
+    }, String.format("Could not recommend for request %s due to", restRequest.getPath()));
     return buildQuotaRecommendation(usage, quotaName);
   }
 
