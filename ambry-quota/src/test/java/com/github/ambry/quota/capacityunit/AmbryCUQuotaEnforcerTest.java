@@ -40,6 +40,8 @@ import java.util.Properties;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -47,6 +49,7 @@ import static org.junit.Assert.*;
 /**
  * Tests for {@link AmbryCUQuotaEnforcer}.
  */
+@RunWith(Parameterized.class)
 public class AmbryCUQuotaEnforcerTest {
   private final static long WCU = 10;
   private final static long RCU = 10;
@@ -57,6 +60,28 @@ public class AmbryCUQuotaEnforcerTest {
   private static ExceptionQuotaSource QUOTA_SOURCE;
   private static Account ACCOUNT;
 
+  private final QuotaAction expectedRecommendationQuotaExceed;
+  private final boolean isRequestThrottlingEnabled;
+
+  /**
+   * Constructor for {@link AmbryCUQuotaEnforcerTest}.
+   * @param isRequestThrottlingEnabled flag to disable and enable request throttling enabled in tests.
+   */
+  public AmbryCUQuotaEnforcerTest(boolean isRequestThrottlingEnabled) {
+    this.isRequestThrottlingEnabled = isRequestThrottlingEnabled;
+    // If request throttling is disabled, then even though quota is exceeded, the recommendation should be ALLOW.
+    this.expectedRecommendationQuotaExceed = isRequestThrottlingEnabled ? QuotaAction.DELAY : QuotaAction.ALLOW;
+  }
+
+  /**
+   * Run with both request throttling enabled, as well as disabled.
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
   @Before
   public void setup() throws IOException {
     ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
@@ -66,6 +91,7 @@ public class AmbryCUQuotaEnforcerTest {
             String.valueOf(ACCOUNT.getId()), WCU, RCU));
     properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON,
         String.format("{\n" + "  \"wcu\": %d,\n" + "  \"rcu\": %d\n" + "}", FE_WCU, FE_RCU));
+    properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, Boolean.toString(isRequestThrottlingEnabled));
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     QUOTA_SOURCE = new ExceptionQuotaSource(quotaConfig, ACCOUNT_SERVICE);
     QUOTA_SOURCE.init();
@@ -125,7 +151,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.READ_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(180, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
+    assertEquals(expectedRecommendationQuotaExceed, quotaRecommendation.getQuotaAction());
     assertEquals(9, usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getRcu()); // make sure that correct quota is charged.
@@ -135,7 +161,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(180, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
+    assertEquals(expectedRecommendationQuotaExceed, quotaRecommendation.getQuotaAction());
     assertEquals(18,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
@@ -146,7 +172,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(270, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
+    assertEquals(expectedRecommendationQuotaExceed, quotaRecommendation.getQuotaAction());
     assertEquals(27,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
@@ -157,7 +183,7 @@ public class AmbryCUQuotaEnforcerTest {
     quotaRecommendation = AMBRY_QUOTA_ENFORCER.recommend(restRequest);
     assertEquals(QuotaName.WRITE_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(360, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
+    assertEquals(expectedRecommendationQuotaExceed, quotaRecommendation.getQuotaAction());
     assertEquals(36,
         usageMap.get(String.valueOf(ACCOUNT.getId())).getWcu()); // make sure that correct quota is charged.
     assertEquals(18,
@@ -223,16 +249,16 @@ public class AmbryCUQuotaEnforcerTest {
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.GET));
     assertEquals(QuotaName.READ_CAPACITY_UNIT, quotaRecommendation.getQuotaName());
     assertEquals(usagePercentage, quotaRecommendation.getQuotaUsagePercentage(), 0.1);
-    assertEquals(quotaRecommendation.getQuotaAction(), QuotaAction.DELAY);
+    assertEquals(expectedRecommendationQuotaExceed, quotaRecommendation.getQuotaAction());
   }
 
   @Test
   public void testIsQuotaExceedAllowed() throws Exception {
-    // 1. Test that quota exceed is allowed if feusage is lesser than quota.
+    // 1. Test that quota exceed is allowed if fe usage is lesser than quota.
     assertTrue(AMBRY_QUOTA_ENFORCER.isQuotaExceedAllowed(
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.GET)));
 
-    // 2. Test that quota exceed is not allowed if feusage is greater than quota.
+    // 2. Test that quota exceed is not allowed if fe usage is greater than quota.
     QUOTA_SOURCE.setFeUsage(QUOTA_SOURCE.getFeQuota().getRcu(), QUOTA_SOURCE.getFeQuota().getWcu());
     assertFalse(AMBRY_QUOTA_ENFORCER.isQuotaExceedAllowed(
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.GET)));
@@ -266,9 +292,9 @@ public class AmbryCUQuotaEnforcerTest {
   }
 
   static class ExceptionQuotaSource extends AmbryCUQuotaSource {
-    private boolean throwException = false;
     private final boolean throwSystemResourceChargeException = false;
     private final boolean throwResourceChargeException = false;
+    private boolean throwException = false;
 
     public ExceptionQuotaSource(QuotaConfig config, AccountService accountService) throws IOException {
       super(config, accountService);

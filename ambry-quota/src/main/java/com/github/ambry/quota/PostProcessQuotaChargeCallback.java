@@ -64,8 +64,7 @@ public class PostProcessQuotaChargeCallback implements QuotaChargeCallback {
       quotaAction =
           quotaManager.chargeAndRecommend(restRequest, requestCost, shouldCheckQuotaExceedAllowed, forceCharge);
       if (isQuotaEnforcedOnRequest && QuotaUtils.shouldThrottle(quotaAction)) {
-        if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING
-            && quotaManager.getQuotaConfig().throttleInProgressRequests) {
+        if (quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
           throw new QuotaException("Exception while charging quota",
               new RouterException("RequestQuotaExceeded", RouterErrorCode.TooManyRequests), false);
         } else {

@@ -151,7 +151,10 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
       // There is no quota set for the given account/container
       return NO_QUOTA_VALUE_RECOMMENDATION;
     }
-    QuotaAction quotaAction = (currentUsage >= quotaValue) ? QuotaAction.REJECT : QuotaAction.ALLOW;
+    QuotaAction quotaAction = QuotaAction.ALLOW;
+    if (config.shouldThrottle && currentUsage >= quotaValue) {
+      quotaAction = QuotaAction.REJECT;
+    }
     float usagePercentage = currentUsage >= quotaValue ? 100f : ((float) currentUsage) / quotaValue * 100f;
     return new QuotaRecommendation(quotaAction, usagePercentage, QuotaName.STORAGE_IN_GB, NO_RETRY);
   }
