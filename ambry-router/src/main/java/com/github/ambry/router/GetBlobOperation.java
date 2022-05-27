@@ -218,6 +218,8 @@ class GetBlobOperation extends GetOperation {
     Exception e = getOperationException();
     if (chunk == firstChunk) {
       if (operationCallbackInvoked.compareAndSet(false, true)) {
+        long timeElapsed = time.milliseconds() - submissionTimeMs;
+        routerMetrics.getMetadataChunkLatencyMs.update(timeElapsed);
         if (options.getChunkIdsOnly) {
           // If this is an operation just to get the chunk ids, then these ids will be returned as part of the
           // result callback and no more chunks will be fetched, so mark the operation as complete to let the
@@ -231,7 +233,6 @@ class GetBlobOperation extends GetOperation {
           // chunk retrievals and channel writes will need to happen and for that, this operation needs the GetManager to
           // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
           // notified during the channel read.
-          long timeElapsed = time.milliseconds() - submissionTimeMs;
           if (isEncrypted) {
             routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
           } else {
@@ -616,6 +617,7 @@ class GetBlobOperation extends GetOperation {
     private boolean chunkCompleted;
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
+    protected long initializedTimeMs;
 
     /**
      * Construct a GetChunk
@@ -672,6 +674,7 @@ class GetBlobOperation extends GetOperation {
       state = ChunkState.Free;
       operationQuotaCharger =
           new OperationQuotaCharger(quotaChargeCallback, GetBlobOperation.class.getSimpleName(), routerMetrics);
+      initializedTimeMs = -1;
     }
 
     /**
@@ -689,6 +692,7 @@ class GetBlobOperation extends GetOperation {
           RouterOperation.GetBlobOperation);
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
+      initializedTimeMs = System.currentTimeMillis();
     }
 
     /**
@@ -748,6 +752,10 @@ class GetBlobOperation extends GetOperation {
           // Nullify result so we know we already passed the bytebuf to chunkIndexToBuf map
           DecryptJob.DecryptJobResult result = decryptCallbackResultInfo.result.getAndSet(null);
           if (result != null) {
+            if (chunkIndex == 0) {
+              routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
+            }
+            routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
             chunkIndexToBuf.put(chunkIndex, filterChunkToRange(result.getDecryptedBlobContent()));
             numChunksRetrieved.incrementAndGet();
           } else {
@@ -898,6 +906,10 @@ class GetBlobOperation extends GetOperation {
           boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, null, encryptionKey, chunkBlobId);
           if (!launchedJob) {
             chunkBuf = filterChunkToRange(chunkBuf);
+            if (chunkIndex == 0) {
+              routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
+            }
+            routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
             chunkIndexToBuf.put(chunkIndex, chunkBuf.retainedDuplicate());
             numChunksRetrieved.incrementAndGet();
           }
@@ -1076,6 +1088,11 @@ class GetBlobOperation extends GetOperation {
               }
             }
           } else {
+            if (chunkBlobId.getBlobDataType() == BlobId.BlobDataType.DATACHUNK
+                && getError == ServerErrorCode.Blob_Not_Found) {
+              // Missing a data chunk
+              routerMetrics.missingDataChunkErrorCount.inc();
+            }
             // process and set the most relevant exception.
             RouterErrorCode routerErrorCode = processServerError(getError);
             if (getError == ServerErrorCode.Disk_Unavailable) {
@@ -1327,6 +1344,8 @@ class GetBlobOperation extends GetOperation {
               ByteBuf decryptedBlobContent = result.getDecryptedBlobContent();
               totalSize = decryptedBlobContent.readableBytes();
               if (!resolveRange(totalSize)) {
+                routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
+                routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
                 chunkIndexToBuf.put(0, filterChunkToRange(decryptedBlobContent));
                 numChunksRetrieved.set(1);
                 progressTracker.setCryptoJobSuccess();
@@ -1591,6 +1610,8 @@ class GetBlobOperation extends GetOperation {
             boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, userMetadata, encryptionKey, blobId);
             if (!launchedJob) {
               chunkBuf = filterChunkToRange(chunkBuf);
+              routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
+              routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
               chunkIndexToBuf.put(0, chunkBuf.retainedDuplicate());
               numChunksRetrieved.set(1);
             }

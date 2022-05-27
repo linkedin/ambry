@@ -102,6 +102,9 @@ public class NonBlockingRouterMetrics {
   public final Histogram updateBlobTtlOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
   public final Histogram responseReceiveToHandleLatencyMs;
+  public final Histogram getDataChunkLatencyMs;
+  public final Histogram getMetadataChunkLatencyMs;
+  public final Histogram getFirstDataChunkLatencyMs;
 
   // Operation error count.
   public final Counter putBlobErrorCount;
@@ -145,6 +148,7 @@ public class NonBlockingRouterMetrics {
   public final Counter requestResponseHandlerUnexpectedErrorCount;
   public final Counter chunkFillerUnexpectedErrorCount;
   public final Counter operationFailureWithUnsetExceptionCount;
+  public final Counter missingDataChunkErrorCount;
 
   // Performance metrics for operation managers.
   public final Histogram putManagerPollTimeMs;
@@ -332,6 +336,12 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "RouterRequestLatencyMs"));
     responseReceiveToHandleLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "ResponseReceiveToHandleLatencyMs"));
+    getDataChunkLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "GetDataChunkLatencyMs"));
+    getMetadataChunkLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "GetMetadataChunkLatencyMs"));
+    getFirstDataChunkLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "GetFirstDataChunkLatencyMs"));
 
     // Operation error count.
     putBlobErrorCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "PutBlobErrorCount"));
@@ -409,6 +419,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ChunkFillerUnexpectedErrorCount"));
     operationFailureWithUnsetExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationFailureWithUnsetExceptionCount"));
+    missingDataChunkErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "MissingDataChunkErrorCount"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));
@@ -510,12 +522,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class, "FailedOnOriginatingDcNotFoundCount"));
     failedOnTotalNotFoundCount =
         metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class, "FailedOnTotalNotFoundCount"));
-    failedMaybeDueToTotalOfflineReplicasCount =
-        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class,
-            "FailedMaybeDueToTotalOfflineReplicasCount"));
-    failedMaybeDueToOriginatingDcOfflineReplicasCount =
-        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class,
-            "FailedMaybeDueToOriginatingDcOfflineReplicasCount"));
+    failedMaybeDueToTotalOfflineReplicasCount = metricRegistry.counter(
+        MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToTotalOfflineReplicasCount"));
+    failedMaybeDueToOriginatingDcOfflineReplicasCount = metricRegistry.counter(
+        MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToOriginatingDcOfflineReplicasCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
@@ -554,9 +564,8 @@ public class NonBlockingRouterMetrics {
           TimeUnit.SECONDS);
     }
 
-    requestsWithUnknownQuotaResourceRate =
-        metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class,
-            "RequestsWithUnknownQuotaResourceRate"));
+    requestsWithUnknownQuotaResourceRate = metricRegistry.meter(
+        MetricRegistry.name(QuotaAwareOperationController.class, "RequestsWithUnknownQuotaResourceRate"));
     nonQuotaCompliantRequestRate =
         metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "NonQuotaCompliantRequestRate"));
     unknownExceptionInChargeableRate =
@@ -685,8 +694,16 @@ public class NonBlockingRouterMetrics {
    */
   public void initializeRequestQueueMetrics(Map<QuotaResource, LinkedList<RequestInfo>> readQueue,
       Map<QuotaResource, LinkedList<RequestInfo>> writeQueue, String suffix) {
-    Supplier<Integer> readQueueSizeSupplier = () -> readQueue.entrySet().stream().flatMap(entry -> Stream.of(entry.getValue())).map(l-> l.size()).reduce(0, Integer::sum);
-    Supplier<Integer> writeQueueSizeSupplier = () -> writeQueue.entrySet().stream().flatMap(entry -> Stream.of(entry.getValue())).map(l-> l.size()).reduce(0, Integer::sum);
+    Supplier<Integer> readQueueSizeSupplier = () -> readQueue.entrySet()
+        .stream()
+        .flatMap(entry -> Stream.of(entry.getValue()))
+        .map(l -> l.size())
+        .reduce(0, Integer::sum);
+    Supplier<Integer> writeQueueSizeSupplier = () -> writeQueue.entrySet()
+        .stream()
+        .flatMap(entry -> Stream.of(entry.getValue()))
+        .map(l -> l.size())
+        .reduce(0, Integer::sum);
     operationControllerReadQueueSize = () -> readQueueSizeSupplier.get();
     operationControllerWriteQueueSize = () -> writeQueueSizeSupplier.get();
     operationControllerQueueSize = () -> Math.addExact(readQueueSizeSupplier.get(), writeQueueSizeSupplier.get());
