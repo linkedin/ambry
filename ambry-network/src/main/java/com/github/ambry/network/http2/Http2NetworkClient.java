@@ -92,7 +92,11 @@ public class Http2NetworkClient implements NetworkClient {
           // We need stream reset to cancel the stream in transmitting.
           RequestInfo requestInfo = streamChannel.attr(Http2NetworkClient.REQUEST_INFO).getAndSet(null);
           if (requestInfo != null) {
-            readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.TimeoutError, null));
+            NetworkClientErrorCode errorCode = NetworkClientErrorCode.TimeoutError;
+            if (http2ClientConfig.http2TimeoutAsNetworkError) {
+              errorCode = NetworkClientErrorCode.NetworkError;
+            }
+            readyResponseInfos.add(new ResponseInfo(requestInfo, errorCode, null));
             ReferenceCountUtil.safeRelease(requestInfo.getRequest());
           }
         }
@@ -199,7 +203,8 @@ public class Http2NetworkClient implements NetworkClient {
                 successCount.incrementAndGet();
               } else {
                 failCount.incrementAndGet();
-                responseInfoList.add(new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId, false));
+                responseInfoList.add(
+                    new ResponseInfo(null, NetworkClientErrorCode.NetworkError, null, dataNodeId, false));
                 logger.error("Couldn't acquire stream channel to {}:{} . Cause: {}.", dataNodeId.getHostname(),
                     dataNodeId.getHttp2Port(), future.cause());
               }
