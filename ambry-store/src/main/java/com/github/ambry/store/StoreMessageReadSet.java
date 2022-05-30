@@ -191,13 +191,13 @@ class StoreMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
   private static final Logger logger = LoggerFactory.getLogger(StoreMessageReadSet.class);
-  private final IOOperationHandler handler;
+  private final IOPHandler handler;
 
   StoreMessageReadSet(List<BlobReadOptions> readOptions) {
     this(readOptions, null);
   }
 
-  StoreMessageReadSet(List<BlobReadOptions> readOptions, IOOperationHandler handler) {
+  StoreMessageReadSet(List<BlobReadOptions> readOptions, IOPHandler handler) {
     Collections.sort(readOptions);
     this.readOptions = readOptions;
     this.handler = handler;
@@ -286,9 +286,18 @@ class StoreMessageReadSet implements MessageReadSet {
     return readOptions.get(index).getPrefetchedData();
   }
 
-  public interface IOOperationHandler {
+  /**
+   * Interface to call after dealing with IO operation in the {@link StoreMessageReadSet}.
+   */
+  public interface IOPHandler {
+    /**
+     * Call this method after successfully read bytes for {@link StoreMessageReadSet}.
+     */
     void onSuccess();
 
+    /**
+     * Call this method after failing to read bytes for {@link StoreMessageReadSet}.
+     */
     void onError();
   }
 }

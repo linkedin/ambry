@@ -309,7 +309,7 @@ public class BlobStore implements Store {
         }
       }
 
-      MessageReadSet readSet = new StoreMessageReadSet(readOptions, new StoreMessageReadSet.IOOperationHandler() {
+      MessageReadSet readSet = new StoreMessageReadSet(readOptions, new StoreMessageReadSet.IOPHandler() {
         @Override
         public void onSuccess() {
           BlobStore.this.onSuccess("GET");
