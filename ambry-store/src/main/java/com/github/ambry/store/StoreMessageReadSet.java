@@ -194,7 +194,7 @@ class StoreMessageReadSet implements MessageReadSet {
   private final IOPHandler handler;
 
   StoreMessageReadSet(List<BlobReadOptions> readOptions) {
-    this(readOptions, null);
+    this(readOptions, IOPHandler.DEFAULT);
   }
 
   StoreMessageReadSet(List<BlobReadOptions> readOptions, IOPHandler handler) {
@@ -299,5 +299,18 @@ class StoreMessageReadSet implements MessageReadSet {
      * Call this method after failing to read bytes for {@link StoreMessageReadSet}.
      */
     void onError();
+
+    /**
+     * A nop implementation of IOPHandler.
+     */
+    IOPHandler DEFAULT = new IOPHandler() {
+      @Override
+      public void onSuccess() {
+      }
+
+      @Override
+      public void onError() {
+      }
+    };
   }
 }
