@@ -1812,7 +1812,13 @@ public class BlobStoreTest {
     Mockito.reset(mockStoreKeyFactory);
     StoreInfo storeInfo = testStore2.get(Collections.singletonList(id2), EnumSet.noneOf(StoreGetOptions.class));
     assertNotNull(storeInfo);
-    assertEquals("Error count should be reset", 0, testStore2.getErrorCount().get());
+    assertEquals("Error count should not be reset before reading bytes", 2, testStore2.getErrorCount().get());
+    try {
+      storeInfo.getMessageReadSet().doPrefetch(0, 0, 53);
+    } catch (IOException e) {
+      fail("Fail to read bytes from message read set");
+    }
+    assertEquals("Error count should be reset after reading bytes", 0, testStore2.getErrorCount().get());
 
     doThrow(new IOException(StoreException.IO_ERROR_STR)).when(mockStoreKeyFactory)
         .getStoreKey(any(DataInputStream.class));
