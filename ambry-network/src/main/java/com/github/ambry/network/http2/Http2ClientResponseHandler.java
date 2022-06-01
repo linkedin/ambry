@@ -54,8 +54,9 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
           System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
       ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
       responseInfoQueue.put(responseInfo);
-      releaseAndCloseStreamChannel(ctx.channel());
     }
+    // release the stream anyway
+    releaseAndCloseStreamChannel(ctx.channel());
   }
 
   /**

@@ -30,6 +30,7 @@ import io.netty.channel.pool.ChannelPoolMap;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.AttributeKey;
+import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
@@ -89,9 +90,10 @@ public class Http2NetworkClient implements NetworkClient {
           // Drop request just generates a ResponseInfo with TimeoutError to router.
           // The stream is still transmitting, but router will ignore ResponseInfo with the same correlationId.
           // We need stream reset to cancel the stream in transmitting.
-          RequestInfo requestInfo = streamChannel.attr(Http2NetworkClient.REQUEST_INFO).get();
+          RequestInfo requestInfo = streamChannel.attr(Http2NetworkClient.REQUEST_INFO).getAndSet(null);
           if (requestInfo != null) {
             readyResponseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.TimeoutError, null));
+            ReferenceCountUtil.safeRelease(requestInfo.getRequest());
           }
         }
       }
