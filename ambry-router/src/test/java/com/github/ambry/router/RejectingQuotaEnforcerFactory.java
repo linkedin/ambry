@@ -18,6 +18,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaEnforcerFactory;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaSource;
@@ -36,10 +37,12 @@ public class RejectingQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * Constructor for {@link AmbryCUQuotaSourceFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param quotaSource {@link QuotaSource} object.
+   * @param accountStatsStore {@link AccountStatsStore} object.
+   * @param quotaMetrics {@link QuotaMetrics} object.
    */
   public RejectingQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) {
-    rejectingQuotaEnforcer = new RejectingQuotaEnforcer(quotaSource, quotaConfig);
+      AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics) {
+    rejectingQuotaEnforcer = new RejectingQuotaEnforcer(quotaSource, quotaConfig, quotaMetrics);
   }
 
   @Override
@@ -52,17 +55,18 @@ public class RejectingQuotaEnforcerFactory implements QuotaEnforcerFactory {
  * An {@link AmbryCUQuotaEnforcer} that rejects quota exceeded requests instead of delaying.
  */
 class RejectingQuotaEnforcer extends AmbryCUQuotaEnforcer {
-  public RejectingQuotaEnforcer(QuotaSource quotaSource, QuotaConfig quotaConfig) {
-    super(quotaSource, quotaConfig);
+  public RejectingQuotaEnforcer(QuotaSource quotaSource, QuotaConfig quotaConfig, QuotaMetrics quotaMetrics) {
+    super(quotaSource, quotaConfig, quotaMetrics);
   }
 
   /**
    * Build the {@link QuotaRecommendation} object from the specified usage and {@link QuotaName}.
    * @param usage percentage usage.
    * @param quotaName {@link QuotaName} object.
+   * @param resourceId resource id of the resource for which check is being made.
    * @return QuotaRecommendation object.
    */
-  protected QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName) {
+  protected QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName, String resourceId) {
     QuotaAction quotaAction = (usage >= MAX_USAGE_PERCENTAGE_ALLOWED) ? QuotaAction.REJECT : QuotaAction.ALLOW;
     return new QuotaRecommendation(quotaAction, usage, quotaName,
         (quotaAction == QuotaAction.REJECT) ? throttleRetryAfterMs : QuotaRecommendation.NO_THROTTLE_RETRY_AFTER_MS);

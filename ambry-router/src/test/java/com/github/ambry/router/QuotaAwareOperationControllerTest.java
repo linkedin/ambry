@@ -137,6 +137,8 @@ public class QuotaAwareOperationControllerTest {
     }).when(putManager).poll(requestsToSend, requestsToDrop);
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
     assertEquals(0, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
+    assertEquals(0, quotaAwareOperationController.getDelayedRequestsInQueue());
+    assertEquals(0, quotaAwareOperationController.getOutOfQuotaRequestsInQueue());
     chargeable.verifyCalls(1, 1);
   }
 
@@ -153,15 +155,21 @@ public class QuotaAwareOperationControllerTest {
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
     assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
     assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).get(TEST_QUOTA_RESOURCE1).size());
+    assertEquals(1, quotaAwareOperationController.getOutOfQuotaRequestsInQueue());
+    assertEquals(1, quotaAwareOperationController.getDelayedRequestsInQueue());
     testChargeable1.verifyCalls(2, 1);
 
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
     assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
     assertEquals(1, quotaAwareOperationController.getRequestQueue(quotaMethod).get(TEST_QUOTA_RESOURCE1).size());
+    assertEquals(1, quotaAwareOperationController.getOutOfQuotaRequestsInQueue());
+    assertEquals(1, quotaAwareOperationController.getDelayedRequestsInQueue());
     testChargeable1.verifyCalls(5, 2);
 
     quotaAwareOperationController.pollForRequests(requestsToSend, requestsToDrop);
     assertEquals(0, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
+    assertEquals(0, quotaAwareOperationController.getOutOfQuotaRequestsInQueue());
+    assertEquals(0, quotaAwareOperationController.getDelayedRequestsInQueue());
     testChargeable1.verifyCalls(6, 2);
   }
 

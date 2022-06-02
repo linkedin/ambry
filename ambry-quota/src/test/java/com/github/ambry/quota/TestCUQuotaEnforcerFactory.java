@@ -34,7 +34,7 @@ public class TestCUQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * @param accountStatsStore the {@link AccountStatsStore}.
    */
   public TestCUQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) {
+      AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics) {
     ambryCUQuotaEnforcer = new TestAmbryCUQuotaEnforcer(quotaSource);
   }
 

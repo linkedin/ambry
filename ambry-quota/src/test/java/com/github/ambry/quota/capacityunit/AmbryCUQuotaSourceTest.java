@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
@@ -24,6 +25,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
@@ -116,8 +118,8 @@ public class AmbryCUQuotaSourceTest {
     for (String s : testQuotas.keySet()) {
       inMemAccountService.updateAccounts(Collections.singletonList(createAccountForQuota(testQuotas.get(s), s)));
     }
-    ambryCUQuotaSource =
-        (AmbryCUQuotaSource) new AmbryCUQuotaSourceFactory(quotaConfig, inMemAccountService).getQuotaSource();
+    ambryCUQuotaSource = (AmbryCUQuotaSource) new AmbryCUQuotaSourceFactory(quotaConfig, inMemAccountService,
+        new QuotaMetrics(new MetricRegistry())).getQuotaSource();
     ambryCUQuotaSource.init();
   }
 
@@ -127,10 +129,11 @@ public class AmbryCUQuotaSourceTest {
     inMemAccountService.close();
   }
 
+  @Test
   public void testInit() throws Exception {
     QuotaSource quotaSource =
-        new AmbryCUQuotaSourceFactory(new QuotaConfig(new VerifiableProperties(new Properties())),
-            inMemAccountService).getQuotaSource();
+        new AmbryCUQuotaSourceFactory(new QuotaConfig(new VerifiableProperties(new Properties())), inMemAccountService,
+            new QuotaMetrics(new MetricRegistry())).getQuotaSource();
     Assert.assertFalse(quotaSource.isReady());
     quotaSource.init();
     Assert.assertTrue(quotaSource.isReady());
@@ -160,14 +163,12 @@ public class AmbryCUQuotaSourceTest {
         (long) ambryCUQuotaSource.getQuota(new QuotaResource("102_1", QuotaResourceType.CONTAINER),
             QuotaName.WRITE_CAPACITY_UNIT).getQuotaValue());
     try {
-      ambryCUQuotaSource.getQuota(new QuotaResource("101", QuotaResourceType.ACCOUNT),
-          QuotaName.WRITE_CAPACITY_UNIT);
+      ambryCUQuotaSource.getQuota(new QuotaResource("101", QuotaResourceType.ACCOUNT), QuotaName.WRITE_CAPACITY_UNIT);
       Assert.fail("If quota is not present, it should throw an exception");
     } catch (QuotaException quotaException) {
     }
     try {
-      ambryCUQuotaSource.getQuota(new QuotaResource("102", QuotaResourceType.ACCOUNT),
-          QuotaName.WRITE_CAPACITY_UNIT);
+      ambryCUQuotaSource.getQuota(new QuotaResource("102", QuotaResourceType.ACCOUNT), QuotaName.WRITE_CAPACITY_UNIT);
       Assert.fail("If quota is not present, it should throw an exception");
     } catch (QuotaException quotaException) {
     }
@@ -182,24 +183,18 @@ public class AmbryCUQuotaSourceTest {
     Assert.assertEquals(0, ambryCUQuotaSource.getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.01);
 
     Assert.assertEquals(4, ambryCUQuotaSource.getAllQuotaUsage().size());
-    Assert.assertEquals(0,
-        (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_1", QuotaResourceType.CONTAINER),
-            QuotaName.READ_CAPACITY_UNIT));
-    Assert.assertEquals(0,
-        (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_1", QuotaResourceType.CONTAINER),
-            QuotaName.WRITE_CAPACITY_UNIT));
-    Assert.assertEquals(0,
-        (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_2", QuotaResourceType.CONTAINER),
-            QuotaName.READ_CAPACITY_UNIT));
-    Assert.assertEquals(0,
-        (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_2", QuotaResourceType.CONTAINER),
-            QuotaName.WRITE_CAPACITY_UNIT));
-    Assert.assertEquals(0,
-        (long) ambryCUQuotaSource.getUsage(new QuotaResource("102_1", QuotaResourceType.CONTAINER),
-            QuotaName.READ_CAPACITY_UNIT));
-    Assert.assertEquals(0,
-        (long) ambryCUQuotaSource.getUsage(new QuotaResource("102_1", QuotaResourceType.CONTAINER),
-            QuotaName.WRITE_CAPACITY_UNIT));
+    Assert.assertEquals(0, (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_1", QuotaResourceType.CONTAINER),
+        QuotaName.READ_CAPACITY_UNIT));
+    Assert.assertEquals(0, (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_1", QuotaResourceType.CONTAINER),
+        QuotaName.WRITE_CAPACITY_UNIT));
+    Assert.assertEquals(0, (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_2", QuotaResourceType.CONTAINER),
+        QuotaName.READ_CAPACITY_UNIT));
+    Assert.assertEquals(0, (long) ambryCUQuotaSource.getUsage(new QuotaResource("101_2", QuotaResourceType.CONTAINER),
+        QuotaName.WRITE_CAPACITY_UNIT));
+    Assert.assertEquals(0, (long) ambryCUQuotaSource.getUsage(new QuotaResource("102_1", QuotaResourceType.CONTAINER),
+        QuotaName.READ_CAPACITY_UNIT));
+    Assert.assertEquals(0, (long) ambryCUQuotaSource.getUsage(new QuotaResource("102_1", QuotaResourceType.CONTAINER),
+        QuotaName.WRITE_CAPACITY_UNIT));
   }
 
   @Test

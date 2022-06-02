@@ -30,7 +30,7 @@ public class RejectQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * @param accountStatsStore the {@link AccountStatsStore}.
    */
   public RejectQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) {
+      AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics) {
     this.rejectQuotaEnforcer = new RejectRequestQuotaEnforcer(quotaSource);
   }
 

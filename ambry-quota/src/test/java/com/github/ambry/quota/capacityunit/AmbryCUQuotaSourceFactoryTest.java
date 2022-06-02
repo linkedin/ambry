@@ -13,9 +13,11 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaMetrics;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Assert;
@@ -32,7 +34,7 @@ public class AmbryCUQuotaSourceFactoryTest {
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
     AccountService mockAccountService = Mockito.mock(AccountService.class);
     AmbryCUQuotaSourceFactory ambryCUQuotaSourceFactory =
-        new AmbryCUQuotaSourceFactory(quotaConfig, mockAccountService);
+        new AmbryCUQuotaSourceFactory(quotaConfig, mockAccountService, new QuotaMetrics(new MetricRegistry()));
     Assert.assertEquals(AmbryCUQuotaSource.class, ambryCUQuotaSourceFactory.getQuotaSource().getClass());
   }
 }
