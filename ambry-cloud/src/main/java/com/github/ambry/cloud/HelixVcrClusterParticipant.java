@@ -184,6 +184,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
 
   @Override
   public void participate() throws Exception {
+    // TODO : to integrate VCR with Helix VM freeze handling
     manager = HelixManagerFactory.getZKHelixManager(vcrClusterName, vcrInstanceName, InstanceType.PARTICIPANT,
         cloudConfig.vcrClusterZkConnectString);
     VcrStateModelFactory stateModelFactory = Utils.getObj(cloudConfig.vcrHelixStateModelFactoryClass, this);

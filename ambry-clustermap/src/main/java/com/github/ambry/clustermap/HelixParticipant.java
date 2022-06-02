@@ -35,9 +35,15 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.AccessOption;
+import org.apache.helix.cloud.event.helix.CloudEventCallbackProperty;
+import org.apache.helix.cloud.event.helix.CloudEventCallbackProperty.HelixOperation;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.HelixCloudProperty;
 import org.apache.helix.HelixManager;
+import org.apache.helix.HelixManagerProperty;
 import org.apache.helix.InstanceType;
+import org.apache.helix.manager.zk.ZKHelixManager;
+import org.apache.helix.model.CloudConfig;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.HelixPropertyStore;
@@ -95,7 +101,31 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Cluster name is empty in clusterMapConfig");
     }
-    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
+
+    // JING TODO:
+    // 1. How to differentiate it's a on-prem or azure participant? How to differentiate the frontend and the server?
+    // 2. Is the following operation safe for On-Prem participant?
+
+    // Cloud Event Callback Property: A property to define the maintenance event handling behavior for a Helix manager.
+    // User can specify which callback implementation class they want to use for Helix operations, if not specified, it will use org.apache.helix.cloud.event.helix.DefaultCloudEventCallbackImpl.class by default
+    CloudEventCallbackProperty callbackProperty = new CloudEventCallbackProperty(Collections.emptyMap());
+
+    // Enable/disable Helix optional operations for a Helix manager via CloudEventCallbackProperty.
+    callbackProperty.setHelixOperationEnabled(HelixOperation.ENABLE_DISABLE_INSTANCE, true);
+    callbackProperty.setHelixOperationEnabled(HelixOperation.MAINTENANCE_MODE, true);
+
+    // Helix Cloud Property: General cloud-related property for a Helix manager, includes CloudEventCallbackProperty.
+    HelixCloudProperty cloudProperty = new HelixCloudProperty(new CloudConfig(new ZNRecord(clusterName)));
+    cloudProperty.setCloudEventCallbackEnabled(true);
+    cloudProperty.setCloudEventCallbackProperty(callbackProperty);
+
+    // Helix Manager Property: General property for a Helix manager, includes HelixCloudProperty
+    HelixManagerProperty.Builder managerPropertyBuilder = new HelixManagerProperty.Builder();
+    managerPropertyBuilder.setHelixCloudProperty(cloudProperty);
+    HelixManagerProperty managerProperty = managerPropertyBuilder.build();
+
+    // Helix Manager
+    manager =  new ZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr, null, managerProperty);
     replicaSyncUpManager = new AmbryReplicaSyncUpManager(clusterMapConfig);
     partitionStateChangeListeners = new HashMap<>();
     try {
