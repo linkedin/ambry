@@ -54,9 +54,12 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
           System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
       ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
       responseInfoQueue.put(responseInfo);
+      // release the stream anyway
+      releaseAndCloseStreamChannel(ctx.channel());
+    } else {
+      logger.info("Failed to get request from attribute map, request maybe dropped");
+      dup.release();
     }
-    // release the stream anyway
-    releaseAndCloseStreamChannel(ctx.channel());
   }
 
   /**

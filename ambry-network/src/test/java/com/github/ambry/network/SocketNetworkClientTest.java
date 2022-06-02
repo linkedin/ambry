@@ -716,6 +716,11 @@ class MockSend extends AbstractByteBufHolder<MockSend> implements SendWithCorrel
     size = SEND_SIZE;
   }
 
+  @Override
+  public String getRequestOrResponseType() {
+    return "mock";
+  }
+
   /**
    * @return the correlation id of this MockSend.
    */

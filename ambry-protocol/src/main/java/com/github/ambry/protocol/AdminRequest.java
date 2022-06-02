@@ -18,8 +18,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 
 
 /**
