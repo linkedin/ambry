@@ -219,7 +219,9 @@ class GetBlobOperation extends GetOperation {
     if (chunk == firstChunk) {
       if (operationCallbackInvoked.compareAndSet(false, true)) {
         long timeElapsed = time.milliseconds() - submissionTimeMs;
-        routerMetrics.getMetadataChunkLatencyMs.update(timeElapsed);
+        if (chunk.chunkBlobId.getBlobDataType() == BlobId.BlobDataType.METADATA) {
+          routerMetrics.getMetadataChunkLatencyMs.update(timeElapsed);
+        }
         if (options.getChunkIdsOnly) {
           // If this is an operation just to get the chunk ids, then these ids will be returned as part of the
           // result callback and no more chunks will be fetched, so mark the operation as complete to let the
