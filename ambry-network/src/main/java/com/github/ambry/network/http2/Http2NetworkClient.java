@@ -86,7 +86,7 @@ public class Http2NetworkClient implements NetworkClient {
       for (int correlationId : requestsToDrop) {
         Channel streamChannel = correlationIdInFlightToChannelMap.remove(correlationId);
         if (streamChannel != null) {
-          RequestInfo requestInfo = streamChannel.attr(Http2NetworkClient.REQUEST_INFO).getAndSet(null);
+          RequestInfo requestInfo = releaseAndCloseStreamChannel(streamChannel);
           // Drop request just generates a ResponseInfo with TimeoutError to router.
           // The stream is still transmitting, but router will ignore ResponseInfo with the same correlationId.
           // We need stream reset to cancel the stream in transmitting.
@@ -99,7 +99,6 @@ public class Http2NetworkClient implements NetworkClient {
             }
             readyResponseInfos.add(new ResponseInfo(requestInfo, errorCode, null));
             ReferenceCountUtil.safeRelease(requestInfo.getRequest());
-            releaseAndCloseStreamChannel(streamChannel);
           } else {
             logger.warn("Drop request {} on streamChannel: {}", correlationId, streamChannel);
           }

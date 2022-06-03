@@ -185,6 +185,7 @@ class TtlUpdateManager {
       }
       routerMetrics.ttlUpdateManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
+      LOGGER.warn("No TtlUpdateOperation found in the set for correlation id: {}", correlationId);
       routerMetrics.ignoredResponseCount.inc();
     }
   }

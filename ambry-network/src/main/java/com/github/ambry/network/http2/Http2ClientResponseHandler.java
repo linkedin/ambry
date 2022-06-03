@@ -47,15 +47,13 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     ByteBuf dup = msg.content().retainedDuplicate();
     // Consume length
     dup.readLong();
-    RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).get();
+    RequestInfo requestInfo = releaseAndCloseStreamChannel(ctx.channel());
     if (requestInfo != null) {
       // A request maybe just dropped by Http2NetworkClient.
       http2ClientMetrics.http2StreamFirstToAllFrameReadyTime.update(
           System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
       ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
       responseInfoQueue.put(responseInfo);
-      // release the stream anyway
-      releaseAndCloseStreamChannel(ctx.channel());
     } else {
       logger.info("Failed to get request from attribute map on channel {}, request maybe dropped", ctx.channel());
       dup.release();
