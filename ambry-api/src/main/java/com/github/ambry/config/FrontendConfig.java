@@ -218,7 +218,7 @@ public class FrontendConfig {
    * The maximum size in bytes for the JSON body of a "POST /stitch" request.
    */
   @Config(MAX_JSON_REQUEST_SIZE_BYTES_KEY)
-  @Default("20 * 1024 * 1024")
+  @Default("128 * 1024 * 1024")
   public final int maxJsonRequestSizeBytes;
 
   /**
@@ -314,7 +314,7 @@ public class FrontendConfig {
     maxAcceptableTtlSecsIfTtlRequired = verifiableProperties.getIntInRange(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY,
         (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);
     maxJsonRequestSizeBytes =
-        verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 128 * 1024 * 1024, 0, Integer.MAX_VALUE);
     enableUndelete = verifiableProperties.getBoolean(ENABLE_UNDELETE, false);
     accountStatsStoreFactory =
         verifiableProperties.getString(ACCOUNT_STATS_STORE_FACTORY, DEFAULT_ACCOUNT_STATS_STORE_FACTORY);
