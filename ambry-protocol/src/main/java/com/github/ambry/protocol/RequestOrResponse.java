@@ -91,6 +91,11 @@ public abstract class RequestOrResponse extends AbstractByteBufHolder<RequestOrR
   }
 
   @Override
+  public String getRequestOrResponseType() {
+    return type.name();
+  }
+
+  @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
     if (byteBufferToSend == null) {
       prepareBuffer();

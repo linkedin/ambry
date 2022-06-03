@@ -23,4 +23,9 @@ public interface SendWithCorrelationId extends Send {
    * @return the correlation id for the {@link Send} (a process-unique identifier for a request).
    */
   int getCorrelationId();
+
+  /**
+   * @return The type of the request or response.
+   */
+  String getRequestOrResponseType();
 }

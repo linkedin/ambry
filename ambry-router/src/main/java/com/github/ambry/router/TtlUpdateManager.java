@@ -25,7 +25,6 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Pair;
@@ -46,7 +45,7 @@ import org.slf4j.LoggerFactory;
  * operations that are assigned to it, and manages their states and life cycles.
  */
 class TtlUpdateManager {
-  private static final Logger LOGGER = LoggerFactory.getLogger(TtlUpdateOperation.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(TtlUpdateManager.class);
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
   private final Time time;
@@ -91,7 +90,8 @@ class TtlUpdateManager {
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitTtlUpdateOperation(Collection<String> blobIdStrs, String serviceId, long expiresAtMs,
-      FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
+      FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback)
+      throws RouterException {
     List<BlobId> blobIds = new ArrayList<>();
     for (String blobIdStr : blobIdStrs) {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
@@ -107,8 +107,8 @@ class TtlUpdateManager {
               time.milliseconds(), callback, time, futureResult, quotaChargeCallback);
       ttlUpdateOperations.add(ttlUpdateOperation);
     } else {
-      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback,
-          quotaChargeCallback);
+      BatchOperationCallbackTracker tracker =
+          new BatchOperationCallbackTracker(blobIds, futureResult, callback, quotaChargeCallback);
       long operationTimeMs = time.milliseconds();
       for (BlobId blobId : blobIds) {
         TtlUpdateOperation ttlUpdateOperation =
@@ -160,8 +160,13 @@ class TtlUpdateManager {
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
             TtlUpdateResponse::readFrom, TtlUpdateResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
-    int correlationId = ((TtlUpdateRequest) routerRequestInfo.getRequest()).getCorrelationId();
+    int correlationId = routerRequestInfo.getRequest().getCorrelationId();
     TtlUpdateOperation ttlUpdateOperation = correlationIdToTtlUpdateOperation.remove(correlationId);
+    if (ttlUpdateOperation == null) {
+      LOGGER.warn("No TtlUpdateOperation found for correlation id: {}", correlationId);
+      routerMetrics.ignoredResponseCount.inc();
+      return;
+    }
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (ttlUpdateOperations.contains(ttlUpdateOperation)) {
       boolean exceptionEncountered = false;
@@ -180,6 +185,7 @@ class TtlUpdateManager {
       }
       routerMetrics.ttlUpdateManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
+      LOGGER.warn("No TtlUpdateOperation found in the set for correlation id: {}", correlationId);
       routerMetrics.ignoredResponseCount.inc();
     }
   }
