@@ -57,7 +57,7 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
       // release the stream anyway
       releaseAndCloseStreamChannel(ctx.channel());
     } else {
-      logger.info("Failed to get request from attribute map, request maybe dropped");
+      logger.info("Failed to get request from attribute map on channel {}, request maybe dropped", ctx.channel());
       dup.release();
     }
   }
