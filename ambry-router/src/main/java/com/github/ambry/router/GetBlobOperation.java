@@ -218,9 +218,8 @@ class GetBlobOperation extends GetOperation {
     Exception e = getOperationException();
     if (chunk == firstChunk) {
       if (operationCallbackInvoked.compareAndSet(false, true)) {
-        long timeElapsed = time.milliseconds() - submissionTimeMs;
         if (chunk.chunkBlobId.getBlobDataType() == BlobId.BlobDataType.METADATA) {
-          routerMetrics.getMetadataChunkLatencyMs.update(timeElapsed);
+          routerMetrics.getMetadataChunkLatencyMs.update(time.milliseconds() - chunk.initializedTimeMs);
         }
         if (options.getChunkIdsOnly) {
           // If this is an operation just to get the chunk ids, then these ids will be returned as part of the
@@ -235,6 +234,7 @@ class GetBlobOperation extends GetOperation {
           // chunk retrievals and channel writes will need to happen and for that, this operation needs the GetManager to
           // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
           // notified during the channel read.
+          long timeElapsed = time.milliseconds() - submissionTimeMs;
           if (isEncrypted) {
             routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
           } else {
