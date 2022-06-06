@@ -215,7 +215,7 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     } else {
       retries = 0;
       tryPersistMonthlyUsage();
-      // sleep for one second so we can move on to next tick
+      // sleep for two seconds so we can move on to next tick
       sleepFor(2000);
       scheduleStorageUsageMonthlyBaseFetcher();
     }
