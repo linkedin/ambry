@@ -309,6 +309,10 @@ public class BlobStore implements Store {
         }
       }
 
+      // We call onSuccess and onError in the MessageReadSet IOPHandler instead of at the end of this method call like
+      // other write methods because we are not really reading any bytes from disks in the get method, we are only
+      // returning an object that triggers the reads when in different thread.
+      // Thus we have to to call onSuccess and onError when we actually read bytes from disk in MessageReadSet.
       MessageReadSet readSet = new StoreMessageReadSet(readOptions, new StoreMessageReadSet.IOPHandler() {
         @Override
         public void onSuccess() {
@@ -900,6 +904,8 @@ public class BlobStore implements Store {
         remoteTokenTracker.updateTokenFromPeerReplica(token, hostname, remoteReplicaPath);
       }
       FindInfo findInfo = index.findEntriesSince(token, maxTotalSizeOfEntries);
+      // We don't call onSuccess here because findEntries only involvs reading index entries from the index
+      // files, which have already been loaded to memory, thus there is no disk operations.
       return findInfo;
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
