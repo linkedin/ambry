@@ -215,7 +215,20 @@ public class MySqlStorageUsageRefresher implements StorageUsageRefresher {
     } else {
       retries = 0;
       tryPersistMonthlyUsage();
+      // sleep for two seconds so we can move on to next tick
+      sleepFor(2000);
       scheduleStorageUsageMonthlyBaseFetcher();
+    }
+  }
+
+  /**
+   * Sleep for the given duration
+   * @param durationInMs
+   */
+  private void sleepFor(long durationInMs) {
+    try {
+      Thread.sleep(durationInMs);
+    } catch (Exception e) {
     }
   }
 
