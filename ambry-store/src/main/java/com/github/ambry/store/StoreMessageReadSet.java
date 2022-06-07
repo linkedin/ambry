@@ -15,8 +15,8 @@ package com.github.ambry.store;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
-import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -191,10 +191,16 @@ class StoreMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
   private static final Logger logger = LoggerFactory.getLogger(StoreMessageReadSet.class);
+  private final IOPHandler handler;
 
   StoreMessageReadSet(List<BlobReadOptions> readOptions) {
+    this(readOptions, IOPHandler.DEFAULT);
+  }
+
+  StoreMessageReadSet(List<BlobReadOptions> readOptions, IOPHandler handler) {
     Collections.sort(readOptions);
     this.readOptions = readOptions;
+    this.handler = handler;
   }
 
   @Override
@@ -264,11 +270,47 @@ class StoreMessageReadSet implements MessageReadSet {
 
   @Override
   public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
-    readOptions.get(index).doPrefetch(relativeOffset, size);
+    try {
+      readOptions.get(index).doPrefetch(relativeOffset, size);
+      handler.onSuccess();
+    } catch (IOException e) {
+      if (e.getMessage().contains("Input/output error")) {
+        handler.onError();
+      }
+      throw e;
+    }
   }
 
   @Override
   public ByteBuf getPrefetchedData(int index) {
     return readOptions.get(index).getPrefetchedData();
+  }
+
+  /**
+   * Interface to call after dealing with IO operation in the {@link StoreMessageReadSet}.
+   */
+  public interface IOPHandler {
+    /**
+     * Call this method after successfully read bytes for {@link StoreMessageReadSet}.
+     */
+    void onSuccess();
+
+    /**
+     * Call this method after failing to read bytes for {@link StoreMessageReadSet}.
+     */
+    void onError();
+
+    /**
+     * A nop implementation of IOPHandler.
+     */
+    IOPHandler DEFAULT = new IOPHandler() {
+      @Override
+      public void onSuccess() {
+      }
+
+      @Override
+      public void onError() {
+      }
+    };
   }
 }
