@@ -30,7 +30,6 @@ import io.netty.channel.pool.ChannelPoolMap;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
 import io.netty.util.AttributeKey;
-import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.InetSocketAddress;
@@ -98,7 +97,7 @@ public class Http2NetworkClient implements NetworkClient {
               errorCode = NetworkClientErrorCode.NetworkError;
             }
             readyResponseInfos.add(new ResponseInfo(requestInfo, errorCode, null));
-            ReferenceCountUtil.safeRelease(requestInfo.getRequest());
+            // We don't have to release the request here, since it should already be released when client sent it out.
           } else {
             logger.warn("Drop request {} on streamChannel: {}", correlationId, streamChannel);
           }
