@@ -43,7 +43,6 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
@@ -63,12 +62,11 @@ import org.slf4j.LoggerFactory;
  */
 public class AmbryCloudRequests extends AmbryRequests {
 
-  private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
+  private static final Logger logger = LoggerFactory.getLogger(AmbryCloudRequests.class);
 
   /**
    * @param storeManager {@link StoreManager} object to get stores for replicas
-   * @param requestResponseChannel the {@link RequestResponseChannel} to receive original ambry request and send
-   *                               original ambry response.
+   * @param requestResponseChannel the {@link RequestResponseChannel} to receive requests and send responses.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param nodeId the data node Id.
    * @param registry the {@link MetricRegistry}
@@ -79,7 +77,12 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
-  public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handlePutRequest(NetworkRequest request) throws InterruptedException {
+
+    if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
+      throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
+    }
+
     PutRequest receivedRequest;
 
     // This is a case where handlePutRequest is called when frontends are writing to Azure. In this case, this method
@@ -111,7 +114,8 @@ public class AmbryCloudRequests extends AmbryRequests {
         MessageFormatWriteSet writeSet = getMessageFormatWriteSet(receivedRequest);
         CloudBlobStore cloudBlobStore =
             (CloudBlobStore) storeManager.getStore(receivedRequest.getBlobId().getPartition());
-        //TODO: Use executor instead of default thread pool
+        //TODO: Pass executor to have async completion stages run on configured thread pool instead of letting them
+        // run on default ForkJoinPool
         cloudBlobStore.putAsync(writeSet).whenCompleteAsync((unused, throwable) -> {
           if (throwable != null) {
             Exception ex = Utils.extractFutureExceptionCause(throwable);
@@ -133,8 +137,8 @@ public class AmbryCloudRequests extends AmbryRequests {
 
           try {
             requestResponseChannel.sendResponse(response.get(), request, null);
-          } catch (InterruptedException ignored) {
-
+          } catch (InterruptedException ie) {
+            logger.warn("Interrupted while enqueuing the response", ie);
           }
         });
       }
@@ -147,7 +151,12 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
-  public void handleGetRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handleGetRequest(NetworkRequest request) throws InterruptedException {
+
+    if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
+      throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
+    }
+
     GetRequest getRequest;
     // This is a case where handleGetRequest is called when frontends are reading from Azure. In this case, this method
     // is called by request handler threads running within the frontend router itself. So, the request can be directly
@@ -172,7 +181,7 @@ public class AmbryCloudRequests extends AmbryRequests {
     } else {
       CloudBlobStore cloudBlobStore = (CloudBlobStore) storeManager.getStore(partitionRequestInfo.getPartition());
       EnumSet<StoreGetOptions> storeGetOptions = getStoreGetOptions(getRequest);
-      cloudBlobStore.getAsync(partitionRequestInfo.getBlobIds(), storeGetOptions).whenComplete((info, throwable) -> {
+      cloudBlobStore.getAsync(partitionRequestInfo.getBlobIds(), storeGetOptions).whenCompleteAsync((info, throwable) -> {
         if (throwable != null) {
           Exception ex = Utils.extractFutureExceptionCause(throwable);
           if (ex instanceof StoreException) {
@@ -212,8 +221,8 @@ public class AmbryCloudRequests extends AmbryRequests {
         try {
           // Send Response
           requestResponseChannel.sendResponse(response.get(), request, null);
-        } catch (InterruptedException ignored) {
-
+        } catch (InterruptedException ie) {
+          logger.warn("Interrupted while enqueuing the response", ie);
         }
       });
     }
@@ -221,6 +230,11 @@ public class AmbryCloudRequests extends AmbryRequests {
 
   @Override
   public void handleDeleteRequest(NetworkRequest request) throws InterruptedException {
+
+    if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
+      throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
+    }
+
     // This is a case where handleDeleteRequest is called when frontends are talking to Azure. In this case, this method
     // is called by request handler threads running within the frontend router itself. So, the request can be directly
     // referenced as java objects without any need for deserialization.
@@ -263,8 +277,8 @@ public class AmbryCloudRequests extends AmbryRequests {
         }
         try {
           requestResponseChannel.sendResponse(response.get(), request, null);
-        } catch (InterruptedException ignored) {
-
+        } catch (InterruptedException ie) {
+          logger.warn("Interrupted while enqueuing the response", ie);
         }
       });
     }
@@ -272,6 +286,11 @@ public class AmbryCloudRequests extends AmbryRequests {
 
   @Override
   public void handleTtlUpdateRequest(NetworkRequest request) throws InterruptedException {
+
+    if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
+      throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
+    }
+
     TtlUpdateRequest updateRequest;
 
     // This is a case where handleTtlUpdateRequest is called when frontends are talking to Azure. In this case, this method
@@ -316,8 +335,8 @@ public class AmbryCloudRequests extends AmbryRequests {
         }
         try {
           requestResponseChannel.sendResponse(response.get(), request, null);
-        } catch (InterruptedException ignored) {
-
+        } catch (InterruptedException ie) {
+          logger.warn("Interrupted while enqueuing the response", ie);
         }
       });
     }
@@ -325,6 +344,11 @@ public class AmbryCloudRequests extends AmbryRequests {
 
   @Override
   public void handleUndeleteRequest(NetworkRequest request) {
+
+    if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
+      throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
+    }
+
     UndeleteRequest undeleteRequest;
 
     // This is a case where handleUndeleteRequest is called when frontends are talking to Azure. In this case, this method
@@ -379,8 +403,8 @@ public class AmbryCloudRequests extends AmbryRequests {
         }
         try {
           requestResponseChannel.sendResponse(response.get(), request, null);
-        } catch (InterruptedException ignored) {
-
+        } catch (InterruptedException ie) {
+          logger.warn("Interrupted while enqueuing the response", ie);
         }
       });
     }
