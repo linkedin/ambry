@@ -46,6 +46,7 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -166,10 +167,9 @@ public class AzureBlobDataAccessor {
     BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfNoneMatch("*");
     azureMetrics.blobUploadRequestCount.inc();
     Timer.Context storageTimer = azureMetrics.blobUploadTime.time();
-    final CompletableFuture<Void> responseFuture = FutureUtils.orTimeout(
+    return FutureUtils.orTimeout(
         storageClient.uploadWithResponse(blobId, blobInputStream, inputLength, null, cloudBlobMetadata.toMap(), null,
-            null, blobRequestConditions), uploadTimeout);
-    return responseFuture.handle((response, throwable) -> {
+            null, blobRequestConditions), uploadTimeout).handle((response, throwable) -> {
       storageTimer.stop();
       if (throwable != null) {
         Exception ex = Utils.extractFutureExceptionCause(throwable);
@@ -180,7 +180,8 @@ public class AzureBlobDataAccessor {
           azureMetrics.blobUploadConflictCount.inc();
           return false;
         }
-        throw new CompletionException(ex);
+        throw throwable instanceof CompletionException ? (CompletionException) throwable
+            : new CompletionException(throwable);
       }
       // Blob uploaded successfully
       logger.debug("Uploaded blob {} to ABS", blobId);
@@ -219,10 +220,9 @@ public class AzureBlobDataAccessor {
    */
   public CompletableFuture<Boolean> downloadFileAsync(String containerName, String fileName, BlobId blobId,
       OutputStream outputStream, boolean errorOnNotFound) {
-    final CompletableFuture<Void> responseFuture = FutureUtils.orTimeout(
+    return FutureUtils.orTimeout(
         storageClient.downloadWithResponse(containerName, fileName, blobId, false, outputStream, null, null,
-            defaultRequestConditions, false), uploadTimeout);
-    return responseFuture.handle((unused, throwable) -> {
+            defaultRequestConditions, false), uploadTimeout).handle((unused, throwable) -> {
       if (throwable != null) {
         Exception ex = Utils.extractFutureExceptionCause(throwable);
         if (!errorOnNotFound && ex instanceof BlobStorageException && isNotFoundError(
@@ -230,7 +230,8 @@ public class AzureBlobDataAccessor {
           // Received exception for blob not found.
           return false;
         }
-        throw new CompletionException(ex);
+        throw throwable instanceof CompletionException ? (CompletionException) throwable
+            : new CompletionException(throwable);
       }
       // Blob downloaded successfully
       return true;
@@ -245,7 +246,7 @@ public class AzureBlobDataAccessor {
    *         will complete exceptionally if an error occurs.
    */
   CompletableFuture<Boolean> deleteFileAsync(String containerName, String fileName) {
-    return storageClient.deleteFile(containerName, fileName);
+    return FutureUtils.orTimeout(storageClient.deleteFile(containerName, fileName), uploadTimeout);
   }
 
   /**
@@ -294,10 +295,8 @@ public class AzureBlobDataAccessor {
    *         the BlobStorageException.
    */
   public CompletableFuture<CloudBlobMetadata> getBlobMetadataAsync(BlobId blobId) {
-    final CompletableFuture<BlobProperties> blobPropertiesCompletableFuture =
-        FutureUtils.orTimeout(storageClient.getPropertiesWithResponse(blobId, defaultRequestConditions),
-            requestTimeout);
-    return blobPropertiesCompletableFuture.handle((properties, throwable) -> {
+    return FutureUtils.orTimeout(storageClient.getPropertiesWithResponse(blobId, defaultRequestConditions),
+        requestTimeout).handle((properties, throwable) -> {
       if (throwable != null) {
         Exception ex = Utils.extractFutureExceptionCause(throwable);
         if (ex instanceof BlobStorageException && isNotFoundError(((BlobStorageException) ex).getErrorCode())) {
@@ -305,7 +304,8 @@ public class AzureBlobDataAccessor {
           logger.debug("Blob {} not found.", blobId);
           return null;
         }
-        throw new CompletionException(ex);
+        throw throwable instanceof CompletionException ? (CompletionException) throwable
+            : new CompletionException(throwable);
       }
       if (properties == null) {
         // If blob properties is null, return null
@@ -333,81 +333,79 @@ public class AzureBlobDataAccessor {
         .forEach(field -> Objects.requireNonNull(updateFields.get(field), String.format("%s cannot be null", field)));
 
     Timer.Context storageTimer = azureMetrics.blobUpdateTime.time();
+    AtomicReference<Map<String, String>> metadata = new AtomicReference<>();
 
     // TODO: Pass executor instead of default async method.
     FutureUtils.orTimeout(storageClient.getPropertiesWithResponse(blobId, defaultRequestConditions), requestTimeout)
-        .whenComplete((blobProperties, throwableOnGet) -> {
-          if (throwableOnGet != null) {
-            // If blob is not found, complete the result future.
-            Exception ex = Utils.extractFutureExceptionCause(throwableOnGet);
-            if (ex instanceof BlobStorageException && isNotFoundError(((BlobStorageException) ex).getErrorCode())) {
-              logger.warn("Blob {} not found, cannot update {}.", blobId, updateFields.keySet());
+        .thenCompose((blobProperties) -> {
+          // Got the current metadata record of the blob. Check for validity of the update and update the blob metadata.
+          String etag = blobProperties.getETag();
+          metadata.set(blobProperties.getMetadata());
+
+          try {
+            // Validate the sanity of update operation by comparing the fields we want to update against existing metadata
+            // fields in Azure. This can throw StoreExceptions which are propagated to caller.
+            if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(metadata.get()), blobId, updateFields)) {
+              storageTimer.stop();
+              resultFuture.complete(new UpdateResponse(false, metadata.get()));
+            }
+          } catch (StoreException e) {
+            // Received an exception during the update validation. Complete the response future.
+            storageTimer.stop();
+            throw new CompletionException(e);
+          }
+
+          if (!resultFuture.isDone()) {
+            // Check for list of changed fields
+            Map<String, String> changedFields = updateFields.entrySet()
+                .stream()
+                .filter(entry -> !String.valueOf(entry.getValue()).equals(metadata.get().get(entry.getKey())))
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> String.valueOf(entry.getValue())));
+
+            // Update the record only if any of its values have changed
+            if (changedFields.size() <= 0) {
+              // There are no changed fields to update
+              storageTimer.stop();
+              resultFuture.complete(new UpdateResponse(false, metadata.get()));
+            } else {
+              // Modify the metadata with changes
+              changedFields.forEach(metadata.get()::put);
+
+              // Invoke the update Callback. This is only needed for our tests.
+              if (updateCallback != null) {
+                try {
+                  updateCallback.call();
+                } catch (Exception ex) {
+                  logger.error("Error in update callback", ex);
+                }
+              }
+
+              // Set condition to ensure we don't clobber a concurrent update
+              BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
+
+              // Update the metadata
+              return FutureUtils.orTimeout(
+                  storageClient.setMetadataWithResponse(blobId, metadata.get(), blobRequestConditions, Context.NONE),
+                  requestTimeout);
+            }
+          }
+          return null;
+        })
+        .whenComplete((response, throwable) -> {
+          storageTimer.stop();
+          if (throwable != null) {
+            Exception ex = Utils.extractFutureExceptionCause(throwable);
+            if (ex instanceof BlobStorageException) {
+              if (isNotFoundError(((BlobStorageException) ex).getErrorCode())) {
+                logger.warn("Blob {} not found, cannot update {}.", blobId, updateFields.keySet());
+              } else if (((BlobStorageException) ex).getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+                logger.warn("Blob {} update condition not met, cannot update {}.", blobId, updateFields.keySet());
+                azureMetrics.blobUpdateConflictCount.inc();
+              }
             }
             resultFuture.completeExceptionally(ex);
           } else {
-            // Got the current metadata record.
-            String etag = blobProperties.getETag();
-            Map<String, String> metadata = blobProperties.getMetadata();
-
-            try {
-              // Validate the sanity of update operation by comparing the fields we want to update against existing metadata
-              // fields in Azure. This can throw StoreExceptions which are propagated to caller.
-              if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(metadata), blobId, updateFields)) {
-                storageTimer.stop();
-                resultFuture.complete(new UpdateResponse(false, metadata));
-              }
-            } catch (StoreException e) {
-              // Received an exception during the update validation. Complete the response future.
-              storageTimer.stop();
-              resultFuture.completeExceptionally(e);
-            }
-
-            if (!resultFuture.isDone()) {
-              // Check for list of changed fields
-              Map<String, String> changedFields = updateFields.entrySet()
-                  .stream()
-                  .filter(entry -> !String.valueOf(entry.getValue()).equals(metadata.get(entry.getKey())))
-                  .collect(Collectors.toMap(Map.Entry::getKey, entry -> String.valueOf(entry.getValue())));
-
-              // Update the record only if any of its values have changed
-              if (changedFields.size() > 0) {
-                // Modify the metadata with changes
-                changedFields.forEach(metadata::put);
-
-                // Invoke the update Callback. This is only needed for our tests.
-                if (updateCallback != null) {
-                  try {
-                    updateCallback.call();
-                  } catch (Exception ex) {
-                    logger.error("Error in update callback", ex);
-                  }
-                }
-
-                // Set condition to ensure we don't clobber a concurrent update
-                BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(etag);
-
-                // Update the metadata
-                FutureUtils.orTimeout(
-                    storageClient.setMetadataWithResponse(blobId, metadata, blobRequestConditions, Context.NONE),
-                    requestTimeout).whenComplete((response, throwableOnUpdate) -> {
-                  storageTimer.stop();
-                  if (throwableOnUpdate != null) {
-                    Exception exOnUpdate = Utils.extractFutureExceptionCause(throwableOnUpdate);
-                    if (exOnUpdate instanceof BlobStorageException
-                        && ((BlobStorageException) exOnUpdate).getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-                      azureMetrics.blobUpdateConflictCount.inc();
-                    }
-                    resultFuture.completeExceptionally(exOnUpdate);
-                  } else {
-                    resultFuture.complete(new UpdateResponse(true, metadata));
-                  }
-                });
-              } else {
-                // There are no changed fields to update
-                storageTimer.stop();
-                resultFuture.complete(new UpdateResponse(false, metadata));
-              }
-            }
+            resultFuture.complete(new UpdateResponse(true, metadata.get()));
           }
         });
     return resultFuture;

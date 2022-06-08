@@ -96,6 +96,7 @@ public class FutureUtils {
    * @param retries if the operation failed
    * @param retryPredicate Predicate to test whether an exception is retryable
    * @param retryDelayFromException function to get retry delay from the exception if present
+   * @param scheduledExecutor executor to schedule retries
    * @return Future containing either the result of the operation or a {@link Exception} if error occurred.
    */
   public static <T> CompletableFuture<T> retry(final Supplier<CompletableFuture<T>> operation, final int retries,
@@ -142,20 +143,18 @@ public class FutureUtils {
           resultFuture.complete(t);
         }
       });
-
-      resultFuture.whenComplete((t, throwable) -> operationFuture.cancel(false));
     }
   }
 
   /**
-   * @param <T>
-   * @param resultFuture
-   * @param operation
-   * @param retries
-   * @param retryDelay
-   * @param retryPredicate
-   * @param retryDelayFromException
-   * @param scheduler
+   * @param <T> type of the future's result
+   * @param resultFuture to complete
+   * @param operation to retry
+   * @param retries until giving up
+   * @param retryDelay duration of retries
+   * @param retryPredicate Predicate to test whether an exception is retryable
+   * @param retryDelayFromException function to get retry delay from the exception if present
+   * @param scheduler executor to schedule retries
    */
   private static <T> void retryOperationWithDelay(final CompletableFuture<T> resultFuture,
       final Supplier<CompletableFuture<T>> operation, final int retries, Duration retryDelay,
@@ -197,8 +196,6 @@ public class FutureUtils {
           resultFuture.complete(t);
         }
       });
-
-      resultFuture.whenComplete((t, throwable) -> operationResultFuture.cancel(false));
     }
   }
 

@@ -242,7 +242,8 @@ public class CosmosDataAccessor {
         new CosmosItemRequestOptions()).toFuture().handle((response, throwable) -> {
       operationTime.stop();
       if (throwable != null) {
-        throw new CompletionException(Utils.extractFutureExceptionCause(throwable));
+        throw throwable instanceof CompletionException ? (CompletionException) throwable
+            : new CompletionException(throwable);
       }
       return response.getItem();
     });
@@ -266,7 +267,8 @@ public class CosmosDataAccessor {
               logger.debug("Could not find metadata for blob {} to delete", blobMetadata.getId());
               return false;
             }
-            throw new CompletionException(ex);
+            throw throwable instanceof CompletionException ? (CompletionException) throwable
+                : new CompletionException(ex);
           }
           return true;
         }));
@@ -383,7 +385,7 @@ public class CosmosDataAccessor {
           return null;
         }
         // For all other exceptions, pass the exception downstream.
-        throw new CompletionException(ex);
+        throw throwable instanceof CompletionException ? (CompletionException) throwable : new CompletionException(ex);
       }
       // return the blob metadata
       return response.getItem();
@@ -402,62 +404,63 @@ public class CosmosDataAccessor {
 
     CompletableFuture<CloudBlobMetadata> resultFuture = new CompletableFuture<>();
     Timer.Context documentReadTimer = azureMetrics.documentReadTime.time();
+    AtomicReference<Timer.Context> documentUpdateTimer = new AtomicReference<>();
 
     // Read the existing record
     cosmosAsyncContainer.readItem(blobId.getID(), new PartitionKey(blobId.getPartition().toPathString()),
-        CloudBlobMetadata.class).toFuture().whenComplete(((readItemResponse, throwableOnRead) -> {
+        CloudBlobMetadata.class).toFuture().exceptionally(throwable -> {
       documentReadTimer.stop();
-      if (throwableOnRead != null) {
-        // If there is an error in reading the current metadata record, complete the result exceptionally.
-        resultFuture.completeExceptionally(throwableOnRead);
+      throw throwable instanceof CompletionException ? (CompletionException) throwable
+          : new CompletionException(throwable);
+    }).thenCompose(readItemResponse -> {
+      documentReadTimer.stop();
+      CloudBlobMetadata receivedMetadata = readItemResponse.getItem();
+      // Update the metadata record only if value has changed
+      Map<String, String> receivedFields = receivedMetadata.toMap();
+      Map<String, String> fieldsToUpdate = updateFields.entrySet()
+          .stream()
+          .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(receivedFields.get(map.getKey())))
+          .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
+      if (fieldsToUpdate.isEmpty()) {
+        logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
+        // If there is no change in value of metadata, complete the result.
+        resultFuture.complete(null);
+      }
+
+      // For testing conflict handling
+      if (updateCallback != null) {
+        try {
+          updateCallback.call();
+        } catch (Exception ex) {
+          logger.error("Error in update callback", ex);
+        }
+      }
+
+      // Update the modified fields
+      fieldsToUpdate.forEach(receivedFields::put);
+
+      // Set condition to ensure we don't clobber a concurrent update
+      CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
+      requestOptions.setIfMatchETag(readItemResponse.getETag());
+
+      documentUpdateTimer.set(azureMetrics.documentUpdateTime.time());
+      return cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
+          new PartitionKey(blobId.getPartition().toPathString()), requestOptions).toFuture();
+    }).whenComplete(((replaceItemResponse, throwable) -> {
+      if (documentUpdateTimer.get() != null) {
+        documentUpdateTimer.get().stop();
+      }
+      if (throwable != null) {
+        Exception ex = Utils.extractFutureExceptionCause(throwable);
+        if (((CosmosException) ex).getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
+          // Received an exception during metadata replacement due to concurrent update. Increase the conflict counter
+          azureMetrics.blobUpdateConflictCount.inc();
+        }
+        // Complete the result exceptionally
+        resultFuture.completeExceptionally(ex);
       } else {
-        CloudBlobMetadata receivedMetadata = readItemResponse.getItem();
-        // Update the metadata record only if value has changed
-        Map<String, String> receivedFields = receivedMetadata.toMap();
-        Map<String, String> fieldsToUpdate = updateFields.entrySet()
-            .stream()
-            .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(receivedFields.get(map.getKey())))
-            .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
-        if (fieldsToUpdate.isEmpty()) {
-          logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
-          // If there is no change in value of metadata, complete the result.
-          resultFuture.complete(null);
-        }
-
-        // For testing conflict handling
-        if (updateCallback != null) {
-          try {
-            updateCallback.call();
-          } catch (Exception ex) {
-            logger.error("Error in update callback", ex);
-          }
-        }
-
-        // Update the modified fields
-        fieldsToUpdate.forEach(receivedFields::put);
-        // Set condition to ensure we don't clobber a concurrent update
-        CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
-        requestOptions.setIfMatchETag(readItemResponse.getETag());
-
-        Timer.Context documentUpdateTimer = azureMetrics.documentUpdateTime.time();
-        cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
-            new PartitionKey(blobId.getPartition().toPathString()), requestOptions)
-            .toFuture()
-            .whenComplete(((replaceItemResponse, throwableOnReplace) -> {
-              documentUpdateTimer.stop();
-              if (throwableOnReplace != null) {
-                Exception ex = Utils.extractFutureExceptionCause(throwableOnReplace);
-                if (((CosmosException) ex).getStatusCode() == HttpConstants.StatusCodes.PRECONDITION_FAILED) {
-                  // Received an exception during metadata replacement due to concurrent update. Increase the conflict counter
-                  azureMetrics.blobUpdateConflictCount.inc();
-                }
-                // Complete the result exceptionally
-                resultFuture.completeExceptionally(ex);
-              } else {
-                // Updated the metadata record successfully
-                resultFuture.complete(replaceItemResponse.getItem());
-              }
-            }));
+        // Updated the metadata record successfully
+        resultFuture.complete(replaceItemResponse.getItem());
       }
     }));
 
