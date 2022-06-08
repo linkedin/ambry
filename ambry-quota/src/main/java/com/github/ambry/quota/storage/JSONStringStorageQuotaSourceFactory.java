@@ -15,6 +15,7 @@ package com.github.ambry.quota.storage;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
 import java.io.IOException;
@@ -30,10 +31,11 @@ public class JSONStringStorageQuotaSourceFactory implements QuotaSourceFactory {
    * Constructor to create a {@link JSONStringStorageQuotaSourceFactory}.
    * @param quotaConfig The {@link QuotaConfig} to use.
    * @param accountService The {@link AccountService} to use.
+   * @param quotaMetrics The {@link QuotaMetrics} to use.
    * @throws IOException
    */
-  public JSONStringStorageQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService)
-      throws IOException {
+  public JSONStringStorageQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService,
+      QuotaMetrics quotaMetrics) throws IOException {
     source = new JSONStringStorageQuotaSource(quotaConfig.storageQuotaConfig, accountService);
   }
 

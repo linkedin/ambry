@@ -18,6 +18,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
@@ -25,6 +26,7 @@ import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -35,6 +37,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,14 +62,17 @@ public class AmbryCUQuotaSource implements QuotaSource {
   private final ScheduledExecutorService usageRefresher;
   private final long aggregationWindowsInSecs;
   private final AtomicBoolean isReady;
+  private final QuotaMetrics quotaMetrics;
 
   /**
    * Constructor for {@link AmbryCUQuotaSource}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
+   * @param quotaMetrics {@link QuotaMetrics} object.
    * @throws IOException in case of any exception.
    */
-  public AmbryCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
+  public AmbryCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics)
+      throws IOException {
     feQuota = JsonCUQuotaDataProviderUtil.getFeCUCapacityFromJson(quotaConfig.frontendCUCapacityInJson);
     cuQuota = new ConcurrentHashMap<>(
         JsonCUQuotaDataProviderUtil.getCUQuotasFromJson(quotaConfig.resourceCUQuotaInJson, accountService));
@@ -75,6 +81,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
     aggregationWindowsInSecs = quotaConfig.cuQuotaAggregationWindowInSecs;
     isReady = new AtomicBoolean(false);
     feUsage = new AtomicReference<>(null);
+    this.quotaMetrics = quotaMetrics;
   }
 
   @Override
@@ -87,6 +94,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
     cuQuota.keySet().forEach(key -> cuUsage.put(key, new CapacityUnit()));
     usageRefresher.scheduleAtFixedRate(this::resetQuotaUsage, aggregationWindowsInSecs, aggregationWindowsInSecs,
         TimeUnit.SECONDS);
+    quotaMetrics.createMetricsForQuotaResources(new ArrayList<>(cuQuota.keySet()));
     isReady.set(true);
   }
 
@@ -151,6 +159,8 @@ public class AmbryCUQuotaSource implements QuotaSource {
         cuUsage.putIfAbsent(quotaResource.getResourceId(),
             new CapacityUnit(DEFAULT_RCU_FOR_NEW_RESOURCE, DEFAULT_WCU_FOR_NEW_RESOURCE));
       });
+      quotaMetrics.createMetricsForQuotaResources(
+          quotaResources.stream().map(QuotaResource::getResourceId).collect(Collectors.toList()));
     }
   }
 
@@ -180,7 +190,7 @@ public class AmbryCUQuotaSource implements QuotaSource {
    * Atomically resets the usage of all the resources.
    */
   private synchronized void resetQuotaUsage() {
-    cuUsage.replaceAll((k,v) -> new CapacityUnit());
+    cuUsage.replaceAll((k, v) -> new CapacityUnit());
     feUsage.set(new CapacityUnit());
   }
 

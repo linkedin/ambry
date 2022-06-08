@@ -13,6 +13,7 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -22,6 +23,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
@@ -95,7 +97,7 @@ public class AmbryCUQuotaEnforcerTest {
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     QUOTA_SOURCE = new ExceptionQuotaSource(quotaConfig, ACCOUNT_SERVICE);
     QUOTA_SOURCE.init();
-    AMBRY_QUOTA_ENFORCER = new AmbryCUQuotaEnforcer(QUOTA_SOURCE, quotaConfig);
+    AMBRY_QUOTA_ENFORCER = new AmbryCUQuotaEnforcer(QUOTA_SOURCE, quotaConfig, new QuotaMetrics(new MetricRegistry()));
   }
 
   @Test
@@ -297,7 +299,7 @@ public class AmbryCUQuotaEnforcerTest {
     private boolean throwException = false;
 
     public ExceptionQuotaSource(QuotaConfig config, AccountService accountService) throws IOException {
-      super(config, accountService);
+      super(config, accountService, new QuotaMetrics(new MetricRegistry()));
     }
 
     @Override

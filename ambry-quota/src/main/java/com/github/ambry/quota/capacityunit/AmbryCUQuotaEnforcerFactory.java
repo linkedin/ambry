@@ -18,6 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaEnforcerFactory;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
 import java.io.IOException;
@@ -36,8 +37,8 @@ public class AmbryCUQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * @param accountStatsStore the {@link AccountStatsStore}.
    */
   public AmbryCUQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) {
-    ambryCUQuotaEnforcer = new AmbryCUQuotaEnforcer(quotaSource, quotaConfig);
+      AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics) {
+    ambryCUQuotaEnforcer = new AmbryCUQuotaEnforcer(quotaSource, quotaConfig, quotaMetrics);
   }
 
   @Override

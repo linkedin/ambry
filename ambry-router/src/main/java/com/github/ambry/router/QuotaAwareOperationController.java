@@ -51,6 +51,8 @@ public class QuotaAwareOperationController extends OperationController {
   private final Map<QuotaResource, LinkedList<RequestInfo>> readRequestQueue = new HashMap<>();
   private final Map<QuotaResource, LinkedList<RequestInfo>> writeRequestQueue = new HashMap<>();
   private final List<RequestInfo> nonCompliantRequests = new ArrayList<>();
+  private volatile int outOfQuotaRequestsInQueue = 0;
+  private volatile int delayedRequestsInQueue = 0;
 
   /**
    * Constructor for {@link QuotaAwareOperationController} class.
@@ -137,10 +139,17 @@ public class QuotaAwareOperationController extends OperationController {
    * @param requestsToSend a list of {@link RequestInfo} that will contain the requests to be sent out.
    */
   private void drainRequestQueue(List<RequestInfo> requestsToSend) {
+    int outOfQuotaRequests = 0;
+    int delayedRequests = 0;
     for (QuotaMethod quotaMethod : QuotaMethod.values()) {
-      pollQuotaCompliantRequests(requestsToSend, getRequestQueue(quotaMethod));
-      pollQuotaExceedAllowedRequestsIfAny(requestsToSend, getRequestQueue(quotaMethod));
+      Map<QuotaResource, LinkedList<RequestInfo>> queue = getRequestQueue(quotaMethod);
+      pollQuotaCompliantRequests(requestsToSend, queue);
+      outOfQuotaRequests += queue.size();
+      pollQuotaExceedAllowedRequestsIfAny(requestsToSend, queue);
+      delayedRequests += queue.size();
     }
+    outOfQuotaRequestsInQueue = outOfQuotaRequests;
+    delayedRequestsInQueue = delayedRequests;
   }
 
   /**
@@ -232,5 +241,19 @@ public class QuotaAwareOperationController extends OperationController {
    */
   Map<QuotaResource, LinkedList<RequestInfo>> getRequestQueue(QuotaMethod quotaMethod) {
     return quotaMethod == QuotaMethod.READ ? readRequestQueue : writeRequestQueue;
+  }
+
+  /**
+   * @return the value of {@code outOfQuotaRequestsInQueue} representing the count of out of quota requests in the queue.
+   */
+  int getOutOfQuotaRequestsInQueue() {
+    return outOfQuotaRequestsInQueue;
+  }
+
+  /**
+   * @return the value of {@code delayedRequestsInQueue} representing the count of delayed requests in the queue.
+   */
+  int getDelayedRequestsInQueue() {
+    return delayedRequestsInQueue;
   }
 }

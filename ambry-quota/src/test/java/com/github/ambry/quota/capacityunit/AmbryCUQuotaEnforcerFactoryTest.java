@@ -13,10 +13,12 @@
  */
 package com.github.ambry.quota.capacityunit;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
 import java.io.IOException;
 import java.util.Properties;
@@ -32,10 +34,12 @@ public class AmbryCUQuotaEnforcerFactoryTest {
   @Test
   public void testGetRequestQuotaEnforcer() throws IOException {
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
-    QuotaSource quotaSource = new AmbryCUQuotaSource(quotaConfig, Mockito.mock(AccountService.class));
+    QuotaSource quotaSource =
+        new AmbryCUQuotaSource(quotaConfig, Mockito.mock(AccountService.class), new QuotaMetrics(new MetricRegistry()));
     AccountStatsStore mockAccountStatsStore = Mockito.mock(AccountStatsStore.class);
     AmbryCUQuotaEnforcerFactory ambryCUQuotaEnforcerFactory =
-        new AmbryCUQuotaEnforcerFactory(quotaConfig, quotaSource, mockAccountStatsStore);
+        new AmbryCUQuotaEnforcerFactory(quotaConfig, quotaSource, mockAccountStatsStore,
+            new QuotaMetrics(new MetricRegistry()));
     Assert.assertEquals(AmbryCUQuotaEnforcer.class, ambryCUQuotaEnforcerFactory.getQuotaEnforcer().getClass());
   }
 }

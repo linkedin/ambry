@@ -334,9 +334,10 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
 
       QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
       Account account = accountService.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
+      QuotaMetrics quotaMetrics = new QuotaMetrics(new MetricRegistry());
       ChargeTesterQuotaManager chargeTesterQuotaManager =
           new ChargeTesterQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
-              accountService, null, new QuotaMetrics(new MetricRegistry()), listenerCalledCount);
+              accountService, null, quotaMetrics, listenerCalledCount);
       chargeTesterQuotaManager.init();
       TestCUQuotaSource quotaSource = chargeTesterQuotaManager.getTestCuQuotaSource();
       RestRequest restRequest =
@@ -345,6 +346,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
           QuotaUtils.buildQuotaChargeCallback(restRequest, chargeTesterQuotaManager, true);
       int blobSize = 3000;
       setOperationParams(blobSize, TTL_SECS, account.getId(), account.getAllContainers().iterator().next().getId());
+      quotaSource.updateNewQuotaResources(Collections.singletonList(account));
       quotaSource.getCuQuota().put(String.valueOf(account.getId()), new CapacityUnit(8, 8));
       quotaSource.getCuUsage().put(String.valueOf(account.getId()), new CapacityUnit());
       String compositeBlobId =
@@ -380,6 +382,9 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
           Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException) ex.getCause()).getErrorCode());
         }
       }
+      Assert.assertTrue(quotaMetrics.perQuotaResourceOutOfQuotaMap.get(Integer.toString(account.getId())).getCount() > 0);
+      Assert.assertEquals(0, (int) routerMetrics.outOfQuotaRequestsInQueue.getValue());
+      Assert.assertEquals(0, (int) routerMetrics.delayedRequestsInQueue.getValue());
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
     } finally {
       if (router != null) {

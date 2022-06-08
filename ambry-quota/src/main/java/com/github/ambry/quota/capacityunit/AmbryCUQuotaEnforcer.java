@@ -17,6 +17,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaException;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
@@ -46,17 +47,20 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   private final QuotaSource quotaSource;
   private final boolean requestThrottlingEnabled;
   private final float maxFrontendCuUsageToAllowExceed;
+  private final QuotaMetrics quotaMetrics;
 
   /**
    * Constructor for {@link AmbryCUQuotaEnforcer}.
    * @param quotaSource {@link QuotaSource} where the quota limit and usage will be saved and retrieved from.
    * @param quotaConfig {@link QuotaConfig} object.
+   * @param quotaMetrics {@link QuotaMetrics} object.
    */
-  public AmbryCUQuotaEnforcer(QuotaSource quotaSource, QuotaConfig quotaConfig) {
+  public AmbryCUQuotaEnforcer(QuotaSource quotaSource, QuotaConfig quotaConfig, QuotaMetrics quotaMetrics) {
     this.quotaSource = quotaSource;
     this.throttleRetryAfterMs = quotaConfig.cuQuotaAggregationWindowInSecs;
     this.maxFrontendCuUsageToAllowExceed = quotaConfig.maxFrontendCuUsageToAllowExceed;
     this.requestThrottlingEnabled = quotaConfig.requestThrottlingEnabled;
+    this.quotaMetrics = quotaMetrics;
   }
 
   @Override
@@ -85,18 +89,26 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
   @Override
   public QuotaRecommendation recommend(RestRequest restRequest) throws QuotaException {
     final QuotaName quotaName = QuotaUtils.getCUQuotaName(restRequest);
-    float usage = doAndHandleException(() -> {
-      final QuotaResource quotaResource = QuotaResource.fromRestRequest(restRequest);
-      return quotaSource.getUsage(quotaResource, quotaName);
-    }, String.format("Could not recommend for request %s due to", restRequest.getPath()));
-    return buildQuotaRecommendation(usage, quotaName);
+    final QuotaResource quotaResource = QuotaResource.fromRestRequest(restRequest);
+    final float usage = doAndHandleException(() -> quotaSource.getUsage(quotaResource, quotaName),
+        String.format("Could not recommend for request %s with resourceid %s due to", restRequest.getPath(),
+            quotaResource.getResourceId()));
+    return buildQuotaRecommendation(usage, quotaName, quotaResource.getResourceId());
   }
 
   @Override
   public boolean isQuotaExceedAllowed(RestRequest restRequest) throws QuotaException {
-    return doAndHandleException(() -> quotaSource.getSystemResourceUsage(QuotaUtils.getCUQuotaName(restRequest))
-            < maxFrontendCuUsageToAllowExceed,
-        String.format("Could not check quota exceed allowed for request %s due to", restRequest));
+    QuotaResource quotaResource = QuotaResource.fromRestRequest(restRequest);
+    return doAndHandleException(() -> {
+      if (quotaSource.getSystemResourceUsage(QuotaUtils.getCUQuotaName(restRequest))
+          >= maxFrontendCuUsageToAllowExceed) {
+        if (quotaMetrics.perQuotaResourceDelayedRequestMap.containsKey(quotaResource.getResourceId())) {
+          quotaMetrics.perQuotaResourceDelayedRequestMap.get(quotaResource.getResourceId()).inc();
+        }
+        return false;
+      }
+      return true;
+    }, String.format("Could not check quota exceed allowed for request %s due to", restRequest));
   }
 
   @Override
@@ -118,12 +130,18 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
    * Build the {@link QuotaRecommendation} object from the specified usage and {@link QuotaName}.
    * @param usage percentage usage.
    * @param quotaName {@link QuotaName} object.
+   * @param resourceId resource id of the resource for which check is being done.
    * @return QuotaRecommendation object.
    */
-  protected QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName) {
+  protected QuotaRecommendation buildQuotaRecommendation(float usage, QuotaName quotaName, String resourceId) {
     QuotaAction quotaAction = QuotaAction.ALLOW;
-    if (requestThrottlingEnabled && usage >= MAX_USAGE_PERCENTAGE_ALLOWED) {
-      quotaAction = QuotaAction.DELAY;
+    if (usage >= MAX_USAGE_PERCENTAGE_ALLOWED) {
+      if (quotaMetrics.perQuotaResourceOutOfQuotaMap.containsKey(resourceId)) {
+        quotaMetrics.perQuotaResourceOutOfQuotaMap.get(resourceId).inc();
+      }
+      if (requestThrottlingEnabled) {
+        quotaAction = QuotaAction.DELAY;
+      }
     }
     return new QuotaRecommendation(quotaAction, usage, quotaName,
         (quotaAction == QuotaAction.DELAY) ? throttleRetryAfterMs : QuotaRecommendation.NO_THROTTLE_RETRY_AFTER_MS);

@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
 import com.github.ambry.quota.capacityunit.AmbryCUQuotaSource;
@@ -30,21 +31,24 @@ import java.util.Map;
 public class TestCUQuotaSourceFactory implements QuotaSourceFactory {
   private final QuotaConfig quotaConfig;
   private final AccountService accountService;
+  private final QuotaMetrics quotaMetrics;
 
   /**
    * Constructor for {@link AmbryCUQuotaSourceFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
+   * @param quotaMetrics {@link QuotaMetrics} object.
    */
-  public TestCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) {
+  public TestCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics) {
     this.quotaConfig = quotaConfig;
     this.accountService = accountService;
+    this.quotaMetrics = quotaMetrics;
   }
 
   @Override
   public QuotaSource getQuotaSource() {
     try {
-      return new TestCUQuotaSource(quotaConfig, accountService);
+      return new TestCUQuotaSource(quotaConfig, accountService, quotaMetrics);
     } catch (IOException ioException) {
       return null;
     }
@@ -60,10 +64,11 @@ class TestCUQuotaSource extends AmbryCUQuotaSource {
    * Constructor for {@link TestCUQuotaSource}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
+   * @param quotaMetrics {@link QuotaMetrics} object.
    * @throws IOException in case of any exception.
    */
-  public TestCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService) throws IOException {
-    super(quotaConfig, accountService);
+  public TestCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics) throws IOException {
+    super(quotaConfig, accountService, quotaMetrics);
   }
 
   /**

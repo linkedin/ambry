@@ -17,6 +17,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.quota.QuotaEnforcer;
 import com.github.ambry.quota.QuotaEnforcerFactory;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
 
 
@@ -31,10 +32,11 @@ public class StorageQuotaEnforcerFactory implements QuotaEnforcerFactory {
    * @param quotaConfig the {@link QuotaConfig}.
    * @param quotaSource the {@link QuotaSource}.
    * @param accountStatsStore the {@link AccountStatsStore}.
+   * @param quotaMetrics The {@link QuotaMetrics}.
    * @throws Exception
    */
   public StorageQuotaEnforcerFactory(QuotaConfig quotaConfig, QuotaSource quotaSource,
-      AccountStatsStore accountStatsStore) throws Exception {
+      AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics) throws Exception {
     quotaEnforcer = new StorageQuotaEnforcer(quotaConfig.storageQuotaConfig, quotaSource, accountStatsStore);
   }
 

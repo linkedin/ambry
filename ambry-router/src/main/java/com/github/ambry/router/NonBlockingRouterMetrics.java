@@ -43,6 +43,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -240,6 +241,8 @@ public class NonBlockingRouterMetrics {
   public Gauge<Integer> operationControllerQueueSize;
   public Gauge<Integer> readQueuedQuotaResourceCount;
   public Gauge<Integer> writeQueuedQuotaResourceCount;
+  public Gauge<Integer> delayedRequestsInQueue;
+  public Gauge<Integer> outOfQuotaRequestsInQueue;
 
   // Resource to latency histogram map. Here resource can be DataNode, Partition, Disk, Replica etc.
   Map<Resource, CachedHistogram> getBlobLocalDcResourceToLatency = new HashMap<>();
@@ -759,6 +762,25 @@ public class NonBlockingRouterMetrics {
   public void initializeNotFoundCacheMetrics(Cache cache) {
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "BlobsNotFoundCacheHitRate"),
         (Gauge<Double>) () -> cache.stats().hitRate());
+  }
+
+  /**
+   * Initialize {@link Gauge} metrics to monitor if any requests are being delayed or are out of quota.
+   * This is relevant only for {@link QuotaAwareOperationController}s because its the only {@link OperationController}
+   * that tracks quota.
+   * @param ocList {@link List} of {@link OperationController} object.
+   */
+  public void initializeQuotaOCMetrics(List<OperationController> ocList) {
+    List<QuotaAwareOperationController> quotaAwareOperationControllers = ocList.stream()
+        .filter(oc -> (oc instanceof QuotaAwareOperationController))
+        .map(oc -> (QuotaAwareOperationController) oc)
+        .collect(Collectors.toList());
+    outOfQuotaRequestsInQueue =
+        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "OutOfQuotaRequestInQueue"),
+            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getOutOfQuotaRequestsInQueue()).sum());
+    delayedRequestsInQueue =
+        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "DelayedRequestInQueue"),
+            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getDelayedRequestsInQueue()).sum());
   }
 
   /**

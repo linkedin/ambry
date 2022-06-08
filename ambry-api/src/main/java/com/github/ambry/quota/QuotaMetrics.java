@@ -17,12 +17,16 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 
 /**
  * Metrics class to capture metrics for request quota enforcement.
  */
 public class QuotaMetrics {
+  private final MetricRegistry metricRegistry;
   public final Meter quotaExceedRecommendationRate;
   public final Timer quotaRecommendationTime;
   public final Meter quotaNotChargedRate;
@@ -40,12 +44,15 @@ public class QuotaMetrics {
   public final Meter recommendRate;
   public final Meter chargeAndRecommendRate;
   public final Counter accountUpdateNotificationCount;
+  public Map<String, Counter> perQuotaResourceOutOfQuotaMap = new HashMap<>();
+  public Map<String, Counter> perQuotaResourceDelayedRequestMap = new HashMap<>();
 
   /**
    * {@link QuotaMetrics} constructor.
    * @param metricRegistry {@link MetricRegistry} object.
    */
   public QuotaMetrics(MetricRegistry metricRegistry) {
+    this.metricRegistry = metricRegistry;
     quotaExceedRecommendationRate =
         metricRegistry.meter(MetricRegistry.name(QuotaMetrics.class, "QuotaExceedRecommendationRate"));
     quotaRecommendationTime = metricRegistry.timer(MetricRegistry.name(QuotaMetrics.class, "QuotaRecommendationTime"));
@@ -68,5 +75,21 @@ public class QuotaMetrics {
         metricRegistry.counter(MetricRegistry.name(QuotaManager.class, "AccountUpdateNotificationCount"));
     noChargeRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoChargeRate"));
     noRecommendationRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoRecommendationRate"));
+  }
+
+  /**
+   * Creates the per quota resource metric to track if there were any out of quota or delayed requests.
+   * Note that this method is not thread, and it should be called from a synchronized context.
+   * @param quotaResourceIds {@link List} of {@link String} resource ids to track.
+   */
+  public void createMetricsForQuotaResources(List<String> quotaResourceIds) {
+    for (final String quotaResourceId : quotaResourceIds) {
+      perQuotaResourceDelayedRequestMap.putIfAbsent(quotaResourceId, metricRegistry.counter(
+          MetricRegistry.name(QuotaEnforcer.class,
+              String.format("QuotaResource-%s-DelayedRequestCount", quotaResourceId))));
+      perQuotaResourceOutOfQuotaMap.putIfAbsent(quotaResourceId, metricRegistry.counter(
+          MetricRegistry.name(QuotaEnforcer.class,
+              String.format("QuotaResource-%s-OutOfQuotaRequestCount", quotaResourceId))));
+    }
   }
 }

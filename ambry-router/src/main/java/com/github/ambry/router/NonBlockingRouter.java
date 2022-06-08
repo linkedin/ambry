@@ -119,6 +119,7 @@ class NonBlockingRouter implements Router {
         .recordStats()
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
+    routerMetrics.initializeQuotaOCMetrics(ocList);
   }
 
   /**

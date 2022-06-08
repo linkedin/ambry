@@ -26,8 +26,9 @@ public class DummyQuotaSourceFactory implements QuotaSourceFactory {
    * Constructor for {@link DummyQuotaSourceFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
+   * @param quotaMetrics {@link QuotaMetrics} object.
    */
-  public DummyQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService) {
+  public DummyQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics) {
 
   }
 
