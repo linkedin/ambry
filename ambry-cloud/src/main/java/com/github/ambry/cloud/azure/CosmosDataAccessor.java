@@ -65,6 +65,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -259,7 +260,7 @@ public class CosmosDataAccessor {
     // Note: not timing here since bulk deletions are timed.
     return cosmosAsyncContainer.deleteItem(blobMetadata.getId(), new PartitionKey(blobMetadata.getPartitionId()))
         .toFuture()
-        .handle(((response, throwable) -> {
+        .handle((response, throwable) -> {
           if (throwable != null) {
             Exception ex = Utils.extractFutureExceptionCause(throwable);
             if (ex instanceof CosmosException && ((CosmosException) ex).getStatusCode() == STATUS_NOT_FOUND) {
@@ -271,7 +272,7 @@ public class CosmosDataAccessor {
                 : new CompletionException(ex);
           }
           return true;
-        }));
+        });
   }
 
   /**
@@ -303,16 +304,17 @@ public class CosmosDataAccessor {
         }
       }
     } else {
-      for (CloudBlobMetadata metadata : blobMetadataList) {
-        try {
-          deleteMetadataAsync(metadata).join();
-        } catch (CompletionException ex) {
-          Exception e = Utils.extractFutureExceptionCause(ex);
-          if (e instanceof CosmosException) {
-            throw (CosmosException) e;
-          } else {
-            throw new RuntimeException(e);
-          }
+      List<CompletableFuture<Boolean>> operationFutures = new ArrayList<>();
+      blobMetadataList.forEach(metadata -> operationFutures.add(deleteMetadataAsync(metadata)));
+      try {
+        // Wait for all async delete operations to complete.
+        CompletableFuture.allOf(operationFutures.toArray(new CompletableFuture<?>[0])).join();
+      } catch (CompletionException ex) {
+        Exception e = Utils.extractFutureExceptionCause(ex);
+        if (e instanceof CosmosException) {
+          throw (CosmosException) e;
+        } else {
+          throw new RuntimeException(e);
         }
       }
     }
@@ -376,20 +378,17 @@ public class CosmosDataAccessor {
   CompletableFuture<CloudBlobMetadata> getMetadataOrNullAsync(BlobId blobId) {
     Timer.Context operationTimer = azureMetrics.documentReadTime.time();
     return cosmosAsyncContainer.readItem(blobId.getID(), new PartitionKey(blobId.getPartition().toPathString()),
-        CloudBlobMetadata.class).toFuture().handle(((response, throwable) -> {
+        CloudBlobMetadata.class).toFuture().handle((response, throwable) -> {
       operationTimer.stop();
       if (throwable != null) {
         Exception ex = Utils.extractFutureExceptionCause(throwable);
         if (ex instanceof CosmosException && ((CosmosException) ex).getStatusCode() == STATUS_NOT_FOUND) {
-          // return null if exception is due to blob not being found
           return null;
         }
-        // For all other exceptions, pass the exception downstream.
         throw throwable instanceof CompletionException ? (CompletionException) throwable : new CompletionException(ex);
       }
-      // return the blob metadata
       return response.getItem();
-    }));
+    });
   }
 
   /**
@@ -408,45 +407,54 @@ public class CosmosDataAccessor {
 
     // Read the existing record
     cosmosAsyncContainer.readItem(blobId.getID(), new PartitionKey(blobId.getPartition().toPathString()),
-        CloudBlobMetadata.class).toFuture().exceptionally(throwable -> {
+        CloudBlobMetadata.class).toFuture().handle((readItemResponse, throwableOnRead) -> {
+      // Stop the document read timer
       documentReadTimer.stop();
-      throw throwable instanceof CompletionException ? (CompletionException) throwable
-          : new CompletionException(throwable);
-    }).thenCompose(readItemResponse -> {
-      documentReadTimer.stop();
-      CloudBlobMetadata receivedMetadata = readItemResponse.getItem();
-      // Update the metadata record only if value has changed
-      Map<String, String> receivedFields = receivedMetadata.toMap();
-      Map<String, String> fieldsToUpdate = updateFields.entrySet()
-          .stream()
-          .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(receivedFields.get(map.getKey())))
-          .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
-      if (fieldsToUpdate.isEmpty()) {
-        logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
-        // If there is no change in value of metadata, complete the result.
-        resultFuture.complete(null);
-      }
+      if (throwableOnRead != null) {
+        // If there is an error in reading the current metadata record, complete the result exceptionally.
+        resultFuture.completeExceptionally(throwableOnRead);
+        return null;
+      } else {
+        // Get the metadata from cosmos response
+        CloudBlobMetadata receivedMetadata = readItemResponse.getItem();
 
-      // For testing conflict handling
-      if (updateCallback != null) {
-        try {
-          updateCallback.call();
-        } catch (Exception ex) {
-          logger.error("Error in update callback", ex);
+        // Update the metadata record only if value has changed
+        Map<String, String> receivedFields = receivedMetadata.toMap();
+        Map<String, String> fieldsToUpdate = updateFields.entrySet()
+            .stream()
+            .filter(map -> !String.valueOf(updateFields.get(map.getKey())).equals(receivedFields.get(map.getKey())))
+            .collect(Collectors.toMap(Map.Entry::getKey, map -> String.valueOf(map.getValue())));
+        if (fieldsToUpdate.isEmpty()) {
+          logger.debug("No change in value for {} in blob {}", updateFields.keySet(), blobId.getID());
+          // If there is no change in value of metadata, complete the result.
+          resultFuture.complete(null);
         }
+
+        // For testing conflict handling
+        if (updateCallback != null) {
+          try {
+            updateCallback.call();
+          } catch (Exception ex) {
+            logger.error("Error in update callback", ex);
+          }
+        }
+
+        // Update the modified fields
+        fieldsToUpdate.forEach(receivedFields::put);
+
+        // Set condition to ensure we don't clobber a concurrent update
+        CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
+        requestOptions.setIfMatchETag(readItemResponse.getETag());
+
+        // Replace the item in cosmos db asynchronously.
+        documentUpdateTimer.set(azureMetrics.documentUpdateTime.time());
+        return cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
+            new PartitionKey(blobId.getPartition().toPathString()), requestOptions).toFuture();
       }
-
-      // Update the modified fields
-      fieldsToUpdate.forEach(receivedFields::put);
-
-      // Set condition to ensure we don't clobber a concurrent update
-      CosmosItemRequestOptions requestOptions = new CosmosItemRequestOptions();
-      requestOptions.setIfMatchETag(readItemResponse.getETag());
-
-      documentUpdateTimer.set(azureMetrics.documentUpdateTime.time());
-      return cosmosAsyncContainer.replaceItem(CloudBlobMetadata.fromMap(receivedFields), blobId.getID(),
-          new PartitionKey(blobId.getPartition().toPathString()), requestOptions).toFuture();
-    }).whenComplete(((replaceItemResponse, throwable) -> {
+    }).thenCompose(result -> {
+      // Since previous stage returns CompletionStage<CompletionStage<T>>, using #thenCompose helps to flatten the result.
+      return result;
+    }).whenComplete((replaceItemResponse, throwable) -> {
       if (documentUpdateTimer.get() != null) {
         documentUpdateTimer.get().stop();
       }
@@ -456,13 +464,12 @@ public class CosmosDataAccessor {
           // Received an exception during metadata replacement due to concurrent update. Increase the conflict counter
           azureMetrics.blobUpdateConflictCount.inc();
         }
-        // Complete the result exceptionally
         resultFuture.completeExceptionally(ex);
       } else {
         // Updated the metadata record successfully
         resultFuture.complete(replaceItemResponse.getItem());
       }
-    }));
+    });
 
     return resultFuture;
   }
