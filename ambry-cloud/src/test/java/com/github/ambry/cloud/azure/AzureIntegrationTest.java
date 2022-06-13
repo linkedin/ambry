@@ -96,9 +96,7 @@ public class AzureIntegrationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{ADAuthBasedStorageClient.class.getCanonicalName()},
-        {ConnectionStringBasedStorageClient.class.getCanonicalName()},
-        {ClientSecretCredentialStorageClient.class.getCanonicalName()}});
+    return Arrays.asList(new Object[][]{{ConnectionStringBasedStorageClient.class.getCanonicalName()}});
   }
 
   /**
@@ -458,7 +456,8 @@ public class AzureIntegrationTest {
     // Case 1: concurrent modification to blob metadata.
     azureDest.getAzureBlobDataAccessor()
         .setUpdateCallback(() -> concurrentUpdater.getAzureBlobDataAccessor()
-            .updateBlobMetadata(blobId, Collections.singletonMap(fieldName, newUploadTime), dummyCloudUpdateValidator));
+            .updateBlobMetadataAsync(blobId, Collections.singletonMap(fieldName, newUploadTime), dummyCloudUpdateValidator)
+            .join());
     try {
       azureDest.updateBlobExpiration(blobId, ++now, dummyCloudUpdateValidator);
       fail("Expected 412 error");
@@ -469,7 +468,8 @@ public class AzureIntegrationTest {
     // Case 2: concurrent modification to Cosmos record.
     azureDest.getCosmosDataAccessor()
         .setUpdateCallback(() -> concurrentUpdater.getCosmosDataAccessor()
-            .updateMetadata(blobId, Collections.singletonMap(fieldName, Long.toString(newUploadTime))));
+            .updateMetadataAsync(blobId, Collections.singletonMap(fieldName, Long.toString(newUploadTime)))
+            .join());
     try {
       azureDest.updateBlobExpiration(blobId, ++now, dummyCloudUpdateValidator);
       fail("Expected 412 error");
@@ -499,13 +499,14 @@ public class AzureIntegrationTest {
     uploadBlobWithRetry(blobId, blobSize, cloudBlobMetadata, inputStream, cloudRequestAgent, azureDest);
 
     // Remove blob record from Cosmos to create inconsistency
-    azureDest.getCosmosDataAccessor().deleteMetadata(cloudBlobMetadata);
+    azureDest.getCosmosDataAccessor().deleteMetadataAsync(cloudBlobMetadata).join();
 
     // Now update the blob and see if it gets fixed
     azureDest.updateBlobExpiration(blobId, Utils.Infinite_Time, dummyCloudUpdateValidator);
     List<CloudBlobMetadata> resultList = azureDest.getCosmosDataAccessor()
-        .queryMetadata(partitionId.toPathString(), "SELECT * FROM c WHERE c.id = '" + blobId.getID() + "'",
-            azureDest.getAzureMetrics().missingKeysQueryTime);
+        .queryMetadataAsync(partitionId.toPathString(), "SELECT * FROM c WHERE c.id = '" + blobId.getID() + "'",
+            azureDest.getAzureMetrics().missingKeysQueryTime)
+        .join();
     assertEquals("Expected record to exist", 1, resultList.size());
   }
 
@@ -528,7 +529,7 @@ public class AzureIntegrationTest {
         azureDest.deleteBlob(blobId, deletionTime, (short) 0, dummyCloudUpdateValidator));
 
     // Simulate incomplete compaction by purging it from ABS only
-    azureDest.getAzureBlobDataAccessor().purgeBlobs(Collections.singletonList(cloudBlobMetadata));
+    azureDest.getAzureBlobDataAccessor().purgeBlobsAsync(Collections.singletonList(cloudBlobMetadata)).join();
 
     // Try to delete again (to trigger recovery), verify removed from Cosmos
     try {
@@ -536,7 +537,8 @@ public class AzureIntegrationTest {
     } catch (CloudStorageException cex) {
       assertEquals("Unexpected error code", HttpConstants.StatusCodes.NOTFOUND, cex.getStatusCode());
     }
-    assertNull("Expected record to be purged from Cosmos", azureDest.getCosmosDataAccessor().getMetadataOrNull(blobId));
+    assertNull("Expected record to be purged from Cosmos",
+        azureDest.getCosmosDataAccessor().getMetadataOrNullAsync(blobId).join());
   }
 
   /** Persist tokens to Azure, then read them back and verify they match. */
@@ -575,12 +577,14 @@ public class AzureIntegrationTest {
     String partitionPath = String.valueOf(testPartition);
     Timer dummyTimer = new Timer();
     List<CloudBlobMetadata> allBlobsInPartition = cloudRequestAgent.doWithRetries(
-        () -> azureDest.getCosmosDataAccessor().queryMetadata(partitionPath, "SELECT * FROM c", dummyTimer),
+        () -> azureDest.getCosmosDataAccessor().queryMetadataAsync(partitionPath, "SELECT * FROM c", dummyTimer).join(),
         "QueryMetadata", partitionPath);
     int numPurged = purgeBlobsWithRetry(allBlobsInPartition, partitionPath);
     logger.info("Cleaned up {} blobs", numPurged);
     // Delete compaction checkpoint blob
-    if (azureDest.getAzureBlobDataAccessor().deleteFile(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath)) {
+    if (azureDest.getAzureBlobDataAccessor()
+        .deleteFileAsync(AzureCloudDestination.CHECKPOINT_CONTAINER, partitionPath)
+        .join()) {
       logger.info("Deleted compaction checkpoint");
     }
   }

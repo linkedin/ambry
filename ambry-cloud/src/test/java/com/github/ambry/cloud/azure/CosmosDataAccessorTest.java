@@ -32,6 +32,7 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletionException;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -104,15 +105,16 @@ public class CosmosDataAccessorTest {
    */
   @Test
   public void testUpsertNormal() {
-    cosmosAccessor.upsertMetadata(blobMetadata);
+    cosmosAccessor.upsertMetadataAsync(blobMetadata).join();
     assertEquals(1, azureMetrics.documentCreateTime.getCount());
   }
 
   /** Test update. */
   @Test
   public void testUpdateNormal() {
-    cosmosAccessor.updateMetadata(blobId,
-        Collections.singletonMap(CloudBlobMetadata.FIELD_DELETION_TIME, Long.toString(System.currentTimeMillis())));
+    cosmosAccessor.updateMetadataAsync(blobId,
+        Collections.singletonMap(CloudBlobMetadata.FIELD_DELETION_TIME, Long.toString(System.currentTimeMillis())))
+        .join();
     assertEquals(1, azureMetrics.documentReadTime.getCount());
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
   }
@@ -125,11 +127,13 @@ public class CosmosDataAccessorTest {
     when(mockCosmosAsyncContainer.replaceItem(any(), anyString(), any(), any())).thenReturn(
         Mono.error(cosmosException));
     try {
-      cosmosAccessor.updateMetadata(blobId,
-          Collections.singletonMap(CloudBlobMetadata.FIELD_DELETION_TIME, Long.toString(System.currentTimeMillis())));
+      cosmosAccessor.updateMetadataAsync(blobId,
+          Collections.singletonMap(CloudBlobMetadata.FIELD_DELETION_TIME, Long.toString(System.currentTimeMillis())))
+          .join();
       fail("Expected exception");
-    } catch (CosmosException ex) {
+    } catch (CompletionException ex) {
       // expected
+      assertTrue(ex.getCause() instanceof CosmosException);
     }
     assertEquals(1, azureMetrics.documentReadTime.getCount());
     assertEquals(1, azureMetrics.documentUpdateTime.getCount());
@@ -165,7 +169,8 @@ public class CosmosDataAccessorTest {
 
     try {
       doQueryChangeFeed();
-    } catch (CosmosException e) {
+    } catch (CompletionException e) {
+      assertTrue(e.getCause() instanceof CosmosException);
     }
     assertEquals(2, azureMetrics.changeFeedQueryCount.getCount());
     assertEquals(1, azureMetrics.changeFeedQueryFailureCount.getCount());
@@ -173,15 +178,15 @@ public class CosmosDataAccessorTest {
 
   /** Utility method to run metadata query with default parameters. */
   private List<CloudBlobMetadata> doQueryMetadata() {
-    return cosmosAccessor.queryMetadata(blobId.getPartition().toPathString(), "select * from c",
-        azureMetrics.missingKeysQueryTime);
+    return cosmosAccessor.queryMetadataAsync(blobId.getPartition().toPathString(), "select * from c",
+        azureMetrics.missingKeysQueryTime).join();
   }
 
   /** Utility method to run metadata query with default parameters. */
   private List<CloudBlobMetadata> doQueryChangeFeed() {
     List<CloudBlobMetadata> changeFeed = new ArrayList<>();
     CosmosChangeFeedRequestOptions mockFeedRequestOptions = mock(CosmosChangeFeedRequestOptions.class);
-    cosmosAccessor.queryChangeFeed(mockFeedRequestOptions, changeFeed, azureMetrics.changeFeedQueryTime);
+    cosmosAccessor.queryChangeFeedAsync(mockFeedRequestOptions, changeFeed, azureMetrics.changeFeedQueryTime).join();
     return changeFeed;
   }
 }

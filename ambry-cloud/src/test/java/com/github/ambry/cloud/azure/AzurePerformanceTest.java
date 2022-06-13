@@ -86,7 +86,7 @@ public class AzurePerformanceTest {
     for (int j = 0; j < 10; j++) {
       String blobName = String.format("Warmup-%d", j);
       InputStream inputStream = new ByteArrayInputStream(buffer);
-      blobDataAccessor.uploadFile(containerName, blobName, inputStream);
+      blobDataAccessor.uploadFileAsync(containerName, blobName, inputStream).join();
     }
 
     int testCount = 100;
@@ -103,7 +103,7 @@ public class AzurePerformanceTest {
         String blobName = String.format("Test-%s-%d", label, j);
         InputStream inputStream = new ByteArrayInputStream(buffer);
         long startTime = System.currentTimeMillis();
-        blobDataAccessor.uploadFile(containerName, blobName, inputStream);
+        blobDataAccessor.uploadFileAsync(containerName, blobName, inputStream).join();
         long uploadTime = System.currentTimeMillis() - startTime;
         totalTime += uploadTime;
         maxTime = Math.max(maxTime, uploadTime);
@@ -121,7 +121,7 @@ public class AzurePerformanceTest {
         String blobName = String.format("Test-%s-%d", label, j);
         OutputStream outputStream = new ByteArrayOutputStream(blobSizes[sizeIndex]);
         long startTime = System.currentTimeMillis();
-        blobDataAccessor.downloadFile(containerName, blobName, null, outputStream, true);
+        blobDataAccessor.downloadFileAsync(containerName, blobName, null, outputStream, true).join();
         long downloadTime = System.currentTimeMillis() - startTime;
         totalTime += downloadTime;
         maxTime = Math.max(maxTime, downloadTime);

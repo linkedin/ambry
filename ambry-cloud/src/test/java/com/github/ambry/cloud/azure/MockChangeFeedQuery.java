@@ -19,9 +19,11 @@ import com.azure.cosmos.CosmosAsyncDatabase;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.VcrMetrics;
+import com.github.ambry.commons.FutureUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.Mockito.*;
 
@@ -52,19 +54,19 @@ public class MockChangeFeedQuery extends CosmosDataAccessor {
   }
 
   @Override
-  public String queryChangeFeed(String requestContinuationToken, int maxFeedSize, List<CloudBlobMetadata> changeFeed,
-      String partitionPath, Timer timer) {
+  public CompletableFuture<String> queryChangeFeedAsync(String requestContinuationToken, int maxFeedSize,
+      List<CloudBlobMetadata> changeFeed, String partitionPath, Timer timer) {
     if (requestContinuationToken.equals("")) {
       requestContinuationToken = "0";
     }
     // there are no changes since last continuation token or there is no change feed at all, then return
     if ((requestContinuationToken != null && Integer.parseInt(requestContinuationToken) == continuationTokenCounter + 1)
         || continuationTokenCounter == -1) {
-      return requestContinuationToken;
+      return CompletableFuture.completedFuture(requestContinuationToken);
     }
     // check if its an invalid continuation token
     if (requestContinuationToken != null && !continuationTokenToBlobIdMap.containsKey(requestContinuationToken)) {
-      throw new IllegalArgumentException("Invalid continuation token");
+      return FutureUtils.completedExceptionally(new IllegalArgumentException("Invalid continuation token"));
     }
 
     if (requestContinuationToken == null) {
@@ -79,7 +81,7 @@ public class MockChangeFeedQuery extends CosmosDataAccessor {
       }
       continuationTokenCtr = Integer.toString(Integer.parseInt(continuationTokenCtr) + 1);
     }
-    return continuationTokenCtr;
+    return CompletableFuture.completedFuture(continuationTokenCtr);
   }
 }
 

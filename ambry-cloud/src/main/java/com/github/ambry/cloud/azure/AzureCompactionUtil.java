@@ -40,7 +40,7 @@ public class AzureCompactionUtil {
     azureMetrics.blobDeleteRequestCount.inc(blobMetadataList.size());
     long t0 = System.currentTimeMillis();
     try {
-      List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobs(blobMetadataList);
+      List<CloudBlobMetadata> deletedBlobs = azureBlobDataAccessor.purgeBlobsAsync(blobMetadataList).join();
       long t1 = System.currentTimeMillis();
       int deletedCount = deletedBlobs.size();
       azureMetrics.blobDeleteErrorCount.inc(blobMetadataList.size() - deletedCount);

@@ -285,7 +285,6 @@ public abstract class StorageClient implements AzureStorageClient {
   /**
    * Deletes a list of blobs asynchronously.
    * @param batchOfBlobs {@link List} of {@link CloudBlobMetadata} objects.
-   * @return {@link List} of {@link Response}s for the blobs in the batch.
    * @return a {@link CompletableFuture} that will eventually contain {@link List} of {@link Response}s for the blobs
    *         in the batch or an exception if an error occurred.
    */

@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -268,10 +269,18 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
   private ChangeFeedCacheEntry getNextChangeFeed(String partitionId, String startRequestContinuationToken,
       String cacheSessionId) throws CosmosException {
     List<CloudBlobMetadata> changeFeedEntries = new ArrayList<>(defaultCacheSize);
-    String newRequestContinuationToken =
-        cosmosDataAccessor.queryChangeFeed(startRequestContinuationToken, defaultCacheSize, changeFeedEntries,
-            partitionId, azureMetrics.changeFeedQueryTime);
-    return new ChangeFeedCacheEntry(startRequestContinuationToken, newRequestContinuationToken, cacheSessionId,
-        changeFeedEntries, partitionId);
+    try {
+      String newRequestContinuationToken =
+          cosmosDataAccessor.queryChangeFeedAsync(startRequestContinuationToken, defaultCacheSize, changeFeedEntries,
+              partitionId, azureMetrics.changeFeedQueryTime).join();
+      return new ChangeFeedCacheEntry(startRequestContinuationToken, newRequestContinuationToken, cacheSessionId,
+          changeFeedEntries, partitionId);
+    } catch (CompletionException e) {
+      Exception ex = Utils.extractFutureExceptionCause(e);
+      if (ex instanceof CosmosException) {
+        throw ((CosmosException) ex);
+      }
+      throw new RuntimeException("Error getting change feed for partitionId " + partitionId, ex);
+    }
   }
 }
