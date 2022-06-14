@@ -26,6 +26,7 @@ import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2Headers;
+import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +58,8 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
     if (!ctx.channel().isOpen()) {
       logger.debug("Channel closed when write. Channel: {}", ctx.channel());
       promise.setFailure(new ChannelException("Channel has been closed when write."));
+      ReferenceCountUtil.release(msg);
+      return;
     }
     if (!(msg instanceof Send)) {
       ctx.write(msg, promise);
