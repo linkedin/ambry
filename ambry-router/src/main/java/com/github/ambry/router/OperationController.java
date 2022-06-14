@@ -16,10 +16,13 @@ package com.github.ambry.router;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.MetadataChunk;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
@@ -135,7 +138,7 @@ public class OperationController implements Runnable {
             suffix, kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
     getManager =
         new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
-            cryptoJobHandler, time);
+            cryptoJobHandler, time, this);
     deleteManager =
         new DeleteManager(clusterMap, responseHandler, accountService, notificationSystem, routerConfig, routerMetrics,
             routerCallback, time);
@@ -545,6 +548,27 @@ public class OperationController implements Runnable {
 
   public Thread getRequestResponseHandlerThread() {
     return requestResponseHandlerThread;
+  }
+
+  public void cacheMetadataChunk(String id, MetadataChunk metadataChunk) {
+    if (this.nonBlockingRouter == null) {
+      return;
+    }
+    this.nonBlockingRouter.cacheMetadataChunk(id, metadataChunk);
+  }
+
+  public MetadataChunk lookupCachedMetadataChunk(String blobIdStr) {
+    if (this.nonBlockingRouter == null) {
+      return null;
+    }
+    return this.nonBlockingRouter.lookupCachedMetadataChunk(blobIdStr);
+  }
+
+  public void eraseCachedMetadataChunk(String blobIdStr) {
+    if (this.nonBlockingRouter == null) {
+      return;
+    }
+    this.nonBlockingRouter.eraseCachedMetadataChunk(blobIdStr);
   }
 }
 

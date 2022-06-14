@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.MetadataChunk;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobAll;
@@ -99,6 +100,7 @@ class GetBlobOperation extends GetOperation {
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
   // Callback to charge against quota for each chunk that's fetched.
   private final QuotaChargeCallback quotaChargeCallback;
+  private final GetManager getManager;
   // Associated with all data chunks in the case of composite blobs. Only a fixed number of these are initialized.
   // Each of these is initialized with the information required to fetch a data chunk and is responsible for
   // retrieving and adding it to the list of chunk buffers. Once complete, they are reused to fetch subsequent data
@@ -124,6 +126,20 @@ class GetBlobOperation extends GetOperation {
   // the CompositeBlobInfo that will be set if (and when) this blob turns out to be a composite blob.
   private CompositeBlobInfo compositeBlobInfo;
 
+  enum mdCacheLookUpStatus {
+    mdCacheNotLookedUp,
+    mdCacheHit,
+    mdCacheMiss
+  };
+  protected mdCacheLookUpStatus mdCacheLookupResult;
+
+  public MetadataChunk lookupCachedMetadataChunk(String blobIdStr) {
+    if (this.getManager == null) {
+      return null;
+    }
+    return this.getManager.lookupCachedMetadataChunk(blobIdStr);
+  }
+
   /**
    * Construct a GetBlobOperation
    * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
@@ -140,18 +156,20 @@ class GetBlobOperation extends GetOperation {
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
+   * @param getManager
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback) {
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, GetManager getManager) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
     this.quotaChargeCallback = quotaChargeCallback;
-    firstChunk = new FirstGetChunk();
+    firstChunk = new FirstGetChunk(this);
+    this.getManager = getManager;
   }
 
   /**
@@ -317,11 +335,24 @@ class GetBlobOperation extends GetOperation {
       return;
     }
     if (operationException.get() == null) {
+      if (mdCacheLookupResult == mdCacheLookUpStatus.mdCacheNotLookedUp) {
+        MetadataChunk metadataChunk = lookupCachedMetadataChunk(blobId.toString());
+        if (metadataChunk != null) {
+          compositeBlobInfo = metadataChunk.getCompositeBlobInfo();
+          mdCacheLookupResult = mdCacheLookUpStatus.mdCacheHit;
+        } else {
+          mdCacheLookupResult = mdCacheLookUpStatus.mdCacheMiss;
+        }
+      }
       if (firstChunk.isReady() || firstChunk.isInProgress()) {
         firstChunk.poll(requestRegistrationCallback);
       }
       if (firstChunk.isComplete()) {
         onChunkOperationComplete(firstChunk);
+        if (firstChunk.getBlobType() == BlobType.MetadataBlob) {
+          MetadataChunk metadataChunk = new MetadataChunk(blobInfo, compositeBlobInfo);
+          this.getManager.cacheMetadataChunkIfAbsent(blobId.getID(), metadataChunk);
+        }
         // Although an attempt is made to write to the channel as soon as a chunk is successfully retrieved,
         // the caller might not have called readInto() and passed in a channel at the time. So an attempt is always
         // made from within poll.
@@ -332,7 +363,7 @@ class GetBlobOperation extends GetOperation {
         if (dataChunks != null) {
           for (GetChunk dataChunk : dataChunks) {
             if (dataChunk.isFree() && chunkIdIterator.hasNext()) {
-              dataChunk.initialize(chunkIdIterator.nextIndex(), chunkIdIterator.next());
+              dataChunk.initialize(chunkIdIterator.nextIndex(), chunkIdIterator.next(), this);
             }
             if (dataChunk.isInProgress() || (dataChunk.isReady()
                 && numChunksRetrieved.get() - blobDataChannel.getNumChunksWrittenOut()
@@ -350,6 +381,16 @@ class GetBlobOperation extends GetOperation {
       }
     }
     if (operationException.get() != null) {
+      Exception e = operationException.get();
+      if (e instanceof RouterException)  {
+        RouterErrorCode routerErrorCode = ((RouterException) e).getErrorCode();
+        switch (routerErrorCode) {
+          case BlobDeleted:
+          case BlobDoesNotExist:
+          case BlobExpired:
+            this.getManager.eraseCachedMetadataChunk(blobId.toString());
+          }
+        }
       abort(operationException.get());
     }
   }
@@ -585,6 +626,7 @@ class GetBlobOperation extends GetOperation {
   private class GetChunk {
     // map of correlation id to the request metadata for every request issued for this operation.
     protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
+    protected GetBlobOperation getBlobOperation;
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
     protected ProgressTracker progressTracker;
     // DecryptCallBackResultInfo that holds all info about decrypt job callback
@@ -623,9 +665,9 @@ class GetBlobOperation extends GetOperation {
      * @param chunkMetadata the {@link BlobId}, data content size, and offset relative to the total blob
      *                           of the initial data chunk that this GetChunk has to fetch.
      */
-    GetChunk(int index, CompositeBlobInfo.ChunkMetadata chunkMetadata) {
+    GetChunk(int index, CompositeBlobInfo.ChunkMetadata chunkMetadata, GetBlobOperation getBlobOperation) {
       reset();
-      initialize(index, chunkMetadata);
+      initialize(index, chunkMetadata, getBlobOperation);
     }
 
     /**
@@ -672,6 +714,7 @@ class GetBlobOperation extends GetOperation {
       state = ChunkState.Free;
       operationQuotaCharger =
           new OperationQuotaCharger(quotaChargeCallback, GetBlobOperation.class.getSimpleName(), routerMetrics);
+      this.getBlobOperation = null;
     }
 
     /**
@@ -680,7 +723,7 @@ class GetBlobOperation extends GetOperation {
      * @param chunkMetadata the id, data content size, and offset (relative to the total size)
      *                           of the chunk of the overall blob that needs to be fetched through this GetChunk.
      */
-    void initialize(int index, CompositeBlobInfo.ChunkMetadata chunkMetadata) {
+    void initialize(int index, CompositeBlobInfo.ChunkMetadata chunkMetadata, GetBlobOperation getBlobOperation) {
       chunkIndex = index;
       chunkBlobId = (BlobId) chunkMetadata.getStoreKey();
       offset = chunkMetadata.getOffset();
@@ -689,6 +732,7 @@ class GetBlobOperation extends GetOperation {
           RouterOperation.GetBlobOperation);
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
+      this.getBlobOperation = getBlobOperation;
     }
 
     /**
@@ -1262,8 +1306,13 @@ class GetBlobOperation extends GetOperation {
     /**
      * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
      */
-    FirstGetChunk() {
-      super(-1, new CompositeBlobInfo.ChunkMetadata(blobId, 0L, -1L));
+    FirstGetChunk(GetBlobOperation getBlobOperation) {
+      super(-1, new CompositeBlobInfo.ChunkMetadata(blobId, 0L, -1L), getBlobOperation);
+      mdCacheLookupResult = mdCacheLookUpStatus.mdCacheNotLookedUp;
+    }
+
+    public BlobType getBlobType() {
+      return blobType;
     }
 
     /**
@@ -1289,6 +1338,9 @@ class GetBlobOperation extends GetOperation {
      */
     @Override
     MessageFormatFlags getOperationFlag() {
+      if (mdCacheLookupResult == mdCacheLookUpStatus.mdCacheHit) {
+        return MessageFormatFlags.BlobInfo;
+      }
       return options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.Data ? MessageFormatFlags.Blob
           : MessageFormatFlags.All;
     }
@@ -1372,8 +1424,16 @@ class GetBlobOperation extends GetOperation {
           rawPayloadBuffer = ByteBuffer.wrap(payloadBytes);
         }
 
-        if (getOperationFlag() == MessageFormatFlags.Blob) {
+        if (getOperationFlag() == MessageFormatFlags.BlobInfo) {
+          blobType = BlobType.MetadataBlob;
+          blobData = null;
+          serverBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
+          ByteBuffer userMd = MessageFormatRecord.deserializeUserMetadata(payload);
+          blobInfo = new BlobInfo(serverBlobProperties, userMd.array(), messageInfo.getLifeVersion());
+          encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
+        } else if (getOperationFlag() == MessageFormatFlags.Blob) {
           blobData = MessageFormatRecord.deserializeBlob(payload);
+          blobType = blobData.getBlobType();
           encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         } else {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
@@ -1381,6 +1441,7 @@ class GetBlobOperation extends GetOperation {
           updateTtlIfRequired(serverBlobInfo.getBlobProperties(), messageInfo);
           getOptions().ageAtAccessTracker.trackAgeAtAccess(serverBlobInfo.getBlobProperties().getCreationTimeInMs());
           blobData = blobAll.getBlobData();
+          blobType = blobData.getBlobType();
           encryptionKey = blobAll.getBlobEncryptionKey();
           if (encryptionKey == null) {
             // set blobInfo only if decryption is not required. If not, maybeProcessCallbackAndComplete() will set appropriate
@@ -1393,7 +1454,6 @@ class GetBlobOperation extends GetOperation {
             userMetadata = serverBlobInfo.getUserMetadata();
           }
         }
-        blobType = blobData.getBlobType();
         chunkIndexToBuf = new ConcurrentHashMap<>();
         chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
         if (rawMode) {
@@ -1466,6 +1526,9 @@ class GetBlobOperation extends GetOperation {
     public List<CompositeBlobInfo.ChunkMetadata> getChunkMetadataList() {
       return chunkMetadataList;
     }
+    public void setChunkMetadataList(List<CompositeBlobInfo.ChunkMetadata> chunkMetadataList) {
+      this.chunkMetadataList = chunkMetadataList;
+    }
 
     /**
      * Process a metadata blob to find the data chunks that need to be fetched.
@@ -1477,10 +1540,12 @@ class GetBlobOperation extends GetOperation {
      */
     private void handleMetadataBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey)
         throws IOException, MessageFormatException {
-      ByteBuf serializedMetadataContent = blobData.content();
+      ByteBuf serializedMetadataContent = null;
       try {
-        compositeBlobInfo =
-            MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent.nioBuffer(), blobIdFactory);
+        if (mdCacheLookupResult == mdCacheLookUpStatus.mdCacheMiss) {
+          serializedMetadataContent = blobData.content();
+          compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent.nioBuffer(), blobIdFactory);
+        }
         totalSize = compositeBlobInfo.getTotalSize();
         chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
         boolean rangeResolutionFailure = false;
@@ -1508,7 +1573,7 @@ class GetBlobOperation extends GetOperation {
           rangeResolutionFailure = true;
         }
         if (!rangeResolutionFailure) {
-          if (options.getChunkIdsOnly || getOperationFlag() == MessageFormatFlags.Blob || encryptionKey == null) {
+          if (options.getChunkIdsOnly || getOperationFlag() == MessageFormatFlags.Blob || (mdCacheLookupResult == mdCacheLookUpStatus.mdCacheHit) || encryptionKey == null) {
             initializeDataChunks();
           } else {
             // if blob is encrypted, then decryption is required only in case of GetBlobInfo and GetBlobAll (since user-metadata
@@ -1540,7 +1605,9 @@ class GetBlobOperation extends GetOperation {
           }
         }
       } finally {
-        ReferenceCountUtil.safeRelease(serializedMetadataContent);
+        if (serializedMetadataContent != null) {
+          ReferenceCountUtil.safeRelease(serializedMetadataContent);
+        }
       }
     }
 
@@ -1560,7 +1627,7 @@ class GetBlobOperation extends GetOperation {
         for (int i = 0; i < dataChunks.length; i++) {
           int idx = chunkIdIterator.nextIndex();
           CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
-          dataChunks[i] = new GetChunk(idx, keyAndOffset);
+          dataChunks[i] = new GetChunk(idx, keyAndOffset, this.getBlobOperation);
         }
       }
     }

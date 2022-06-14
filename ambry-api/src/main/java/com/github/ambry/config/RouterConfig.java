@@ -114,6 +114,8 @@ public class RouterConfig {
   public static final String ROUTER_STORE_KEY_CONVERTER_FACTORY = "router.store.key.converter.factory";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS = "router.unavailable.due.to.offline.replicas";
   public static final String ROUTER_NOT_FOUND_CACHE_TTL_IN_MS = "router.not.found.cache.ttl.in.ms";
+  private static final String ROUTER_METADATA_CACHE = "router.metadata.cache" ;
+  private static final String ROUTER_METADATA_CACHE_MAX_ITEM_COUNT = "router.metadata.cache.max.item.count";
 
   /**
    * Number of independent scaling units for the router.
@@ -578,6 +580,11 @@ public class RouterConfig {
   @Default("15*1000")
   public final long routerNotFoundCacheTtlInMs;
 
+  @Config(ROUTER_METADATA_CACHE)
+  public final boolean routerMetadataCache;
+
+  @Config(ROUTER_METADATA_CACHE_MAX_ITEM_COUNT)
+  public final int routerMetadataCacheMaxItemCount;
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -643,6 +650,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_UNDELETE_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
     routerUseGetBlobOperationForBlobInfo =
         verifiableProperties.getBoolean(ROUTER_USE_GET_BLOB_OPERATION_FOR_BLOB_INFO, false);
+    routerMetadataCache = verifiableProperties.getBoolean(ROUTER_METADATA_CACHE, false);
+    routerMetadataCacheMaxItemCount = verifiableProperties.getInt(ROUTER_METADATA_CACHE_MAX_ITEM_COUNT, 100);
     List<String> customPercentiles =
         Utils.splitString(verifiableProperties.getString(ROUTER_OPERATION_TRACKER_CUSTOM_PERCENTILES, ""), ",");
     routerOperationTrackerCustomPercentiles =

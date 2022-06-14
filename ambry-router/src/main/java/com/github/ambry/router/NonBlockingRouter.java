@@ -17,6 +17,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.MetadataChunk;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -66,6 +67,8 @@ class NonBlockingRouter implements Router {
   private static final int cacheMaxLimit = 1000;
   // Cache to store blob IDs which were not found in servers recently.
   private final Cache<String, Boolean> notFoundCache;
+  private final Cache<String, MetadataChunk> metadataChunkCache;
+  private final boolean enableMetadataCache;
 
   /**
    * Constructs a NonBlockingRouter.
@@ -119,6 +122,12 @@ class NonBlockingRouter implements Router {
         .recordStats()
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
+    enableMetadataCache = routerConfig.routerMetadataCache;
+    logger.info("enableMetadataCache = " + enableMetadataCache);
+    metadataChunkCache = CacheBuilder.newBuilder()
+        .maximumSize(routerConfig.routerMetadataCacheMaxItemCount)
+        .recordStats()
+        .build();
   }
 
   /**
@@ -495,6 +504,7 @@ class NonBlockingRouter implements Router {
           deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId, quotaChargeCallback));
         }
         initiateBackgroundDeletes(deleteRequests);
+        // eraseCachedMetadataChunk(blobIdStr);
       }
       currentBackgroundOperationsCount.decrementAndGet();
     };
@@ -641,6 +651,27 @@ class NonBlockingRouter implements Router {
    */
   int getBackgroundOperationsCount() {
     return currentBackgroundOperationsCount.get();
+  }
+
+  public void cacheMetadataChunk(String id, MetadataChunk metadataChunk) {
+    if (enableMetadataCache == false) {
+      return;
+    }
+    metadataChunkCache.put(id, metadataChunk);
+  }
+
+  public MetadataChunk lookupCachedMetadataChunk(String id) {
+    if (enableMetadataCache == false) {
+      return null;
+    }
+    return metadataChunkCache.getIfPresent(id);
+  }
+
+  public void eraseCachedMetadataChunk(String id) {
+    if (enableMetadataCache == false) {
+      return;
+    }
+    metadataChunkCache.invalidate(id);
   }
 
   /**

@@ -53,11 +53,9 @@ import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import java.nio.ByteBuffer;
-import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -366,7 +364,7 @@ public class CloudOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
-            routerCallback, blobIdFactory, null, null, null, time, false, null);
+            routerCallback, blobIdFactory, null, null, null, time, false, null, null);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
 
     // Wait operation to complete

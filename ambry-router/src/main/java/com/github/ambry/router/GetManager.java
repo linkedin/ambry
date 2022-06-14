@@ -18,8 +18,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.MetadataChunk;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
@@ -67,6 +69,7 @@ class GetManager {
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to GetOperations, every time.
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback;
+  private final OperationController operationController;
 
   /**
    * Create a GetManager
@@ -79,10 +82,11 @@ class GetManager {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time The {@link Time} instance to use.
+   * @param operationController
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
       NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, OperationController operationController) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
@@ -96,6 +100,7 @@ class GetManager {
     getOperations = ConcurrentHashMap.newKeySet();
     correlationIdToGetOperation = new HashMap<>();
     requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToGetOperation);
+    this.operationController = operationController;
   }
 
   /**
@@ -128,10 +133,11 @@ class GetManager {
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeCallback);
     } else {
-      getOperation =
+      GetBlobOperation getBlobOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
-              quotaChargeCallback);
+              quotaChargeCallback, this);
+      getOperation = getBlobOperation;
     }
     getOperations.add(getOperation);
   }
@@ -205,6 +211,13 @@ class GetManager {
     routerMetrics.getManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
+  public MetadataChunk lookupCachedMetadataChunk(String blobIdStr) {
+    if (this.operationController == null) {
+      return null;
+    }
+    return this.operationController.lookupCachedMetadataChunk(blobIdStr);
+  }
+
   /**
    * Hands over the response to the associated GetOperation that issued the request.
    * @param responseInfo the {@link ResponseInfo} containing the response.
@@ -264,6 +277,22 @@ class GetManager {
       routerMetrics.operationAbortCount.inc();
       routerMetrics.onGetBlobError(abortCause, op.getOptions(), op.isEncrypted);
     }
+  }
+
+  public void cacheMetadataChunkIfAbsent(String id, MetadataChunk metadataChunk) {
+    if (this.operationController == null) {
+      return;
+    }
+    if (this.operationController.lookupCachedMetadataChunk(id) == null) {
+      this.operationController.cacheMetadataChunk(id, metadataChunk);
+    }
+  }
+
+  public void eraseCachedMetadataChunk(String blobIdStr) {
+    if (this.operationController == null) {
+      return;
+    }
+    this.operationController.eraseCachedMetadataChunk(blobIdStr);
   }
 }
 
