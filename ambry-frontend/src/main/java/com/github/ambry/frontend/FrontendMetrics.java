@@ -313,14 +313,14 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "securityProcessResponse", metricRegistry);
 
     deleteBlobSecurityProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(DeleteHandler.class, "securityProcessRequest", metricRegistry);
+        new AsyncOperationTracker.Metrics(DeleteBlobHandler.class, "securityProcessRequest", metricRegistry);
     deleteBlobSecurityPostProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(DeleteHandler.class, "securityPostProcessRequest", metricRegistry);
-    deleteBlobRouterMetrics = new AsyncOperationTracker.Metrics(DeleteHandler.class, "router", metricRegistry);
+        new AsyncOperationTracker.Metrics(DeleteBlobHandler.class, "securityPostProcessRequest", metricRegistry);
+    deleteBlobRouterMetrics = new AsyncOperationTracker.Metrics(DeleteBlobHandler.class, "router", metricRegistry);
     deleteBlobIdConversionMetrics =
-        new AsyncOperationTracker.Metrics(DeleteHandler.class, "idConversion", metricRegistry);
+        new AsyncOperationTracker.Metrics(DeleteBlobHandler.class, "idConversion", metricRegistry);
     deleteBlobSecurityProcessResponseMetrics =
-        new AsyncOperationTracker.Metrics(DeleteHandler.class, "securityProcessResponse", metricRegistry);
+        new AsyncOperationTracker.Metrics(DeleteBlobHandler.class, "securityProcessResponse", metricRegistry);
 
     undeleteBlobSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(UndeleteHandler.class, "securityProcessRequest", metricRegistry);
@@ -333,13 +333,13 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(UndeleteHandler.class, "securityProcessResponse", metricRegistry);
 
     headBlobSecurityProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(HeadHandler.class, "securityProcessRequest", metricRegistry);
+        new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "securityProcessRequest", metricRegistry);
     headBlobSecurityPostProcessRequestMetrics =
-        new AsyncOperationTracker.Metrics(HeadHandler.class, "securityPostProcessRequest", metricRegistry);
-    headBlobRouterMetrics = new AsyncOperationTracker.Metrics(HeadHandler.class, "router", metricRegistry);
-    headBlobIdConversionMetrics = new AsyncOperationTracker.Metrics(HeadHandler.class, "idConversion", metricRegistry);
+        new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "securityPostProcessRequest", metricRegistry);
+    headBlobRouterMetrics = new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "router", metricRegistry);
+    headBlobIdConversionMetrics = new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "idConversion", metricRegistry);
     headBlobSecurityProcessResponseMetrics =
-        new AsyncOperationTracker.Metrics(HeadHandler.class, "securityProcessResponse", metricRegistry);
+        new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "securityProcessResponse", metricRegistry);
 
     getBlobSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetBlobHandler.class, "securityProcessRequest", metricRegistry);

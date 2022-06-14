@@ -79,8 +79,8 @@ class FrontendRestRequestService implements RestRequestService {
   private PostBlobHandler postBlobHandler;
   private NamedBlobPutHandler namedBlobPutHandler;
   private TtlUpdateHandler ttlUpdateHandler;
-  private DeleteHandler deleteHandler;
-  private HeadHandler headHandler;
+  private DeleteBlobHandler deleteBlobHandler;
+  private HeadBlobHandler headBlobHandler;
   private UndeleteHandler undeleteHandler;
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
   private GetAccountsHandler getAccountsHandler;
@@ -171,10 +171,10 @@ class FrontendRestRequestService implements RestRequestService {
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
-    deleteHandler =
-        new DeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
+    deleteBlobHandler =
+        new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
-    headHandler = new HeadHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
+    headBlobHandler = new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
         frontendMetrics, clusterMap, quotaManager);
     undeleteHandler =
         new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
@@ -300,7 +300,7 @@ class FrontendRestRequestService implements RestRequestService {
         accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
             frontendMetrics.deleteBlobMetricsGroup);
       }
-      deleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+      deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
         submitResponse(restRequest, restResponseChannel, null, e);
       });
     };
@@ -315,7 +315,7 @@ class FrontendRestRequestService implements RestRequestService {
           frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
 
-      headHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+      headBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
         submitResponse(restRequest, restResponseChannel, null, e);
       });
     };

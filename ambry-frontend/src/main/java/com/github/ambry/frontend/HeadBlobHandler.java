@@ -36,8 +36,11 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 
 
-public class HeadHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(HeadHandler.class);
+/**
+ * Handler to handle all the http HEAD requests on blobs.
+ */
+public class HeadBlobHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(HeadBlobHandler.class);
 
   private final FrontendConfig frontendConfig;
   private final Router router;
@@ -48,9 +51,9 @@ public class HeadHandler {
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
 
-  HeadHandler(FrontendConfig frontendConfig, Router router, SecurityService securityService, IdConverter idConverter,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      QuotaManager quotaManager) {
+  HeadBlobHandler(FrontendConfig frontendConfig, Router router, SecurityService securityService,
+      IdConverter idConverter, AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics,
+      ClusterMap clusterMap, QuotaManager quotaManager) {
     this.frontendConfig = frontendConfig;
     this.router = router;
     this.securityService = securityService;

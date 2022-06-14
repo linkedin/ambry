@@ -41,6 +41,9 @@ import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
+/**
+ * Handler to handle all the http GET requests on blobs.
+ */
 public class GetBlobHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(GetBlobHandler.class);
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);

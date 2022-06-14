@@ -32,11 +32,11 @@ import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
- * Handler for all delete requests.
+ * Handler for all delete blob requests.
  */
-public class DeleteHandler {
+public class DeleteBlobHandler {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(DeleteHandler.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(DeleteBlobHandler.class);
 
   private final Router router;
   private final SecurityService securityService;
@@ -46,7 +46,7 @@ public class DeleteHandler {
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
 
-  DeleteHandler(Router router, SecurityService securityService, IdConverter idConverter,
+  DeleteBlobHandler(Router router, SecurityService securityService, IdConverter idConverter,
       AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
       QuotaManager quotaManager) {
     this.router = router;
