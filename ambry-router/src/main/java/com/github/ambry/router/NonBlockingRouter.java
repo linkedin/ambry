@@ -122,7 +122,7 @@ class NonBlockingRouter implements Router {
         .recordStats()
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
-    enableMetadataCache = routerConfig.routerMetadataCache;
+    enableMetadataCache = routerConfig.routerMetadataCacheEnabled;
     logger.info("enableMetadataCache = " + enableMetadataCache);
     metadataChunkCache = CacheBuilder.newBuilder()
         .maximumSize(routerConfig.routerMetadataCacheMaxItemCount)
