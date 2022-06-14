@@ -364,6 +364,8 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
           .get();
+      Assert.assertEquals(0, (int) routerMetrics.outOfQuotaRequestsInQueue.getValue());
+      Assert.assertEquals(0, (int) routerMetrics.delayedRequestsInQueue.getValue());
       // read out all the chunks.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
       quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
@@ -377,14 +379,12 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
         }
       } catch (ExecutionException ex) {
         if (quotaMode == QuotaMode.TRACKING) {
-          fail("getBlob should throw exception if request is be rejected by an enforcer and quota mode is tracking.");
+          fail("getBlob should not throw exception if request is be rejected by an enforcer and quota mode is tracking.");
         } else {
           Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException) ex.getCause()).getErrorCode());
         }
       }
       Assert.assertTrue(quotaMetrics.perQuotaResourceOutOfQuotaMap.get(Integer.toString(account.getId())).getCount() > 0);
-      Assert.assertEquals(0, (int) routerMetrics.outOfQuotaRequestsInQueue.getValue());
-      Assert.assertEquals(0, (int) routerMetrics.delayedRequestsInQueue.getValue());
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
     } finally {
       if (router != null) {
