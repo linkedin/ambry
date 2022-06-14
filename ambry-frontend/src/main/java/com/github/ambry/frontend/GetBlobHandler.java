@@ -168,7 +168,10 @@ public class GetBlobHandler {
     private Callback<String> idConverterCallback() {
       return buildCallback(metrics.getBlobIdConversionMetrics, convertedBlobId -> {
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
-        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
+        if (restRequest.getArgs().get(TARGET_ACCOUNT_KEY) == null) {
+          // Inject account and container when they are missing from the rest request.
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
+        }
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }

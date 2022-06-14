@@ -18,9 +18,12 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Router;
 import java.util.GregorianCalendar;
@@ -58,7 +61,15 @@ public class DeleteBlobHandler {
     this.quotaManager = quotaManager;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, RequestPath requestPath,
+      Callback<Void> callback) throws RestServiceException {
+    RestRequestMetrics requestMetrics =
+        metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+    if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metrics.deleteBlobMetricsGroup);
+    }
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -107,8 +118,11 @@ public class DeleteBlobHandler {
     private Callback<String> idConverterCallback() {
       return buildCallback(metrics.deleteBlobIdConversionMetrics, convertedBlobId -> {
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
-        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
-            metrics.deleteBlobMetricsGroup);
+        if (restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY) == null) {
+          // Inject account and container when they are missing from the rest request.
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
+              metrics.deleteBlobMetricsGroup);
+        }
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }

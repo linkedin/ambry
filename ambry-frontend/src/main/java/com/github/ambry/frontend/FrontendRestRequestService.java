@@ -174,8 +174,9 @@ class FrontendRestRequestService implements RestRequestService {
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
-    headBlobHandler = new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
-        frontendMetrics, clusterMap, quotaManager);
+    headBlobHandler =
+        new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
+            frontendMetrics, clusterMap, quotaManager);
     undeleteHandler =
         new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
@@ -292,15 +293,7 @@ class FrontendRestRequestService implements RestRequestService {
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      RestRequestMetrics requestMetrics =
-          frontendMetrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
-      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
-      if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-        accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
-            frontendMetrics.deleteBlobMetricsGroup);
-      }
-      deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+      deleteBlobHandler.handle(restRequest, restResponseChannel, requestPath, (r, e) -> {
         submitResponse(restRequest, restResponseChannel, null, e);
       });
     };
