@@ -17,6 +17,7 @@ import com.github.ambry.network.Send;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.DefaultHttp2DataFrame;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
@@ -51,7 +52,7 @@ public class AmbrySendToHttp2AdaptorTest {
    * @throws Exception
    */
   @Test
-  public void testServerWrite() throws Exception {
+  public void testServerWrite() {
     int maxFrameSize = 2001;
     EmbeddedChannel channel = new EmbeddedChannel(new AmbrySendToHttp2Adaptor(true, maxFrameSize));
     int contentSize = 7000;
@@ -80,5 +81,22 @@ public class AmbrySendToHttp2AdaptorTest {
     data.content().release();
     Assert.assertArrayEquals(byteArray, resultArray);
     content.release();
+  }
+
+  /**
+   * Test writing when the channel is closed.
+   */
+  @Test
+  public void testChannelCloseBeforeWriting() {
+    AmbrySendToHttp2Adaptor adaptor = new AmbrySendToHttp2Adaptor(true, 100);
+    EmbeddedChannel channel = new EmbeddedChannel(adaptor);
+    byte[] byteArray = new byte[100];
+    new Random().nextBytes(byteArray);
+    ByteBuf content = PooledByteBufAllocator.DEFAULT.heapBuffer(100).writeBytes(byteArray);
+
+    // Get the context before closing the channel, since closing channel would remove all the context.
+    ChannelHandlerContext ctx = channel.pipeline().firstContext();
+    channel.close().getNow();
+    adaptor.write(ctx, content, channel.newPromise());
   }
 }
