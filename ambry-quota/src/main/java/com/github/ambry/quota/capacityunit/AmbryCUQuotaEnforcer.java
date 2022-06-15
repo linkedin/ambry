@@ -142,6 +142,8 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
       if (requestThrottlingEnabled) {
         quotaAction = QuotaAction.DELAY;
       }
+      // Check if this request would have been throttled and log metrics.
+      logMetricIfThrottleCandidate(quotaName, resourceId);
     }
     return new QuotaRecommendation(quotaAction, usage, quotaName,
         (quotaAction == QuotaAction.DELAY) ? throttleRetryAfterMs : QuotaRecommendation.NO_THROTTLE_RETRY_AFTER_MS);
@@ -165,6 +167,24 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
             ((QuotaException) ex).isRetryable());
       }
       throw new QuotaException(String.format("%s unexpected exception %s", errorMessagePrefix, ex.getMessage()), true);
+    }
+  }
+
+  /**
+   * Logs metrics if the request would have been throttled. Use these metrics to check potential throttling candidates
+   * when running in {@link com.github.ambry.quota.QuotaMode#TRACKING} mode.
+   * @param quotaName {@link QuotaName} for which check is being made.
+   * @param resourceId resourceId for which metric will be logged.
+   */
+  private void logMetricIfThrottleCandidate(QuotaName quotaName, String resourceId) {
+    try {
+      if (quotaSource.getSystemResourceUsage(quotaName) > maxFrontendCuUsageToAllowExceed) {
+        if (quotaMetrics.perQuotaResourceWouldBeThrottledMap.containsKey(resourceId)) {
+          quotaMetrics.perQuotaResourceWouldBeThrottledMap.get(resourceId).inc();
+        }
+      }
+    } catch (QuotaException quotaException) {
+      // this is unlikely, but not logging here because it can potentially overwhelm logs.
     }
   }
 }

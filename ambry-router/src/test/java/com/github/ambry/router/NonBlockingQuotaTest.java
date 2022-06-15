@@ -323,6 +323,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
     try {
       Properties properties = getNonBlockingRouterProperties("DC1");
       properties.setProperty(QuotaConfig.BANDWIDTH_THROTTLING_FEATURE_ENABLED, "true");
+      properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, "true");
       properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
           buildQuotaEnforcerSourceInfoPair());
       properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
@@ -379,12 +380,16 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
         }
       } catch (ExecutionException ex) {
         if (quotaMode == QuotaMode.TRACKING) {
-          fail("getBlob should not throw exception if request is be rejected by an enforcer and quota mode is tracking.");
+          fail(
+              "getBlob should not throw exception if request is be rejected by an enforcer and quota mode is tracking.");
         } else {
           Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException) ex.getCause()).getErrorCode());
         }
       }
-      Assert.assertTrue(quotaMetrics.perQuotaResourceOutOfQuotaMap.get(Integer.toString(account.getId())).getCount() > 0);
+      Assert.assertTrue(
+          quotaMetrics.perQuotaResourceOutOfQuotaMap.get(Integer.toString(account.getId())).getCount() > 0);
+      Assert.assertTrue(
+          quotaMetrics.perQuotaResourceWouldBeThrottledMap.get(Integer.toString(account.getId())).getCount() > 0);
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
     } finally {
       if (router != null) {
