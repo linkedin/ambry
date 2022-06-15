@@ -121,7 +121,8 @@ public class HeadBlobHandler {
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
         if (restRequest.getArgs().get(TARGET_ACCOUNT_KEY) == null) {
           // Inject account and container when they are missing from the rest request.
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
+              metrics.headBlobMetricsGroup);
         }
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
