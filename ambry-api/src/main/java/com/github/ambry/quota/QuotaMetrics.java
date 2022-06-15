@@ -45,6 +45,7 @@ public class QuotaMetrics {
   public final Meter chargeAndRecommendRate;
   public final Counter accountUpdateNotificationCount;
   public Map<String, Counter> perQuotaResourceOutOfQuotaMap = new HashMap<>();
+  public Map<String, Counter> perQuotaResourceWouldBeThrottledMap = new HashMap<>();
   public Map<String, Counter> perQuotaResourceDelayedRequestMap = new HashMap<>();
 
   /**
@@ -90,6 +91,9 @@ public class QuotaMetrics {
       perQuotaResourceOutOfQuotaMap.putIfAbsent(quotaResourceId, metricRegistry.counter(
           MetricRegistry.name(QuotaEnforcer.class,
               String.format("QuotaResource-%s-OutOfQuotaRequestCount", quotaResourceId))));
+      perQuotaResourceWouldBeThrottledMap.putIfAbsent(quotaResourceId, metricRegistry.counter(
+          MetricRegistry.name(QuotaEnforcer.class,
+              String.format("QuotaResource-%s-WouldBeThrottledCount", quotaResourceId))));
     }
   }
 }
