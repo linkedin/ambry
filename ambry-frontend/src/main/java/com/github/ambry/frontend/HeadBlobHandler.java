@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -118,8 +119,10 @@ public class HeadBlobHandler {
     private Callback<String> idConverterCallback() {
       return buildCallback(metrics.headBlobIdConversionMetrics, convertedBlobId -> {
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
-        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
-            metrics.headBlobMetricsGroup);
+        if (restRequest.getArgs().get(TARGET_ACCOUNT_KEY) == null) {
+          // Inject account and container when they are missing from the rest request.
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest, metricsGroup);
+        }
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
