@@ -52,10 +52,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import org.apache.helix.HelixAdmin;
 import org.apache.helix.lock.DistributedLock;
 import org.apache.helix.lock.LockScope;
 import org.apache.helix.lock.helix.HelixLockScope;
 import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
+import org.apache.helix.manager.zk.ZKHelixAdmin;
 
 
 /**
@@ -77,6 +79,12 @@ public class VcrReplicationManager extends ReplicationEngine {
   private volatile ScheduledFuture<?> ambryVcrHelixSyncCheckTaskFuture = null;
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
   private DistributedLock vcrUpdateDistributedLock = null;
+  // Vcr replication manager may need update Helix Vcr cluster based on one source Helix cluster.
+  // To connect to the source Helix cluster, we need specify a Zk string and a cluster name.
+  // Usually we use the local DC Zk string as the source Helix cluster Zk string for on-prem VCR.
+  // But for Cloud VCR, we have to use some remote DC Zk string instead of the local DC Zk string.
+  private String syncSrcZkStr = null;
+  private String syncSrcClusterName = null;
 
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
@@ -110,6 +118,43 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
+
+    // Get the Helix src ZK String for the Helix Sync Operation.
+    // Although only the VCR host which gets assigned partition 1 will do the Helix update,
+    // we get the Helix src ZK string for all the hosts beforehand since there is no harm to do that.
+    // try to use the local DC Zk String first.
+    if (clusterMap instanceof HelixClusterManager) { // Don't run the code if it's Mock cluster.
+      syncSrcClusterName = clusterMapConfig.clusterMapClusterName;
+
+      try {
+        String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
+        HelixAdmin srcAdmin = new ZKHelixAdmin(localDcZkStr);
+        List<String> srcResources = srcAdmin.getResourcesInCluster(syncSrcClusterName);
+        syncSrcZkStr = localDcZkStr;
+      } catch (Exception e) {
+        logger.warn("Ambry Helix doesn't have a local sync source {} {} ",
+            ((HelixClusterManager) clusterMap).getLocalDcZkConnectString(), syncSrcClusterName, e);
+      }
+
+      // try the remaining ZK strings if local ZK string doesn't work
+      if (syncSrcZkStr == null) {
+        ArrayList<String> zkStrings = ((HelixClusterManager) clusterMap).getAllDcZkConnectionString();
+        logger.info("Ambry Helix zkstring count {} strings {} ", zkStrings.size(), zkStrings);
+
+        for (String zkStr : zkStrings) {
+          try {
+            HelixAdmin srcAdmin = new ZKHelixAdmin(zkStr);
+            List<String> srcResources = srcAdmin.getResourcesInCluster(syncSrcClusterName);
+            syncSrcZkStr = zkStr;
+            break;
+          } catch (Exception e) {
+            logger.warn("Ambry Helix hit one invalid sync source {} {} ", zkStr, syncSrcClusterName, e);
+          }
+        }
+      }
+    }
+
+    logger.warn("Ambry Helix syncSrcZkStr {} and syncSrcClusterName {}", syncSrcZkStr, syncSrcClusterName);
   }
 
   @Override
@@ -409,9 +454,8 @@ public class VcrReplicationManager extends ReplicationEngine {
     logger.debug("Current partitions in clustermap data structure: {}",
         clusterMap.getAllPartitionIds(null).stream().map(Object::toString).collect(Collectors.joining(",")));
     try {
-      String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
       isVcrHelixUpdateInProgress = true;
-      HelixVcrUtil.updateResourceAndPartition(localDcZkStr, clusterMapConfig.clusterMapClusterName,
+      HelixVcrUtil.updateResourceAndPartition(syncSrcZkStr, syncSrcClusterName,
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName, vcrHelixConfig,
           cloudConfig.vcrHelixUpdateDryRun);
       vcrMetrics.vcrHelixUpdateSuccessCount.inc();
@@ -433,11 +477,12 @@ public class VcrReplicationManager extends ReplicationEngine {
   private void checkAmbryHelixAndVcrHelixOnSync() {
     boolean isSrcAndDstSync = false;
     try {
-      String localDcZkStr = ((HelixClusterManager) clusterMap).getLocalDcZkConnectString();
-      isSrcAndDstSync = HelixVcrUtil.isSrcDestSync(localDcZkStr, clusterMapConfig.clusterMapClusterName,
+      isSrcAndDstSync = HelixVcrUtil.isSrcDestSync(syncSrcZkStr, syncSrcClusterName,
           cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName);
     } catch (Exception e) {
-      logger.warn("Ambry Helix and Vcr Helix sync check runs into exception: ", e);
+      logger.warn("Ambry Helix {}{} and Vcr Helix {}{} sync check runs into exception: ",
+          syncSrcZkStr, syncSrcClusterName, cloudConfig.vcrClusterZkConnectString, cloudConfig.vcrClusterName,
+          e);
     }
     if (vcrHelixUpdateFuture == null && !isSrcAndDstSync) {
       logger.warn("Ambry Helix cluster and VCR helix cluster are not on sync");
