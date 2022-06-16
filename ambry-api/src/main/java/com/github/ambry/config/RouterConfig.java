@@ -578,11 +578,30 @@ public class RouterConfig {
   @Default("15*1000")
   public final long routerNotFoundCacheTtlInMs;
 
+  public static final String ROUTER_BLOB_METADATA_CACHE_ID = "router.blob.metadata.cache.id";
+  @Config(ROUTER_BLOB_METADATA_CACHE_ID)
+  public final String routerBlobMetadataCacheId;
+
+  public static final String ROUTER_BLOB_METADATA_CACHE_ENABLED = "router.blob.metadata.cache.enabled";
+  @Config(ROUTER_BLOB_METADATA_CACHE_ENABLED)
+  public final boolean routerBlobMetadataCacheEnabled;
+
+  public static final String ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES = "router.blob.metadata.cache.max.size.bytes";
+  @Config(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES)
+  public final long routerBlobMetadataCacheMaxSizeBytes;
+  long numBytesInOneMb = (long) Math.pow(1024, 2);
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
+    routerBlobMetadataCacheId =
+        verifiableProperties.getString(ROUTER_BLOB_METADATA_CACHE_ID, "routerBlobMetadataCache");
+    routerBlobMetadataCacheEnabled =
+        verifiableProperties.getBoolean(ROUTER_BLOB_METADATA_CACHE_ENABLED, false);
+    routerBlobMetadataCacheMaxSizeBytes =
+        verifiableProperties.getLong(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES, 64 * numBytesInOneMb);
     routerScalingUnitCount = verifiableProperties.getIntInRange(ROUTER_SCALING_UNIT_COUNT, 1, 1, Integer.MAX_VALUE);
     routerHostname = verifiableProperties.getString(ROUTER_HOSTNAME);
     routerDatacenterName = verifiableProperties.getString(ROUTER_DATACENTER_NAME);
