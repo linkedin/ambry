@@ -54,6 +54,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -555,8 +556,13 @@ public class NonBlockingRouterTestBase {
     Future<String> future =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build());
     Assert.assertTrue(future.isDone());
-    RouterException e = (RouterException) ((FutureResult<String>) future).error();
-    Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
+    try {
+      ((CompletableFuture<?>) future).join();
+      Assert.fail("Excepting failure");
+    } catch (Exception e) {
+      RouterException routerException = (RouterException) Utils.extractFutureExceptionCause(e);
+      Assert.assertEquals(routerException.getErrorCode(), RouterErrorCode.RouterClosed);
+    }
   }
 
   /**
@@ -590,10 +596,15 @@ public class NonBlockingRouterTestBase {
     }
     router.close();
     // check that ttl update won't work after router close
-    Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time);
+    CompletableFuture<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time);
     Assert.assertTrue(future.isDone());
-    RouterException e = (RouterException) ((FutureResult<Void>) future).error();
-    Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
+    try {
+      future.join();
+      Assert.fail("Expecting a failure");
+    } catch (Exception e) {
+      RouterException routerException = (RouterException) Utils.extractFutureExceptionCause(e);
+      Assert.assertEquals(routerException.getErrorCode(), RouterErrorCode.RouterClosed);
+    }
   }
 
   /**
