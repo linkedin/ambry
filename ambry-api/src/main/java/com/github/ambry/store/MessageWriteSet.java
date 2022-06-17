@@ -34,8 +34,4 @@ public interface MessageWriteSet {
    * @return The list of message info about the message set
    */
   List<MessageInfo> getMessageSetInfo();
-
-  /**
-   * Set life Version for {@link StoreKey}.
-   */
 }
