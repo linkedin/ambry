@@ -161,7 +161,12 @@ public class HeadBlobHandler {
             result.getBlobInfo().getBlobProperties(), metrics.headBlobMetricsGroup);
         securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
             securityProcessResponseCallback());
-      }, restRequest.getUri(), LOGGER, finalCallback);
+      }, restRequest.getUri(), LOGGER, (r, e) -> {
+        // Even we failed in router operations, we already used some of the resources in router,
+        // so let's record the charges for this request.
+        securityService.processRequestCharges(restRequest, restResponseChannel, null);
+        finalCallback.onCompletion(null, e);
+      });
     }
 
     /**
