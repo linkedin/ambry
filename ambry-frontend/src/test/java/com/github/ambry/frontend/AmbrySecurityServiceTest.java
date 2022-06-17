@@ -130,9 +130,8 @@ public class AmbrySecurityServiceTest {
           RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
-      QUOTA_MANAGER =
-          new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig), mock(AccountService.class), null,
-              new QuotaMetrics(new MetricRegistry()));
+      QUOTA_MANAGER = new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
+          mock(AccountService.class), null, new QuotaMetrics(new MetricRegistry()));
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -281,13 +280,6 @@ public class AmbrySecurityServiceTest {
     TestUtils.assertException(IllegalArgumentException.class,
         () -> securityService.processResponse(restRequest, new MockRestResponseChannel(), null).get(), null);
 
-    // for unsupported methods
-    RestMethod[] methods = {RestMethod.DELETE};
-    for (RestMethod restMethod : methods) {
-      testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), DEFAULT_INFO,
-          RestServiceErrorCode.InternalServerError);
-    }
-
     // OPTIONS (should be no errors)
     securityService.processResponse(createRestRequest(RestMethod.OPTIONS, "/", null), new MockRestResponseChannel(),
         null).get();
@@ -402,7 +394,7 @@ public class AmbrySecurityServiceTest {
 
     // security service closed
     securityService.close();
-    methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), blobInfo,
           RestServiceErrorCode.ServiceUnavailable);

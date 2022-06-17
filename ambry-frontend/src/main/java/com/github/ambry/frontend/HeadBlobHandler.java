@@ -1,5 +1,5 @@
-/*
- * Copyright 2020 LinkedIn Corp. All rights reserved.
+/**
+ * Copyright 2022 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,27 +16,34 @@ package com.github.ambry.frontend;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
+import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.Router;
-import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
- * Handler for all Undelete requests.
+ * Handler to handle all the http HEAD requests on blobs.
  */
-public class UndeleteHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(UndeleteHandler.class);
+public class HeadBlobHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(HeadBlobHandler.class);
 
+  private final FrontendConfig frontendConfig;
   private final Router router;
   private final SecurityService securityService;
   private final IdConverter idConverter;
@@ -45,19 +52,10 @@ public class UndeleteHandler {
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
 
-  /**
-   * Constructs a handler for handling requests for undelete the blobs
-   * @param router the {@link Router} to use.
-   * @param securityService the {@link SecurityService} to use.
-   * @param idConverter the {@link IdConverter} to use.
-   * @param accountAndContainerInjector helper to resolve account and container for a given request.
-   * @param metrics {@link FrontendMetrics} instance where metrics should be recorded.
-   * @param clusterMap the {@link ClusterMap} in use.
-   * @param quotaManager the {@link QuotaManager} object.
-   */
-  UndeleteHandler(Router router, SecurityService securityService, IdConverter idConverter,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      QuotaManager quotaManager) {
+  HeadBlobHandler(FrontendConfig frontendConfig, Router router, SecurityService securityService,
+      IdConverter idConverter, AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics,
+      ClusterMap clusterMap, QuotaManager quotaManager) {
+    this.frontendConfig = frontendConfig;
     this.router = router;
     this.securityService = securityService;
     this.idConverter = idConverter;
@@ -67,21 +65,15 @@ public class UndeleteHandler {
     this.quotaManager = quotaManager;
   }
 
-  /**
-   * Handles a request for undeleting a blob
-   * @param restRequest the {@link RestRequest} that contains the request parameters.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
-   * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
-   */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
-    // And always send failure reason back to client for undelete
-    restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+      throws RestServiceException {
+    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+    if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
+      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metrics.headBlobMetricsGroup);
+    }
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
-  /**
-   * Represents the chain of actions to take. Keeps request context that is relevant to all callback stages.
-   */
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
@@ -103,9 +95,6 @@ public class UndeleteHandler {
      * Start the chain by calling {@link SecurityService#processRequest}.
      */
     private void start() {
-      RestRequestMetrics requestMetrics =
-          metrics.undeleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
-      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
       securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
@@ -116,8 +105,8 @@ public class UndeleteHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
     private Callback<Void> securityProcessRequestCallback() {
-      return buildCallback(metrics.undeleteBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+      return buildCallback(metrics.headBlobSecurityProcessRequestMetrics, result -> {
+        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -128,39 +117,56 @@ public class UndeleteHandler {
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
     private Callback<String> idConverterCallback() {
-      return buildCallback(metrics.undeleteBlobIdConversionMetrics, convertedBlobId -> {
+      return buildCallback(metrics.headBlobIdConversionMetrics, convertedBlobId -> {
         BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
-        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
-            metrics.undeleteBlobMetricsGroup);
+        if (restRequest.getArgs().get(TARGET_ACCOUNT_KEY) == null) {
+          // Inject account and container when they are missing from the rest request.
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
+              metrics.headBlobMetricsGroup);
+        }
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
-     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#undeleteBlob} to undelete
-     * the blob in the storage layer.
-     * @param blobId the {@link BlobId} to undelete
+     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#getBlob} to dget
+     * the blob info from the storage layer.
+     * @param blobId the {@link BlobId} to get info
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
-      return buildCallback(metrics.undeleteBlobSecurityPostProcessRequestMetrics, result -> {
-        String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        router.undeleteBlob(blobId.getID(), serviceId, routerCallback(),
-            QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
+      return buildCallback(metrics.headBlobSecurityPostProcessRequestMetrics, result -> {
+        GetOption getOption = getGetOption(restRequest, frontendConfig.defaultRouterGetOption);
+        // inject encryption metrics if need be
+        if (BlobId.isEncrypted(blobId.getID())) {
+          RestRequestMetrics requestMetrics =
+              metrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
+          restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+        }
+        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
+            .getOption(getOption)
+            .restRequest(restRequest)
+            .build(), routerCallback(), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
-     * After {@link Router#undeleteBlob} finishes, call {@link SecurityService#processResponse}.
-     * @return a {@link Callback} to be used with {@link Router#undeleteBlob}.
+     * After {@link Router#getBlob} finishes, call {@link SecurityService#processResponse}.
+     * @return a {@link Callback} to be used with {@link Router#getBlob}.
      */
-    private Callback<Void> routerCallback() {
-      return buildCallback(metrics.undeleteBlobRouterMetrics, result -> {
-        LOGGER.debug("Undeleted {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
-      }, restRequest.getUri(), LOGGER, finalCallback);
+    private Callback<GetBlobResult> routerCallback() {
+      return buildCallback(metrics.headBlobRouterMetrics, result -> {
+        LOGGER.debug("Head {}", getRequestPath(restRequest).getOperationOrBlobId(false));
+        accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
+            result.getBlobInfo().getBlobProperties(), metrics.headBlobMetricsGroup);
+        securityService.processResponse(restRequest, restResponseChannel, result.getBlobInfo(),
+            securityProcessResponseCallback());
+      }, restRequest.getUri(), LOGGER, (r, e) -> {
+        // Even we failed in router operations, we already used some of the resources in router,
+        // so let's record the charges for this request.
+        securityService.processRequestCharges(restRequest, restResponseChannel, null);
+        finalCallback.onCompletion(null, e);
+      });
     }
 
     /**
@@ -168,7 +174,7 @@ public class UndeleteHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
      */
     private Callback<Void> securityProcessResponseCallback() {
-      return buildCallback(metrics.undeleteBlobSecurityProcessResponseMetrics,
+      return buildCallback(metrics.headBlobSecurityProcessResponseMetrics,
           securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
     }
   }
