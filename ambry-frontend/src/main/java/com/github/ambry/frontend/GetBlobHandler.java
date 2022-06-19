@@ -79,40 +79,9 @@ public class GetBlobHandler {
         getGetOption(restRequest, frontendConfig.defaultRouterGetOption), restRequest, requestPath.getBlobSegmentIdx());
     RestRequestMetricsGroup metricsGroup = getMetricsGroupForGet(metrics, subResource);
     RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
-    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
-    if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metricsGroup);
-    }
     restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
     new CallbackChain(restRequest, restResponseChannel, metricsGroup, requestPath, subResource, options,
         callback).start();
-  }
-
-  /**
-   * Fetch {@link RestRequestMetricsGroup} for GetRequest based on the {@link SubResource}.
-   * @param frontendMetrics instance of {@link FrontendMetrics} to use
-   * @param subResource {@link SubResource} corresponding to the GetRequest
-   * @return the appropriate {@link RestRequestMetricsGroup} based on the given params
-   */
-  private static RestRequestMetricsGroup getMetricsGroupForGet(FrontendMetrics frontendMetrics,
-      SubResource subResource) {
-    RestRequestMetricsGroup group = null;
-    if (subResource == null || subResource.equals(SubResource.Segment)) {
-      group = frontendMetrics.getBlobMetricsGroup;
-    } else {
-      switch (subResource) {
-        case BlobInfo:
-          group = frontendMetrics.getBlobInfoMetricsGroup;
-          break;
-        case UserMetadata:
-          group = frontendMetrics.getUserMetadataMetricsGroup;
-          break;
-        case Replicas:
-          group = frontendMetrics.getReplicasMetricsGroup;
-          break;
-      }
-    }
-    return group;
   }
 
   private class CallbackChain {

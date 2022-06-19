@@ -66,10 +66,6 @@ public class DeleteBlobHandler {
     RestRequestMetrics requestMetrics =
         metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
-    if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metrics.deleteBlobMetricsGroup);
-    }
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 

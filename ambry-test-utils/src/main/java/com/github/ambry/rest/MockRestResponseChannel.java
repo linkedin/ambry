@@ -78,7 +78,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
      * @param mockRestResponseChannel the {@link MockRestResponseChannel} where the event occurred.
      * @param event the {@link Event} that occurred.
      */
-    public void onEventComplete(MockRestResponseChannel mockRestResponseChannel, Event event);
+    void onEventComplete(MockRestResponseChannel mockRestResponseChannel, Event event);
   }
 
   // main fields

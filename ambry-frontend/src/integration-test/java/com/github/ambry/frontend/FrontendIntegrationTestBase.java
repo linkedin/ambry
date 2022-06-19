@@ -75,7 +75,7 @@ public class FrontendIntegrationTestBase {
   static final int PLAINTEXT_SERVER_PORT = 1174;
   static final int SSL_SERVER_PORT = 1175;
   static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
-  static final String DATA_CENTER_NAME = "Datacenter-Name";
+  static final String DATA_CENTER_NAME = "localDc";
   static final String HOST_NAME = "localhost";
   static final int PORT = 12345;
   static final String CLUSTER_NAME = "Cluster-name";
@@ -108,7 +108,8 @@ public class FrontendIntegrationTestBase {
     if (headers != null) {
       httpRequest.headers().set(headers);
     }
-    if (HttpMethod.POST.equals(httpMethod) && !HttpUtil.isContentLengthSet(httpRequest)) {
+    if ((HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) && !HttpUtil.isContentLengthSet(
+        httpRequest)) {
       HttpUtil.setTransferEncodingChunked(httpRequest, true);
     }
     return httpRequest;
@@ -193,6 +194,71 @@ public class FrontendIntegrationTestBase {
     }
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     headers.add(RestUtils.Headers.LIFE_VERSION, "0");
+    doVariousGetAndVerify(blobId, headers, isPrivate, content, contentSize, expectedAccountName, expectedContainerName,
+        usermetadata);
+    updateBlobTtlAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
+    deleteBlobAndVerify(blobId);
+
+    // check GET, HEAD, TTL update and DELETE after delete.
+    verifyOperationsAfterDelete(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, content,
+        usermetadata, false);
+    // Undelete it
+    headers.add(RestUtils.Headers.LIFE_VERSION, "1");
+    undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
+  }
+
+  void doNamedBlobPutGetHeadDeleteTest(int contentSize, Account account, Container container, String serviceId)
+      throws Exception {
+    // Test second container, test get and delete
+    String accountName = account.getName();
+    String containerName = container.getName();
+    String blobName = "zzzz" + TestUtils.getRandomString(10);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    String contentType = "application/octet-stream";
+    String ownerId = "namedBlobTest";
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+    setAmbryHeadersForPut(headers, TTL_SECS, false, accountName, contentType, ownerId, null, null);
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
+    putNamedBlobAndVerify(headers, content, 100, accountName, containerName, blobName);
+    headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+    headers.add(RestUtils.Headers.LIFE_VERSION, "0");
+    headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+    headers.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
+    String blobId = buildUriForNamedBlob(accountName, containerName, blobName);
+    doVariousGetAndVerify(blobId, headers, false, content, 100, accountName, containerName, null);
+    deleteBlobAndVerify(blobId);
+    verifyOperationsAfterDelete(blobId, headers, false, accountName, containerName, content, null, true);
+  }
+
+  void putNamedBlobAndVerify(HttpHeaders headers, ByteBuffer content, long contentSize, String accountName,
+      String containerName, String blobName) throws Exception {
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.PUT, buildUriForNamedBlob(accountName, containerName, blobName), headers, content);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.status());
+    assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
+    assertNotNull("No " + RestUtils.Headers.CREATION_TIME,
+        response.headers().get(RestUtils.Headers.CREATION_TIME, null));
+    assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
+    String blobId = response.headers().get(HttpHeaderNames.LOCATION, null);
+    assertNotNull("Blob ID from POST should not be null", blobId);
+    assertNoContent(responseParts.queue, 1);
+    assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+    assertEquals("Correct blob size should be returned in response", Long.toString(contentSize),
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    verifyTrackingHeaders(response);
+    verifyPostRequestCostHeaders(response, contentSize);
+  }
+
+  String buildUriForNamedBlob(String accountName, String containerName, String blobName) {
+    return String.format("/named/%s/%s/%s", accountName, containerName, blobName);
+  }
+
+  void doVariousGetAndVerify(String blobId, HttpHeaders headers, boolean isPrivate, ByteBuffer content,
+      long contentSize, String expectedAccountName, String expectedContainerName, byte[] usermetadata)
+      throws Exception {
     getBlobAndVerify(blobId, null, null, false, headers, isPrivate, content, expectedAccountName,
         expectedContainerName);
     getHeadAndVerify(blobId, null, null, headers, isPrivate, expectedAccountName, expectedContainerName);
@@ -219,15 +285,6 @@ public class FrontendIntegrationTestBase {
     getNotModifiedBlobAndVerify(blobId, null, isPrivate);
     getUserMetadataAndVerify(blobId, null, headers, usermetadata);
     getBlobInfoAndVerify(blobId, null, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
-    updateBlobTtlAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
-    deleteBlobAndVerify(blobId);
-
-    // check GET, HEAD, TTL update and DELETE after delete.
-    verifyOperationsAfterDelete(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, content,
-        usermetadata);
-    // Undelete it
-    headers.add(RestUtils.Headers.LIFE_VERSION, "1");
-    undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
 
   /**
@@ -339,6 +396,11 @@ public class FrontendIntegrationTestBase {
       headers.add(RestUtils.Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, true);
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
+    System.out.println("Get request uri " + httpRequest.uri());
+    for (Map.Entry<String, String> header : httpRequest.headers()) {
+      System.out.println(header.getKey() + ":" + header.getValue());
+    }
+    System.out.println("Sending this out====");
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate, expectedContent,
         accountName, containerName);
@@ -746,10 +808,11 @@ public class FrontendIntegrationTestBase {
    * @param containerName the expected container name in {@code response}.
    * @param expectedContent the expected content of the blob if the right options are provided.
    * @param usermetadata if non-null, this is expected to come as the body.
+   * @param avoidTtlUpdate {@code true} to avoid doing ttl update.
    * @throws Exception
    */
   void verifyOperationsAfterDelete(String blobId, HttpHeaders expectedHeaders, boolean isPrivate, String accountName,
-      String containerName, ByteBuffer expectedContent, byte[] usermetadata) throws Exception {
+      String containerName, ByteBuffer expectedContent, byte[] usermetadata, boolean avoidTtlUpdate) throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders().add(RestUtils.Headers.GET_OPTION, GetOption.None.toString());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
@@ -761,10 +824,12 @@ public class FrontendIntegrationTestBase {
     httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
 
-    headers = new DefaultHttpHeaders().set(RestUtils.Headers.BLOB_ID, blobId)
-        .set(RestUtils.Headers.SERVICE_ID, "verifyOperationsAfterDelete");
-    httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UPDATE_TTL, headers, null);
-    verifyDeleted(httpRequest, HttpResponseStatus.GONE);
+    if (avoidTtlUpdate) {
+      headers = new DefaultHttpHeaders().set(RestUtils.Headers.BLOB_ID, blobId)
+          .set(RestUtils.Headers.SERVICE_ID, "verifyOperationsAfterDelete");
+      httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UPDATE_TTL, headers, null);
+      verifyDeleted(httpRequest, HttpResponseStatus.GONE);
+    }
 
     httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.ACCEPTED);
@@ -898,7 +963,7 @@ public class FrontendIntegrationTestBase {
    * @param response the {@link HttpResponse} to be verified.
    * @param contentSize size of the content posted.
    */
-  private void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
+  protected void verifyPostRequestCostHeaders(HttpResponse response, long contentSize) {
     double cuCost = contentSize / SimpleAmbryCostModelPolicy.CU_COST_UNIT;
     cuCost = Math.max(cuCost, 1);
     double storageCost = contentSize / (double) QuotaUtils.BYTES_IN_GB;

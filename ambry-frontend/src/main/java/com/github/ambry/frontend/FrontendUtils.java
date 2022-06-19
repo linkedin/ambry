@@ -21,6 +21,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.ThrowingConsumer;
@@ -101,5 +102,32 @@ class FrontendUtils {
     } catch (Exception e) {
       throw new RestServiceException("Could not serialize response json.", e, RestServiceErrorCode.InternalServerError);
     }
+  }
+
+  /**
+   * Fetch {@link RestRequestMetricsGroup} for GetRequest based on the {@link RestUtils.SubResource}.
+   * @param frontendMetrics instance of {@link FrontendMetrics} to use
+   * @param subResource {@link RestUtils.SubResource} corresponding to the GetRequest
+   * @return the appropriate {@link RestRequestMetricsGroup} based on the given params
+   */
+  static RestRequestMetricsGroup getMetricsGroupForGet(FrontendMetrics frontendMetrics,
+      RestUtils.SubResource subResource) {
+    RestRequestMetricsGroup group = null;
+    if (subResource == null || subResource.equals(RestUtils.SubResource.Segment)) {
+      group = frontendMetrics.getBlobMetricsGroup;
+    } else {
+      switch (subResource) {
+        case BlobInfo:
+          group = frontendMetrics.getBlobInfoMetricsGroup;
+          break;
+        case UserMetadata:
+          group = frontendMetrics.getUserMetadataMetricsGroup;
+          break;
+        case Replicas:
+          group = frontendMetrics.getReplicasMetricsGroup;
+          break;
+      }
+    }
+    return group;
   }
 }

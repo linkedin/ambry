@@ -49,6 +49,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -97,7 +98,9 @@ import static org.junit.Assume.*;
 
 
 /**
- * Integration tests for Ambry frontend.
+ * Integration tests for Ambry frontend. We have quite a few overlapping tests with {@link FrontendRestRequestServiceTest}.
+ * The difference between these two test suites are this one actually set up an HTTP server and an HTTP client that sends
+ * HTTP requests to said server.
  */
 @RunWith(Parameterized.class)
 public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
@@ -107,7 +110,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
-  private static final String DATA_CENTER_NAME = "Datacenter-Name";
+  private static final String DATA_CENTER_NAME = "localDc";
   private static final String HOST_NAME = "localhost";
   private static final String CLUSTER_NAME = "Cluster-name";
   private static boolean enableUndeleteTested = false;
@@ -523,26 +526,51 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
         refContainer.getName());
   }
 
+  @Test
+  public void namedBlobTest() throws Exception {
+
+    // Create an account and then create two containers, first container disables named blob and second container
+    // set it as optional.
+    Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container namedBlobDisableContainer =
+        new ContainerBuilder((short) 10, "disabled", Container.ContainerStatus.ACTIVE, "",
+            refAccount.getId()).setNamedBlobMode(Container.NamedBlobMode.DISABLED).build();
+    Container namedBlobOptionalContainer =
+        new ContainerBuilder((short) 11, "optional", Container.ContainerStatus.ACTIVE, "",
+            refAccount.getId()).setNamedBlobMode(Container.NamedBlobMode.OPTIONAL).build();
+    ACCOUNT_SERVICE.updateContainers(refAccount.getName(),
+        Arrays.asList(namedBlobDisableContainer, namedBlobOptionalContainer));
+
+    // Test first container, it returns error
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
+    String contentType = "application/octet-stream";
+    String ownerId = "namedBlobTest";
+    String accountName = refAccount.getName();
+    String containerName = namedBlobDisableContainer.getName();
+    String blobName = "zzzz" + TestUtils.getRandomString(10);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    setAmbryHeadersForPut(headers, TTL_SECS, false, refAccount.getName(), contentType, ownerId, null, null);
+    putNamedBlobAndFail(headers, content, accountName, containerName, blobName, HttpResponseStatus.BAD_REQUEST);
+
+    // Test second container, test get and delete
+    doNamedBlobPutGetHeadDeleteTest(100, refAccount, namedBlobOptionalContainer, refAccount.getName());
+
+    // Upload lots of blobs to second container, and test list named blob
+  }
+
+  private void putNamedBlobAndFail(HttpHeaders headers, ByteBuffer content, String accountName, String containerName,
+      String blobName, HttpResponseStatus expectedStatus) throws Exception {
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.PUT, buildUriForNamedBlob(accountName, containerName, blobName), headers, content);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", expectedStatus, response.status());
+    verifyTrackingHeaders(response);
+    assertNoContent(responseParts.queue, 1);
+  }
+
   // helpers
   // general
-
-  /**
-   * Discards all the content in {@code contents} and checks none of the chunks have actual content
-   * @param contents the content to discard.
-   * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded.
-   */
-  void assertNoContent(Queue<HttpObject> contents, int expectedDiscardCount) {
-    assertEquals("Objects that will be discarded differ from expected", expectedDiscardCount, contents.size());
-    boolean endMarkerFound = false;
-    for (HttpObject object : contents) {
-      assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
-      HttpContent content = (HttpContent) object;
-      assertEquals("No content expected ", 0, content.content().readableBytes());
-      endMarkerFound = object instanceof LastHttpContent;
-      ReferenceCountUtil.release(object);
-    }
-    assertTrue("There should have been an end marker", endMarkerFound);
-  }
 
   // BeforeClass helpers
 
@@ -587,6 +615,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
+    properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.frontend.TestNamedBlobDbFactory");
     return new VerifiableProperties(properties);
   }
 
@@ -601,8 +630,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
    * @throws Exception
    */
   private Pair<List<String>, byte[]> uploadDataChunksAndVerify(Account account, Container container, Long chunkBlobTtl,
-      int... chunkSizes)
-      throws Exception {
+      int... chunkSizes) throws Exception {
     IdSigningService idSigningService = new AmbryIdSigningService();
     HttpHeaders chunkUploadHeaders = new DefaultHttpHeaders();
     chunkUploadHeaders.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
@@ -704,7 +732,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     // Delete stitched blob.
     deleteBlobAndVerify(stitchedBlobId);
     verifyOperationsAfterDelete(stitchedBlobId, expectedGetHeaders, !container.isCacheable(), account.getName(),
-        container.getName(), ByteBuffer.wrap(fullContentArray), null);
+        container.getName(), ByteBuffer.wrap(fullContentArray), null, false);
   }
 
   // accountApiTest() helpers
