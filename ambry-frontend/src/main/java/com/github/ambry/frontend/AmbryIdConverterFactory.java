@@ -23,6 +23,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -32,6 +33,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -64,6 +66,14 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private final IdSigningService idSigningService;
     private final NamedBlobDb namedBlobDb;
     private final FrontendMetrics frontendMetrics;
+    private static final Map<GetOption, NamedBlobDb.GetMode> getOptionToGetModeMapping = new HashMap<>();
+
+    static {
+      getOptionToGetModeMapping.put(GetOption.Include_All, NamedBlobDb.GetMode.Include_All);
+      getOptionToGetModeMapping.put(GetOption.Include_Deleted_Blobs, NamedBlobDb.GetMode.Include_Deleted);
+      getOptionToGetModeMapping.put(GetOption.Include_Expired_Blobs, NamedBlobDb.GetMode.Include_Expired);
+      getOptionToGetModeMapping.put(GetOption.None, NamedBlobDb.GetMode.Include_None);
+    }
 
     AmbryIdConverter(IdSigningService idSigningService, NamedBlobDb namedBlobDb, FrontendMetrics frontendMetrics) {
       this.idSigningService = idSigningService;
@@ -155,13 +165,16 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       CompletionStage<String> conversionFuture;
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
+        GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
         if (restRequest.getRestMethod() == RestMethod.DELETE) {
           // on delete requests we can soft delete the record from NamedBlobDb and get the blob ID in one step.
           conversionFuture = getNamedBlobDb().delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
         } else {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName()).thenApply(NamedBlobRecord::getBlobId);
+                  namedBlobPath.getBlobName(),
+                  getOptionToGetModeMapping.getOrDefault(getOption, NamedBlobDb.GetMode.Include_None))
+              .thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB)) {
