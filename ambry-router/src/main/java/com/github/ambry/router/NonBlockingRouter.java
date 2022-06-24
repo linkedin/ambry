@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
@@ -66,6 +67,7 @@ class NonBlockingRouter implements Router {
   private static final int cacheMaxLimit = 1000;
   // Cache to store blob IDs which were not found in servers recently.
   private final Cache<String, Boolean> notFoundCache;
+  private final AmbryCache blobMetadataCache;
 
   /**
    * Constructs a NonBlockingRouter.
@@ -120,6 +122,10 @@ class NonBlockingRouter implements Router {
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
     routerMetrics.initializeQuotaOCMetrics(ocList);
+    blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
+        routerConfig.routerBlobMetadataCacheEnabled,
+        routerConfig.routerBlobMetadataCacheMaxSizeBytes,
+        routerMetrics.getMetricRegistry());
   }
 
   /**
