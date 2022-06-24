@@ -501,7 +501,6 @@ public class DeleteManagerTest {
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
     serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
     serverErrorCodes[1] = ServerErrorCode.Blob_Not_Found;
-    serverErrorCodes[2] = ServerErrorCode.Blob_Not_Found;
     // The first two responses are blob not found and they are from the local dc and originating dc.
     // So even if the rest of servers returns No_Error, router will not send any requests to them.
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
