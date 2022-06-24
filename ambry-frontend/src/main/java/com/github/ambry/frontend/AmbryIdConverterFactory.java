@@ -163,8 +163,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
         } else {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                  namedBlobPath.getBlobName(), , getOption)
-              .thenApply(NamedBlobRecord::getBlobId);
+              namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB)) {
