@@ -1640,6 +1640,7 @@ class PutOperation {
           loggingContext, correlationId);
       setChunkException(new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests));
       onErrorResponse(replicaId, TrackedRequestFinalState.QUOTA_REJECTED, false);
+      operationCompleted = true;
       checkAndMaybeComplete();
     }
 

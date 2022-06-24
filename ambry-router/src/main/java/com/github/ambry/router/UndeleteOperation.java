@@ -264,6 +264,7 @@ public class UndeleteOperation {
     LOGGER.trace(
         "UndeleteRequest with response correlationId {} was rejected because quota was exceeded.", correlationId);
     onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
+    operationCompleted = true;
     checkAndMaybeComplete();
   }
 
