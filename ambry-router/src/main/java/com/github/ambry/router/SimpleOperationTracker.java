@@ -334,7 +334,7 @@ class SimpleOperationTracker implements OperationTracker {
     if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled
         && numActiveReplicasInOriginatingDc >= routerConfig.routerPutSuccessTarget) {
       // There are two conditions to meet in order to use this feature
-      // 1. TerminateNoNotFound has to be enabled.
+      // 1. TerminateOnNotFound has to be enabled.
       // 2. We need enough active replicas in the originating DC
       // How many active replicas is considered as enough? We have to consider some extreme cases.
       // When the put success target is 2, we at least need 2 replicas in active state so we know the replicas are up to
