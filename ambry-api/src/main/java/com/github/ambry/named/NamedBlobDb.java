@@ -15,6 +15,7 @@
 package com.github.ambry.named;
 
 import com.github.ambry.frontend.Page;
+import com.github.ambry.protocol.GetOption;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -24,37 +25,15 @@ import java.util.concurrent.CompletableFuture;
 public interface NamedBlobDb {
 
   /**
-   * The mode for get method.
-   */
-  enum GetMode {
-    /**
-     * Return NamedBlobRecord in get method when it's not expired or deleted.
-     */
-    Include_None,
-    /**
-     * Return NamedBlobRecord in get method even if it's deleted.
-     */
-    Include_Deleted,
-    /**
-     * Return NamedBlobRecord in get method even if it's expired.
-     */
-    Include_Expired,
-    /**
-     * Return NamedBlobRecord in get method even if it's deleted or expired.
-     */
-    Include_All
-  }
-
-  /**
    * Look up a {@link NamedBlobRecord} by name.
    * @param accountName the name of the account.
    * @param containerName the name of the container.
    * @param blobName the name of the blob.
-   * @param mode The {@link GetMode} for this get method.
+   * @param option The {@link GetOption} for this get method.
    * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
    *         blob or an exception if an error occurred.
    */
-  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetMode mode);
+  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option);
 
   /**
    * Look up a {@link NamedBlobRecord} by name.
@@ -65,7 +44,7 @@ public interface NamedBlobDb {
    *         blob or an exception if an error occurred.
    */
   default CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
-    return get(accountName, containerName, blobName, GetMode.Include_None);
+    return get(accountName, containerName, blobName, GetOption.None);
   }
 
   /**

@@ -117,10 +117,10 @@ public class AmbryIdConverterFactoryTest {
     String outputId = "dummy-id";
     reset(idSigningService);
     reset(namedBlobDb);
-    when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(
+    when(namedBlobDb.get(any(), any(), any(), , any())).thenReturn(
         CompletableFuture.completedFuture(new NamedBlobRecord("", "", "", outputId, Utils.Infinite_Time)));
     testConversion(idConverter, RestMethod.GET, null, outputId, NAMED_BLOB_PATH);
-    verify(namedBlobDb).get(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, NamedBlobDb.GetMode.Include_None);
+    verify(namedBlobDb).get(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, , NamedBlobDb.GetMode.Include_None);
 
     reset(idSigningService);
     reset(namedBlobDb);

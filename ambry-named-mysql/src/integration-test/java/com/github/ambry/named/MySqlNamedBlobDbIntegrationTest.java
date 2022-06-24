@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
@@ -97,8 +98,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     // get records just inserted
     for (NamedBlobRecord record : records) {
       NamedBlobRecord recordFromStore =
-          namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-              NamedBlobDb.GetMode.Include_None).get();
+          namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
       assertEquals("Record does not match expectations.", record, recordFromStore);
     }
 
@@ -130,14 +130,14 @@ public class MySqlNamedBlobDbIntegrationTest {
           namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
       assertEquals("Unexpected deleted ID", record.getBlobId(), deleteResult.getBlobId());
       assertFalse("Unexpected alreadyDeleted value", deleteResult.isAlreadyDeleted());
-      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-          NamedBlobDb.GetMode.Include_None), RestServiceErrorCode.Deleted);
+      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()),
+          RestServiceErrorCode.Deleted);
       NamedBlobRecord recordFromStore =
           namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-              NamedBlobDb.GetMode.Include_Deleted).get();
+              GetOption.Include_Deleted_Blobs).get();
       assertEquals("Record does not match expectations.", record, recordFromStore);
       recordFromStore = namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-          NamedBlobDb.GetMode.Include_All).get();
+          GetOption.Include_All).get();
       assertEquals("Record does not match expectations.", record, recordFromStore);
     }
 
@@ -152,8 +152,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     // delete and get for non existent blobs should return not found.
     for (NamedBlobRecord record : records) {
       String nonExistentName = record.getBlobName() + "-other";
-      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), nonExistentName,
-          NamedBlobDb.GetMode.Include_None), RestServiceErrorCode.NotFound);
+      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), nonExistentName),
+          RestServiceErrorCode.NotFound);
       checkErrorCode(() -> namedBlobDb.delete(record.getAccountName(), record.getContainerName(), nonExistentName),
           RestServiceErrorCode.NotFound);
     }
@@ -192,14 +192,13 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.put(record).get();
 
     Thread.sleep(100);
-    checkErrorCode(
-        () -> namedBlobDb.get(account.getName(), container.getName(), blobName, NamedBlobDb.GetMode.Include_None),
+    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
         RestServiceErrorCode.Deleted);
     NamedBlobRecord recordFromStore =
-        namedBlobDb.get(account.getName(), container.getName(), blobName, NamedBlobDb.GetMode.Include_All).get();
+        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_All).get();
     assertEquals("Record does not match expectations.", record, recordFromStore);
     recordFromStore =
-        namedBlobDb.get(account.getName(), container.getName(), blobName, NamedBlobDb.GetMode.Include_Expired).get();
+        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_Expired_Blobs).get();
     assertEquals("Record does not match expectations.", record, recordFromStore);
 
     // replacement should succeed
@@ -207,7 +206,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     record = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
     namedBlobDb.put(record).get();
     assertEquals("Record should have been replaced", record,
-        namedBlobDb.get(account.getName(), container.getName(), blobName, NamedBlobDb.GetMode.Include_None).get());
+        namedBlobDb.get(account.getName(), container.getName(), blobName).get());
   }
 
   /**

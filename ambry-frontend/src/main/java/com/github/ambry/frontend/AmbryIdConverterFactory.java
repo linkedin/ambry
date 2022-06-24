@@ -33,7 +33,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -66,14 +65,6 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private final IdSigningService idSigningService;
     private final NamedBlobDb namedBlobDb;
     private final FrontendMetrics frontendMetrics;
-    private static final Map<GetOption, NamedBlobDb.GetMode> getOptionToGetModeMapping = new HashMap<>();
-
-    static {
-      getOptionToGetModeMapping.put(GetOption.Include_All, NamedBlobDb.GetMode.Include_All);
-      getOptionToGetModeMapping.put(GetOption.Include_Deleted_Blobs, NamedBlobDb.GetMode.Include_Deleted);
-      getOptionToGetModeMapping.put(GetOption.Include_Expired_Blobs, NamedBlobDb.GetMode.Include_Expired);
-      getOptionToGetModeMapping.put(GetOption.None, NamedBlobDb.GetMode.Include_None);
-    }
 
     AmbryIdConverter(IdSigningService idSigningService, NamedBlobDb namedBlobDb, FrontendMetrics frontendMetrics) {
       this.idSigningService = idSigningService;
@@ -172,8 +163,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
         } else {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                  namedBlobPath.getBlobName(),
-                  getOptionToGetModeMapping.getOrDefault(getOption, NamedBlobDb.GetMode.Include_None))
+                  namedBlobPath.getBlobName(), , getOption)
               .thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
