@@ -26,6 +26,7 @@ import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
@@ -117,10 +118,10 @@ public class AmbryIdConverterFactoryTest {
     String outputId = "dummy-id";
     reset(idSigningService);
     reset(namedBlobDb);
-    when(namedBlobDb.get(any(), any(), any())).thenReturn(
+    when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new NamedBlobRecord("", "", "", outputId, Utils.Infinite_Time)));
     testConversion(idConverter, RestMethod.GET, null, outputId, NAMED_BLOB_PATH);
-    verify(namedBlobDb).get(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME);
+    verify(namedBlobDb).get(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, GetOption.None);
 
     reset(idSigningService);
     reset(namedBlobDb);
