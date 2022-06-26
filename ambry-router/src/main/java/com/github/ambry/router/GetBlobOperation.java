@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.Callback;
@@ -123,6 +124,8 @@ class GetBlobOperation extends GetOperation {
   private BlobDataReadableStreamChannel blobDataChannel;
   // the CompositeBlobInfo that will be set if (and when) this blob turns out to be a composite blob.
   private CompositeBlobInfo compositeBlobInfo;
+  // A cache for blob metadata of composite blobs
+  private AmbryCache blobMetadataCache;
 
   /**
    * Construct a GetBlobOperation
@@ -140,18 +143,75 @@ class GetBlobOperation extends GetOperation {
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
+   * @param blobMetadataCache A cache to save blob metadata for composite blobs
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback) {
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
     this.quotaChargeCallback = quotaChargeCallback;
-    firstChunk = new FirstGetChunk();
+    this.blobMetadataCache = blobMetadataCache;
+    BlobMetadata blobMetadata = shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
+    firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
+  }
+
+  /**
+   * Returns whether the current request is a range request or not.
+   * @return True if range request, else False.
+   */
+  boolean isRangeRequest() {
+    return options.getBlobOptions.getRange() != null;
+  }
+
+  /**
+   * Decides if we should look up the metadata cache during a GET request
+   * @return True if and only if
+   *  - cache exists
+   *  - it is a RANGE request
+   *  - it is not a raw mode request
+   *  - it is not a GET request for a segment
+   *  - the blobID is for a metadata blob (this info is present only in v5 and v6 version of blobID)
+   *  False, otherwise.
+   */
+  boolean shouldLookupMetadataCache() {
+    return (blobMetadataCache != null &&
+        isRangeRequest() &&
+        options.getBlobOptions.hasBlobSegmentIdx() == false &&
+        options.getBlobOptions.isRawMode() == false &&
+        blobId.getBlobDataType() == BlobId.BlobDataType.METADATA);
+  }
+
+  /**
+   * Conditionally saves blob metadata for composite blobs
+   * @return True if metadata was saved successfully, else False.
+   */
+  boolean saveMetadata() {
+    boolean putResult = false;
+    if (firstChunk.shouldSaveMetadata()) {
+      BlobMetadata blobMetadata = new BlobMetadata(blobId.toString(), blobInfo, compositeBlobInfo);
+      putResult = blobMetadataCache.putObject(blobMetadata.getBlobId(), blobMetadata);
+      logger.trace("Saving metadata for blobId = {}, result = {}", blobId, putResult);
+    }
+    return putResult;
+  }
+
+  /**
+   * Unconditionally deletes blob metadata for composite blobs.
+   * @param reason String describing reason for deletion, useful for triaging.
+   * @return True if metadata was deleted successfully, else False.
+   */
+  boolean deleteMetadata(String reason) {
+    if (blobMetadataCache == null) {
+      return false;
+    }
+    boolean deleteResult = blobMetadataCache.deleteObject(blobId.toString());
+    logger.trace("Deleting metadata for blobId = {}, reason = {}, result = {}", blobId, reason, deleteResult);
+    return deleteResult;
   }
 
   /**
@@ -201,6 +261,15 @@ class GetBlobOperation extends GetOperation {
         blobDataChannel.completeRead();
       }
     }
+    if (abortCause != null && abortCause instanceof RouterException) {
+      switch(((RouterException) abortCause).getErrorCode()) {
+        /* If the blob is not found, then delete its metadata from frontend cache. */
+        case BlobDoesNotExist:
+        case BlobDeleted:
+        case BlobExpired:
+          deleteMetadata(((RouterException) abortCause).getErrorCode().toString());
+      }
+    }
     setOperationCompleted();
   }
 
@@ -219,6 +288,8 @@ class GetBlobOperation extends GetOperation {
     if (chunk == firstChunk) {
       if (operationCallbackInvoked.compareAndSet(false, true)) {
         if (chunk.chunkBlobId.getBlobDataType() == BlobId.BlobDataType.METADATA) {
+          /* Save metadata on successful completion. Everything is decrypted at this point. */
+          saveMetadata();
           routerMetrics.getMetadataChunkLatencyMs.update(time.milliseconds() - chunk.initializedTimeMs);
         }
         if (options.getChunkIdsOnly) {
@@ -616,7 +687,7 @@ class GetBlobOperation extends GetOperation {
     // size of the chunk
     private long chunkSize;
     // whether the operation on the current chunk has completed.
-    private boolean chunkCompleted;
+    protected boolean chunkCompleted;
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
     protected long initializedTimeMs;
@@ -1273,16 +1344,41 @@ class GetBlobOperation extends GetOperation {
   private class FirstGetChunk extends GetChunk {
 
     // refers to the blob type.
-    private BlobType blobType;
-    private List<CompositeBlobInfo.ChunkMetadata> chunkMetadataList;
-    private BlobProperties serverBlobProperties;
-    private short lifeVersion;
+    protected BlobType blobType;
+    protected List<CompositeBlobInfo.ChunkMetadata> chunkMetadataList;
+    protected BlobProperties serverBlobProperties;
+    protected short lifeVersion;
 
     /**
      * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
      */
     FirstGetChunk() {
       super(-1, new CompositeBlobInfo.ChunkMetadata(blobId, 0L, -1L));
+    }
+
+    /**
+     * Decides if we should cache metadata during a GET request
+     * This method should be called after decryption is complete.
+     * @return True if and only if
+     *  - cache exists
+     *  - it's a RANGE request
+     *  - it's not a GET request for a segment
+     *  - it is not a raw mode request
+     *  - the blobID is for a metadata blob (this info is present only in v5 and v6 version of blobID)
+     *  - the blob type is metadata blob
+     *  - firstChunk is complete
+     *  - there are no exceptions
+     *  False, otherwise.
+     */
+    protected boolean shouldSaveMetadata() {
+      return (blobMetadataCache != null &&
+          isRangeRequest() &&
+          options.getBlobOptions.hasBlobSegmentIdx() == false &&
+          options.getBlobOptions.isRawMode() == false &&
+          blobId.getBlobDataType() == BlobId.BlobDataType.METADATA &&
+          blobType == BlobType.MetadataBlob &&
+          totalSize >= routerConfig.routerSmallestBlobForMetadataCache &&
+          isComplete() && getChunkException() == null && getOperationException() == null);
     }
 
     /**
@@ -1568,7 +1664,7 @@ class GetBlobOperation extends GetOperation {
     /**
      * Initialize data chunks and few other cast for metadata chunk
      */
-    private void initializeDataChunks() {
+    protected void initializeDataChunks() {
       if (options.getChunkIdsOnly
           || options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         chunkIdIterator = null;
@@ -1644,6 +1740,19 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
+     * Wrapper over resolveRange
+     * @param rangeTotalSize byte range to be used for range resolution
+     * @return {@code true} if range resolution succeeded or no range resolution was done. {@code false} otherwise
+     */
+    protected boolean resolveRangeProper(long rangeTotalSize) {
+      /*
+       * resolveRange is a weird function that returns false on success and true on failure !
+       * Hence, this wrapper to make code readable !
+       */
+      return !resolveRange(rangeTotalSize);
+    }
+
+    /**
      * On an invalid range, set a {@link RouterErrorCode#RangeNotSatisfiable} exception for this chunk, mark the chunk
      * as unconditionally completed, and set the chunk counters such that the operation will be completed.
      * @param exception the reason that the range was invalid.
@@ -1656,6 +1765,113 @@ class GetBlobOperation extends GetOperation {
       dataChunks = null;
       numChunksTotal = 0;
       numChunksRetrieved.set(0);
+    }
+  }
+
+  private class CachedFirstChunk extends FirstGetChunk {
+
+    /**
+     * Construct a CachedFirstChunk and initialize it with the {@link BlobMetadata} of the overall operation.
+     * @param blobMetadata Cached blob metadata for composite blobs
+     */
+    CachedFirstChunk(BlobMetadata blobMetadata) {
+      super();
+      /*
+       * If cache hit, extract all relevant metadata and save in appropriate variables.
+       * If the entry gets evicted later, we are still safe as we have saved all the metadata.
+       */
+      blobType = BlobType.MetadataBlob;
+      compositeBlobInfo = blobMetadata.getCompositeBlobInfo();
+      totalSize = compositeBlobInfo.getTotalSize();
+      chunkMetadataList = compositeBlobInfo.getChunkMetadataList();
+      blobInfo = blobMetadata.getBlobInfo();
+      lifeVersion = blobInfo.getLifeVersion();
+      serverBlobProperties = blobInfo.getBlobProperties();
+      chunkIndexToBuf = new ConcurrentHashMap<>();
+      chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
+      successfullyDeserialized = true;
+    }
+
+    /**
+     * Return {@link MessageFormatFlags} to associate with cached first chunk.
+     * For a cached metadata chunk, we just need to get blobInfo to validate it.
+     * We don't have to fetch the entire metadata chunk again.
+     * @return {@link MessageFormatFlags#BlobInfo}
+     */
+    @Override
+    MessageFormatFlags getOperationFlag() {
+      return MessageFormatFlags.BlobInfo;
+    }
+
+    /**
+     * Decides if we should save metadata or not.
+     * @return False for cached first chunk. There is nothing to cache.
+     */
+    @Override
+    protected boolean shouldSaveMetadata() { return false; }
+
+    /**
+     * On an invalid cache entry, set a {@link RouterErrorCode} exception for first chunk, mark the chunk
+     * as completed, and set the chunk counters such that the operation will be completed.
+     * @param routerException Exception due to which cache entry was invalid.
+     */
+    protected void onInvalidCacheEntry(RouterException routerException) {
+      setChunkException(routerException);
+      chunkCompleted = true;
+      retainChunkExceptionOnSuccess = true;
+      chunkIdIterator = null;
+      dataChunks = null;
+      numChunksTotal = 0;
+      numChunksRetrieved.set(0);
+    }
+
+    /**
+     * Validate cached metadata chunk and proceed to request data chunks
+     * @param payload Bytes received from backend
+     * @param messageMetadata  Metadata associated with messages sent out
+     * @param messageInfo Message info class that contains basic info about a message
+     * @throws IOException
+     * @throws MessageFormatException
+     */
+    @Override
+    void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
+        throws IOException, MessageFormatException {
+      /* If we find blob metadata in frontend cache, validate it and use it. */
+      BlobProperties receivedBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
+      /*
+       * Some cached variables are mutable.
+       * Update them and then compare if other immutable variables are same or not.
+       */
+      updateTtlIfRequired(serverBlobProperties, messageInfo);
+      lifeVersion = messageInfo.getLifeVersion();
+      blobInfo.setLifeVersion(lifeVersion);
+      if (!serverBlobProperties.equals(receivedBlobProperties)) {
+        /*
+         * This is a rare error case.
+         * If we find blob properties is in our frontend cache, we request just blobInfo from backend to validate
+         * the cache entry. If cached blob properties does not match received blob properties, due to a random bit flip for eg.,
+         * we must delete the cache entry and throw a retriable exception to the user.
+         * The next request will re-fill the cache with a valid entry if the blob stills exists.
+         * We do not need to decrypt anything at this point.
+         */
+        String reason = "Cached blob property does not match received blob property";
+        logger.error("{} for blobId = {}, cached blob property = {}, received blob property = {}", reason, blobId,
+            serverBlobProperties, receivedBlobProperties);
+        deleteMetadata(reason);
+        onInvalidCacheEntry(new RouterException(reason, RouterErrorCode.UnexpectedInternalError));
+        return;
+      }
+      getOptions().ageAtAccessTracker.trackAgeAtAccess(serverBlobProperties.getCreationTimeInMs());
+
+      /*
+       * If we reach here, then the cached metadata is valid and already decrypted from a previous GET/RANGE request.
+       * Just use it directly and initiate fetching data chunks.
+       */
+      if (isRangeRequest() && resolveRangeProper(totalSize)) {
+        chunkMetadataList = compositeBlobInfo.getStoreKeysInByteRange(resolvedByteRange.getStartOffset(),
+            resolvedByteRange.getEndOffset());
+        initializeDataChunks();
+      }
     }
   }
 }
