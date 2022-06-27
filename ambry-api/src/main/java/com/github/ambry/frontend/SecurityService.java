@@ -79,7 +79,7 @@ public interface SecurityService extends Closeable {
       Callback<Void> callback);
 
   /**
-   * Similar to {@link #preProcessRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
+   * Similar to {@link #preProcessRequest(RestRequest, Callback)} but returns a {@link CompletableFuture} instead of requiring
    * a callback.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
    * @return a {@link CompletableFuture} that is completed when the pre-processing is done.
@@ -91,7 +91,7 @@ public interface SecurityService extends Closeable {
   }
 
   /**
-   * Similar to {@link #processRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
+   * Similar to {@link #processRequest(RestRequest, Callback)} but returns a {@link CompletableFuture} instead of requiring
    * a callback.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
    * @return a {@link CompletableFuture} that is completed when the processing is done.
@@ -103,7 +103,7 @@ public interface SecurityService extends Closeable {
   }
 
   /**
-   * Similar to {@link #postProcessRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
+   * Similar to {@link #postProcessRequest(RestRequest, Callback)} but returns a {@link CompletableFuture} instead of requiring
    * a callback.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
    * @return a {@link CompletableFuture} that is completed when the post-processing is done.
@@ -116,7 +116,7 @@ public interface SecurityService extends Closeable {
 
   /**
    * Similar to {@link #processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} but returns a
-   * {@link Future} instead of requiring a callback.
+   * {@link CompletableFuture} instead of requiring a callback.
    * @param restRequest {@link RestRequest} whose response have to be validated
    * @param responseChannel the {@link RestResponseChannel} over which the response is sent
    * @param blobInfo the {@link BlobInfo} pertaining to the rest request made
