@@ -172,7 +172,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
                 blobName);
           } else {
-            return new NamedBlobRecord(accountName, containerName, blobName, blobId, version, timestampToMs(expirationTime));
+            NamedBlobRecord record = new NamedBlobRecord(accountName, containerName, blobName, blobId,
+                timestampToMs(expirationTime));
+            record.setVersion(version);
+            return record;
           }
         }
       }
@@ -212,7 +215,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                   accountName, containerName, blobName);
             } else {
               entries.add(
-                  new NamedBlobRecord(accountName, containerName, blobName, blobId, 0, timestampToMs(expirationTime)));
+                  new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime)));
             }
           }
           return new Page<>(entries, nextContinuationToken);

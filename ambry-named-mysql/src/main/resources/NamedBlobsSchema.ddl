@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS named_blobs (
     blob_id varbinary(50) NOT NULL,
     deleted_ts datetime(6) DEFAULT NULL,
     expires_ts datetime(6) DEFAULT NULL,
-    version long NOT NULL,
+    version long(20) NOT NULL,
     blob_state varchar(20) NOT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
 )

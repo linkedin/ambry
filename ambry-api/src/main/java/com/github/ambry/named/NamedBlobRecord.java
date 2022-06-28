@@ -26,7 +26,7 @@ public class NamedBlobRecord {
   private final String containerName;
   private final String blobName;
   private final String blobId;
-  private final long version;
+  private long version;
   private final long expirationTimeMs;
 
   /**
@@ -36,13 +36,12 @@ public class NamedBlobRecord {
    * @param blobId the blob ID for the blob content in ambry storage.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    */
-  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId, long version,
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
       long expirationTimeMs) {
     this.accountName = accountName;
     this.containerName = containerName;
     this.blobName = blobName;
     this.blobId = blobId;
-    this.version = version;
     this.expirationTimeMs = expirationTimeMs;
   }
 
@@ -72,6 +71,13 @@ public class NamedBlobRecord {
    */
   public String getBlobId() {
     return blobId;
+  }
+
+  /**
+   * @set the version for the named blob map.
+   */
+  public void setVersion(long versionNew) {
+    this.version = versionNew;;
   }
 
   /**
