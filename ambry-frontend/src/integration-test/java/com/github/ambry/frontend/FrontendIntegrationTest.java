@@ -31,6 +31,7 @@ import com.github.ambry.commons.NettySslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -49,20 +50,15 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
-import io.netty.util.ReferenceCountUtil;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -79,7 +75,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
@@ -542,31 +537,11 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
         Arrays.asList(namedBlobDisableContainer, namedBlobOptionalContainer));
 
     // Test first container, it returns error
-    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
-    String contentType = "application/octet-stream";
-    String ownerId = "namedBlobTest";
-    String accountName = refAccount.getName();
-    String containerName = namedBlobDisableContainer.getName();
-    String blobName = "zzzz" + TestUtils.getRandomString(10);
-    HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeadersForPut(headers, TTL_SECS, false, refAccount.getName(), contentType, ownerId, null, null);
-    putNamedBlobAndFail(headers, content, accountName, containerName, blobName, HttpResponseStatus.BAD_REQUEST);
-
+    doNamedBlobPutOnDisabledContainer(refAccount, namedBlobDisableContainer);
     // Test second container, test get and delete
-    doNamedBlobPutGetHeadDeleteTest(100, refAccount, namedBlobOptionalContainer, refAccount.getName());
-
+    doNamedBlobPutGetHeadDeleteTest(refAccount, namedBlobOptionalContainer);
     // Upload lots of blobs to second container, and test list named blob
-  }
-
-  private void putNamedBlobAndFail(HttpHeaders headers, ByteBuffer content, String accountName, String containerName,
-      String blobName, HttpResponseStatus expectedStatus) throws Exception {
-    FullHttpRequest httpRequest =
-        buildRequest(HttpMethod.PUT, buildUriForNamedBlob(accountName, containerName, blobName), headers, content);
-    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = getHttpResponse(responseParts);
-    assertEquals("Unexpected response status", expectedStatus, response.status());
-    verifyTrackingHeaders(response);
-    assertNoContent(responseParts.queue, 1);
+    doNamedBlobPutListDeleteTest(refAccount, namedBlobOptionalContainer);
   }
 
   // helpers
@@ -616,6 +591,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.host.name", HOST_NAME);
     properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
     properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.frontend.TestNamedBlobDbFactory");
+    properties.setProperty(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, String.valueOf(NAMED_BLOB_LIST_RESULT_MAX));
     return new VerifiableProperties(properties);
   }
 

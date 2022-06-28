@@ -67,6 +67,8 @@ class NamedBlobDeleteHandler {
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
+    accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
+        metrics.deleteBlobMetricsGroup);
     RequestPath requestPath = getRequestPath(restRequest);
     // Get blob id and reconstruct RequestPath
     // this is the three-part named blob id, including account name, container name and the custom blob name.
@@ -105,12 +107,10 @@ class NamedBlobDeleteHandler {
           RequestPath newRequestPath =
               new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
                   "/ " + blobId, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-          // Replace RequestPath in the RestRequest and call GetBlobHandler.handle.
+          // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
           restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
           try {
-            //accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
-            //    metrics.deleteBlobMetricsGroup);
-            deleteBlobHandler.handle(restRequest, restResponseChannel, newRequestPath, (v, e) -> {
+            deleteBlobHandler.handle(restRequest, restResponseChannel, (v, e) -> {
               if (e != null) {
                 callback.onCompletion(null, e);
               } else {

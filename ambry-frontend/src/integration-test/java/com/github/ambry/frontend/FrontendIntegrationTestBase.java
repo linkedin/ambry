@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
@@ -58,8 +59,10 @@ import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
@@ -79,6 +82,7 @@ public class FrontendIntegrationTestBase {
   static final String HOST_NAME = "localhost";
   static final int PORT = 12345;
   static final String CLUSTER_NAME = "Cluster-name";
+  static final int NAMED_BLOB_LIST_RESULT_MAX = 5;
   protected FrontendConfig frontendConfig;
   protected NettyClient nettyClient;
   protected QuotaConfig quotaConfig;
@@ -207,8 +211,52 @@ public class FrontendIntegrationTestBase {
     undeleteBlobAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
   }
 
-  void doNamedBlobPutGetHeadDeleteTest(int contentSize, Account account, Container container, String serviceId)
-      throws Exception {
+  /**
+   * Put operation to a container that disabled named blob, and this PUT operation should fail.
+   * @param account The {@link Account}.
+   * @param container The {@link Container} that disabled named blob.
+   * @throws Exception
+   */
+  void doNamedBlobPutOnDisabledContainer(Account account, Container container) throws Exception {
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
+    String contentType = "application/octet-stream";
+    String ownerId = "namedBlobTest";
+    String accountName = account.getName();
+    String containerName = container.getName();
+    String blobName = "zzzz" + TestUtils.getRandomString(10);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    setAmbryHeadersForPut(headers, TTL_SECS, false, account.getName(), contentType, ownerId, null, null);
+    putNamedBlobAndFail(headers, content, accountName, containerName, blobName, HttpResponseStatus.BAD_REQUEST);
+  }
+
+  /**
+   * Put a named blob and fail.
+   * @param headers The http headers to send
+   * @param content The content to send
+   * @param accountName The account name.
+   * @param containerName The container name.
+   * @param blobName The blob name.
+   * @param expectedStatus The expected status.
+   * @throws Exception
+   */
+  private void putNamedBlobAndFail(HttpHeaders headers, ByteBuffer content, String accountName, String containerName,
+      String blobName, HttpResponseStatus expectedStatus) throws Exception {
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.PUT, buildUriForNamedBlob(accountName, containerName, blobName), headers, content);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", expectedStatus, response.status());
+    verifyTrackingHeaders(response);
+    assertNoContent(responseParts.queue, 1);
+  }
+
+  /**
+   * Utility to test named blob PUT, GET, HEAD and DELETE operations
+   * @param account the {@link Account} to use in post headers.
+   * @param container the {@link Container} to use in post headers.
+   * @throws Exception
+   */
+  void doNamedBlobPutGetHeadDeleteTest(Account account, Container container) throws Exception {
     // Test second container, test get and delete
     String accountName = account.getName();
     String containerName = container.getName();
@@ -221,16 +269,74 @@ public class FrontendIntegrationTestBase {
     setAmbryHeadersForPut(headers, TTL_SECS, false, accountName, contentType, ownerId, null, null);
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
     putNamedBlobAndVerify(headers, content, 100, accountName, containerName, blobName);
+
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     headers.add(RestUtils.Headers.LIFE_VERSION, "0");
     headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
     headers.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
     String blobId = buildUriForNamedBlob(accountName, containerName, blobName);
+    // check GET, HEAD, DELETE
     doVariousGetAndVerify(blobId, headers, false, content, 100, accountName, containerName, null);
     deleteBlobAndVerify(blobId);
+
+    // check GET after DELETE
     verifyOperationsAfterDelete(blobId, headers, false, accountName, containerName, content, null, true);
   }
 
+  /**
+   * Utility to test named blob LIST  operations.
+   * @param account the {@link Account} to use in post headers.
+   * @param container the {@link Container} to use in post headers.
+   * @throws Exception
+   */
+  void doNamedBlobPutListDeleteTest(Account account, Container container) throws Exception {
+    int listMaxResults = NAMED_BLOB_LIST_RESULT_MAX;
+    // upload three batches of blobs,
+    // listMaxResults-1 blobs that start with aaaa
+    // listMaxResults * 2 + listMaxResults-2 blobs that start with bbbb
+    // listMaxResults blobs that start with cccc
+    List<String> allBlobNames = new ArrayList<>();
+    String accountName = account.getName();
+    String containerName = container.getName();
+    String contentType = "application/octet-stream";
+    String ownerId = "namedBlobTest";
+    for (Pair<String, Integer> pair : Arrays.asList(new Pair<>("aaaa", listMaxResults - 1),
+        new Pair<>("bbbb", 3 * listMaxResults - 2), new Pair<>("cccc", listMaxResults))) {
+      for (int i = 0; i < pair.getSecond(); i++) {
+        HttpHeaders headers = new DefaultHttpHeaders();
+        headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+        headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+        setAmbryHeadersForPut(headers, TTL_SECS, false, accountName, contentType, ownerId, null, null);
+        ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
+        String blobName = pair.getFirst() + String.format("%02d", i);
+        putNamedBlobAndVerify(headers, content, 100, accountName, containerName, blobName);
+        allBlobNames.add(blobName);
+      }
+    }
+
+    // Check the LIST operation
+    verifyListNamedBlobs(accountName, containerName, ownerId, "aaaa", listMaxResults - 1);
+    verifyListNamedBlobs(accountName, containerName, ownerId, "bbbb", 3 * listMaxResults - 2);
+    verifyListNamedBlobs(accountName, containerName, ownerId, "cccc", listMaxResults);
+
+    // DELETE all the named blobs
+    for (String blobName : allBlobNames) {
+      String blobId = buildUriForNamedBlob(accountName, containerName, blobName);
+      deleteBlobAndVerify(blobId);
+    }
+  }
+
+  /**
+   * Put a named blob with the given {@code headers} and {@code content}.
+   * @param headers the headers required.
+   * @param content the content of the blob.
+   * @param contentSize the length of the given content.
+   * @param accountName the account name.
+   * @param containerName the container name.
+   * @param blobName the blob name.
+   * @throws ExecutionException
+   * @throws InterruptedException
+   */
   void putNamedBlobAndVerify(HttpHeaders headers, ByteBuffer content, long contentSize, String accountName,
       String containerName, String blobName) throws Exception {
     FullHttpRequest httpRequest =
@@ -252,10 +358,85 @@ public class FrontendIntegrationTestBase {
     verifyPostRequestCostHeaders(response, contentSize);
   }
 
+  /**
+   * Verify Named blob List operation.
+   * @param accountName The account name.
+   * @param containerName The container name
+   * @param ownerId The owner id
+   * @param prefix The prefix of blob name.
+   * @param numberOfBlobs The expected number of named blobs returned by list operation.
+   * @throws Exception
+   */
+  void verifyListNamedBlobs(String accountName, String containerName, String ownerId, String prefix, int numberOfBlobs)
+      throws Exception {
+    String nextPageToken = null;
+    boolean isFirst = true;
+    while (numberOfBlobs > 0) {
+      int expectedReturnNumber =
+          numberOfBlobs > NAMED_BLOB_LIST_RESULT_MAX ? NAMED_BLOB_LIST_RESULT_MAX : numberOfBlobs;
+      HttpHeaders headers = new DefaultHttpHeaders();
+      headers.add(RestUtils.Headers.SERVICE_ID, accountName);
+      headers.add(RestUtils.Headers.OWNER_ID, ownerId);
+      headers.add("prefix", prefix);
+      if (!isFirst) {
+        assertNotNull("nextPageToken should not be null", nextPageToken);
+        headers.add("page", nextPageToken);
+      }
+      FullHttpRequest httpRequest =
+          buildRequest(HttpMethod.GET, buildUriForNamedBlobList(accountName, containerName), headers, null);
+      NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+      HttpResponse response = getHttpResponse(responseParts);
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+      assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
+      assertEquals("Content-Type does not match", "application/json",
+          response.headers().get(HttpHeaderNames.CONTENT_TYPE));
+      assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+      verifyTrackingHeaders(response);
+      int contentLength = response.headers().getInt(HttpHeaderNames.CONTENT_LENGTH);
+      byte[] responseContentArray = getContent(responseParts.queue, contentLength).array();
+      ObjectMapper objectMapper = new ObjectMapper();
+      ListNamedBlobResponse listResponse = objectMapper.readValue(responseContentArray, ListNamedBlobResponse.class);
+      assertEquals("Named blob entry number don't match", expectedReturnNumber, listResponse.entries.size());
+      nextPageToken = listResponse.getNextPageToken();
+      isFirst = false;
+      numberOfBlobs -= NAMED_BLOB_LIST_RESULT_MAX;
+    }
+  }
+
+  /**
+   * The http request uri for named blob.
+   * @param accountName The account name.
+   * @param containerName The container name.
+   * @param blobName the blob name.
+   * @return The http request uri.
+   */
   String buildUriForNamedBlob(String accountName, String containerName, String blobName) {
     return String.format("/named/%s/%s/%s", accountName, containerName, blobName);
   }
 
+  /**
+   * The http request uri for list named blob.
+   * @param accountName The account name.
+   * @param containerName The container name.
+   * @return The http request uri.
+   */
+  String buildUriForNamedBlobList(String accountName, String containerName) {
+    return String.format("/named/%s/%s", accountName, containerName);
+  }
+
+  /**
+   * Do various GET operations and verify the responses. It includes GET content with different byte range and get options.
+   * It includes HEAD operations. It includes GET usermetadata and GET blob info.
+   * @param blobId The blob id.
+   * @param headers The http headers to send
+   * @param isPrivate {@code true} is the container is private.
+   * @param content The expected content
+   * @param contentSize The length of content.
+   * @param expectedAccountName The expected account name.
+   * @param expectedContainerName The expected container named.
+   * @param usermetadata The expected usermetadata.
+   * @throws Exception
+   */
   void doVariousGetAndVerify(String blobId, HttpHeaders headers, boolean isPrivate, ByteBuffer content,
       long contentSize, String expectedAccountName, String expectedContainerName, byte[] usermetadata)
       throws Exception {
@@ -396,11 +577,6 @@ public class FrontendIntegrationTestBase {
       headers.add(RestUtils.Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, true);
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
-    System.out.println("Get request uri " + httpRequest.uri());
-    for (Map.Entry<String, String> header : httpRequest.headers()) {
-      System.out.println(header.getKey() + ":" + header.getValue());
-    }
-    System.out.println("Sending this out====");
     NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate, expectedContent,
         accountName, containerName);
@@ -1035,6 +1211,70 @@ public class FrontendIntegrationTestBase {
 
     for (Account account : accounts) {
       assertEquals("Update not reflected in AccountService", account, accountService.getAccountById(account.getId()));
+    }
+  }
+
+  /**
+   * A utility class to represent the response structure returned by List named blob.
+   */
+  static class NamedBlobEntry {
+    private String blobName;
+    private long expirationTimeMs;
+
+    public NamedBlobEntry() {
+    }
+
+    public NamedBlobEntry(String blobName, long expiration) {
+      this.blobName = blobName;
+      this.expirationTimeMs = expiration;
+    }
+
+    public String getBlobName() {
+      return blobName;
+    }
+
+    public void setBlobName(String blobName) {
+      this.blobName = blobName;
+    }
+
+    public long getExpirationTimeMs() {
+      return expirationTimeMs;
+    }
+
+    public void setExpirationTimeMs(long expirationTimeMs) {
+      this.expirationTimeMs = expirationTimeMs;
+    }
+  }
+
+  /**
+   * A utility class to represent the response structure returned by List named blob.
+   */
+  static class ListNamedBlobResponse {
+    private List<NamedBlobEntry> entries;
+    private String nextPageToken;
+
+    public ListNamedBlobResponse() {
+    }
+
+    public ListNamedBlobResponse(List<NamedBlobEntry> entries, String nextPageToken) {
+      this.entries = entries;
+      this.nextPageToken = nextPageToken;
+    }
+
+    public List<NamedBlobEntry> getEntries() {
+      return entries;
+    }
+
+    public void setEntries(List<NamedBlobEntry> entries) {
+      this.entries = entries;
+    }
+
+    public String getNextPageToken() {
+      return nextPageToken;
+    }
+
+    public void setNextPageToken(String nextPageToken) {
+      this.nextPageToken = nextPageToken;
     }
   }
 }

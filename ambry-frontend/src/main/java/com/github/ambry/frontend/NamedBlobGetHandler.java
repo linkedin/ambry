@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -73,25 +74,23 @@ class NamedBlobGetHandler {
     // this is the three-part named blob id, including account name, container name and the custom blob name.
     String namedBlobId = requestPath.getOperationOrBlobId(false);
     NamedBlobPath namedBlobPath = NamedBlobPath.parse(namedBlobId, Collections.emptyMap());
-    System.out.println("Named Path: " + namedBlobPath.getAccountName() + " " + namedBlobPath.getContainerName() + " "
-        + namedBlobPath.getBlobName());
-    namedBlobDb.get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName())
-        .thenApply(NamedBlobRecord::getBlobId)
-        .whenComplete((blobId, exception) -> {
-          if (exception != null) {
-            callback.onCompletion(null, Utils.extractFutureExceptionCause(exception));
-            return;
-          }
-          RequestPath newRequestPath =
-              new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                  "/ " + blobId, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-          // Replace RequestPath in the RestRequest and call GetBlobHandler.handle.
-          restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-          try {
-            getBlobHandler.handle(newRequestPath, restRequest, restResponseChannel, callback);
-          } catch (RestServiceException e) {
-            callback.onCompletion(null, e);
-          }
-        });
+    GetOption getOption = getGetOption(restRequest, GetOption.None);
+    namedBlobDb.get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(),
+        getOption).thenApply(NamedBlobRecord::getBlobId).whenComplete((blobId, exception) -> {
+      if (exception != null) {
+        callback.onCompletion(null, Utils.extractFutureExceptionCause(exception));
+        return;
+      }
+      RequestPath newRequestPath =
+          new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+              "/ " + blobId, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+      // Replace RequestPath in the RestRequest and call GetBlobHandler.handle.
+      restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+      try {
+        getBlobHandler.handle(newRequestPath, restRequest, restResponseChannel, callback);
+      } catch (RestServiceException e) {
+        callback.onCompletion(null, e);
+      }
+    });
   }
 }

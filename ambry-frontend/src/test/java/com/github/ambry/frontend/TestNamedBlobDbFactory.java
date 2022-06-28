@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
@@ -26,11 +27,21 @@ public class TestNamedBlobDbFactory implements NamedBlobDbFactory {
 
   public TestNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       AccountService accountService) {
-    namedBlobDb = new TestNamedBlobDb(SystemTime.getInstance(), 5);
+    InternalConfig config = new InternalConfig(verifiableProperties);
+    namedBlobDb = new TestNamedBlobDb(SystemTime.getInstance(), config.listMaxResults);
   }
 
   @Override
   public NamedBlobDb getNamedBlobDb() throws Exception {
     return namedBlobDb;
+  }
+
+  class InternalConfig {
+    public final int listMaxResults;
+
+    public InternalConfig(VerifiableProperties verifiableProperties) {
+      this.listMaxResults =
+          verifiableProperties.getIntInRange(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
+    }
   }
 }

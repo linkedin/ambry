@@ -18,7 +18,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
-import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -61,8 +60,8 @@ public class DeleteBlobHandler {
     this.quotaManager = quotaManager;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, RequestPath requestPath,
-      Callback<Void> callback) throws RestServiceException {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+      throws RestServiceException {
     RestRequestMetrics requestMetrics =
         metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);

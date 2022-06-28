@@ -77,9 +77,9 @@ class FrontendRestRequestService implements RestRequestService {
   private NamedBlobListHandler namedBlobListHandler;
   private NamedBlobGetHandler namedBlobGetHandler;
   private NamedBlobDeleteHandler namedBlobDeleteHandler;
+  private NamedBlobPutHandler namedBlobPutHandler;
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
-  private NamedBlobPutHandler namedBlobPutHandler;
   private TtlUpdateHandler ttlUpdateHandler;
   private DeleteBlobHandler deleteBlobHandler;
   private HeadBlobHandler headBlobHandler;
@@ -179,15 +179,17 @@ class FrontendRestRequestService implements RestRequestService {
     undeleteHandler =
         new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager);
+
     namedBlobListHandler =
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
     namedBlobGetHandler =
         new NamedBlobGetHandler(accountAndContainerInjector, namedBlobDb, frontendMetrics, getBlobHandler);
     namedBlobDeleteHandler =
         new NamedBlobDeleteHandler(accountAndContainerInjector, namedBlobDb, frontendMetrics, deleteBlobHandler);
+    namedBlobPutHandler =
+        new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
+            frontendConfig, frontendMetrics, clusterName, quotaManager);
+
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
@@ -310,7 +312,7 @@ class FrontendRestRequestService implements RestRequestService {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else {
-        deleteBlobHandler.handle(restRequest, restResponseChannel, requestPath, (r, e) -> {
+        deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
       }

@@ -18,15 +18,19 @@ import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 
@@ -36,6 +40,10 @@ public class TestNamedBlobDb implements NamedBlobDb {
   private Exception exception;
   private final Time time;
   private final int listMaxResults;
+  private static final Set<GetOption> includeDeletedOptions =
+      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs));
+  private static final Set<GetOption> includeExpiredOptions =
+      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Expired_Blobs));
 
   public TestNamedBlobDb(Time time, int listMaxResults) {
     this.time = time;
@@ -43,7 +51,8 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
+  public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
+      GetOption option) {
     CompletableFuture<NamedBlobRecord> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
@@ -52,10 +61,12 @@ public class TestNamedBlobDb implements NamedBlobDb {
     Pair<NamedBlobRecord, Long> recordWithDelete = getInternal(accountName, containerName, blobName);
     if (recordWithDelete == null) {
       future.completeExceptionally(new RestServiceException("NotFound", RestServiceErrorCode.NotFound));
-    } else if (recordWithDelete.getSecond() != 0 && recordWithDelete.getSecond() < time.milliseconds()) {
+    } else if (recordWithDelete.getSecond() != 0 && recordWithDelete.getSecond() < time.milliseconds()
+        && !includeDeletedOptions.contains(option)) {
       future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
     } else if (recordWithDelete.getFirst().getExpirationTimeMs() != 0
-        && recordWithDelete.getFirst().getExpirationTimeMs() < time.milliseconds()) {
+        && recordWithDelete.getFirst().getExpirationTimeMs() < time.milliseconds() && !includeExpiredOptions.contains(
+        option)) {
       future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
     } else {
       future.complete(recordWithDelete.getFirst());

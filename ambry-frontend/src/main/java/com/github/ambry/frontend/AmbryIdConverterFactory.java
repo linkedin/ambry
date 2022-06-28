@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
-import com.github.ambry.commons.FutureUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
