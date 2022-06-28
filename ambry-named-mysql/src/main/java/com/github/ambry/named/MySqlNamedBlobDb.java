@@ -56,7 +56,7 @@ import org.slf4j.LoggerFactory;
  * implementation.
  */
 class MySqlNamedBlobDb implements NamedBlobDb {
-  private static final Logger logger = LoggerFactory.getLogger(com.github.ambry.named.MySqlNamedBlobDb.class);
+  private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
   // table name
   private static final String NAMED_BLOBS = "named_blobs";
   // column names
@@ -115,10 +115,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private final String localDatacenter;
   private final List<String> remoteDatacenters;
   private final RetryExecutor retryExecutor;
-  private final Map<String, com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutor> transactionExecutors;
+  private final Map<String, TransactionExecutor> transactionExecutors;
   private final MySqlNamedBlobDbConfig config;
 
-  MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, com.github.ambry.named.MySqlNamedBlobDb.DataSourceFactory dataSourceFactory,
+  MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
       String localDatacenter) {
     this.accountService = accountService;
     this.config = config;
@@ -130,7 +130,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         .flatMap(List::stream)
         .filter(DbEndpoint::isWriteable)
         .collect(Collectors.toMap(DbEndpoint::getDatacenter,
-            dbEndpoint -> new com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutor(dbEndpoint.getDatacenter(),
+            dbEndpoint -> new TransactionExecutor(dbEndpoint.getDatacenter(),
                 dataSourceFactory.getDataSource(dbEndpoint),
                 localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
@@ -278,17 +278,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   /**
    * Run a transaction on a thread pool and handle common logic surrounding looking up account metadata and error
    * handling. Eventually this will handle retries.
-   * @param <T> the return type of the {@link com.github.ambry.named.MySqlNamedBlobDb.Transaction}.
+   * @param <T> the return type of the {@link Transaction}.
    * @param accountName the account name for the transaction.
    * @param containerName the container name for the transaction.
    * @param autoCommit true if each statement execution should be its own transaction. If set to false, this helper will
    *                   handle calling commit/rollback.
-   * @param transaction the {@link com.github.ambry.named.MySqlNamedBlobDb.Transaction} to run. This can either be a read only query or include DML.
+   * @param transaction the {@link Transaction} to run. This can either be a read only query or include DML.
    * @param transactionStateTracker the {@link TransactionStateTracker} to describe the retry strategy.
    * @return a {@link CompletableFuture} that will eventually contain the result of the transaction or an exception.
    */
   private <T> CompletableFuture<T> executeTransactionAsync(String accountName, String containerName, boolean autoCommit,
-      com.github.ambry.named.MySqlNamedBlobDb.Transaction<T> transaction, TransactionStateTracker transactionStateTracker) {
+      Transaction<T> transaction, TransactionStateTracker transactionStateTracker) {
     CompletableFuture<T> future = new CompletableFuture<>();
     // Look up account and container IDs. This is common logic needed for all types of transactions.
     Account account = accountService.getAccountByName(accountName);
@@ -335,7 +335,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       executor = Utils.newScheduler(numThreads, "Thread-" + datacenter, false);
     }
 
-    <T> void executeTransaction(Container container, boolean autoCommit, com.github.ambry.named.MySqlNamedBlobDb.Transaction<T> transaction,
+    <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
         Callback<T> callback) {
       executor.submit(() -> {
         try (Connection connection = dataSource.getConnection()) {

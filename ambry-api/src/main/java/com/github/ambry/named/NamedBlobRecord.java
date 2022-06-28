@@ -96,7 +96,7 @@ public class NamedBlobRecord {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    com.github.ambry.named.NamedBlobRecord record = (com.github.ambry.named.NamedBlobRecord) o;
+    NamedBlobRecord record = (NamedBlobRecord) o;
     return expirationTimeMs == record.expirationTimeMs && Objects.equals(accountName, record.accountName)
         && Objects.equals(containerName, record.containerName) && Objects.equals(blobName, record.blobName)
         && Objects.equals(blobId, record.blobId) && Objects.equals(version, record.version);
