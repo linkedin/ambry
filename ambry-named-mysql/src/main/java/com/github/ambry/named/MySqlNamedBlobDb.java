@@ -37,6 +37,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -55,7 +56,7 @@ import org.slf4j.LoggerFactory;
  * implementation.
  */
 class MySqlNamedBlobDb implements NamedBlobDb {
-  private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
+  private static final Logger logger = LoggerFactory.getLogger(com.github.ambry.named.MySqlNamedBlobDb.class);
   // table name
   private static final String NAMED_BLOBS = "named_blobs";
   // column names
@@ -63,67 +64,61 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String CONTAINER_ID = "container_id";
   private static final String BLOB_NAME = "blob_name";
   private static final String BLOB_ID = "blob_id";
+  private static final String BLOB_STATE = "blob_state";
+  private static final String VERSION = "version";
   private static final String DELETED_TS = "deleted_ts";
   private static final String EXPIRES_TS = "expires_ts";
   // query building blocks
   private static final String CURRENT_TIME = "CURRENT_TIMESTAMP(6)";
-  private static final String CURRENT_TIME_COMPARISON = "(%1$s IS NOT NULL AND %1$s <= " + CURRENT_TIME + ")";
-  private static final String IS_DELETED = String.format(CURRENT_TIME_COMPARISON, DELETED_TS);
-  private static final String IS_EXPIRED = String.format(CURRENT_TIME_COMPARISON, EXPIRES_TS);
-  private static final String IS_DELETED_OR_EXPIRED = "(" + IS_DELETED + " OR " + IS_EXPIRED + ")";
+  private static final String STATE_MATCH = String.format("%s = '%s'", BLOB_STATE, NamedBlobState.READY);
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
+  private static final String PK_MATCH_VERSION = String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID,
+      CONTAINER_ID, BLOB_NAME, VERSION);
 
   /**
    * Select a record that matches a blob name (lookup by primary key).
    */
   private static final String GET_QUERY =
-      String.format("SELECT %s, %s, %s FROM %s WHERE %s", BLOB_ID, EXPIRES_TS, DELETED_TS, NAMED_BLOBS, PK_MATCH);
+      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION,
+          EXPIRES_TS, DELETED_TS, NAMED_BLOBS, PK_MATCH, STATE_MATCH, VERSION);
 
   /**
    * Select records up to a specific limit where the blob name starts with a string prefix. The fourth parameter can
    * be used for pagination.
    */
   private static final String LIST_QUERY = String.format("SELECT %1$s, %2$s, %3$s, %4$s FROM %5$s "
-          + "WHERE (%6$s, %7$s) = (?, ?) AND %1$s LIKE ? AND %1$s >= ? ORDER BY %1$s ASC LIMIT ?", BLOB_NAME, BLOB_ID,
-      EXPIRES_TS, DELETED_TS, NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID);
+          + "WHERE (%6$s, %7$s) = (?, ?) AND %8$s AND %1$s LIKE ? AND %1$s >= ? ORDER BY %1$s ASC LIMIT ?", BLOB_NAME,
+      BLOB_ID, EXPIRES_TS, DELETED_TS, NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID, STATE_MATCH);
 
   /**
    * Attempt to insert a new mapping into the database.
    */
   private static final String INSERT_QUERY =
-      String.format("INSERT INTO %s (%s, %s, %4$s, %5$s, %6$s) VALUES (?, ?, ?, ?, ?)", NAMED_BLOBS, ACCOUNT_ID,
-          CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS);
-
-  /**
-   * If a record already exists for a named blob, attempt an update if the record in the DB represents an expired or
-   * deleted blob.
-   */
-  private static final String UPDATE_IF_DELETED_OR_EXPIRED_QUERY =
-      String.format("UPDATE %s SET %s = ?, %s = ?, %s = null WHERE %s AND %s", NAMED_BLOBS, BLOB_ID, EXPIRES_TS,
-          DELETED_TS, PK_MATCH, IS_DELETED_OR_EXPIRED);
+      String.format("INSERT INTO %s (%s, %s, %4$s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)", NAMED_BLOBS,
+          ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS, VERSION, BLOB_STATE);
 
   /**
    * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.
    * This select call also allows the current blob ID to be retrieved prior to a delete.
    */
   private static final String SELECT_FOR_SOFT_DELETE_QUERY =
-      String.format("SELECT %s, %s, %s FROM %s WHERE %s FOR UPDATE", BLOB_ID, DELETED_TS, CURRENT_TIME, NAMED_BLOBS,
-          PK_MATCH);
+      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1 FOR UPDATE", BLOB_ID,
+          VERSION, DELETED_TS, CURRENT_TIME, NAMED_BLOBS, PK_MATCH, STATE_MATCH, VERSION);
 
   /**
    * Soft delete a blob by setting the delete timestamp to the current time.
    */
   private static final String SOFT_DELETE_QUERY =
-      String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS, DELETED_TS, PK_MATCH);
+      String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS, DELETED_TS, PK_MATCH_VERSION);
 
   private final AccountService accountService;
   private final String localDatacenter;
   private final List<String> remoteDatacenters;
   private final RetryExecutor retryExecutor;
-  private final Map<String, TransactionExecutor> transactionExecutors;
+  private final Map<String, com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutor> transactionExecutors;
   private final MySqlNamedBlobDbConfig config;
 
-  MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
+  MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, com.github.ambry.named.MySqlNamedBlobDb.DataSourceFactory dataSourceFactory,
       String localDatacenter) {
     this.accountService = accountService;
     this.config = config;
@@ -135,7 +130,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         .flatMap(List::stream)
         .filter(DbEndpoint::isWriteable)
         .collect(Collectors.toMap(DbEndpoint::getDatacenter,
-            dbEndpoint -> new TransactionExecutor(dbEndpoint.getDatacenter(),
+            dbEndpoint -> new com.github.ambry.named.MySqlNamedBlobDb.TransactionExecutor(dbEndpoint.getDatacenter(),
                 dataSourceFactory.getDataSource(dbEndpoint),
                 localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
@@ -156,8 +151,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                 blobName);
           }
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-          Timestamp expirationTime = resultSet.getTimestamp(2);
-          Timestamp deletionTime = resultSet.getTimestamp(3);
+          long version = resultSet.getLong(2);
+          Timestamp expirationTime = resultSet.getTimestamp(3);
+          Timestamp deletionTime = resultSet.getTimestamp(4);
           long currentTime = System.currentTimeMillis();
           if (compareTimestamp(expirationTime, currentTime) <= 0) {
             throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
@@ -166,7 +162,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
                 blobName);
           } else {
-            return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime));
+            return new NamedBlobRecord(accountName, containerName, blobName, blobId, version, timestampToMs(expirationTime));
           }
         }
       }
@@ -206,7 +202,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                   accountName, containerName, blobName);
             } else {
               entries.add(
-                  new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime)));
+                  new NamedBlobRecord(accountName, containerName, blobName, blobId, 0, timestampToMs(expirationTime)));
             }
           }
           return new Page<>(entries, nextContinuationToken);
@@ -219,7 +215,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<PutResult> put(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
-          boolean rowAlreadyExists = false;
           // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
           try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
             statement.setInt(1, accountId);
@@ -231,34 +226,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             } else {
               statement.setTimestamp(5, null);
             }
+            statement.setLong(6, buildVersion());
+            statement.setString(7, NamedBlobState.READY.name());
             statement.executeUpdate();
           } catch (SQLIntegrityConstraintViolationException e) {
-            rowAlreadyExists = true;
-          }
-          // 2. If the row already exists, attempt an update, checking that the update should be allowed (the current
-          //    row in the db represents a blob that was soft deleted or expired. Since soft deleted records are not
-          //    deleted from the table before a long retention period, there is no risk of the row not existing when
-          //    this query is run.
-          if (rowAlreadyExists) {
-            try (PreparedStatement statement = connection.prepareStatement(UPDATE_IF_DELETED_OR_EXPIRED_QUERY)) {
-              // fields to update
-              statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
-              if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
-                statement.setTimestamp(2, new Timestamp(record.getExpirationTimeMs()));
-              } else {
-                statement.setTimestamp(2, null);
-              }
-              // primary key fields
-              statement.setInt(3, accountId);
-              statement.setInt(4, containerId);
-              statement.setString(5, record.getBlobName());
-              // the number of rows found will be 0 if there is currently an entry for this blob name that is
-              // not expired or deleted.
-              if (statement.executeUpdate() == 0) {
-                throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
-                    record.getContainerName(), record.getBlobName());
-              }
-            }
+            throw e;
           }
           return new PutResult(record);
         }, null);
@@ -268,6 +240,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
       String blobId;
+      long version;
       Timestamp currentTime;
       boolean alreadyDeleted;
       try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY)) {
@@ -280,8 +253,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                 blobName);
           }
           blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-          Timestamp deletionTime = resultSet.getTimestamp(2);
-          currentTime = resultSet.getTimestamp(3);
+          version = resultSet.getLong(2);
+          Timestamp deletionTime = resultSet.getTimestamp(3);
+          currentTime = resultSet.getTimestamp(4);
           alreadyDeleted = (deletionTime != null && currentTime.after(deletionTime));
         }
       }
@@ -293,6 +267,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           statement.setInt(2, accountId);
           statement.setInt(3, containerId);
           statement.setString(4, blobName);
+          statement.setLong(5, version);
           statement.executeUpdate();
         }
       }
@@ -303,17 +278,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   /**
    * Run a transaction on a thread pool and handle common logic surrounding looking up account metadata and error
    * handling. Eventually this will handle retries.
-   * @param <T> the return type of the {@link Transaction}.
+   * @param <T> the return type of the {@link com.github.ambry.named.MySqlNamedBlobDb.Transaction}.
    * @param accountName the account name for the transaction.
    * @param containerName the container name for the transaction.
    * @param autoCommit true if each statement execution should be its own transaction. If set to false, this helper will
    *                   handle calling commit/rollback.
-   * @param transaction the {@link Transaction} to run. This can either be a read only query or include DML.
+   * @param transaction the {@link com.github.ambry.named.MySqlNamedBlobDb.Transaction} to run. This can either be a read only query or include DML.
    * @param transactionStateTracker the {@link TransactionStateTracker} to describe the retry strategy.
    * @return a {@link CompletableFuture} that will eventually contain the result of the transaction or an exception.
    */
   private <T> CompletableFuture<T> executeTransactionAsync(String accountName, String containerName, boolean autoCommit,
-      Transaction<T> transaction, TransactionStateTracker transactionStateTracker) {
+      com.github.ambry.named.MySqlNamedBlobDb.Transaction<T> transaction, TransactionStateTracker transactionStateTracker) {
     CompletableFuture<T> future = new CompletableFuture<>();
     // Look up account and container IDs. This is common logic needed for all types of transactions.
     Account account = accountService.getAccountByName(accountName);
@@ -360,7 +335,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       executor = Utils.newScheduler(numThreads, "Thread-" + datacenter, false);
     }
 
-    <T> void executeTransaction(Container container, boolean autoCommit, Transaction<T> transaction,
+    <T> void executeTransaction(Container container, boolean autoCommit, com.github.ambry.named.MySqlNamedBlobDb.Transaction<T> transaction,
         Callback<T> callback) {
       executor.submit(() -> {
         try (Connection connection = dataSource.getConnection()) {
@@ -405,6 +380,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return transactionExecutors.entrySet()
         .stream()
         .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getDataSource()));
+  }
+
+  /**
+   * Build the version for Named Blob row based on timestamp and uuid postfix.
+   * @return a long number whose rightmost 5 digits are uuid postfix, and the remaining digits are current timestamp
+   */
+  private static long buildVersion() {
+    long currentTime = System.currentTimeMillis();
+    UUID uuid = UUID.randomUUID();
+    int base = 100000;
+    return currentTime * base + Long.parseLong(uuid.toString().split("-")[0],16) % base;
   }
 
   /**

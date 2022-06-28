@@ -26,6 +26,7 @@ public class NamedBlobRecord {
   private final String containerName;
   private final String blobName;
   private final String blobId;
+  private final long version;
   private final long expirationTimeMs;
 
   /**
@@ -35,12 +36,13 @@ public class NamedBlobRecord {
    * @param blobId the blob ID for the blob content in ambry storage.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    */
-  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId, long version,
       long expirationTimeMs) {
     this.accountName = accountName;
     this.containerName = containerName;
     this.blobName = blobName;
     this.blobId = blobId;
+    this.version = version;
     this.expirationTimeMs = expirationTimeMs;
   }
 
@@ -73,6 +75,13 @@ public class NamedBlobRecord {
   }
 
   /**
+   * @return the version for the named blob map.
+   */
+  public long getVersion() {
+    return version;
+  }
+
+  /**
    * @return the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    */
   public long getExpirationTimeMs() {
@@ -87,9 +96,9 @@ public class NamedBlobRecord {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    NamedBlobRecord record = (NamedBlobRecord) o;
+    com.github.ambry.named.NamedBlobRecord record = (com.github.ambry.named.NamedBlobRecord) o;
     return expirationTimeMs == record.expirationTimeMs && Objects.equals(accountName, record.accountName)
         && Objects.equals(containerName, record.containerName) && Objects.equals(blobName, record.blobName)
-        && Objects.equals(blobId, record.blobId);
+        && Objects.equals(blobId, record.blobId) && Objects.equals(version, record.version);
   }
 }
