@@ -25,6 +25,7 @@ import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
@@ -35,6 +36,8 @@ import java.sql.ResultSet;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -75,6 +78,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
   private static final String PK_MATCH_VERSION = String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID,
       CONTAINER_ID, BLOB_NAME, VERSION);
+
+  private static final Set<GetOption> includeDeletedModes =
+      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs));
+  private static final Set<GetOption> includeExpiredModes =
+      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Expired_Blobs));
 
   /**
    * Select a record that matches a blob name (lookup by primary key).
@@ -138,7 +146,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
+  public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
+      GetOption option) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
@@ -156,10 +165,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp expirationTime = resultSet.getTimestamp(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
           long currentTime = System.currentTimeMillis();
-          if (compareTimestamp(expirationTime, currentTime) <= 0) {
+          if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredModes.contains(option)) {
             throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
                 blobName);
-          } else if (compareTimestamp(deletionTime, currentTime) <= 0) {
+          } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedModes.contains(option)) {
             throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
                 blobName);
           } else {
