@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
@@ -131,6 +132,13 @@ public class MySqlNamedBlobDbIntegrationTest {
       assertFalse("Unexpected alreadyDeleted value", deleteResult.isAlreadyDeleted());
       checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()),
           RestServiceErrorCode.Deleted);
+      NamedBlobRecord recordFromStore =
+          namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+              GetOption.Include_Deleted_Blobs).get();
+      assertEquals("Record does not match expectations.", record, recordFromStore);
+      recordFromStore = namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+          GetOption.Include_All).get();
+      assertEquals("Record does not match expectations.", record, recordFromStore);
     }
 
     // deletes should be idempotent and additional delete calls should succeed
@@ -186,6 +194,12 @@ public class MySqlNamedBlobDbIntegrationTest {
     Thread.sleep(100);
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
         RestServiceErrorCode.Deleted);
+    NamedBlobRecord recordFromStore =
+        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_All).get();
+    assertEquals("Record does not match expectations.", record, recordFromStore);
+    recordFromStore =
+        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_Expired_Blobs).get();
+    assertEquals("Record does not match expectations.", record, recordFromStore);
 
     // replacement should succeed
     blobId = getBlobId(account, container);
