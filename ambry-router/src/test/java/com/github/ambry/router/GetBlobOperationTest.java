@@ -781,10 +781,10 @@ public class GetBlobOperationTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             GetBlobOperation op = createOperationAndComplete(null);
-            // Local dc is the origin DC, need at least three NOT_FOUND responses from origin DC to terminate the operation.
-            // Note that the default parallelism is 2 for GET. To terminate on not found, 4 requests may be sent out.
+            // Local dc is the origin DC, need two NOT_FOUND responses from origin DC to terminate the operation.
+            // Note that the default parallelism is 2 for GET. To terminate on not found, 2 requests must be sent out.
             Assert.assertTrue("Must have attempted sending requests to all 3 originating dc replicas",
-                correlationIdToGetOperation.size() >= 3);
+                correlationIdToGetOperation.size() >= 2);
             assertFailureAndCheckErrorCode(op, expectedError);
           }
         });
