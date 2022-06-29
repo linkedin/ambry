@@ -179,22 +179,26 @@ subprojects {
 }
 
 ext {
+    // Get platform specific information
     osArch = System.getProperty("os.arch")
     osName = System.getProperty("os.name").toLowerCase()
     osNameShort = ""
     if (osName.contains("mac"))
         osNameShort = "osx"
-    else if (osName.contains("Linux"))
+    else if (osName.contains("linux"))
         osNameShort = "linux"
     else
         osNameShort = "windows"
     osClass = "${osNameShort}_$osArch"
+
+    // Netty tcnative has a different string for os arch
     osArchNetty = ""
     if (osArch.contains("aarch"))
         osArchNetty = "aarch_64" // arm64
     else
         osArchNetty = "x86_64"
     osClassNetty = "${osNameShort}-$osArchNetty"
+
     print osClass
     print osClassNetty
 }
