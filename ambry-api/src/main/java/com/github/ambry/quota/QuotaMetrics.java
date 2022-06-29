@@ -96,4 +96,11 @@ public class QuotaMetrics {
               String.format("QuotaResource-%s-WouldBeThrottledCount", quotaResourceId))));
     }
   }
+
+  /**
+   * @return MetricRegistry object.
+   */
+  public MetricRegistry getMetricRegistry() {
+    return metricRegistry;
+  }
 }
