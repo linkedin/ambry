@@ -178,6 +178,27 @@ subprojects {
     }
 }
 
+ext {
+    osArch = System.getProperty("os.arch")
+    osName = System.getProperty("os.name").toLowerCase()
+    osNameShort = ""
+    if (osName.contains("mac"))
+        osNameShort = "osx"
+    else if (osName.contains("Linux"))
+        osNameShort = "linux"
+    else
+        osNameShort = "windows"
+    osClass = "${osNameShort}_$osArch"
+    osArchNetty = ""
+    if (osArch.contains("aarch"))
+        osArchNetty = "aarch_64" // arm64
+    else
+        osArchNetty = "x86_64"
+    osClassNetty = "${osNameShort}-$osArchNetty"
+    print osClass
+    print osClassNetty
+}
+
 project(':ambry-utils') {
     dependencies {
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
@@ -396,7 +417,7 @@ project(':ambry-rest') {
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
         compile "io.netty:netty-all:$nettyVersion"
-        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
+        compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion:$osClassNetty"
         compile "io.netty:netty-transport-native-epoll:$nettyVersion"
         compile "javax.servlet:javax.servlet-api:$javaxVersion"
         runtimeOnly "org.apache.logging.log4j:log4j-core:$log4jVersion"
