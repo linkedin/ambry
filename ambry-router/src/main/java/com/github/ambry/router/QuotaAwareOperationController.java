@@ -184,7 +184,7 @@ public class QuotaAwareOperationController extends OperationController {
             break;
           case REJECT:
             quotaAvailable = false;
-            routerMetrics.nonQuotaCompliantRequestRate.mark();
+            routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
             requestQueue.get(quotaResource).removeFirst();
             break;
@@ -211,12 +211,14 @@ public class QuotaAwareOperationController extends OperationController {
         QuotaAction quotaAction = requestInfo.getChargeable().checkAndCharge(true);
         switch (quotaAction) {
           case ALLOW:
+            routerMetrics.exceedAllowedRequestRate.mark();
             requestsToSend.add(requestInfo);
             break;
           case DELAY:
+            routerMetrics.delayedRequestRate.mark();
             return;
           case REJECT:
-            routerMetrics.nonQuotaCompliantRequestRate.mark();
+            routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
         }
         requestQueue.get(quotaResource).removeFirst();

@@ -234,7 +234,9 @@ public class NonBlockingRouterMetrics {
 
   // Quota handling related metrics
   public final Meter requestsWithUnknownQuotaResourceRate;
-  public final Meter nonQuotaCompliantRequestRate;
+  public final Meter rejectedRequestRate;
+  public final Meter delayedRequestRate;
+  public final Meter exceedAllowedRequestRate;
   public final Meter unknownExceptionInChargeableRate;
   public Gauge<Integer> operationControllerReadQueueSize;
   public Gauge<Integer> operationControllerWriteQueueSize;
@@ -569,8 +571,12 @@ public class NonBlockingRouterMetrics {
 
     requestsWithUnknownQuotaResourceRate = metricRegistry.meter(
         MetricRegistry.name(QuotaAwareOperationController.class, "RequestsWithUnknownQuotaResourceRate"));
-    nonQuotaCompliantRequestRate =
-        metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "NonQuotaCompliantRequestRate"));
+    rejectedRequestRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "RejectedRequestRate"));
+    delayedRequestRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "DelayedRequestRate"));
+    exceedAllowedRequestRate =
+        metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "ExceedAllowedRequestRate"));
     unknownExceptionInChargeableRate =
         metricRegistry.meter(MetricRegistry.name(OperationQuotaCharger.class, "UnknownExceptionInChargeableRate"));
   }
