@@ -79,6 +79,10 @@ public class GetBlobHandler {
         getGetOption(restRequest, frontendConfig.defaultRouterGetOption), restRequest, requestPath.getBlobSegmentIdx());
     RestRequestMetricsGroup metricsGroup = getMetricsGroupForGet(metrics, subResource);
     RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+    if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metricsGroup);
+    }
     restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
     new CallbackChain(restRequest, restResponseChannel, metricsGroup, requestPath, subResource, options,
         callback).start();

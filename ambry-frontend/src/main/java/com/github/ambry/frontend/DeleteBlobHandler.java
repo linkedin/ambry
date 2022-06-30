@@ -18,6 +18,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -64,6 +65,11 @@ public class DeleteBlobHandler {
       throws RestServiceException {
     RestRequestMetrics requestMetrics =
         metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+    RequestPath requestPath = getRequestPath(restRequest);
+    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+    if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
+      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metrics.deleteBlobMetricsGroup);
+    }
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }

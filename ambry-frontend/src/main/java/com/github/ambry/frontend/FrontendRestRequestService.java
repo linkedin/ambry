@@ -75,8 +75,8 @@ class FrontendRestRequestService implements RestRequestService {
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private NamedBlobListHandler namedBlobListHandler;
-  private NamedBlobGetHandler namedBlobGetHandler;
-  private NamedBlobDeleteHandler namedBlobDeleteHandler;
+  //private NamedBlobGetHandler namedBlobGetHandler;
+  //private NamedBlobDeleteHandler namedBlobDeleteHandler;
   private NamedBlobPutHandler namedBlobPutHandler;
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
@@ -182,10 +182,6 @@ class FrontendRestRequestService implements RestRequestService {
 
     namedBlobListHandler =
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
-    namedBlobGetHandler =
-        new NamedBlobGetHandler(accountAndContainerInjector, namedBlobDb, frontendMetrics, getBlobHandler);
-    namedBlobDeleteHandler =
-        new NamedBlobDeleteHandler(accountAndContainerInjector, namedBlobDb, frontendMetrics, deleteBlobHandler);
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             frontendConfig, frontendMetrics, clusterName, quotaManager);
@@ -245,14 +241,10 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.STATS_REPORT)) {
         getStatsReportHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-        if (NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
-          namedBlobListHandler.handle(restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        } else {
-          namedBlobGetHandler.handle(restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        }
+      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
+          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
+        namedBlobListHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         getBlobHandler.handle(requestPath, restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, r, e);
@@ -307,15 +299,9 @@ class FrontendRestRequestService implements RestRequestService {
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-        namedBlobDeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          submitResponse(restRequest, restResponseChannel, null, e);
-        });
-      } else {
-        deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          submitResponse(restRequest, restResponseChannel, null, e);
-        });
-      }
+      deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+        submitResponse(restRequest, restResponseChannel, null, e);
+      });
     };
     preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.deletePreProcessingMetrics,
         routingAction);
