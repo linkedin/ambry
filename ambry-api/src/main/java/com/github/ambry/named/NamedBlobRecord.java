@@ -75,6 +75,7 @@ public class NamedBlobRecord {
 
   /**
    * @set the version for the named blob map.
+   * TODO Will add this to constructor when adding version in call the code places that call this class
    */
   public void setVersion(long versionNew) {
     this.version = versionNew;;

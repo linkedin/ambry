@@ -95,16 +95,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Select records up to a specific limit where the blob name starts with a string prefix. The fourth parameter can
    * be used for pagination.
    */
-  private static final String LIST_QUERY = String.format("SELECT %1$s, %2$s, %3$s, %4$s FROM %5$s "
-          + "WHERE (%6$s, %7$s) = (?, ?) AND %8$s AND %1$s LIKE ? AND %1$s >= ? ORDER BY %1$s ASC LIMIT ?", BLOB_NAME,
-      BLOB_ID, EXPIRES_TS, DELETED_TS, NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID, STATE_MATCH);
+  private static final String LIST_QUERY = String.format("SELECT blob_name, blob_id, expires_ts, deleted_ts FROM %1$s "
+          + "WHERE (%2$s, %3$s) = (?, ?) AND %4$s AND %5$s LIKE ? AND %5$s >= ? ORDER BY %5$s ASC LIMIT ?", NAMED_BLOBS,
+      ACCOUNT_ID, CONTAINER_ID, STATE_MATCH, BLOB_NAME);
 
   /**
    * Attempt to insert a new mapping into the database.
    */
   private static final String INSERT_QUERY =
-      String.format("INSERT INTO %s (%s, %s, %4$s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)", NAMED_BLOBS,
-          ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS, VERSION, BLOB_STATE);
+      String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS, VERSION, BLOB_STATE);
 
   /**
    * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.
