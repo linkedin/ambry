@@ -54,6 +54,11 @@ import org.slf4j.LoggerFactory;
 public class RestUtils {
 
   /**
+   * The default extension to add to blob id returned back to client.
+   */
+  public static final String DEFAULT_EXTENSION = "bin";
+
+  /**
    * Ambry specific HTTP headers.
    */
   public static final class Headers {

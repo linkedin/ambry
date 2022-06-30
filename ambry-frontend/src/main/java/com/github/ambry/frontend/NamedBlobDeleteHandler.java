@@ -92,7 +92,8 @@ class NamedBlobDeleteHandler {
           // delete. Even if client doesn't retry delete, we still have a background job to delete the orphan blob from router.
           RequestPath newRequestPath =
               new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                  "/ " + blobId, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+                  "/" + blobId + "." + DEFAULT_EXTENSION, requestPath.getSubResource(),
+                  requestPath.getBlobSegmentIdx());
           // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
           restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
           try {

@@ -268,18 +268,22 @@ public class FrontendIntegrationTestBase {
     headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     setAmbryHeadersForPut(headers, TTL_SECS, false, accountName, contentType, ownerId, null, null);
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(100));
-    putNamedBlobAndVerify(headers, content, 100, accountName, containerName, blobName);
+    String blobId = putNamedBlobAndVerify(headers, content, 100, accountName, containerName, blobName);
 
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     headers.add(RestUtils.Headers.LIFE_VERSION, "0");
     headers.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
     headers.add(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
-    String blobId = buildUriForNamedBlob(accountName, containerName, blobName);
-    // check GET, HEAD, DELETE
+    // This is the blob id for the given blob name, we should be able to do all get operations on this blob id.
     doVariousGetAndVerify(blobId, headers, false, content, 100, accountName, containerName, null);
-    deleteBlobAndVerify(blobId);
+
+    String fakeBlobId = buildUriForNamedBlob(accountName, containerName, blobName);
+    // check GET, HEAD, DELETE
+    doVariousGetAndVerify(fakeBlobId, headers, false, content, 100, accountName, containerName, null);
+    deleteBlobAndVerify(fakeBlobId);
 
     // check GET after DELETE
+    verifyOperationsAfterDelete(fakeBlobId, headers, false, accountName, containerName, content, null, true);
     verifyOperationsAfterDelete(blobId, headers, false, accountName, containerName, content, null, true);
   }
 
@@ -334,10 +338,11 @@ public class FrontendIntegrationTestBase {
    * @param accountName the account name.
    * @param containerName the container name.
    * @param blobName the blob name.
+   * @return blob id returned by the server.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  void putNamedBlobAndVerify(HttpHeaders headers, ByteBuffer content, long contentSize, String accountName,
+  String putNamedBlobAndVerify(HttpHeaders headers, ByteBuffer content, long contentSize, String accountName,
       String containerName, String blobName) throws Exception {
     FullHttpRequest httpRequest =
         buildRequest(HttpMethod.PUT, buildUriForNamedBlob(accountName, containerName, blobName), headers, content);
@@ -356,6 +361,7 @@ public class FrontendIntegrationTestBase {
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     verifyTrackingHeaders(response);
     verifyPostRequestCostHeaders(response, contentSize);
+    return blobId;
   }
 
   /**
