@@ -91,15 +91,20 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       if (request.equals(EmptyRequest.getInstance())) {
         logger.debug("Request handler {} received shut down command ", request);
       } else {
-        DataInputStream stream = new DataInputStream(request.getInputStream());
-        try {
-          // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
-          // Here we just need to consume it.
-          stream.readLong();
-        } catch (IOException e) {
-          logger.error("Encountered an error while reading length out, close the connection", e);
-          closeConnection(request);
-          request = null;
+        if (request.isRegularHttp()) {
+          // This is a regular http request
+          break;
+        } else {
+          DataInputStream stream = new DataInputStream(request.getInputStream());
+          try {
+            // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
+            // Here we just need to consume it.
+            stream.readLong();
+          } catch (IOException e) {
+            logger.error("Encountered an error while reading length out, close the connection", e);
+            closeConnection(request);
+            request = null;
+          }
         }
       }
     }

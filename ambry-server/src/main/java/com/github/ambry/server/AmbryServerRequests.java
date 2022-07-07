@@ -49,6 +49,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import io.netty.handler.codec.http.FullHttpRequest;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.Collection;
@@ -234,6 +235,11 @@ public class AmbryServerRequests extends AmbryRequests {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,
             requestTotalTimeHistogram, null, null, totalTimeSpent));
+  }
+
+  @Override
+  public void handleRegularHttpRequests(FullHttpRequest request) throws IOException, InterruptedException {
+
   }
 
   /**

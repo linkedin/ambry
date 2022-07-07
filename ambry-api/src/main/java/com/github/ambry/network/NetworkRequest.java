@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.FullHttpRequest;
 import java.io.InputStream;
 
 
@@ -40,5 +41,13 @@ public interface NetworkRequest {
    */
   default boolean release() {
     return false;
+  }
+
+  default boolean isRegularHttp() {
+    return false;
+  }
+
+  default FullHttpRequest getHttpRequest() {
+    return null;
   }
 }

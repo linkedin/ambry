@@ -44,7 +44,11 @@ public class AmbryNetworkRequestHandler extends SimpleChannelInboundHandler<Full
 
     ByteBuf dup = msg.content().retainedDuplicate();
     try {
-      requestResponseChannel.sendRequest(new NettyServerRequest(ctx, dup));
+      if (msg.uri().equals("/")) {
+        requestResponseChannel.sendRequest(new NettyServerRequest(ctx, dup));
+      } else {
+        requestResponseChannel.sendRequest(new NettyServerRequest(ctx, msg));
+      }
     } catch (InterruptedException e) {
       dup.release();
       http2ServerMetrics.requestResponseChannelErrorCount.inc();

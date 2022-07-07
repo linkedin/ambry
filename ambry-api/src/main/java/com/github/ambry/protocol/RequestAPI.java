@@ -14,6 +14,7 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.network.NetworkRequest;
+import io.netty.handler.codec.http.FullHttpRequest;
 import java.io.IOException;
 
 
@@ -28,6 +29,10 @@ public interface RequestAPI {
    * @throws InterruptedException if request processing is interrupted.
    */
   void handleRequests(NetworkRequest request) throws InterruptedException;
+
+  default void handleRegularHttpRequests(FullHttpRequest request) throws IOException, InterruptedException {
+    throw new UnsupportedOperationException("Http request not supported on this node");
+  }
 
   /**
    * Puts a blob into the store. It accepts a blob property, user metadata and the blob

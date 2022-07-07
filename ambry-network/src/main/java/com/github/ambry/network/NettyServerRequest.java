@@ -17,6 +17,7 @@ import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.FullHttpRequest;
 import java.io.InputStream;
 
 
@@ -28,11 +29,21 @@ public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest
   private final InputStream inputStream;
   private final long startTimeInMs;
   private final ByteBuf content;
+  private final FullHttpRequest request;
 
   public NettyServerRequest(ChannelHandlerContext ctx, ByteBuf content) {
     this.ctx = ctx;
     this.content = content;
     this.inputStream = new NettyByteBufDataInputStream(content);
+    this.request = null;
+    this.startTimeInMs = System.currentTimeMillis();
+  }
+
+  public NettyServerRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
+    this.ctx = ctx;
+    this.content = request.content();
+    this.inputStream = null;
+    this.request = request;
     this.startTimeInMs = System.currentTimeMillis();
   }
 
@@ -48,6 +59,16 @@ public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest
   @Override
   public long getStartTimeInMs() {
     return startTimeInMs;
+  }
+
+  @Override
+  public FullHttpRequest getHttpRequest() {
+    return request;
+  }
+
+  @Override
+  public boolean isRegularHttp() {
+    return request != null;
   }
 
   @Override
