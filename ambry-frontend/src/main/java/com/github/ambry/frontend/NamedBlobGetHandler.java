@@ -86,6 +86,7 @@ class NamedBlobGetHandler {
               "/" + blobId + "." + DEFAULT_EXTENSION, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
       // Replace RequestPath in the RestRequest and call GetBlobHandler.handle.
       restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+      restRequest.setArg(InternalKeys.FILENAME_HINT, newRequestPath.getOperationOrBlobId(true));
       try {
         getBlobHandler.handle(newRequestPath, restRequest, restResponseChannel, callback);
       } catch (RestServiceException e) {

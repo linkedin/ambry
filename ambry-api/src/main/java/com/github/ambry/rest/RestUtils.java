@@ -384,6 +384,13 @@ public class RestUtils {
      * To be set to {@code true} if failures reason should be attached to frontend responses.
      */
     public static final String SEND_FAILURE_REASON = KEY_PREFIX + "send-failure-reason";
+
+    /**
+     * The key to store a hint for filename to return in response. This is an internal key to convey a potential filename
+     * to the component that set the filename in the response. Notice that this is just a hint, the final filename in
+     * may not be the same as the value in this key.
+     */
+    public static final String FILENAME_HINT = KEY_PREFIX + "filename-hint";
   }
 
   /**
