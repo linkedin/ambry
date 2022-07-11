@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.FutureUtils;
 import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
 import java.io.InputStream;

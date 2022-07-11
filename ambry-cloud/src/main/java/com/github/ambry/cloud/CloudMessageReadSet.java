@@ -14,8 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
@@ -23,9 +23,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.PooledByteBufAllocator;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -146,6 +146,20 @@ class CloudMessageReadSet implements MessageReadSet {
       blobContent = PooledByteBufAllocator.DEFAULT.ioBuffer((int) blobMetadata.getSize());
       ByteBufOutputStream outputStream = new ByteBufOutputStream(blobContent);
       blobStore.downloadBlob(blobMetadata, blobId, outputStream);
+    }
+
+    /**
+     * Download the {@code blob} from {@code CloudDestination} and put it in {@code blobContent} asynchronously.
+     * @param blobStore {@code CloudBlobStore} implementation representing the cloud from which download will happen.
+     * @return a {@link CompletableFuture} that will eventually complete when the blob is downloaded successfully. If
+     *         the blob could not be downloaded, it will complete exceptionally containing the {@link StoreException}
+     */
+    public CompletableFuture<Void> downloadBlobAsync(CloudBlobStore blobStore) {
+      // Casting blobsize to int, as blobs are chunked in Ambry, and chunk size is 4/8MB.
+      // However, if in future, if very large size of blobs are allowed, then prefetching logic should be changed.
+      blobContent = PooledByteBufAllocator.DEFAULT.ioBuffer((int) blobMetadata.getSize());
+      ByteBufOutputStream outputStream = new ByteBufOutputStream(blobContent);
+      return blobStore.downloadBlobAsync(blobMetadata, blobId, outputStream);
     }
 
     /**
