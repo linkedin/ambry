@@ -20,7 +20,6 @@ import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.models.BlobErrorCode;
-import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.codahale.metrics.Timer;
@@ -418,43 +417,41 @@ public class AzureBlobDataAccessor {
    *         the blobs successfully purged or a {@link BlobStorageException} if the purge operation fails.
    */
   public CompletableFuture<List<CloudBlobMetadata>> purgeBlobsAsync(List<CloudBlobMetadata> blobMetadataList) {
-    List<CompletableFuture<Void>> deleteBatchOperationFutureList = new ArrayList<>();
+    if (blobMetadataList.isEmpty()) {
+      return CompletableFuture.completedFuture(new ArrayList<>());
+    }
     List<CloudBlobMetadata> deletedBlobs = new ArrayList<>();
+    CompletableFuture<Void> resultFuture = null;
     List<List<CloudBlobMetadata>> partitionedLists = Utils.partitionList(blobMetadataList, purgeBatchSize);
     for (List<CloudBlobMetadata> batchOfBlobs : partitionedLists) {
-      CompletableFuture<Void> deleteBatchOperationFuture = new CompletableFuture<>();
-      FutureUtils.orTimeout(storageClient.deleteBatch(batchOfBlobs), batchTimeout)
-          .whenComplete((responseList, throwable) -> {
-            if (throwable != null) {
-              deleteBatchOperationFuture.completeExceptionally(Utils.extractFutureExceptionCause(throwable));
-            } else {
-              for (int j = 0; j < responseList.size(); j++) {
-                Response<Void> response = responseList.get(j);
-                CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
-                // Note: Response.getStatusCode() throws exception on any error.
-                try {
-                  response.getStatusCode();
-                } catch (BlobStorageException bse) {
-                  int statusCode = bse.getStatusCode();
-                  // Don't worry if blob is already gone
-                  if (statusCode != HttpURLConnection.HTTP_NOT_FOUND && statusCode != HttpURLConnection.HTTP_GONE) {
-                    logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
-                    deleteBatchOperationFuture.completeExceptionally(bse);
-                  }
+      CompletableFuture<Void> currentBatchDeleteFuture =
+          FutureUtils.orTimeout(storageClient.deleteBatch(batchOfBlobs), batchTimeout).thenAccept(responses -> {
+            for (int j = 0; j < responses.size(); j++) {
+              Response<Void> response = responses.get(j);
+              CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
+              // Note: Response.getStatusCode() throws exception on any error.
+              try {
+                response.getStatusCode();
+              } catch (BlobStorageException bse) {
+                int statusCode = bse.getStatusCode();
+                // Don't worry if blob is already gone
+                if (statusCode != HttpURLConnection.HTTP_NOT_FOUND && statusCode != HttpURLConnection.HTTP_GONE) {
+                  logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
+                  throw new CompletionException(bse);
                 }
-                deletedBlobs.add(blobMetadata);
               }
-              // Complete the results for current iteration.
-              deleteBatchOperationFuture.complete(null);
+              deletedBlobs.add(blobMetadata);
             }
           });
-      deleteBatchOperationFutureList.add(deleteBatchOperationFuture);
+      if (resultFuture == null) {
+        resultFuture = currentBatchDeleteFuture;
+      } else {
+        // Issue batch deletes serially one after another since issuing all in parallel can be expensive resulting in 429s.
+        resultFuture = resultFuture.thenCompose(unused -> currentBatchDeleteFuture);
+      }
     }
 
-    // Return a completable future that is completed (with list of deleted blobs) once all the individual delete batch
-    // operations complete.
-    return CompletableFuture.allOf(deleteBatchOperationFutureList.toArray(new CompletableFuture<?>[0]))
-        .thenApply(v -> deletedBlobs);
+    return Objects.requireNonNull(resultFuture).thenApply(unused -> deletedBlobs);
   }
 
   /**

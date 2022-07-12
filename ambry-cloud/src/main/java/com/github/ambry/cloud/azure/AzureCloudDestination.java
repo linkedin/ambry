@@ -390,11 +390,8 @@ class AzureCloudDestination implements CloudDestination {
   @Override
   public CompletableFuture<Map<String, CloudBlobMetadata>> getBlobMetadataAsync(List<BlobId> blobIds) {
     Objects.requireNonNull(blobIds, "blobIds cannot be null");
-    CompletableFuture<Map<String, CloudBlobMetadata>> resultFuture = new CompletableFuture<>();
-
     if (blobIds.isEmpty()) {
-      resultFuture.complete(Collections.emptyMap());
-      return resultFuture;
+      return CompletableFuture.completedFuture(Collections.emptyMap());
     }
 
     // For single blob GET request (isVcr = false), get metadata from ABS instead of Cosmos
@@ -402,45 +399,40 @@ class AzureCloudDestination implements CloudDestination {
     // previous upload could have resulted in a missing record in Cosmos; the findMissingKeys result
     // needs to include that store key to replay the upload.
     if (!isVcr && blobIds.size() == 1) {
-      azureBlobDataAccessor.getBlobMetadataAsync(blobIds.get(0)).whenComplete((cloudBlobMetadata, throwable) -> {
+      return azureBlobDataAccessor.getBlobMetadataAsync(blobIds.get(0)).handle((cloudBlobMetadata, throwable) -> {
         if (throwable != null) {
           Exception ex = Utils.extractFutureExceptionCause(throwable);
-          resultFuture.completeExceptionally(
+          throw new CompletionException(
               toCloudStorageException("Failed to query metadata for blob" + blobIds.get(0), ex));
         } else {
           if (cloudBlobMetadata == null) {
-            resultFuture.complete(Collections.emptyMap());
+            return Collections.emptyMap();
           } else {
-            resultFuture.complete(Collections.singletonMap(cloudBlobMetadata.getId(), cloudBlobMetadata));
+            return Collections.singletonMap(cloudBlobMetadata.getId(), cloudBlobMetadata);
           }
         }
       });
-      return resultFuture;
     }
 
     // CosmosDB has query size limit of 256k chars.
     // Break list into chunks if necessary to avoid overflow.
-    List<CompletableFuture<Void>> operationFutures = new ArrayList<>();
     List<CloudBlobMetadata> metadataList = new ArrayList<>();
+    CompletableFuture<Void> resultFuture = null;
     List<List<BlobId>> chunkedBlobIdList = Utils.partitionList(blobIds, queryBatchSize);
-
     for (List<BlobId> batchOfBlobs : chunkedBlobIdList) {
       // Get metadata of specified list of blobs
-      CompletableFuture<Void> operationFuture = getBlobMetadataChunked(batchOfBlobs).thenAccept((metadataList::addAll));
-      operationFutures.add(operationFuture);
+      if (resultFuture == null) {
+        resultFuture = getBlobMetadataChunked(batchOfBlobs).thenAccept(metadataList::addAll);
+      } else {
+        // Issue metadata queries one after another since parallel queries can be expensive resulting in 429s from cosmos.
+        resultFuture =
+            resultFuture.thenCompose(unused -> getBlobMetadataChunked(batchOfBlobs).thenAccept(metadataList::addAll));
+      }
     }
 
-    // Complete the result future which is completed when all the individual operation futures are completed.
-    CompletableFuture.allOf(operationFutures.toArray(new CompletableFuture<?>[0])).whenComplete((unused, throwable) -> {
-      if (throwable != null) {
-        Exception ex = Utils.extractFutureExceptionCause(throwable);
-        resultFuture.completeExceptionally(ex);
-      } else {
-        resultFuture.complete(metadataList.stream()
+    return Objects.requireNonNull(resultFuture)
+        .thenApply(unused -> metadataList.stream()
             .collect(Collectors.toMap(CloudBlobMetadata::getId, Function.identity(), (x, y) -> x)));
-      }
-    });
-    return resultFuture;
   }
 
   @Override
