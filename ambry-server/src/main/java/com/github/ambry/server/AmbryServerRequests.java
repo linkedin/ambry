@@ -11,6 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
+
 package com.github.ambry.server;
 
 import com.codahale.metrics.Histogram;
@@ -29,6 +30,7 @@ import com.github.ambry.config.ServerConfig;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
+import com.github.ambry.network.http2.HttpResponseSendAdapter;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
@@ -42,6 +44,9 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.server.httphandler.ApiGetHandler;
+import com.github.ambry.server.httphandler.Handler;
+import com.github.ambry.server.httphandler.NotFoundHandler;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
@@ -49,13 +54,21 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -82,6 +95,8 @@ public class AmbryServerRequests extends AmbryRequests {
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
 
+  private final Map<HttpMethod, List<Handler>> handlers = new HashMap<>();
+
   AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
@@ -98,6 +113,12 @@ public class AmbryServerRequests extends AmbryRequests {
         RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
+    initializeHttpHandlers();
+  }
+
+  private void initializeHttpHandlers() {
+    Handler apiGetHandler = new ApiGetHandler();
+    handlers.computeIfAbsent(apiGetHandler.supportedMethod(), k -> new ArrayList<>()).add(apiGetHandler);
   }
 
   /**
@@ -238,8 +259,34 @@ public class AmbryServerRequests extends AmbryRequests {
   }
 
   @Override
-  public void handleRegularHttpRequests(FullHttpRequest request) throws IOException, InterruptedException {
+  public void handleRegularHttpRequests(NetworkRequest request) throws IOException, InterruptedException {
+    FullHttpResponse httpResp = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+    try {
+      long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+      long totalTimeSpent = requestQueueTime;
+      FullHttpRequest httpReq = request.getHttpRequest();
 
+      httpResp = getHandler(httpReq).handle(httpReq, httpResp);
+      requestResponseChannel.sendResponse(new HttpResponseSendAdapter(httpResp), request,
+          new ServerNetworkResponseMetrics(metrics.regularHttpResponseQueueTimeInMs,
+              metrics.regularHttpResponseSendTimeInMs, metrics.regularHttpRequestTotalTimeInMs, null, null,
+              totalTimeSpent));
+    } catch (Throwable t) {
+      logger.error("Failed to handle regular http request: {}", request.getHttpRequest(), t);
+      httpResp.setStatus(HttpResponseStatus.INTERNAL_SERVER_ERROR);
+      requestResponseChannel.sendResponse(new HttpResponseSendAdapter(httpResp), request,
+          new ServerNetworkResponseMetrics(metrics.regularHttpResponseQueueTimeInMs,
+              metrics.regularHttpResponseSendTimeInMs, metrics.regularHttpRequestTotalTimeInMs, null, null, 0));
+    }
+  }
+
+  private Handler getHandler(FullHttpRequest httpReq) {
+    for (Handler handler : handlers.getOrDefault(httpReq.method(), Collections.emptyList())) {
+      if (handler.match(httpReq)) {
+        return handler;
+      }
+    }
+    return NotFoundHandler.HANDLER;
   }
 
   /**

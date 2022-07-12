@@ -14,7 +14,6 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.network.NetworkRequest;
-import io.netty.handler.codec.http.FullHttpRequest;
 import java.io.IOException;
 
 
@@ -30,7 +29,13 @@ public interface RequestAPI {
    */
   void handleRequests(NetworkRequest request) throws InterruptedException;
 
-  default void handleRegularHttpRequests(FullHttpRequest request) throws IOException, InterruptedException {
+  /**
+   * Handle regular http request. This is used when the server is an http server.
+   * @param request The request to handle.
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  default void handleRegularHttpRequests(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Http request not supported on this node");
   }
 

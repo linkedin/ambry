@@ -115,7 +115,7 @@ public class AmbryRequests implements RequestAPI {
   public void handleRequests(NetworkRequest networkRequest) throws InterruptedException {
     try {
       if (networkRequest.isRegularHttp()) {
-        handleRegularHttpRequests(networkRequest.getHttpRequest());
+        handleRegularHttpRequests(networkRequest);
         return;
       }
       RequestOrResponseType type;

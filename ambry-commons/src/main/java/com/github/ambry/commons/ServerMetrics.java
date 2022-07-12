@@ -151,6 +151,12 @@ public class ServerMetrics {
   public final Histogram blobStoreControlResponseSendTimeInMs;
   public final Histogram blobStoreControlRequestTotalTimeInMs;
 
+  public final Histogram regularHttpRequestQueueTimeInMs;
+  public final Histogram regularHttpRequestProcessingTimeInMs;
+  public final Histogram regularHttpResponseQueueTimeInMs;
+  public final Histogram regularHttpResponseSendTimeInMs;
+  public final Histogram regularHttpRequestTotalTimeInMs;
+
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
@@ -422,6 +428,17 @@ public class ServerMetrics {
     blobStoreControlRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "BlobStoreControlRequestTotalTimeInMs"));
 
+    regularHttpRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "RegularHttpRequestQueueTimeInMs"));
+    regularHttpRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "RegularHttpRequestProcessingTimeInMs"));
+    regularHttpResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "RegularHttpResponseQueueTimeInMs"));
+    regularHttpResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "RegularHttpResponseSendTimeInMs"));
+    regularHttpRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "RegularHttpRequestTotalTimeInMs"));
+
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));
 
@@ -526,7 +543,7 @@ public class ServerMetrics {
 
   public void updateCrossColoMetadataExchangeBytesRate(String dcName, long bytes) {
     crossColoMetadataExchangeBytesRate.computeIfAbsent(dcName,
-        dc -> registry.meter(MetricRegistry.name(requestClass, dcName + "-CrossColoMetadataExchangeBytesRate")))
+            dc -> registry.meter(MetricRegistry.name(requestClass, dcName + "-CrossColoMetadataExchangeBytesRate")))
         .mark(bytes);
   }
 

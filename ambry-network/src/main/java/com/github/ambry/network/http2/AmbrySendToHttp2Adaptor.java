@@ -27,6 +27,7 @@ import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersFrame;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.ReferenceCountUtil;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,33 +69,43 @@ public class AmbrySendToHttp2Adaptor extends ChannelOutboundHandlerAdapter {
     Send send = (Send) msg;
 
     Http2Headers http2Headers;
-    if (forServer) {
-      logger.trace("Write content to channel as server {}", ctx.channel());
-      http2Headers = new DefaultHttp2Headers().status(HttpResponseStatus.OK.codeAsText());
+    if (send instanceof HttpResponseSendAdapter) {
+      HttpResponseSendAdapter adapter = (HttpResponseSendAdapter) send;
+      http2Headers = new DefaultHttp2Headers().status(adapter.getStatus().codeAsText());
+      for (Map.Entry<String, String> header : adapter.getHeaders()) {
+        http2Headers.set(header.getKey(), header.getValue());
+      }
     } else {
-      logger.trace("Write content to channel as client {}", ctx.channel());
-      http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
+      if (forServer) {
+        logger.trace("Write content to channel as server {}", ctx.channel());
+        http2Headers = new DefaultHttp2Headers().status(HttpResponseStatus.OK.codeAsText());
+      } else {
+        logger.trace("Write content to channel as client {}", ctx.channel());
+        http2Headers = new DefaultHttp2Headers().method(HttpMethod.POST.asciiName()).scheme("https").path("/");
+      }
     }
     DefaultHttp2HeadersFrame headersFrame = new DefaultHttp2HeadersFrame(http2Headers, false);
     ctx.write(headersFrame);
 
-    // Referencing counting for derived {@link ByteBuf}: https://netty.io/wiki/reference-counted-objects.html#derived-buffers
-    try {
-      while (send.content().isReadable(maxFrameSize)) {
-        ByteBuf slice = send.content().readSlice(maxFrameSize);
+    if (send.content() != null && send.content().readableBytes() != 0) {
+      // Referencing counting for derived {@link ByteBuf}: https://netty.io/wiki/reference-counted-objects.html#derived-buffers
+      try {
+        while (send.content().isReadable(maxFrameSize)) {
+          ByteBuf slice = send.content().readSlice(maxFrameSize);
+          slice.retain();
+          DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, false);
+          ctx.write(dataFrame);
+        }
+        // The last slice
+        ByteBuf slice = send.content().readSlice(send.content().readableBytes());
         slice.retain();
-        DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, false);
-        ctx.write(dataFrame);
+        DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, true);
+        ctx.write(dataFrame, promise);
+      } catch (Exception e) {
+        logger.error("Error while processing frames. Channel: {}", ctx.channel(), e);
+      } finally {
+        send.content().release();
       }
-      // The last slice
-      ByteBuf slice = send.content().readSlice(send.content().readableBytes());
-      slice.retain();
-      DefaultHttp2DataFrame dataFrame = new DefaultHttp2DataFrame(slice, true);
-      ctx.write(dataFrame, promise);
-    } catch (Exception e) {
-      logger.error("Error while processing frames. Channel: {}", ctx.channel(), e);
-    } finally {
-      send.content().release();
     }
   }
 }
