@@ -13,6 +13,8 @@
  */
 package com.github.ambry.protocol;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -52,7 +54,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -813,6 +817,57 @@ public class RequestResponseTest {
     }
   }
 
+  @Test
+  public void adminResponseWithContentTest() throws IOException {
+    int correlationId = 1;
+    String clientId = "ambry-healthchecker";
+
+    // test it with some content
+    Map<String, String> returnedMap = new HashMap<>();
+    returnedMap.put("key1", "value1");
+    returnedMap.put("key2", "value2");
+    ObjectMapper objectMapper = new ObjectMapper();
+    System.out.println(objectMapper.writeValueAsString(returnedMap));
+    byte[] content = objectMapper.writeValueAsBytes(returnedMap);
+    AdminResponseWithContent response =
+        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, content);
+    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
+    AdminResponseWithContent deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
+    Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
+    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertNotNull(deserializedAdminResponse.getContent());
+
+    Map<String, String> deserializedMap =
+        objectMapper.readValue(deserializedAdminResponse.getContent(), new TypeReference<Map<String, String>>() {
+        });
+    Assert.assertEquals(returnedMap, deserializedMap);
+    response.release();
+
+    // test it with null content
+    response =
+        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, null);
+    responseStream = serAndPrepForRead(response, -1, false);
+    deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
+    Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
+    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertNull(deserializedAdminResponse.getContent());
+    response.release();
+
+
+    // test it with empty content
+    response =
+        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, new byte[0]);
+    responseStream = serAndPrepForRead(response, -1, false);
+    deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
+    Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
+    Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertNull(deserializedAdminResponse.getContent());
+    response.release();
+  }
+
   /**
    * Tests the ser/de of {@link RequestControlAdminRequest} and checks for equality of fields with reference data.
    * @throws IOException
@@ -893,6 +948,22 @@ public class RequestResponseTest {
     doReplicationControlAdminRequestTest(origins, true);
     doReplicationControlAdminRequestTest(origins, false);
     doReplicationControlAdminRequestTest(Collections.emptyList(), true);
+  }
+
+  @Test
+  public void healthCheckAdminRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    int correlationId = 1;
+    String clientId = "ambry-healthchecker";
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.RequestControl, null, correlationId, clientId);
+    HealthCheckAdminRequest checkRequest = new HealthCheckAdminRequest(adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(checkRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.HealthCheck, null);
+    HealthCheckAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+    checkRequest.release();
   }
 
   /**
