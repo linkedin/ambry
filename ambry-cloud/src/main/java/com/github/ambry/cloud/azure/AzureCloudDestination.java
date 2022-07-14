@@ -417,17 +417,12 @@ class AzureCloudDestination implements CloudDestination {
     // CosmosDB has query size limit of 256k chars.
     // Break list into chunks if necessary to avoid overflow.
     List<CloudBlobMetadata> metadataList = new ArrayList<>();
-    CompletableFuture<Void> resultFuture = null;
+    CompletableFuture<Void> resultFuture = CompletableFuture.completedFuture(null);
     List<List<BlobId>> chunkedBlobIdList = Utils.partitionList(blobIds, queryBatchSize);
     for (List<BlobId> batchOfBlobs : chunkedBlobIdList) {
-      // Get metadata of specified list of blobs
-      if (resultFuture == null) {
-        resultFuture = getBlobMetadataChunked(batchOfBlobs).thenAccept(metadataList::addAll);
-      } else {
-        // Issue metadata queries one after another since parallel queries can be expensive resulting in 429s from cosmos.
-        resultFuture =
-            resultFuture.thenCompose(unused -> getBlobMetadataChunked(batchOfBlobs).thenAccept(metadataList::addAll));
-      }
+      // Issue metadata queries one after another since parallel queries can be expensive resulting in 429s from cosmos.
+      resultFuture =
+          resultFuture.thenCompose(unused -> getBlobMetadataChunked(batchOfBlobs).thenAccept(metadataList::addAll));
     }
 
     return Objects.requireNonNull(resultFuture)

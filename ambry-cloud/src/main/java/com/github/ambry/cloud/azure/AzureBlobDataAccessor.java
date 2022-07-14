@@ -417,38 +417,31 @@ public class AzureBlobDataAccessor {
    *         the blobs successfully purged or a {@link BlobStorageException} if the purge operation fails.
    */
   public CompletableFuture<List<CloudBlobMetadata>> purgeBlobsAsync(List<CloudBlobMetadata> blobMetadataList) {
-    if (blobMetadataList.isEmpty()) {
-      return CompletableFuture.completedFuture(new ArrayList<>());
-    }
     List<CloudBlobMetadata> deletedBlobs = new ArrayList<>();
-    CompletableFuture<Void> resultFuture = null;
+    CompletableFuture<Void> resultFuture = CompletableFuture.completedFuture(null);
     List<List<CloudBlobMetadata>> partitionedLists = Utils.partitionList(blobMetadataList, purgeBatchSize);
     for (List<CloudBlobMetadata> batchOfBlobs : partitionedLists) {
-      CompletableFuture<Void> currentBatchDeleteFuture =
-          FutureUtils.orTimeout(storageClient.deleteBatch(batchOfBlobs), batchTimeout).thenAccept(responses -> {
-            for (int j = 0; j < responses.size(); j++) {
-              Response<Void> response = responses.get(j);
-              CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
-              // Note: Response.getStatusCode() throws exception on any error.
-              try {
-                response.getStatusCode();
-              } catch (BlobStorageException bse) {
-                int statusCode = bse.getStatusCode();
-                // Don't worry if blob is already gone
-                if (statusCode != HttpURLConnection.HTTP_NOT_FOUND && statusCode != HttpURLConnection.HTTP_GONE) {
-                  logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
-                  throw new CompletionException(bse);
+      // Issue batch deletes serially one after another since issuing all in parallel can be expensive resulting in 429s.
+      resultFuture = resultFuture.thenCompose(
+          unused -> FutureUtils.orTimeout(storageClient.deleteBatch(batchOfBlobs), batchTimeout)
+              .thenAccept(responses -> {
+                for (int j = 0; j < responses.size(); j++) {
+                  Response<Void> response = responses.get(j);
+                  CloudBlobMetadata blobMetadata = batchOfBlobs.get(j);
+                  // Note: Response.getStatusCode() throws exception on any error.
+                  try {
+                    response.getStatusCode();
+                  } catch (BlobStorageException bse) {
+                    int statusCode = bse.getStatusCode();
+                    // Don't worry if blob is already gone
+                    if (statusCode != HttpURLConnection.HTTP_NOT_FOUND && statusCode != HttpURLConnection.HTTP_GONE) {
+                      logger.error("Deleting blob {} got status {}", blobMetadata.getId(), statusCode);
+                      throw new CompletionException(bse);
+                    }
+                  }
+                  deletedBlobs.add(blobMetadata);
                 }
-              }
-              deletedBlobs.add(blobMetadata);
-            }
-          });
-      if (resultFuture == null) {
-        resultFuture = currentBatchDeleteFuture;
-      } else {
-        // Issue batch deletes serially one after another since issuing all in parallel can be expensive resulting in 429s.
-        resultFuture = resultFuture.thenCompose(unused -> currentBatchDeleteFuture);
-      }
+              }));
     }
 
     return Objects.requireNonNull(resultFuture).thenApply(unused -> deletedBlobs);
