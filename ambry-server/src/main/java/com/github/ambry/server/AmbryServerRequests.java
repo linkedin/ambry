@@ -214,6 +214,15 @@ public class AmbryServerRequests extends AmbryRequests {
           requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
           response = handleBlobStoreControlRequest(requestStream, adminRequest);
           break;
+        case HealthCheck:
+          metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.blobStoreControlRequestRate.mark();
+          processingTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
+          responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
+          response = handleHealthCheckRequest(requestStream, adminRequest);
+          break;
       }
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
@@ -397,6 +406,18 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.debug("The partition Id should not be null.");
     }
     return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+  }
+
+  /**
+   * Handles {@link com.github.ambry.protocol.AdminRequestOrResponseType#HealthCheck}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   * @throws IOException if there is any I/O error reading from the {@code requestStream}.
+   */
+  private AdminResponse handleHealthCheckRequest(DataInputStream requestStream, AdminRequest adminRequest)
+      throws StoreException, IOException {
+    return null;
   }
 
   /**

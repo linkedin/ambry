@@ -151,6 +151,13 @@ public class ServerMetrics {
   public final Histogram blobStoreControlResponseSendTimeInMs;
   public final Histogram blobStoreControlRequestTotalTimeInMs;
 
+  public final Histogram healthCheckRequestQueueTimeInMs;
+  public final Histogram healthCheckRequestProcessingTimeInMs;
+  public final Histogram healthCheckResponseQueueTimeInMs;
+  public final Histogram healthCheckResponseSendTimeInMs;
+  public final Histogram healthCheckRequestTotalTimeInMs;
+
+
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
@@ -421,6 +428,18 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(requestClass, "BlobStoreControlResponseSendTimeInMs"));
     blobStoreControlRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "BlobStoreControlRequestTotalTimeInMs"));
+
+    healthCheckRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "HealthCheckRequestQueueTimeInMs"));
+    healthCheckRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "HealthCheckRequestProcessingTimeInMs"));
+    healthCheckResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "HealthCheckResponseQueueTimeInMs"));
+    healthCheckResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "HealthCheckResponseSendTimeInMs"));
+    healthCheckRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "HealthCheckRequestTotalTimeInMs"));
+
 
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));

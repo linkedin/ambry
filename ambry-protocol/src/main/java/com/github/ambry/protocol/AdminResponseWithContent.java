@@ -20,13 +20,14 @@ import java.io.IOException;
 
 /**
  * Representation of a response to an administration request, with content to return to client.
+ * Currently only used to reply to {@link HealthCheckAdminRequest}.
  */
 public class AdminResponseWithContent extends AdminResponse {
   private static final int CONTENT_LENGTH_SIZE = 4;
   private final byte[] content;
 
   /**
-   * Constructs a response.
+   * Constructs an {@link AdminResponseWithContent} with empty content.
    * @param correlationId an ID to help match responses to requests.
    * @param clientId the ID of the client.
    * @param error the {@link ServerErrorCode} for the request.
@@ -36,11 +37,24 @@ public class AdminResponseWithContent extends AdminResponse {
     content = null;
   }
 
+  /**
+   * Constructs an {@link AdminResponseWithContent}
+   * @param correlationId an ID to help match responses to requests.
+   * @param clientId the ID of the client.
+   * @param error the {@link ServerErrorCode} for the request.
+   * @param content the content to return back to client
+   */
   public AdminResponseWithContent(int correlationId, String clientId, ServerErrorCode error, byte[] content) {
     super(correlationId, clientId, ServerErrorCode.No_Error);
     this.content = content;
   }
 
+  /**
+   * Reads from a stream and constructs an {@link AdminResponseWithContent}.
+   * @param stream  the {@link DataInputStream} to read from.
+   * @return {@link AdminResponseWithContent} that is deserialized from the {@code stream}.
+   * @throws IOException if there is an I/O error reading from {@code stream}
+   */
   public static AdminResponseWithContent readFrom(DataInputStream stream) throws IOException {
     AdminResponse adminResponse = AdminResponse.readFrom(stream);
     int contentLength = stream.readInt();
@@ -53,6 +67,10 @@ public class AdminResponseWithContent extends AdminResponse {
         adminResponse.getError(), content);
   }
 
+  /**
+   * Return the content.
+   * @return
+   */
   public byte[] getContent() {
     return content;
   }

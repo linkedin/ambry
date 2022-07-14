@@ -16,11 +16,20 @@ package com.github.ambry.protocol;
 import java.io.DataInputStream;
 import java.io.IOException;
 
-
+/**
+ *  An admin request used to query the health status of a server host.
+ */
 public class HealthCheckAdminRequest extends AdminRequest {
   private static final short VERSION_1 = 1;
   private final long sizeInBytes;
 
+  /**
+   * Reads from a stream and constructs a {@link HealthCheckAdminRequest}.
+   * @param stream the stream to read from
+   * @param adminRequest the {@link AdminRequest} that contains some necessary headers.
+   * @return the {@link HealthCheckAdminRequest} constructed from the {@code stream}.
+   * @throws IOException if there is any problem reading from the stream
+   */
   public static HealthCheckAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest) throws IOException {
     Short versionId = stream.readShort();
     if (versionId != VERSION_1) {
@@ -29,6 +38,10 @@ public class HealthCheckAdminRequest extends AdminRequest {
     return new HealthCheckAdminRequest(adminRequest);
   }
 
+  /**
+   * Constructor for {@link HealthCheckAdminRequest}.
+   * @param adminRequest the {@link AdminRequest} that contains common admin request related information.
+   */
   public HealthCheckAdminRequest(AdminRequest adminRequest) {
     super(AdminRequestOrResponseType.HealthCheck, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
