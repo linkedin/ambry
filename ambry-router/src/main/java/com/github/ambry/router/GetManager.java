@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.Callback;
@@ -67,6 +68,7 @@ class GetManager {
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to GetOperations, every time.
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback;
+  private final AmbryCache blobMetadataCache;
 
   /**
    * Create a GetManager
@@ -79,10 +81,11 @@ class GetManager {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time The {@link Time} instance to use.
+   * @param blobMetadataCache A cache to save blob metadata for composite blobs
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
       NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, AmbryCache blobMetadataCache) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
@@ -96,6 +99,7 @@ class GetManager {
     getOperations = ConcurrentHashMap.newKeySet();
     correlationIdToGetOperation = new HashMap<>();
     requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToGetOperation);
+    this.blobMetadataCache = blobMetadataCache;
   }
 
   /**
@@ -131,7 +135,7 @@ class GetManager {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
-              quotaChargeCallback);
+              quotaChargeCallback, blobMetadataCache);
     }
     getOperations.add(getOperation);
   }

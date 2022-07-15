@@ -135,7 +135,7 @@ public class OperationController implements Runnable {
             suffix, kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
     getManager =
         new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
-            cryptoJobHandler, time);
+            cryptoJobHandler, time, nonBlockingRouter.getBlobMetadataCache());
     deleteManager =
         new DeleteManager(clusterMap, responseHandler, accountService, notificationSystem, routerConfig, routerMetrics,
             routerCallback, time);

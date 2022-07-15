@@ -1328,7 +1328,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       opHelper = new OperationHelper(OperationType.GET);
       getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
           new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService,
-          cryptoJobHandler, mockTime);
+          cryptoJobHandler, mockTime, null);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
           invalidResponse, -1);
       // Test that if a failed response comes before the operation is completed, failure detector is notified.

@@ -15,6 +15,7 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.util.Objects;
 
 
 /**
@@ -229,5 +230,22 @@ public class BlobProperties {
     sb.append(", ").append("Filename=").append(getFilename());
     sb.append("]");
     return sb.toString();
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    BlobProperties that = (BlobProperties) o;
+    return isPrivate == that.isPrivate && creationTimeInMs == that.creationTimeInMs && accountId == that.accountId
+        && containerId == that.containerId && isEncrypted == that.isEncrypted && blobSize == that.blobSize
+        && timeToLiveInSeconds == that.timeToLiveInSeconds && Objects.equals(serviceId, that.serviceId)
+        && Objects.equals(ownerId, that.ownerId) && Objects.equals(contentType, that.contentType) && Objects.equals(
+        contentEncoding, that.contentEncoding) && Objects.equals(filename, that.filename) && Objects.equals(
+        externalAssetTag, that.externalAssetTag);
   }
 }

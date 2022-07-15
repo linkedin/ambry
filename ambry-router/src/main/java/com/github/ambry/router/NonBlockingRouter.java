@@ -97,6 +97,14 @@ class NonBlockingRouter implements Router {
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     this.kms = kms;
     this.cryptoJobHandler = cryptoJobHandler;
+    /*
+     * Initialize blobMetadata cache before the operation controllers
+     * as it will be passed further down and we don't want to pass down a null value.
+     */
+    blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
+        routerConfig.routerBlobMetadataCacheEnabled,
+        routerConfig.routerBlobMetadataCacheMaxSizeBytes,
+        routerMetrics.getMetricRegistry());
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
@@ -122,10 +130,6 @@ class NonBlockingRouter implements Router {
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
     routerMetrics.initializeQuotaOCMetrics(ocList);
-    blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
-        routerConfig.routerBlobMetadataCacheEnabled,
-        routerConfig.routerBlobMetadataCacheMaxSizeBytes,
-        routerMetrics.getMetricRegistry());
   }
 
   /**
@@ -133,6 +137,14 @@ class NonBlockingRouter implements Router {
    */
   Cache<String, Boolean> getNotFoundCache() {
     return notFoundCache;
+  }
+
+  /**
+   * Returns an instance of blob metadata cache.
+   * @return Returns an instance of blobMetadata cache
+   */
+  public AmbryCache getBlobMetadataCache() {
+    return blobMetadataCache;
   }
 
   /**
@@ -502,6 +514,9 @@ class NonBlockingRouter implements Router {
           deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId, quotaChargeCallback));
         }
         initiateBackgroundDeletes(deleteRequests);
+        if (blobMetadataCache != null) {
+          blobMetadataCache.deleteObject(blobIdStr);
+        }
       }
       currentBackgroundOperationsCount.decrementAndGet();
     };
