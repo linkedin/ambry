@@ -435,6 +435,10 @@ class GetBlobOperation extends GetOperation {
     return firstChunk.getChunkOperationTrackerInUse();
   }
 
+  MessageFormatFlags getFirstChunkOperationFlag() {
+    return firstChunk.getOperationFlag();
+  }
+
   // ReadableStreamChannel implementation:
 
   /**

@@ -194,7 +194,7 @@ public class CloudOperationTest {
     NetworkClientFactory networkClientFactory = new CompositeNetworkClientFactory(childFactories);
     router = new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
         mockClusterMap, null, null, null, new InMemAccountService(false, true), time,
-        MockClusterMap.DEFAULT_PARTITION_CLASS);
+        MockClusterMap.DEFAULT_PARTITION_CLASS, null);
 
     NetworkClient compNetworkClient = networkClientFactory.getNetworkClient();
     mockNetworkClient = new MockCompositeNetworkClient(compNetworkClient);

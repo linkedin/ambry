@@ -145,7 +145,7 @@ public class CloudRouterTest extends NonBlockingRouterTest {
 
     router =
         new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, mockClusterMap,
-            kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+            kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
     router.addResourceToClose(requestHandlerPool);
   }
 
@@ -292,4 +292,33 @@ public class CloudRouterTest extends NonBlockingRouterTest {
   public void testBlobNotFoundCache() throws Exception {
 
   }
+
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheSimpleBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheGetCompositeBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheDeleteCompositeBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheBlobDoesNotExistOnGetCompositeBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheBlobDeletedOnGetCompositeBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheBlobExpiredOnGetCompositeBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheUnexpectedInternalErrorOnGetCompositeBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheUnexpectedInternalErrorOnDeleteCompositeBlob() throws Exception {}
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheBlobDoesNotExistOnDeleteCompositeBlob() throws Exception {}
+
 }

@@ -104,10 +104,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     super(testEncryption, metadataContentVersion, includeCloudDc);
   }
 
-  /**
-   * Running for both regular and encrypted blobs, and versions 2 and 3 of MetadataContent
-   * @return an array with all four different choices
-   */
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{false, MessageFormatRecord.Metadata_Content_Version_V2, false},
@@ -637,7 +633,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
         mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime,
-        MockClusterMap.DEFAULT_PARTITION_CLASS);
+        MockClusterMap.DEFAULT_PARTITION_CLASS, null);
 
     assertExpectedThreadCounts(2, 1);
 
@@ -714,7 +710,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
           new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
               CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-          cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+          cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
 
       setOperationParams();
 
@@ -792,7 +788,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
           new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
               CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-          cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+          cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
 
       setOperationParams();
 
@@ -888,7 +884,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       router = new NonBlockingRouter(routerConfig, localMetrics,
           new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
               CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-          cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+          cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
@@ -1252,7 +1248,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       Mockito.when(networkClientFactory.getNetworkClient()).thenReturn(mockNetworkClient);
       testRouter =
           new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
-              mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+              mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
       assertTrue("Invocation latch didn't count to 0 within 10 seconds", invocationLatch.await(10, TimeUnit.SECONDS));
       // verify the test node is considered timeout
       assertTrue("The node should be considered timeout", testDataNode.isTimedOut());
@@ -1365,6 +1361,248 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         deleteManager.close();
       }
     }
+  }
+
+  @Test
+  public void testRouterMetadataCacheSimpleBlob() throws Exception {
+    String blobId = null;
+    try {
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
+      properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
+      setRouterWithMetadataCache(properties, new AmbryCacheMetrics(1,1,1,0));
+      AmbryCacheWithMetrics ambryCacheWithMetrics = (AmbryCacheWithMetrics) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithMetrics);
+
+      // put a simple blob and test it is absent in the metadata cache
+      setOperationParams(PUT_CONTENT_SIZE, TTL_SECS);
+      blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // get the entire simple blob, and it's metadata must be absent from cache
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      // Metadata for simple blob must be absent from metadata cache
+      assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      // get the one byte from simple blob, and it's metadata must be absent from cache
+      ByteRange range = ByteRanges.fromOffsetRange(1, 2);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      // Metadata for simple blob must be absent from metadata cache
+      assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      // delete simple blob
+      router.deleteBlob(blobId, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      // Metadata for simple blob must be absent from metadata cache
+      assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      try {
+        // get the one byte from simple blob and it's metadata must be absent from cache
+        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        fail("Blob must be deleted");
+      } catch (Exception e) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+        // Metadata for simple blob must be absent from metadata cache
+        assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+      }
+      } finally {
+        router.close();
+    }
+  }
+
+  @Test
+  public void testRouterMetadataCacheGetCompositeBlob() throws Exception {
+    try {
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
+      properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
+      setRouterWithMetadataCache(properties, new AmbryCacheMetrics(1,1,1,0));
+      AmbryCacheWithMetrics ambryCacheWithMetrics = (AmbryCacheWithMetrics) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithMetrics);
+
+      // put a composite blob and test it is absent in the metadata cache
+      setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // get the entire composite blob, and it's metadata must be absent from cache
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      if (testEncryption) {
+        // get the entire composite blob in raw mode, and it's metadata must be absent from cache
+        router.getBlob(blobId, new GetBlobOptionsBuilder().rawMode(true).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+      }
+
+      // get one segment of composite blob, and it's metadata must be absent from cache
+      router.getBlob(blobId, new GetBlobOptionsBuilder().blobSegment(1).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      // cache miss and populate cache
+      // get the one byte from composite blob, and it's metadata must be present in cache
+      ByteRange range = ByteRanges.fromOffsetRange(1, 2);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss", ambryCacheWithMetrics.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache", ambryCacheWithMetrics.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      // cache hit
+      // get one byte from composite blob, and it's metadata must be present in cache
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache hit", ambryCacheWithMetrics.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+    } finally {
+      router.close();
+    }
+  }
+
+  @Test
+  public void testRouterMetadataCacheDeleteCompositeBlob() throws Exception {
+    try {
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
+      properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
+      setRouterWithMetadataCache(properties, new AmbryCacheMetrics(1,1,1,1));
+      AmbryCacheWithMetrics ambryCacheWithMetrics = (AmbryCacheWithMetrics) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithMetrics);
+
+      // put a composite blob and test it is absent in the metadata cache
+      setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // get the one byte from composite blob, and it's metadata must be present in cache
+      ByteRange range = ByteRanges.fromOffsetRange(1, 2);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss", ambryCacheWithMetrics.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache", ambryCacheWithMetrics.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      // delete composite blob
+      router.deleteBlob(blobId, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache hit", ambryCacheWithMetrics.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must delete metadata in cache", ambryCacheWithMetrics.getDeleteObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+    } finally {
+      router.close();
+    }
+  }
+
+  void routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode serverErrorCode, RouterErrorCode routerErrorCode, boolean deleteCacheEntryOnFail) throws Exception {
+    try{
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
+      properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
+      setRouterWithMetadataCache(properties, new AmbryCacheMetrics(1,1,1,1));
+      AmbryCacheWithMetrics ambryCacheWithMetrics = (AmbryCacheWithMetrics) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithMetrics);
+
+      // put a composite blob and test it is absent in the metadata cache
+      setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // successful get
+      ByteRange range = ByteRanges.fromOffsetRange(1, 2);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss", ambryCacheWithMetrics.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache", ambryCacheWithMetrics.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      // failed get
+      mockServerLayout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(serverErrorCode));
+      TestCallback<GetBlobResult> testCallback = new TestCallback<>();
+      Future<GetBlobResult> future = router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build(), testCallback, null);
+      assertFailureAndCheckErrorCode(future, testCallback, routerErrorCode);
+      assertTrue("Must encounter a cache hit", ambryCacheWithMetrics.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      if (deleteCacheEntryOnFail) {
+        assertTrue("Must delete metadata in cache", ambryCacheWithMetrics.getDeleteObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+      } else {
+        assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+      }
+      mockServerLayout.getMockServers().forEach(mockServer -> mockServer.resetServerErrors());
+      // There should be flag to disable this cache !
+      router.getNotFoundCache().invalidateAll();
+
+      // successful get, cache must repopulate
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+    } finally {
+      router.close();
+    }
+  }
+
+  @Test
+  public void testRouterMetadataCacheBlobDoesNotExistOnGetCompositeBlob() throws Exception {
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist, true);
+  }
+  @Test
+  public void testRouterMetadataCacheBlobDeletedOnGetCompositeBlob() throws Exception {
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted, true);
+  }
+  @Test
+  public void testRouterMetadataCacheBlobExpiredOnGetCompositeBlob() throws Exception {
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired, true);
+  }
+  @Test
+  public void testRouterMetadataCacheUnexpectedInternalErrorOnGetCompositeBlob() throws Exception {
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError, false);
+  }
+
+  void routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode serverErrorCode, RouterErrorCode routerErrorCode) throws Exception {
+    try{
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
+      properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
+      setRouterWithMetadataCache(properties, new AmbryCacheMetrics(1,1,1,1));
+      AmbryCacheWithMetrics ambryCacheWithMetrics = (AmbryCacheWithMetrics) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithMetrics);
+
+      // put a composite blob and test it is absent in the metadata cache
+      setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // successful get
+      ByteRange range = ByteRanges.fromOffsetRange(1, 2);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss", ambryCacheWithMetrics.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache", ambryCacheWithMetrics.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+
+      // failed delete
+      mockServerLayout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(serverErrorCode));
+      TestCallback<Void> testCallback = new TestCallback<>();
+      Future<Void> future = router.deleteBlob(blobId, null, testCallback, null);
+      assertFailureAndCheckErrorCode(future, testCallback, routerErrorCode);
+      assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+      mockServerLayout.getMockServers().forEach(mockServer -> mockServer.resetServerErrors());
+      // There should be flag to disable this cache !
+      router.getNotFoundCache().invalidateAll();
+
+      // successful get, cache must be intact
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache hit", ambryCacheWithMetrics.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    } finally {
+      router.close();
+    }
+  }
+
+  @Test
+  public void testRouterMetadataCacheUnexpectedInternalErrorOnDeleteCompositeBlob() throws Exception {
+    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError);
+  }
+
+  @Test
+  public void testRouterMetadataCacheBlobDoesNotExistOnDeleteCompositeBlob() throws Exception {
+    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
   }
 
   /**

@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
@@ -147,7 +148,7 @@ public class CloudRouterFactory implements RouterFactory {
       CompositeNetworkClientFactory networkClientFactory = getCompositeNetworkClientFactory(requestHandlerPool);
       NonBlockingRouter router =
           new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap, kms,
-              cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
+              cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, null);
       // Make sure requestHandlerPool is shut down properly
       router.addResourceToClose(requestHandlerPool);
       router.addResourceToClose(cloudDestination);

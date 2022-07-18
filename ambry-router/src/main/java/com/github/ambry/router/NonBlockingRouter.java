@@ -91,7 +91,7 @@ class NonBlockingRouter implements Router {
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      AccountService accountService, Time time, String defaultPartitionClass)
+      AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
       throws IOException, ReflectiveOperationException {
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
@@ -99,12 +99,9 @@ class NonBlockingRouter implements Router {
     this.cryptoJobHandler = cryptoJobHandler;
     /*
      * Initialize blobMetadata cache before the operation controllers
-     * as it will be passed further down and we don't want to pass down a null value.
+     * as it will be passed further down.
      */
-    blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
-        routerConfig.routerBlobMetadataCacheEnabled,
-        routerConfig.routerBlobMetadataCacheMaxSizeBytes,
-        routerMetrics.getMetricRegistry());
+    this.blobMetadataCache = blobMetadataCache;
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
