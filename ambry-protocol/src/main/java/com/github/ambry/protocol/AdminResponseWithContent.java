@@ -45,7 +45,7 @@ public class AdminResponseWithContent extends AdminResponse {
    * @param content the content to return back to client
    */
   public AdminResponseWithContent(int correlationId, String clientId, ServerErrorCode error, byte[] content) {
-    super(correlationId, clientId, ServerErrorCode.No_Error);
+    super(correlationId, clientId, error);
     this.content = content;
   }
 
