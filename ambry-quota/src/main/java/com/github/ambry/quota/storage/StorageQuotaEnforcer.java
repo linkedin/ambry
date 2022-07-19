@@ -49,15 +49,22 @@ import org.slf4j.LoggerFactory;
  * An {@link QuotaEnforcer} implementation on each container's storage usage.
  */
 public class StorageQuotaEnforcer implements QuotaEnforcer {
+  private static final Logger logger = LoggerFactory.getLogger(StorageQuotaEnforcer.class);
   private static final List<QuotaName> SUPPORTED_QUOTA_NAMES =
       Collections.unmodifiableList(Arrays.asList(QuotaName.STORAGE_IN_GB));
-  private static final Logger logger = LoggerFactory.getLogger(StorageQuotaEnforcer.class);
   private static final String STORAGE_QUOTA_SERVICE_PREFIX = "storage-quota-enforcer";
   private static final long NO_RETRY = -1L;
   private static final long BYTES_IN_GB = 1024 * 1024 * 1024;
-  // The quota recommendation returned when there is no quota found for the given account/container.
-  private static final QuotaRecommendation NO_QUOTA_VALUE_RECOMMENDATION =
+
+  // The quota recommendation to return when we can ignore the storage quota restrain.
+  private static final QuotaRecommendation IGNORE_STORAGE_QUOTA_RECOMMENDATION =
       new QuotaRecommendation(QuotaAction.ALLOW, 0.0f, QuotaName.STORAGE_IN_GB, NO_RETRY);
+
+  // The quota recommendation to return when we reject the upload due to storage quota not found for
+  // this account/container. Notice that QuotaAction is REJECT, but the percentage is 0.
+  private static final QuotaRecommendation REJECT_DUE_TO_MISSING_QUOTA_RECOMMENDATION =
+      new QuotaRecommendation(QuotaAction.REJECT, 0.0f, QuotaName.STORAGE_IN_GB, NO_RETRY);
+
   protected final StorageUsageRefresher storageUsageRefresher;
   protected final QuotaSource quotaSource;
   protected final StorageQuotaConfig config;
@@ -133,30 +140,12 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   @Override
   public QuotaRecommendation recommend(RestRequest restRequest) {
     if (!RestUtils.isUploadRequest(restRequest)) {
-      return NO_QUOTA_VALUE_RECOMMENDATION;
+      // This is not an upload request, it doesn't change any storage footprint of this account/container.
+      // Storage quota will not be enforced on this request.
+      return IGNORE_STORAGE_QUOTA_RECOMMENDATION;
     }
     Pair<Long, Long> pair = getQuotaAndUsage(restRequest);
     return recommendBasedOnQuotaAndUsage(pair);
-  }
-
-  /**
-   * Return a {@link QuotaRecommendation} based on the given pair of quota and current usage.
-   * @param pair The {@link Pair} of quota and current usage.
-   * @return A {@link QuotaRecommendation}.
-   */
-  private QuotaRecommendation recommendBasedOnQuotaAndUsage(Pair<Long, Long> pair) {
-    long quotaValue = pair.getFirst();
-    long currentUsage = pair.getSecond();
-    if (quotaValue == -1L) {
-      // There is no quota set for the given account/container
-      return NO_QUOTA_VALUE_RECOMMENDATION;
-    }
-    QuotaAction quotaAction = QuotaAction.ALLOW;
-    if (config.shouldThrottle && currentUsage >= quotaValue) {
-      quotaAction = QuotaAction.REJECT;
-    }
-    float usagePercentage = currentUsage >= quotaValue ? 100f : ((float) currentUsage) / quotaValue * 100f;
-    return new QuotaRecommendation(quotaAction, usagePercentage, QuotaName.STORAGE_IN_GB, NO_RETRY);
   }
 
   @Override
@@ -183,6 +172,31 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
     if (scheduler != null) {
       Utils.shutDownExecutorService(scheduler, config.refresherPollingIntervalMs, TimeUnit.MILLISECONDS);
     }
+  }
+
+  /**
+   * Return a {@link QuotaRecommendation} based on the given pair of quota and current usage.
+   * @param pair The {@link Pair} of quota and current usage.
+   * @return A {@link QuotaRecommendation}.
+   */
+  QuotaRecommendation recommendBasedOnQuotaAndUsage(Pair<Long, Long> pair) {
+    long quotaValue = pair.getFirst();
+    long currentUsage = pair.getSecond();
+    if (quotaValue == -1L) {
+      // There is no quota set for the given account/container
+      if (config.shouldRejectRequestWithoutQuota && config.shouldThrottle) {
+        return REJECT_DUE_TO_MISSING_QUOTA_RECOMMENDATION;
+      } else {
+        // If we don't reject requests with missing storage quota, then just ignore it.
+        return IGNORE_STORAGE_QUOTA_RECOMMENDATION;
+      }
+    }
+    QuotaAction quotaAction = QuotaAction.ALLOW;
+    if (config.shouldThrottle && currentUsage >= quotaValue) {
+      quotaAction = QuotaAction.REJECT;
+    }
+    float usagePercentage = currentUsage >= quotaValue ? 100f : ((float) currentUsage) / quotaValue * 100f;
+    return new QuotaRecommendation(quotaAction, usagePercentage, QuotaName.STORAGE_IN_GB, NO_RETRY);
   }
 
   /**
@@ -320,8 +334,8 @@ public class StorageQuotaEnforcer implements QuotaEnforcer {
   protected long getQuotaValueForResource(QuotaResource resource) {
     long quotaValue = -1;
     try {
-    Quota quota = quotaSource.getQuota(resource, QuotaName.STORAGE_IN_GB);
-    quotaValue = (long) quota.getQuotaValue() * BYTES_IN_GB;
+      Quota quota = quotaSource.getQuota(resource, QuotaName.STORAGE_IN_GB);
+      quotaValue = (long) quota.getQuotaValue() * BYTES_IN_GB;
     } catch (QuotaException quotaException) {
       logger.warn("Quota not found for resource id: {}, type: {}", resource.getResourceId(),
           resource.getQuotaResourceType());

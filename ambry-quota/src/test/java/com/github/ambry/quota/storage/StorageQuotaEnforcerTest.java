@@ -21,7 +21,9 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.StorageQuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.quota.QuotaAction;
 import com.github.ambry.quota.QuotaName;
+import com.github.ambry.quota.QuotaRecommendation;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.rest.MockRestRequest;
@@ -36,6 +38,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import org.json.JSONObject;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -274,6 +277,55 @@ public class StorageQuotaEnforcerTest {
     quotaAndUsage = enforcer.charge(restRequest, 100L);
     assertEquals(-1L, quotaAndUsage.getFirst().longValue());
     assertEquals(0L, quotaAndUsage.getSecond().longValue());
+  }
+
+  @Test
+  public void testRecommendBasedOnQuotaAndUsage() {
+    for (int i = 0; i < 4; i++) {
+      boolean shouldThrottle = i % 2 == 0;
+      boolean shouldRejectWithoutQuota = i / 2 == 0;
+      // The pair of these two boolean should be
+      // [(true, true), (false, true), (true, false), (false, false)]
+      Properties properties = new Properties();
+      properties.setProperty(StorageQuotaConfig.SHOULD_THROTTLE, String.valueOf(shouldThrottle));
+      properties.setProperty(StorageQuotaConfig.SHOULD_REJECT_REQUEST_WITHOUT_QUOTA,
+          String.valueOf(shouldRejectWithoutQuota));
+
+      StorageQuotaConfig config = new StorageQuotaConfig(new VerifiableProperties(properties));
+
+      JSONStringStorageQuotaSource quotaSource =
+          new JSONStringStorageQuotaSource(new HashMap<>(), new InMemAccountService(false, false));
+      StorageQuotaEnforcer enforcer = new StorageQuotaEnforcer(config, quotaSource, (StorageUsageRefresher) null);
+      enforcer.initStorageUsage(Collections.EMPTY_MAP);
+
+      // Test some cases
+      // Case 1: no quota, only when both boolean values are true, we would reject
+      // Case 2: usage is less than quota, shouldn't reject and the percentage should be right.
+      // Case 3: usage is large then quota, shouldThrottle is true to reject
+
+      // Case 1:
+      QuotaRecommendation rec = enforcer.recommendBasedOnQuotaAndUsage(new Pair<>(-1L, 100L));
+      if (shouldThrottle && shouldRejectWithoutQuota) {
+        Assert.assertEquals(QuotaAction.REJECT, rec.getQuotaAction());
+      } else {
+        Assert.assertEquals(QuotaAction.ALLOW, rec.getQuotaAction());
+      }
+      Assert.assertEquals(0.0, rec.getQuotaUsagePercentage(), 0.0);
+
+      // Case 2:
+      rec = enforcer.recommendBasedOnQuotaAndUsage(new Pair<>(100L, 50L));
+      Assert.assertEquals(QuotaAction.ALLOW, rec.getQuotaAction());
+      Assert.assertEquals(50.0, rec.getQuotaUsagePercentage(), 0.0);
+
+      // Case 3:
+      rec = enforcer.recommendBasedOnQuotaAndUsage(new Pair<>(100L, 200L));
+      if (shouldThrottle) {
+        Assert.assertEquals(QuotaAction.REJECT, rec.getQuotaAction());
+      } else {
+        Assert.assertEquals(QuotaAction.ALLOW, rec.getQuotaAction());
+      }
+      Assert.assertEquals(100.0, rec.getQuotaUsagePercentage(), 0.0);
+    }
   }
 
   /**
