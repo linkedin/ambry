@@ -215,12 +215,12 @@ public class AmbryServerRequests extends AmbryRequests {
           response = handleBlobStoreControlRequest(requestStream, adminRequest);
           break;
         case HealthCheck:
-          metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.blobStoreControlRequestRate.mark();
-          processingTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
-          responseQueueTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
-          responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
+          metrics.healthCheckRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.healthCheckRequestRate.mark();
+          processingTimeHistogram = metrics.healthCheckRequestQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.healthCheckRequestQueueTimeInMs;
+          responseSendTimeHistogram = metrics.healthCheckResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.healthCheckRequestTotalTimeInMs;
           response = handleHealthCheckRequest(requestStream, adminRequest);
           break;
       }

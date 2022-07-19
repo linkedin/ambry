@@ -184,6 +184,7 @@ public class ServerMetrics {
   public final Meter replicationControlRequestRate;
   public final Meter catchupStatusRequestRate;
   public final Meter blobStoreControlRequestRate;
+  public final Meter healthCheckRequestRate;
 
   public final Meter putSmallBlobRequestRate;
   public final Meter getSmallBlobRequestRate;
@@ -475,6 +476,7 @@ public class ServerMetrics {
     replicationControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicationControlRequestRate"));
     catchupStatusRequestRate = registry.meter(MetricRegistry.name(requestClass, "CatchupStatusRequestRate"));
     blobStoreControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlRequestRate"));
+    healthCheckRequestRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckRequestRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetSmallBlobRequestRate"));
