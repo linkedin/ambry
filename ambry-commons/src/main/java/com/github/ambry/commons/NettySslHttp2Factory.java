@@ -104,9 +104,9 @@ public class NettySslHttp2Factory implements SSLFactory {
     }
     return sslContextBuilder.sslProvider(SslContext.defaultClientProvider())
         .clientAuth(NettySslFactory.getClientAuth(config))
-        /* NOTE: the cipher filter may not include all ciphers required by the HTTP/2 specification.
-         * Please refer to the HTTP/2 specification for cipher requirements. */.ciphers(Http2SecurityUtil.CIPHERS,
-            SupportedCipherSuiteFilter.INSTANCE)
+        // NOTE: the cipher filter may not include all ciphers required by the HTTP/2 specification.
+        // Please refer to the HTTP/2 specification for cipher requirements.
+        .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(new ApplicationProtocolConfig(ApplicationProtocolConfig.Protocol.ALPN,
             // NO_ADVERTISE is currently the only mode supported by both OpenSsl and JDK providers.
             ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
