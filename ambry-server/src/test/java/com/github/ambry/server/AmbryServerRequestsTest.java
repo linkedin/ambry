@@ -49,6 +49,7 @@ import com.github.ambry.network.SocketRequestResponseChannel;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.AdminResponseWithContent;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
@@ -100,6 +101,7 @@ import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -937,6 +939,68 @@ public class AmbryServerRequestsTest {
     assertEquals("cross-colo fetch bytes are not expected", responseList.get(0).sizeInBytes(),
         serverMetrics.crossColoFetchBytesRate.get(remoteNode.getDatacenterName()).getCount());
     responseList.forEach(Response::release);
+  }
+
+  /**
+   * Tests for appropriate responses from healthCheck admin endpoint
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void healthCheckTest() throws InterruptedException, IOException {
+
+    //retrieves writeable partitions to test with
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+
+    for (PartitionId id : partitionIds) {
+
+      int correlationId = TestUtils.RANDOM.nextInt();
+      String clientId = TestUtils.getRandomString(10);
+
+      // Test 1: "Good" Response Excepted where the host state is in either Standby or Leader
+      HashMap<ReplicaId,ReplicaState> replicaToOriginalState = new HashMap<>(); //remembers original state of replica
+
+      //change all replica states in partition to Standby or Leader
+      for(ReplicaId replica : id.getReplicaIds()) {
+        replicaToOriginalState.put(replica, storageManager.getStore(replica.getPartitionId()).getCurrentState());
+        storageManager.getStore(replica.getPartitionId()).setCurrentState(
+            TestUtils.RANDOM.nextInt() % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.STANDBY);
+      }
+
+      AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
+      AdminResponseWithContent response =
+          (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
+
+      assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+      assertEquals("Response's content length does not match the content length in response",
+          response.getContent()[7],
+          response.getContent().length);
+      assertEquals("Payload was expected to be {\"health\":\"GOOD\"}","{\"health\":\"GOOD\"}",
+          new String(Arrays.copyOfRange(response.getContent(), 45, 62), StandardCharsets.UTF_8));
+
+      //Test 2: Change Replicas to Error State on this Partition. Make sure Healthcheck responds with "BAD"
+
+      //change all replica states in partition to ERROR
+      for(ReplicaId replica : id.getReplicaIds()) {
+        storageManager.getStore(replica.getPartitionId()).setCurrentState(ReplicaState.ERROR);
+      }
+
+      adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
+      response =
+          (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
+
+      assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+      assertEquals("Response's content length does not match the content length in response",
+          response.getContent()[7],
+          response.getContent().length);
+      assertEquals("Payload was expected to be {\"health\":\"BAD\"}","{\"health\":\"BAD\"}",
+          new String(Arrays.copyOfRange(response.getContent(), 45, 61), StandardCharsets.UTF_8));
+
+      //restore the state of the Replicas
+      for(ReplicaId replica : id.getReplicaIds()) {
+        storageManager.getStore(replica.getPartitionId()).setCurrentState(replicaToOriginalState.get(replica));
+      }
+    }
   }
 
   // helpers

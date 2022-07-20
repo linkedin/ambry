@@ -32,6 +32,7 @@ import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.AdminResponseWithContent;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
@@ -43,18 +44,23 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.BlobStore;
+import com.github.ambry.store.DiskManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -417,7 +423,62 @@ public class AmbryServerRequests extends AmbryRequests {
    */
   private AdminResponse handleHealthCheckRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws StoreException, IOException {
-    return null;
+    boolean hostHealthy = true; //used to determine if the host is ever unhealthy
+
+    //Finds all replicas of every partition that have this server's hostName
+    List<PartitionId> partitionsWithHostName = new ArrayList<>();
+    StorageManager storageManager = (StorageManager)this.storeManager;
+    for(Map.Entry<PartitionId, DiskManager> entry : storageManager.getPartitionToDiskManager().entrySet()){
+      for(ReplicaId replica : entry.getKey().getReplicaIds()){
+        if (replica.getDataNodeId().getHostname() == currentNode.getHostname()) {
+          partitionsWithHostName.add(entry.getKey());
+          break;
+        }
+      }
+    }
+
+    /**
+     * Checks if the Host's BlobStore exists/initialized and is Leader/Standby ReplicaState for all Partitions
+     * this Host is apart of
+     */
+    ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = storageManager.getPartitionToDiskManager();
+
+    for(PartitionId partitionId : partitionsWithHostName){
+      BlobStore blobStore = (BlobStore) storageManager.getStore(partitionId);
+
+      //if any fail, this host isn't healthy
+      if(blobStore == null || ((blobStore.getCurrentState() != ReplicaState.STANDBY) &&
+          (blobStore.getCurrentState() != ReplicaState.LEADER))){
+        hostHealthy = false;
+        break;
+      }
+    }
+
+    //Initializing the Content of the AdminReponse
+    byte[] clientId = "ambry-healthchecker".getBytes(StandardCharsets.UTF_8);
+    byte[] outputPayload = hostHealthy ? "{\"health\":\"GOOD\"}".getBytes(StandardCharsets.UTF_8) :
+        "{\"health\":\"BAD\"}".getBytes(StandardCharsets.UTF_8);
+    List<byte[]> contentAttributes = new ArrayList<>();
+    contentAttributes.add(new byte[]{0, 0, 0, 0, 0, 0, 0,
+        (byte)(26 + clientId.length + outputPayload.length)}); //content Length
+    contentAttributes.add(new byte[]{0,11}); //ordinalNumber
+    contentAttributes.add(new byte[]{0,1}); //versionOfResponse
+    contentAttributes.add(new byte[]{0,0,0,1}); //requestId
+    contentAttributes.add(new byte[]{0,0,0,(byte)clientId.length}); //lengthOfClientId
+    contentAttributes.add(clientId);
+    contentAttributes.add(new byte[]{0,0,0,0,0,(byte)outputPayload.length}); //lengthOfPayload
+    contentAttributes.add(outputPayload);
+
+    //Append the arrays together
+    ByteArrayOutputStream content = new ByteArrayOutputStream();
+    for(byte[] attribute: contentAttributes){
+      content.write(attribute);
+    }
+
+    //return the response with the content made above
+    ServerErrorCode error = ServerErrorCode.No_Error;
+    return new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(), error,
+        content.toByteArray());
   }
 
   /**

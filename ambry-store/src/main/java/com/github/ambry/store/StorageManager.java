@@ -451,6 +451,23 @@ public class StorageManager implements StoreManager {
   }
 
   /**
+   * Getter utility for protected diskToDiskManager
+   * @return diskToDiskManager
+   */
+  public ConcurrentHashMap<DiskId, DiskManager> getDiskToDiskManager(){
+    return diskToDiskManager;
+  }
+
+  /**
+   * Getter utility for protected parititontoDiskManager
+   * @return parititontoDiskManager
+   */
+  public ConcurrentHashMap<PartitionId, DiskManager> getPartitionToDiskManager(){
+    return partitionToDiskManager;
+  }
+
+
+  /**
    * Implementation of {@link PartitionStateChangeListener} to capture state changes and take actions accordingly.
    */
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
