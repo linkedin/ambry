@@ -180,7 +180,7 @@ public class StorageManager implements StoreManager {
    * Start the {@link DiskManager}s for all disks on this node.
    * @throws InterruptedException
    */
-  public void start() throws InterruptedException {
+  public void start() throws InterruptedException, StoreException {
     long startTimeMs = time.milliseconds();
     try {
       logger.info("Starting storage manager");

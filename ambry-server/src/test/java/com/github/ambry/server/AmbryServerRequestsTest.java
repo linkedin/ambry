@@ -304,7 +304,7 @@ public class AmbryServerRequestsTest {
    * @throws IOException
    */
   @Test
-  public void scheduleCompactionFailureTest() throws InterruptedException, IOException {
+  public void scheduleCompactionFailureTest() throws InterruptedException, IOException, StoreException {
     // partitionId not specified
     doScheduleCompactionTest(null, ServerErrorCode.Bad_Request);
 
@@ -679,7 +679,7 @@ public class AmbryServerRequestsTest {
    * @throws IOException
    */
   @Test
-  public void stopBlobStoreFailureTest() throws InterruptedException, IOException {
+  public void stopBlobStoreFailureTest() throws InterruptedException, IOException, StoreException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     short numReplicasCaughtUpPerPartition = 3;
@@ -957,14 +957,14 @@ public class AmbryServerRequestsTest {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = TestUtils.getRandomString(10);
 
-      // Test 1: "Good" Response Excepted where the host state is in either Standby or Leader
+      // Test 1: "Good" response excepted where the host state is in either Standby or Leader
       HashMap<ReplicaId,ReplicaState> replicaToOriginalState = new HashMap<>(); //remembers original state of replica
 
       //change all replica states in partition to Standby or Leader
       for(ReplicaId replica : id.getReplicaIds()) {
         replicaToOriginalState.put(replica, storageManager.getStore(replica.getPartitionId()).getCurrentState());
         storageManager.getStore(replica.getPartitionId()).setCurrentState(
-            TestUtils.RANDOM.nextInt() % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.STANDBY);
+            TestUtils.RANDOM.nextInt() % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.LEADER);
       }
 
       AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
@@ -972,13 +972,12 @@ public class AmbryServerRequestsTest {
           (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
 
       assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-      assertEquals("Response's content length does not match the content length in response",
-          response.getContent()[7],
-          response.getContent().length);
-      assertEquals("Payload was expected to be {\"health\":\"GOOD\"}","{\"health\":\"GOOD\"}",
-          new String(Arrays.copyOfRange(response.getContent(), 45, 62), StandardCharsets.UTF_8));
 
-      //Test 2: Change Replicas to Error State on this Partition. Make sure Healthcheck responds with "BAD"
+      assertEquals("Payload was expected to be {\"health\":\"GOOD\"}","{\"health\":\"GOOD\"}",
+          new String(Arrays.copyOfRange(response.getContent(), 0, response.getContent().length),
+              StandardCharsets.UTF_8));
+
+      //Test 2: "BAD" response expected where change replicas to error State on this partition
 
       //change all replica states in partition to ERROR
       for(ReplicaId replica : id.getReplicaIds()) {
@@ -990,11 +989,9 @@ public class AmbryServerRequestsTest {
           (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
 
       assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-      assertEquals("Response's content length does not match the content length in response",
-          response.getContent()[7],
-          response.getContent().length);
       assertEquals("Payload was expected to be {\"health\":\"BAD\"}","{\"health\":\"BAD\"}",
-          new String(Arrays.copyOfRange(response.getContent(), 45, 61), StandardCharsets.UTF_8));
+          new String(Arrays.copyOfRange(response.getContent(), 0, response.getContent().length),
+              StandardCharsets.UTF_8));
 
       //restore the state of the Replicas
       for(ReplicaId replica : id.getReplicaIds()) {

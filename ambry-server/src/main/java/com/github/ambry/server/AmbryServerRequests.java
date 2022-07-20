@@ -425,61 +425,45 @@ public class AmbryServerRequests extends AmbryRequests {
       throws StoreException, IOException {
     boolean hostHealthy = true; //used to determine if the host is ever unhealthy
 
+    //Confirms that the storeManager is instance of StorageManager
+    StorageManager storageManager = null;
+
+    if(this.storeManager instanceof StorageManager){
+      storageManager = (StorageManager)this.storeManager;
+    }else{
+      hostHealthy = false;
+    }
+
     //Finds all replicas of every partition that have this server's hostName
-    List<PartitionId> partitionsWithHostName = new ArrayList<>();
-    StorageManager storageManager = (StorageManager)this.storeManager;
-    for(Map.Entry<PartitionId, DiskManager> entry : storageManager.getPartitionToDiskManager().entrySet()){
-      for(ReplicaId replica : entry.getKey().getReplicaIds()){
-        if (replica.getDataNodeId().getHostname() == currentNode.getHostname()) {
-          partitionsWithHostName.add(entry.getKey());
+    List<PartitionId> partitionsInThisHost = hostHealthy ?
+        Collections.list(storageManager.getPartitionToDiskManager().keys()) : null;
+
+    /*
+     * Checks if the Host's BlobStore exists,started and is Leader/Standby ReplicaState for all Partitions
+     * this Host is apart of
+     */
+    if(hostHealthy) {
+
+      for (PartitionId partitionId : partitionsInThisHost) {
+        BlobStore hostBlobStore = (BlobStore) storageManager.getStore(partitionId);
+
+        //if any fail, this host isn't healthy
+        if (hostBlobStore == null || !hostBlobStore.isStarted() ||
+            ((hostBlobStore.getCurrentState() != ReplicaState.STANDBY) && (
+            hostBlobStore.getCurrentState() != ReplicaState.LEADER))) {
+          hostHealthy = false;
           break;
         }
       }
     }
 
-    /**
-     * Checks if the Host's BlobStore exists/initialized and is Leader/Standby ReplicaState for all Partitions
-     * this Host is apart of
-     */
-    ConcurrentHashMap<PartitionId, DiskManager> partitionToDiskManager = storageManager.getPartitionToDiskManager();
-
-    for(PartitionId partitionId : partitionsWithHostName){
-      BlobStore blobStore = (BlobStore) storageManager.getStore(partitionId);
-
-      //if any fail, this host isn't healthy
-      if(blobStore == null || ((blobStore.getCurrentState() != ReplicaState.STANDBY) &&
-          (blobStore.getCurrentState() != ReplicaState.LEADER))){
-        hostHealthy = false;
-        break;
-      }
-    }
-
-    //Initializing the Content of the AdminReponse
-    byte[] clientId = "ambry-healthchecker".getBytes(StandardCharsets.UTF_8);
-    byte[] outputPayload = hostHealthy ? "{\"health\":\"GOOD\"}".getBytes(StandardCharsets.UTF_8) :
-        "{\"health\":\"BAD\"}".getBytes(StandardCharsets.UTF_8);
-    List<byte[]> contentAttributes = new ArrayList<>();
-    contentAttributes.add(new byte[]{0, 0, 0, 0, 0, 0, 0,
-        (byte)(26 + clientId.length + outputPayload.length)}); //content Length
-    contentAttributes.add(new byte[]{0,11}); //ordinalNumber
-    contentAttributes.add(new byte[]{0,1}); //versionOfResponse
-    contentAttributes.add(new byte[]{0,0,0,1}); //requestId
-    contentAttributes.add(new byte[]{0,0,0,(byte)clientId.length}); //lengthOfClientId
-    contentAttributes.add(clientId);
-    contentAttributes.add(new byte[]{0,0,0,0,0,(byte)outputPayload.length}); //lengthOfPayload
-    contentAttributes.add(outputPayload);
-
-    //Append the arrays together
-    ByteArrayOutputStream content = new ByteArrayOutputStream();
-    for(byte[] attribute: contentAttributes){
-      content.write(attribute);
-    }
-
-    //return the response with the content made above
+    //Initializing the Content of the response and return it
+    byte[] content = (hostHealthy ? "{\"health\":\"GOOD\"}" : "{\"health\":\"BAD\"}").getBytes(StandardCharsets.UTF_8);
     ServerErrorCode error = ServerErrorCode.No_Error;
-    return new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(), error,
-        content.toByteArray());
+
+    return new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(), error, content);
   }
+
 
   /**
    * Handles admin request that starts BlobStore
