@@ -958,14 +958,11 @@ public class AmbryServerRequestsTest {
       String clientId = TestUtils.getRandomString(10);
 
       // Test 1: "Good" response excepted where the host state is in either Standby or Leader
-      HashMap<ReplicaId,ReplicaState> replicaToOriginalState = new HashMap<>(); //remembers original state of replica
+      ReplicaState originalPartitionState = storageManager.getStore(id).getCurrentState();
 
-      //change all replica states in partition to Standby or Leader
-      for(ReplicaId replica : id.getReplicaIds()) {
-        replicaToOriginalState.put(replica, storageManager.getStore(replica.getPartitionId()).getCurrentState());
-        storageManager.getStore(replica.getPartitionId()).setCurrentState(
+      //change Partition to Standby or Leader
+      storageManager.getStore(id).setCurrentState(
             TestUtils.RANDOM.nextInt() % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.LEADER);
-      }
 
       AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
       AdminResponseWithContent response =
@@ -977,9 +974,7 @@ public class AmbryServerRequestsTest {
 
       //Test 2: "BAD" response expected where change replicas to error State on this partition
       //change all replica states in partition to ERROR
-      for(ReplicaId replica : id.getReplicaIds()) {
-        storageManager.getStore(replica.getPartitionId()).setCurrentState(ReplicaState.ERROR);
-      }
+      storageManager.getStore(id).setCurrentState(ReplicaState.ERROR);
 
       adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
       response = (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
@@ -988,10 +983,8 @@ public class AmbryServerRequestsTest {
       assertEquals("Payload was expected to be {\"health\":\"BAD\"}","{\"health\":\"BAD\"}",
           new String(response.getContent(),StandardCharsets.UTF_8));
 
-      //restore the state of the Replicas
-      for(ReplicaId replica : id.getReplicaIds()) {
-        storageManager.getStore(replica.getPartitionId()).setCurrentState(replicaToOriginalState.get(replica));
-      }
+      //restore the state of the Partition
+      storageManager.getStore(id).setCurrentState(originalPartitionState);
     }
   }
 

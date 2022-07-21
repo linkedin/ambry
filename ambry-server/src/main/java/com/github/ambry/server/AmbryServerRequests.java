@@ -423,34 +423,26 @@ public class AmbryServerRequests extends AmbryRequests {
    */
   private AdminResponse handleHealthCheckRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws StoreException, IOException {
-    boolean hostHealthy = true; //used to determine if the host is ever unhealthy
+    boolean hostHealthy = false; //used to determine if the host is ever unhealthy
 
-    //Confirms that the storeManager is instance of StorageManager
-    StorageManager storageManager = null;
+    if (this.storeManager instanceof StorageManager) {
+      StorageManager storageManager = (StorageManager) this.storeManager;
+      hostHealthy = true;
 
-    if(this.storeManager instanceof StorageManager){
-      storageManager = (StorageManager)this.storeManager;
-    }else{
-      hostHealthy = false;
-    }
+      //Finds all replicas of every partition that have this server's hostName
+      List<PartitionId> partitionsInThisHost =Collections.list(storageManager.getPartitionToDiskManager().keys());
 
-    //Finds all replicas of every partition that have this server's hostName
-    List<PartitionId> partitionsInThisHost = hostHealthy ?
-        Collections.list(storageManager.getPartitionToDiskManager().keys()) : null;
-
-    /*
-     * Checks if the Host's BlobStore exists,started and is Leader/Standby ReplicaState for all Partitions
-     * this Host is apart of
-     */
-    if(hostHealthy) {
-
+      /*
+       * Checks if the Host's BlobStore exists,started and is Leader/Standby ReplicaState for all Partitions
+       * this Host is apart of
+       */
       for (PartitionId partitionId : partitionsInThisHost) {
         BlobStore hostBlobStore = (BlobStore) storageManager.getStore(partitionId);
 
         //if any fail, this host isn't healthy
         if (hostBlobStore == null || !hostBlobStore.isStarted() ||
-            ((hostBlobStore.getCurrentState() != ReplicaState.STANDBY) && (
-            hostBlobStore.getCurrentState() != ReplicaState.LEADER))) {
+            ((hostBlobStore.getCurrentState() != ReplicaState.STANDBY) &&
+                (hostBlobStore.getCurrentState() != ReplicaState.LEADER))) {
           hostHealthy = false;
           break;
         }

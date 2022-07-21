@@ -466,7 +466,6 @@ public class StorageManager implements StoreManager {
     return partitionToDiskManager;
   }
 
-
   /**
    * Implementation of {@link PartitionStateChangeListener} to capture state changes and take actions accordingly.
    */
