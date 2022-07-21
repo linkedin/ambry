@@ -464,7 +464,6 @@ public class AmbryServerRequests extends AmbryRequests {
     return new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(), error, content);
   }
 
-
   /**
    * Handles admin request that starts BlobStore
    * @param partitionId the {@link PartitionId} associated with BlobStore

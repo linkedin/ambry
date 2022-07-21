@@ -972,26 +972,21 @@ public class AmbryServerRequestsTest {
           (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
 
       assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-
       assertEquals("Payload was expected to be {\"health\":\"GOOD\"}","{\"health\":\"GOOD\"}",
-          new String(Arrays.copyOfRange(response.getContent(), 0, response.getContent().length),
-              StandardCharsets.UTF_8));
+          new String(response.getContent(),StandardCharsets.UTF_8));
 
       //Test 2: "BAD" response expected where change replicas to error State on this partition
-
       //change all replica states in partition to ERROR
       for(ReplicaId replica : id.getReplicaIds()) {
         storageManager.getStore(replica.getPartitionId()).setCurrentState(ReplicaState.ERROR);
       }
 
       adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
-      response =
-          (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
+      response = (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
 
       assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
       assertEquals("Payload was expected to be {\"health\":\"BAD\"}","{\"health\":\"BAD\"}",
-          new String(Arrays.copyOfRange(response.getContent(), 0, response.getContent().length),
-              StandardCharsets.UTF_8));
+          new String(response.getContent(),StandardCharsets.UTF_8));
 
       //restore the state of the Replicas
       for(ReplicaId replica : id.getReplicaIds()) {
