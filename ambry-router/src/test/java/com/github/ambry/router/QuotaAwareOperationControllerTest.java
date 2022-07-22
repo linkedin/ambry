@@ -139,6 +139,12 @@ public class QuotaAwareOperationControllerTest {
     assertEquals(0, quotaAwareOperationController.getRequestQueue(quotaMethod).size());
     assertEquals(0, quotaAwareOperationController.getDelayedRequestsInQueue());
     assertEquals(0, quotaAwareOperationController.getOutOfQuotaRequestsInQueue());
+
+    assertTrue(quotaAwareOperationController.routerMetrics.totalQuotaQueueingDelay.getMeanRate() > 0);
+    assertTrue(quotaAwareOperationController.routerMetrics.addToQueueTime.getMeanRate() > 0);
+    assertTrue(quotaAwareOperationController.routerMetrics.drainRequestQueueTime.getMeanRate() > 0);
+    assertTrue(quotaAwareOperationController.routerMetrics.pollExceedAllowedRequestTime.getMeanRate() > 0);
+    assertTrue(quotaAwareOperationController.routerMetrics.pollExceedAllowedRequestTime.getMeanRate() > 0);
     chargeable.verifyCalls(1, 1);
   }
 
