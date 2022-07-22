@@ -238,6 +238,11 @@ public class NonBlockingRouterMetrics {
   public final Meter delayedRequestRate;
   public final Meter exceedAllowedRequestRate;
   public final Meter unknownExceptionInChargeableRate;
+  public final Timer totalQuotaQueueingDelay;
+  public final Timer addToQueueTime;
+  public final Timer drainRequestQueueTime;
+  public final Timer pollQuotaCompliantRequestTime;
+  public final Timer pollExceedAllowedRequestTime;
   public Gauge<Integer> operationControllerReadQueueSize;
   public Gauge<Integer> operationControllerWriteQueueSize;
   public Gauge<Integer> operationControllerQueueSize;
@@ -577,8 +582,17 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "DelayedRequestRate"));
     exceedAllowedRequestRate =
         metricRegistry.meter(MetricRegistry.name(QuotaAwareOperationController.class, "ExceedAllowedRequestRate"));
-    unknownExceptionInChargeableRate =
-        metricRegistry.meter(MetricRegistry.name(OperationQuotaCharger.class, "UnknownExceptionInChargeableRate"));
+    unknownExceptionInChargeableRate = metricRegistry.meter(
+        MetricRegistry.name(QuotaAwareOperationController.class, "UnknownExceptionInChargeableRate"));
+    totalQuotaQueueingDelay =
+        metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "TotalQuotaQueueingDelay"));
+    addToQueueTime = metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "AddToQueueTime"));
+    drainRequestQueueTime =
+        metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "DrainRequestQueueTime"));
+    pollQuotaCompliantRequestTime =
+        metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollQuotaCompliantRequestTime"));
+    pollExceedAllowedRequestTime =
+        metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollExceedAllowedRequestTime"));
   }
 
   /**
