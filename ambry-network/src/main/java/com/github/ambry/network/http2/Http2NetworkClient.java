@@ -110,10 +110,9 @@ public class Http2NetworkClient implements NetworkClient {
     http2ClientMetrics.http2ClientSendRate.mark(requestsToSend.size());
     for (RequestInfo requestInfo : requestsToSend) {
       long streamInitiateTime = System.currentTimeMillis();
-
       long waitingTime = streamInitiateTime - requestInfo.getRequestCreateTime();
       http2ClientMetrics.requestToNetworkClientLatencyMs.update(waitingTime);
-
+      requestInfo.setRequestSendTime(streamInitiateTime);
       this.pools.get(InetSocketAddress.createUnresolved(requestInfo.getHost(), requestInfo.getPort().getPort()))
           .acquire()
           .addListener((GenericFutureListener<Future<Channel>>) future -> {

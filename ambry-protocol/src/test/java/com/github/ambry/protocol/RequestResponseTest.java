@@ -13,6 +13,7 @@
  */
 package com.github.ambry.protocol;
 
+import com.codahale.metrics.Timer;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
@@ -26,6 +27,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageMetadata;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.Send;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenFactory;
@@ -55,8 +57,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -64,6 +68,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -164,6 +170,7 @@ public class RequestResponseTest {
   private static short versionSaved;
   private final boolean useByteBufContent;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private static final Logger LOGGER = LoggerFactory.getLogger(RequestResponseTest.class);
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -312,6 +319,37 @@ public class RequestResponseTest {
         }
       }
     }
+  }
+
+  @Test
+  public void logTimeTest() {
+    Queue<RequestInfo> requestInfoQueue = new LinkedList<>();
+    long startTime = SystemTime.getInstance().milliseconds();
+    Timer timer = new Timer();
+    for (int i = 0; i < 260000; i++) {
+      requestInfoQueue.add(new RequestInfo(Integer.toString(i), null, null, null, null));
+    }
+    Timer.Context t = timer.time();
+    long enqueTime = SystemTime.getInstance().milliseconds() - startTime;
+    System.out.println(enqueTime);
+    Map<String, List<RequestInfo>> map = new HashMap<>();
+    for (int i = 0; i < 260000; i++) {
+      RequestInfo requestInfo = requestInfoQueue.remove();
+      if(!map.containsKey("1")) {
+        map.put("1", new LinkedList<>());
+      }
+      map.get("1").add(requestInfo);
+    }
+
+    for (int i = 0; i < 260000; i++) {
+      List<RequestInfo> l = map.get("1");
+      l.remove(0);
+    }
+
+    long dequeueTime = SystemTime.getInstance().milliseconds() - enqueTime;
+    //System.out.println(dequeueTime);
+    System.out.println(SystemTime.getInstance().milliseconds() - startTime);
+    System.out.println(t.stop() * 1000000);
   }
 
   @Test
@@ -845,8 +883,7 @@ public class RequestResponseTest {
     response.release();
 
     // test it with null content
-    response =
-        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, null);
+    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, null);
     responseStream = serAndPrepForRead(response, -1, false);
     deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
     Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
@@ -855,10 +892,8 @@ public class RequestResponseTest {
     Assert.assertNull(deserializedAdminResponse.getContent());
     response.release();
 
-
     // test it with empty content
-    response =
-        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, new byte[0]);
+    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, new byte[0]);
     responseStream = serAndPrepForRead(response, -1, false);
     deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
     Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);

@@ -28,6 +28,7 @@ public class RequestInfo {
   private final ReplicaId replicaId;
   private final Chargeable chargeable;
   private final long requestCreateTime;
+  private long requestSendTime = -1;
   private long streamSendTime = -1;
   private long streamHeaderFrameReceiveTime = -1;
   public int responseFramesCount = 0;
@@ -112,5 +113,21 @@ public class RequestInfo {
   public String toString() {
     return "RequestInfo{" + "host='" + host + '\'' + ", port=" + port + ", request=" + request + ", replicaId="
         + replicaId + '}';
+  }
+
+  /**
+   * Get the time at which network client received this request and initiated to send this request.
+   * @return the time in milliseconds.
+   */
+  public long getRequestSendTime() {
+    return requestSendTime;
+  }
+
+  /**
+   * Set the time at which network client received this request and initiated to send this request.
+   * @param requestSendTime time in milliseconds at which request was received by network client.
+   */
+  public void setRequestSendTime(long requestSendTime) {
+    this.requestSendTime = requestSendTime;
   }
 }
