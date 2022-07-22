@@ -44,23 +44,19 @@ import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.BlobStore;
-import com.github.ambry.store.DiskManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -429,7 +425,7 @@ public class AmbryServerRequests extends AmbryRequests {
       StorageManager storageManager = (StorageManager) this.storeManager;
       hostHealthy = true;
 
-      //Finds all replicas of every partition that have this server's hostName
+      //Finds all partitions on this host
       List<PartitionId> partitionsInThisHost =Collections.list(storageManager.getPartitionToDiskManager().keys());
 
       /*
