@@ -2303,11 +2303,17 @@ class PersistentIndex {
    * @param logSegmentName the name of the log segment whose index segment files are required.
    * @return the list of {@link IndexSegment} files that refer to the log segment with name {@code logSegmentName}.
    */
-  static File[] getIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName) {
+  static File[] getIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName) { // ERROR
     return new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
-        return name.startsWith(logSegmentName.toString()) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+        // If not segmented, log name is log_current
+        // index name has the format of <offset>_index, for example 0_index, 265_index
+        // In this case, input parameter logSegmentName == ""
+        if (logSegmentName.toString().isEmpty())
+          return name.startsWith(logSegmentName.toString()) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+        else
+          return name.startsWith(logSegmentName.toString()+BlobStore.SEPARATOR) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
       }
     });
   }

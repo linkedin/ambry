@@ -75,6 +75,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.ReplicaState.*;
@@ -556,6 +558,37 @@ public class BlobStoreTest {
     file.deleteOnExit();
     blobStore = createBlobStore(getMockReplicaId(file.getAbsolutePath()));
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
+  }
+
+  @Test
+  public void storeStartupTests2() throws IOException, StoreException { // here
+    if (!isLogSegmented) {
+      verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
+      return;
+    }
+
+    // Test the following LogSegment == null issue
+    // https://jira01.corp.linkedin.com:8443/browse/AMBRY-9175
+    // copy and generate:
+    //    0_49_18_bloom
+    //    0_49_18_index
+    //    0_49_log_temp
+    // Rename 0_0_log and related index bloom to
+    //    0_4_log
+    //    0_4_18_index
+    //    0_4_18_bloom
+    // At this moment, we have 0_4_xxx_index and also 0_49_xxx_index
+    // But only have 0_4_log. 0_49_log_temp is under compaction.
+    Files.copy(Paths.get(tempDir+"/0_0_log"), Paths.get(tempDir+"/0_49_log_temp"));
+    Files.move(Paths.get(tempDir+"/0_0_log"), Paths.get(tempDir+"/0_4_log"));
+
+    Files.copy(Paths.get(tempDir+"/0_0_18_index"), Paths.get(tempDir+"/0_49_18_index"));
+    Files.move(Paths.get(tempDir+"/0_0_18_index"), Paths.get(tempDir+"/0_4_18_index"));
+
+    Files.copy(Paths.get(tempDir+"/0_0_18_bloom"), Paths.get(tempDir+"/0_49_18_bloom"));
+    Files.move(Paths.get(tempDir+"/0_0_18_bloom"), Paths.get(tempDir+"/0_4_18_bloom"));
+
+    reloadStore();
   }
 
   /**
