@@ -133,7 +133,8 @@ class DeleteOperation {
       String hostname = replica.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       DeleteRequest deleteRequest = createDeleteRequest();
-      RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo =
+          new RequestInfo(hostname, port, deleteRequest, replica, operationQuotaCharger, time.milliseconds());
       deleteRequestInfos.put(deleteRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
@@ -268,11 +269,11 @@ class DeleteOperation {
       Map.Entry<Integer, RequestInfo> entry = itr.next();
       int correlationId = entry.getKey();
       RequestInfo requestInfo = entry.getValue();
-      // If there is no response from network layer or if request itself didn't get chance to reach chance to reach
-      // network layer (due to some throttling in router, etc), drop the request after some time.
+      // If request times out due to no response from server or due to being stuck in router itself for long time,
+      // drop the request.
       long currentTimeInMs = time.milliseconds();
-      if ((requestInfo.getRequestSendTime() != -1
-          && currentTimeInMs - requestInfo.getRequestSendTime() > routerConfig.routerRequestNetworkTimeoutMs)
+      if ((requestInfo.isRequestReceivedByNetworkLayer()
+          && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
           || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
         logger.trace("Delete Request with correlationId {} in flight has expired for replica {} ", correlationId,

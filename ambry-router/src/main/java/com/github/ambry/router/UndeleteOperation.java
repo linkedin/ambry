@@ -127,7 +127,8 @@ public class UndeleteOperation {
       String hostname = replica.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       UndeleteRequest undeleteRequest = createUndeleteRequest();
-      RequestInfo requestInfo = new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo =
+          new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger, time.milliseconds());
       undeleteRequestInfos.put(undeleteRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
@@ -282,8 +283,8 @@ public class UndeleteOperation {
       // If there is no response from network layer or if request itself didn't get chance to reach chance to reach
       // network layer (due to some throttling in router, etc), drop the request after some time.
       long currentTimeInMs = time.milliseconds();
-      if ((requestInfo.getRequestSendTime() != -1
-          && currentTimeInMs - requestInfo.getRequestSendTime() > routerConfig.routerRequestNetworkTimeoutMs)
+      if ((requestInfo.isRequestReceivedByNetworkLayer()
+          && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
           || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
         iter.remove();
         LOGGER.warn("Undelete request with correlationid {} in flight has expired for replica {} ", correlationId,

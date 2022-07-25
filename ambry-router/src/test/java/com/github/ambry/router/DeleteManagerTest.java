@@ -211,7 +211,8 @@ public class DeleteManagerTest {
     // Create a router with QuotaRejectionOperationController for this test.
     router.close();
     Properties properties = getNonBlockingRouterProperties();
-    properties.setProperty(RouterConfig.OPERATION_CONTROLLER, QuotaRejectingOperationController.class.getCanonicalName());
+    properties.setProperty(RouterConfig.OPERATION_CONTROLLER,
+        QuotaRejectingOperationController.class.getCanonicalName());
     VerifiableProperties vProps = new VerifiableProperties(properties);
     RouterConfig routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
@@ -262,7 +263,7 @@ public class DeleteManagerTest {
    * @throws Exception
    */
   @Test
-  public void routerErrorCodeResolutionTest() throws Exception {
+  public void routerErrorCodeResolutionFirstSetTest() throws Exception {
     LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
     // test 4 codes
     codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
@@ -270,9 +271,15 @@ public class DeleteManagerTest {
     codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     codesToSetAndTest.put(ServerErrorCode.IO_Error, RouterErrorCode.UnexpectedInternalError);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
+  }
 
-    // test another 4 codes
-    codesToSetAndTest.clear();
+  /**
+   * Tests to ensure that {@link RouterErrorCode}s are properly resolved based on precedence
+   * @throws Exception
+   */
+  @Test
+  public void routerErrorCodeResolutionSecondSetTest() throws Exception {
+    LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
     codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     codesToSetAndTest.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
@@ -596,8 +603,6 @@ public class DeleteManagerTest {
         serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
         serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
       }
-      // Reset not-found cache after each test since we are using same blob ID for all error codes
-      router.getNotFoundCache().invalidateAll();
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }

@@ -112,7 +112,7 @@ public class SocketNetworkClient implements NetworkClient {
     List<NetworkSend> sends = null;
     try {
       for (RequestInfo requestInfo : requestsToSend) {
-        requestInfo.setRequestSendTime(System.currentTimeMillis());
+        requestInfo.setRequestEnqueueTime(System.currentTimeMillis());
         pendingRequests.add(new RequestMetadata(requestInfo));
       }
       sends = prepareSends(requestsToDrop, responseInfoList);

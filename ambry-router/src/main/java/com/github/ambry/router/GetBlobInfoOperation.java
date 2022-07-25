@@ -152,8 +152,8 @@ class GetBlobInfoOperation extends GetOperation {
       // If there is no response from network layer or if request itself didn't get chance to reach chance to reach
       // network layer (due to some throttling in router, etc), drop the request after some time.
       long currentTimeInMs = time.milliseconds();
-      if ((requestInfo.getRequestSendTime() != -1
-          && currentTimeInMs - requestInfo.getRequestSendTime() > routerConfig.routerRequestNetworkTimeoutMs)
+      if ((requestInfo.isRequestReceivedByNetworkLayer()
+          && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
           || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
         logger.trace("GetBlobInfoRequest with correlationId {} in flight has expired for replica {} ", correlationId,
             requestInfo.getReplicaId().getDataNodeId());
@@ -181,7 +181,8 @@ class GetBlobInfoOperation extends GetOperation {
       String hostname = replicaId.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
       GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
-      RequestInfo requestInfo = new RequestInfo(hostname, port, getRequest, replicaId, operationQuotaCharger);
+      RequestInfo requestInfo =
+          new RequestInfo(hostname, port, getRequest, replicaId, operationQuotaCharger, time.milliseconds());
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);

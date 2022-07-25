@@ -28,9 +28,9 @@ public class RequestInfo {
   private final ReplicaId replicaId;
   private final Chargeable chargeable;
   private final long requestCreateTime;
+  private long requestEnqueueTime = -1;
   private long requestSendTime = -1;
-  private long streamSendTime = -1;
-  private long streamHeaderFrameReceiveTime = -1;
+  private long responseHeaderReceiveTime = -1;
   public int responseFramesCount = 0;
 
   /**
@@ -49,6 +49,25 @@ public class RequestInfo {
     this.replicaId = replicaId;
     this.chargeable = chargeable;
     requestCreateTime = System.currentTimeMillis();
+  }
+
+  /**
+   * Construct a RequestInfo with the given parameters
+   * @param host the host to which the data is meant for
+   * @param port the port on the host to which the data is meant for
+   * @param request the data to be sent.
+   * @param replicaId the {@link ReplicaId} associated with this request.
+   * @param chargeable the {@link Chargeable} associated with this request.
+   * @param creationTime the creation time of this request in msec.
+   */
+  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId, Chargeable chargeable,
+      long creationTime) {
+    this.host = host;
+    this.port = port;
+    this.request = request;
+    this.replicaId = replicaId;
+    this.chargeable = chargeable;
+    requestCreateTime = creationTime;
   }
 
   /**
@@ -86,48 +105,72 @@ public class RequestInfo {
     return replicaId;
   }
 
-  public long getStreamHeaderFrameReceiveTime() {
-    return streamHeaderFrameReceiveTime;
-  }
-
-  public void setStreamHeaderFrameReceiveTime(long streamHeaderFrameReceiveTime) {
-    this.streamHeaderFrameReceiveTime = streamHeaderFrameReceiveTime;
-  }
-
-  public long getStreamSendTime() {
-    return streamSendTime;
-  }
-
-  public void setStreamSendTime(long streamSendTime) {
-    this.streamSendTime = streamSendTime;
-  }
-
   /**
-   * @return creation time of this request in msec.
+   * @return time in msec at which this request was created.
    */
   public long getRequestCreateTime() {
     return requestCreateTime;
   }
 
-  @Override
-  public String toString() {
-    return "RequestInfo{" + "host='" + host + '\'' + ", port=" + port + ", request=" + request + ", replicaId="
-        + replicaId + '}';
+  /**
+   * Set the time at which request was received and enqueued at network layer.
+   * @param requestEnqueueTime time in msec.
+   */
+  public void setRequestEnqueueTime(long requestEnqueueTime) {
+    this.requestEnqueueTime = requestEnqueueTime;
   }
 
   /**
-   * Get the time at which network client received this request and initiated to send this request.
-   * @return the time in milliseconds.
+   * @return the time in msec at which request was received and enqueued at network layer. If it is -1, it means that
+   * network layer didn't receive this request yet from router.
+   */
+  public long getRequestEnqueueTime() {
+    return requestEnqueueTime;
+  }
+
+  /**
+   * Set the time in msec at which request was sent out.
+   * @param requestSendTime in msec.
+   */
+  public void setRequestSendTime(long requestSendTime) {
+    this.requestSendTime = requestSendTime;
+  }
+
+  /**
+   * @return the time in msec at which request was sent out. If it is -1, it means that request is not yet sent out of
+   * network layer.
    */
   public long getRequestSendTime() {
     return requestSendTime;
   }
 
   /**
-   * Set the time at which network client received this request and initiated to send this request.
-   * @param requestSendTime time in milliseconds at which request was received by network client.
+   * Set the time in msec at which response header is received. For HTTP2, this is the time at which first response
+   * header frame is received.
+   * @param responseHeaderReceiveTime in msec.
    */
-  public void setRequestSendTime(long requestSendTime) {
-    this.requestSendTime = requestSendTime;
+  public void setResponseHeaderReceiveTime(long responseHeaderReceiveTime) {
+    this.responseHeaderReceiveTime = responseHeaderReceiveTime;
+  }
+
+  /**
+   * @return the time in msec at which response header is received. For HTTP2, this is the time at which first response
+   * header frame is received. If it is -1, it means that response is not yet received.
+   */
+  public long getResponseHeaderReceiveTime() {
+    return responseHeaderReceiveTime;
+  }
+
+  /**
+   * @return {@code True} if request has been received by network layer.
+   */
+  public boolean isRequestReceivedByNetworkLayer() {
+    return requestEnqueueTime != 1;
+  }
+
+  @Override
+  public String toString() {
+    return "RequestInfo{" + "host='" + host + '\'' + ", port=" + port + ", request=" + request + ", replicaId="
+        + replicaId + '}';
   }
 }

@@ -1454,8 +1454,8 @@ class PutOperation {
         // If there is no response from network layer or if request itself didn't get chance to reach chance to reach
         // network layer (due to some throttling in router, etc), drop the request after some time.
         long currentTimeInMs = time.milliseconds();
-        if ((requestInfo.getRequestSendTime() != -1
-            && currentTimeInMs - requestInfo.getRequestSendTime() > routerConfig.routerRequestNetworkTimeoutMs)
+        if ((requestInfo.isRequestReceivedByNetworkLayer()
+            && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
             || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(requestInfo.getReplicaId(), TrackedRequestFinalState.FAILURE);
           logger.warn("{}: PutRequest with correlationId {} in flight has expired for replica {} {}", loggingContext,
@@ -1484,7 +1484,8 @@ class PutOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         PutRequest putRequest = createPutRequest();
-        RequestInfo requestInfo = new RequestInfo(hostname, port, putRequest, replicaId, prepareQuotaCharger());
+        RequestInfo requestInfo =
+            new RequestInfo(hostname, port, putRequest, replicaId, prepareQuotaCharger(), time.milliseconds());
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo.put(correlationId, requestInfo);
         correlationIdToPutChunk.put(correlationId, this);

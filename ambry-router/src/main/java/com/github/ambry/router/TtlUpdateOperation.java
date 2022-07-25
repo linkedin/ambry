@@ -129,7 +129,8 @@ class TtlUpdateOperation {
       String hostname = replica.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       TtlUpdateRequest ttlUpdateRequest = createTtlUpdateRequest();
-      RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo =
+          new RequestInfo(hostname, port, ttlUpdateRequest, replica, operationQuotaCharger, time.milliseconds());
       ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
@@ -253,8 +254,8 @@ class TtlUpdateOperation {
       // If there is no response from network layer or if request itself didn't get chance to reach chance to reach
       // network layer (due to some throttling in router, etc), drop the request after some time.
       long currentTimeInMs = time.milliseconds();
-      if ((requestInfo.getRequestSendTime() != -1
-          && currentTimeInMs - requestInfo.getRequestSendTime() > routerConfig.routerRequestNetworkTimeoutMs)
+      if ((requestInfo.isRequestReceivedByNetworkLayer()
+          && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
           || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
         LOGGER.trace("TTL Request with correlationid {} in flight has expired for replica {} ", correlationId,
