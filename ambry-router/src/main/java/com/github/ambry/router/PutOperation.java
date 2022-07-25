@@ -1451,12 +1451,10 @@ class PutOperation {
         Map.Entry<Integer, RequestInfo> entry = inFlightRequestsIterator.next();
         int correlationId = entry.getKey();
         RequestInfo requestInfo = entry.getValue();
-        // If there is no response from network layer or if request itself didn't get chance to reach chance to reach
-        // network layer (due to some throttling in router, etc), drop the request after some time.
+        // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
+        // throttling, etc) for long time, drop the request.
         long currentTimeInMs = time.milliseconds();
-        if ((requestInfo.isRequestReceivedByNetworkLayer()
-            && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
-            || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
+        if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
           onErrorResponse(requestInfo.getReplicaId(), TrackedRequestFinalState.FAILURE);
           logger.warn("{}: PutRequest with correlationId {} in flight has expired for replica {} {}", loggingContext,
               correlationId, requestInfo.getReplicaId().getDataNodeId(), requestInfo);

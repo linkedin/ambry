@@ -165,7 +165,7 @@ public class RequestInfo {
    * @return {@code True} if request has been received by network layer.
    */
   public boolean isRequestReceivedByNetworkLayer() {
-    return requestEnqueueTime != 1;
+    return requestEnqueueTime != -1;
   }
 
   @Override

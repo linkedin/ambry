@@ -33,6 +33,10 @@ public class RouterConfig {
   public static final double DEFAULT_LATENCY_TOLERANCE_QUANTILE = 0.9;
   public static final long DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS = 1000L;
   public static final long ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS = 24 * 60 * 1000L;
+  public static final int MAX_NETWORK_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS = 60 * 1000;
+  // This is a theoretical maximum value. Configured value may be much smaller since we might need to respond back to
+  // client with either success or failure much sooner.
+  public static final int MAX_OVERALL_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS = 60 * 60 * 1000;
 
   // config keys
   public static final String ROUTER_SCALING_UNIT_COUNT = "router.scaling.unit.count";
@@ -631,9 +635,10 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_CONNECTIONS_WARM_UP_TIMEOUT_MS, 5000, 0, Integer.MAX_VALUE);
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange(ROUTER_CONNECTION_CHECKOUT_TIMEOUT_MS, 1000, 1, 5000);
-    routerRequestTimeoutMs = verifiableProperties.getIntInRange(ROUTER_REQUEST_TIMEOUT_MS, 4000, 1, 60000);
-    routerRequestNetworkTimeoutMs =
-        verifiableProperties.getIntInRange(ROUTER_REQUEST_NETWORK_TIMEOUT_MS, 2000, 1, 30000);
+    routerRequestTimeoutMs = verifiableProperties.getIntInRange(ROUTER_REQUEST_TIMEOUT_MS, 4000, 1,
+        MAX_OVERALL_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS);
+    routerRequestNetworkTimeoutMs = verifiableProperties.getIntInRange(ROUTER_REQUEST_NETWORK_TIMEOUT_MS, 2000, 1,
+        MAX_NETWORK_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS);
     routerDropRequestOnTimeout = verifiableProperties.getBoolean(ROUTER_DROP_REQUEST_ON_TIMEOUT, false);
     routerMaxPutChunkSizeBytes =
         verifiableProperties.getIntInRange(ROUTER_MAX_PUT_CHUNK_SIZE_BYTES, 4 * 1024 * 1024, 1, Integer.MAX_VALUE);

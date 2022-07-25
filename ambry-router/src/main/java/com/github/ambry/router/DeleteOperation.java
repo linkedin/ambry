@@ -269,12 +269,10 @@ class DeleteOperation {
       Map.Entry<Integer, RequestInfo> entry = itr.next();
       int correlationId = entry.getKey();
       RequestInfo requestInfo = entry.getValue();
-      // If request times out due to no response from server or due to being stuck in router itself for long time,
-      // drop the request.
+      // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
+      // throttling, etc) for long time, drop the request.
       long currentTimeInMs = time.milliseconds();
-      if ((requestInfo.isRequestReceivedByNetworkLayer()
-          && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
-          || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
+      if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
         itr.remove();
         logger.trace("Delete Request with correlationId {} in flight has expired for replica {} ", correlationId,
             requestInfo.getReplicaId().getDataNodeId());
