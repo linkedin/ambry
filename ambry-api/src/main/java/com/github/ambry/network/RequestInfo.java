@@ -40,24 +40,6 @@ public class RequestInfo {
    * @param request the data to be sent.
    * @param replicaId the {@link ReplicaId} associated with this request.
    * @param chargeable the {@link Chargeable} associated with this request.
-   */
-  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId,
-      Chargeable chargeable) {
-    this.host = host;
-    this.port = port;
-    this.request = request;
-    this.replicaId = replicaId;
-    this.chargeable = chargeable;
-    requestCreateTime = System.currentTimeMillis();
-  }
-
-  /**
-   * Construct a RequestInfo with the given parameters
-   * @param host the host to which the data is meant for
-   * @param port the port on the host to which the data is meant for
-   * @param request the data to be sent.
-   * @param replicaId the {@link ReplicaId} associated with this request.
-   * @param chargeable the {@link Chargeable} associated with this request.
    * @param creationTime the creation time of this request in msec.
    */
   public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId, Chargeable chargeable,
@@ -68,6 +50,19 @@ public class RequestInfo {
     this.replicaId = replicaId;
     this.chargeable = chargeable;
     requestCreateTime = creationTime;
+  }
+
+  /**
+   * Construct a RequestInfo with the given parameters
+   * @param host the host to which the data is meant for
+   * @param port the port on the host to which the data is meant for
+   * @param request the data to be sent.
+   * @param replicaId the {@link ReplicaId} associated with this request.
+   * @param chargeable the {@link Chargeable} associated with this request.
+   */
+  public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId,
+      Chargeable chargeable) {
+    this(host, port, request, replicaId, chargeable, System.currentTimeMillis());
   }
 
   /**
