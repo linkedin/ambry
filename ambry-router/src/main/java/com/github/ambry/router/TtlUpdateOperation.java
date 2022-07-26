@@ -57,7 +57,7 @@ class TtlUpdateOperation {
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final Map<Integer, TtlUpdateRequestInfo> ttlUpdateRequestInfos = new TreeMap<>();
+  private final Map<Integer, RequestInfo> ttlUpdateRequestInfos = new TreeMap<>();
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
@@ -129,9 +129,9 @@ class TtlUpdateOperation {
       String hostname = replica.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       TtlUpdateRequest ttlUpdateRequest = createTtlUpdateRequest();
-      ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(),
-          new TtlUpdateRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, ttlUpdateRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo =
+          new RequestInfo(hostname, port, ttlUpdateRequest, replica, operationQuotaCharger, time.milliseconds());
+      ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
@@ -163,18 +163,19 @@ class TtlUpdateOperation {
    */
   void handleResponse(ResponseInfo responseInfo, TtlUpdateResponse ttlUpdateResponse) {
     TtlUpdateRequest ttlUpdateRequest = (TtlUpdateRequest) responseInfo.getRequestInfo().getRequest();
-    TtlUpdateRequestInfo ttlUpdateRequestInfo = ttlUpdateRequestInfos.remove(ttlUpdateRequest.getCorrelationId());
+    RequestInfo ttlUpdateRequestInfo = ttlUpdateRequestInfos.remove(ttlUpdateRequest.getCorrelationId());
     // ttlUpdateRequestInfo can be null if this request was timed out before this response is received. No
     // metric is updated here, as corresponding metrics have been updated when the request was timed out.
     if (ttlUpdateRequestInfo == null) {
       return;
     }
-    ReplicaId replica = ttlUpdateRequestInfo.replica;
+    ReplicaId replica = ttlUpdateRequestInfo.getReplicaId();
     if (responseInfo.isQuotaRejected()) {
       processQuotaRejectedResponse(ttlUpdateRequest.getCorrelationId(), replica);
       return;
     }
-    long requestLatencyMs = time.milliseconds() - ttlUpdateRequestInfo.startTimeMs;
+    // Track the over all time taken for the response since the creation of the request.
+    long requestLatencyMs = time.milliseconds() - ttlUpdateRequestInfo.getRequestCreateTime();
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).ttlUpdateRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
@@ -245,20 +246,23 @@ class TtlUpdateOperation {
    */
   private void cleanupExpiredInflightRequests(
       RequestRegistrationCallback<TtlUpdateOperation> requestRegistrationCallback) {
-    Iterator<Map.Entry<Integer, TtlUpdateRequestInfo>> itr = ttlUpdateRequestInfos.entrySet().iterator();
+    Iterator<Map.Entry<Integer, RequestInfo>> itr = ttlUpdateRequestInfos.entrySet().iterator();
     while (itr.hasNext()) {
-      Map.Entry<Integer, TtlUpdateRequestInfo> ttlUpdateRequestInfoEntry = itr.next();
+      Map.Entry<Integer, RequestInfo> ttlUpdateRequestInfoEntry = itr.next();
       int correlationId = ttlUpdateRequestInfoEntry.getKey();
-      TtlUpdateRequestInfo ttlUpdateRequestInfo = ttlUpdateRequestInfoEntry.getValue();
-      if (time.milliseconds() - ttlUpdateRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+      RequestInfo requestInfo = ttlUpdateRequestInfoEntry.getValue();
+      // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
+      // throttling, etc) for long time, drop the request.
+      long currentTimeInMs = time.milliseconds();
+      if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
         itr.remove();
         LOGGER.trace("TTL Request with correlationid {} in flight has expired for replica {} ", correlationId,
-            ttlUpdateRequestInfo.replica.getDataNodeId());
+            requestInfo.getReplicaId().getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
-        onErrorResponse(ttlUpdateRequestInfo.replica,
-            RouterUtils.buildTimeoutException(correlationId, ttlUpdateRequestInfo.replica.getDataNodeId(), blobId));
+        onErrorResponse(requestInfo.getReplicaId(),
+            RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
       } else {
         // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -342,9 +346,8 @@ class TtlUpdateOperation {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
       } else if (operationTracker.maybeFailedDueToOfflineReplicas()) {
-        operationException.set(
-            new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
-                RouterErrorCode.AmbryUnavailable));
+        operationException.set(new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
+            RouterErrorCode.AmbryUnavailable));
       } else if (operationTracker.hasFailedOnNotFound()) {
         operationException.set(
             new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
@@ -472,18 +475,5 @@ class TtlUpdateOperation {
    */
   long getExpiresAtMs() {
     return expiresAtMs;
-  }
-
-  /**
-   * A wrapper class that is used to check if a request has been expired.
-   */
-  private class TtlUpdateRequestInfo {
-    final long startTimeMs;
-    final ReplicaId replica;
-
-    TtlUpdateRequestInfo(long submissionTime, ReplicaId replica) {
-      this.startTimeMs = submissionTime;
-      this.replica = replica;
-    }
   }
 }

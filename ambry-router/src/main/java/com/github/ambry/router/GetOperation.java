@@ -275,21 +275,3 @@ abstract class GetOperation {
   }
 }
 
-/**
- * A class that holds information about the get requests sent out.
- */
-class GetRequestInfo {
-  final ReplicaId replicaId;
-  final long startTimeMs;
-
-  /**
-   * Construct a GetRequestInfo
-   * @param replicaId the replica to which this request is being sent.
-   * @param startTimeMs the time at which this request was created.
-   */
-  GetRequestInfo(ReplicaId replicaId, long startTimeMs) {
-    this.replicaId = replicaId;
-    this.startTimeMs = startTimeMs;
-  }
-}
-

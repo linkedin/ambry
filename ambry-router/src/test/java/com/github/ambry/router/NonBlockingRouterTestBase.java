@@ -77,6 +77,7 @@ public class NonBlockingRouterTestBase {
   protected static final int MAX_PORTS_SSL = 3;
   protected static final int CHECKOUT_TIMEOUT_MS = 1000;
   protected static final int REQUEST_TIMEOUT_MS = 1000;
+  protected static final int NETWORK_TIMEOUT_MS = 500;
   protected static final int PUT_REQUEST_PARALLELISM = 3;
   protected static final int PUT_SUCCESS_TARGET = 2;
   protected static final int GET_REQUEST_PARALLELISM = 2;
@@ -180,6 +181,7 @@ public class NonBlockingRouterTestBase {
     properties.setProperty("router.delete.success.target", Integer.toString(DELETE_SUCCESS_TARGET));
     properties.setProperty("router.connection.checkout.timeout.ms", Integer.toString(CHECKOUT_TIMEOUT_MS));
     properties.setProperty("router.request.timeout.ms", Integer.toString(REQUEST_TIMEOUT_MS));
+    properties.setProperty("router.request.network.timeout.ms", Integer.toString(NETWORK_TIMEOUT_MS));
     properties.setProperty("router.connections.local.dc.warm.up.percentage", Integer.toString(67));
     properties.setProperty("router.connections.remote.dc.warm.up.percentage", Integer.toString(34));
     properties.setProperty("clustermap.cluster.name", "test");
@@ -240,7 +242,8 @@ public class NonBlockingRouterTestBase {
    * Setup test suite to perform a {@link Router#putBlob} call using random account and container ids.
    */
   protected void setOperationParams(int putContentSize, long ttlSecs) {
-    setOperationParams(putContentSize, ttlSecs, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+    setOperationParams(putContentSize, ttlSecs, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM));
   }
 
   /**
@@ -251,8 +254,9 @@ public class NonBlockingRouterTestBase {
    * @param containerId container id for the blob.
    */
   protected void setOperationParams(int putContentSize, long ttlSecs, short accountId, short containerId) {
-    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, ttlSecs,
-        accountId, containerId, testEncryption, null, null, null);
+    putBlobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, ttlSecs, accountId, containerId,
+            testEncryption, null, null, null);
     putUserMetadata = new byte[USER_METADATA_SIZE];
     random.nextBytes(putUserMetadata);
     putContent = new byte[putContentSize];

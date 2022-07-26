@@ -51,7 +51,7 @@ class Http2ClientResponseHandler extends SimpleChannelInboundHandler<FullHttpRes
     if (requestInfo != null) {
       // A request maybe just dropped by Http2NetworkClient.
       http2ClientMetrics.http2StreamFirstToAllFrameReadyTime.update(
-          System.currentTimeMillis() - requestInfo.getStreamHeaderFrameReceiveTime());
+          System.currentTimeMillis() - requestInfo.getResponseHeaderReceiveTime());
       ResponseInfo responseInfo = new ResponseInfo(requestInfo, null, dup);
       responseInfoQueue.put(responseInfo);
     } else {

@@ -64,6 +64,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -845,8 +847,7 @@ public class RequestResponseTest {
     response.release();
 
     // test it with null content
-    response =
-        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, null);
+    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, null);
     responseStream = serAndPrepForRead(response, -1, false);
     deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
     Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
@@ -855,10 +856,8 @@ public class RequestResponseTest {
     Assert.assertNull(deserializedAdminResponse.getContent());
     response.release();
 
-
     // test it with empty content
-    response =
-        new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, new byte[0]);
+    response = new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, new byte[0]);
     responseStream = serAndPrepForRead(response, -1, false);
     deserializedAdminResponse = AdminResponseWithContent.readFrom(responseStream);
     Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);

@@ -78,6 +78,7 @@ public class LocalNetworkClient implements NetworkClient {
       // Request is sent and received as it is without serializing to stream since they are handled in same process via
       // local queues.
       try {
+        requestInfo.setRequestEnqueueTime(System.currentTimeMillis());
         channel.sendRequest(new LocalChannelRequest(requestInfo, processorId));
       } catch (Exception e) {
         logger.error("Received an unexpected error during sendAndPoll(): ", e);

@@ -71,7 +71,7 @@ class GetBlobInfoOperation extends GetOperation {
   private final CryptoJobMetricsTracker decryptJobMetricsTracker =
       new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
   // map of correlation id to the request metadata for every request issued for this operation.
-  private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
+  private final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobInfoOperation.class);
 
@@ -94,7 +94,8 @@ class GetBlobInfoOperation extends GetOperation {
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted, QuotaChargeCallback quotaChargeCallback) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted,
+      QuotaChargeCallback quotaChargeCallback) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -142,20 +143,23 @@ class GetBlobInfoOperation extends GetOperation {
    * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
    */
   private void cleanupExpiredInFlightRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
-    Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
+    Iterator<Map.Entry<Integer, RequestInfo>> inFlightRequestsIterator =
         correlationIdToGetRequestInfo.entrySet().iterator();
     while (inFlightRequestsIterator.hasNext()) {
-      Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
+      Map.Entry<Integer, RequestInfo> entry = inFlightRequestsIterator.next();
       int correlationId = entry.getKey();
-      GetRequestInfo info = entry.getValue();
-      if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+      RequestInfo requestInfo = entry.getValue();
+      // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
+      // throttling, etc) for long time, drop the request.
+      long currentTimeInMs = time.milliseconds();
+      if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
         logger.trace("GetBlobInfoRequest with correlationId {} in flight has expired for replica {} ", correlationId,
-            info.replicaId.getDataNodeId());
+            requestInfo.getReplicaId().getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
-        onErrorResponse(entry.getValue().replicaId,
-            RouterUtils.buildTimeoutException(correlationId, info.replicaId.getDataNodeId(), blobId));
+        onErrorResponse(entry.getValue().getReplicaId(),
+            RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
         inFlightRequestsIterator.remove();
       } else {
@@ -175,10 +179,11 @@ class GetBlobInfoOperation extends GetOperation {
       String hostname = replicaId.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
       GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
-      RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, operationQuotaCharger);
+      RequestInfo requestInfo =
+          new RequestInfo(hostname, port, getRequest, replicaId, operationQuotaCharger, time.milliseconds());
       int correlationId = getRequest.getCorrelationId();
-      correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
-      requestRegistrationCallback.registerRequestToSend(this, request);
+      correlationIdToGetRequestInfo.put(correlationId, requestInfo);
+      requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
         logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
@@ -208,32 +213,31 @@ class GetBlobInfoOperation extends GetOperation {
     }
     int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
     // Get the GetOperation that generated the request.
-    GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
+    RequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
     if (getRequestInfo == null) {
       // Ignore. The request must have timed out.
       return;
     }
     if (responseInfo.isQuotaRejected()) {
-      processQuotaRejectedResponse(correlationId, getRequestInfo.replicaId);
+      processQuotaRejectedResponse(correlationId, getRequestInfo.getReplicaId());
       return;
     }
-    long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
+    // Track the over all time taken for the response since the creation of the request.
+    long requestLatencyMs = time.milliseconds() - getRequestInfo.getRequestCreateTime();
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-    routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId())
-        .getBlobInfoRequestLatencyMs.update(requestLatencyMs);
+    routerMetrics.getDataNodeBasedMetrics(
+        getRequestInfo.getReplicaId().getDataNodeId()).getBlobInfoRequestLatencyMs.update(requestLatencyMs);
     if (responseInfo.getError() != null) {
       logger.trace("GetBlobInfoRequest with response correlationId {} timed out for replica {} ", correlationId,
-          getRequestInfo.replicaId.getDataNodeId());
-      onErrorResponse(getRequestInfo.replicaId, new RouterException(
+          getRequestInfo.getReplicaId().getDataNodeId());
+      onErrorResponse(getRequestInfo.getReplicaId(), new RouterException(
           "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
           RouterErrorCode.OperationTimedOut));
     } else {
       if (getResponse == null) {
-        logger.trace(
-            "GetBlobInfoRequest with response correlationId {} received an unexpected error on response"
-                + "deserialization from replica {} ",
-            correlationId, getRequestInfo.replicaId.getDataNodeId());
-        onErrorResponse(getRequestInfo.replicaId,
+        logger.trace("GetBlobInfoRequest with response correlationId {} received an unexpected error on response"
+            + "deserialization from replica {} ", correlationId, getRequestInfo.getReplicaId().getDataNodeId());
+        onErrorResponse(getRequestInfo.getReplicaId(),
             new RouterException("Response deserialization received an unexpected error",
                 RouterErrorCode.UnexpectedInternalError));
       } else {
@@ -244,8 +248,8 @@ class GetBlobInfoOperation extends GetOperation {
           // There is no other way to handle it.
           routerMetrics.unknownReplicaResponseError.inc();
           logger.trace("GetBlobInfoRequest with response correlationId {} mismatch from response {} for replica {} ",
-              correlationId, getResponse.getCorrelationId(), getRequestInfo.replicaId.getDataNodeId());
-          onErrorResponse(getRequestInfo.replicaId, new RouterException(
+              correlationId, getResponse.getCorrelationId(), getRequestInfo.getReplicaId().getDataNodeId());
+          onErrorResponse(getRequestInfo.getReplicaId(), new RouterException(
               "The correlation id in the GetResponse " + getResponse.getCorrelationId()
                   + "is not the same as the correlation id in the associated GetRequest: " + correlationId,
               RouterErrorCode.UnexpectedInternalError));
@@ -258,9 +262,9 @@ class GetBlobInfoOperation extends GetOperation {
             // detection.
             logger.trace(
                 "GetBlobInfoRequest with response correlationId {} response deserialization failed for replica {} ",
-                correlationId, getRequestInfo.replicaId.getDataNodeId());
+                correlationId, getRequestInfo.getReplicaId().getDataNodeId());
             routerMetrics.responseDeserializationErrorCount.inc();
-            onErrorResponse(getRequestInfo.replicaId,
+            onErrorResponse(getRequestInfo.getReplicaId(),
                 new RouterException("Response deserialization received an unexpected error", e,
                     RouterErrorCode.UnexpectedInternalError));
           }
@@ -272,19 +276,19 @@ class GetBlobInfoOperation extends GetOperation {
 
   /**
    * Process the {@link GetResponse} extracted from a {@link ResponseInfo}
-   * @param getRequestInfo the associated {@link GetRequestInfo} for which this response was received.
+   * @param getRequestInfo the associated {@link RequestInfo} for which this response was received.
    * @param getResponse the {@link GetResponse} extracted from the {@link ResponseInfo}
    * @throws IOException if there is an error during deserialization of the GetResponse.
    * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
    */
-  private void processGetBlobInfoResponse(GetRequestInfo getRequestInfo, GetResponse getResponse)
+  private void processGetBlobInfoResponse(RequestInfo getRequestInfo, GetResponse getResponse)
       throws IOException, MessageFormatException {
     ServerErrorCode getError = getResponse.getError();
     if (getError == ServerErrorCode.No_Error) {
       int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
       // Each get request issued by the router is for a single blob.
       if (partitionsInResponse != 1) {
-        onErrorResponse(getRequestInfo.replicaId, new RouterException(
+        onErrorResponse(getRequestInfo.getReplicaId(), new RouterException(
             "Unexpected number of partition responses, expected: 1, " + "received: " + partitionsInResponse,
             RouterErrorCode.UnexpectedInternalError));
         // Again, no need to notify the responseHandler.
@@ -294,31 +298,31 @@ class GetBlobInfoOperation extends GetOperation {
           PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
           int msgsInResponse = partitionResponseInfo.getMessageInfoList().size();
           if (msgsInResponse != 1) {
-            onErrorResponse(getRequestInfo.replicaId, new RouterException(
+            onErrorResponse(getRequestInfo.getReplicaId(), new RouterException(
                 "Unexpected number of messages in a partition response, expected: 1, " + "received: " + msgsInResponse,
                 RouterErrorCode.UnexpectedInternalError));
           } else {
             MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
             MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
             handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
-            operationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.SUCCESS);
-            if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
+            operationTracker.onResponse(getRequestInfo.getReplicaId(), TrackedRequestFinalState.SUCCESS);
+            if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.getReplicaId())) {
               logger.trace("Cross colo request successful for remote replica in {} ",
-                  getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
+                  getRequestInfo.getReplicaId().getDataNodeId().getDatacenterName());
               routerMetrics.crossColoSuccessCount.inc();
             }
           }
         } else {
           // process and set the most relevant exception.
           logger.trace("Replica  {} returned error {} with response correlationId {} ",
-              getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
+              getRequestInfo.getReplicaId().getDataNodeId(), getError, getResponse.getCorrelationId());
           RouterErrorCode routerErrorCode = processServerError(getError);
           if (getError == ServerErrorCode.Disk_Unavailable) {
-            operationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.DISK_DOWN);
+            operationTracker.onResponse(getRequestInfo.getReplicaId(), TrackedRequestFinalState.DISK_DOWN);
             setOperationException(new RouterException("Server returned: " + getError, routerErrorCode));
             routerMetrics.routerRequestErrorCount.inc();
-            routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestErrorCount
-                .inc();
+            routerMetrics.getDataNodeBasedMetrics(
+                getRequestInfo.getReplicaId().getDataNodeId()).getBlobInfoRequestErrorCount.inc();
           } else {
             if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
                 || getError == ServerErrorCode.Blob_Authorization_Failure) {
@@ -328,15 +332,16 @@ class GetBlobInfoOperation extends GetOperation {
             }
             // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
             // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
-            onErrorResponse(getRequestInfo.replicaId,
+            onErrorResponse(getRequestInfo.getReplicaId(),
                 new RouterException("Server returned: " + getError, routerErrorCode));
           }
         }
       }
     } else {
       logger.trace("Replica {} returned an error {} for a GetBlobInfoRequest with response correlationId : {} ",
-          getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
-      onErrorResponse(getRequestInfo.replicaId, new RouterException("Server returned", processServerError(getError)));
+          getRequestInfo.getReplicaId().getDataNodeId(), getError, getResponse.getCorrelationId());
+      onErrorResponse(getRequestInfo.getReplicaId(),
+          new RouterException("Server returned", processServerError(getError)));
     }
   }
 
@@ -403,28 +408,29 @@ class GetBlobInfoOperation extends GetOperation {
       decryptJobMetricsTracker.onJobSubmission();
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
-          new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms, options.getBlobOptions,
-              decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
-            decryptJobMetricsTracker.onJobResultProcessingStart();
-            logger.trace("Handling decrypt job callback results for {}", blobId);
-            routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-            if (exception == null) {
-              logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-              BlobInfo blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(),
-                  messageInfo.getLifeVersion());
-              operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
-              progressTracker.setCryptoJobSuccess();
-            } else {
-              decryptJobMetricsTracker.incrementOperationError();
-              logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
-              setOperationException(
-                  new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
-                      RouterErrorCode.UnexpectedInternalError));
-              progressTracker.setCryptoJobFailed();
-            }
-            decryptJobMetricsTracker.onJobResultProcessingComplete();
-            routerCallback.onPollReady();
-          }));
+          new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
+              options.getBlobOptions, decryptJobMetricsTracker,
+              (DecryptJob.DecryptJobResult result, Exception exception) -> {
+                decryptJobMetricsTracker.onJobResultProcessingStart();
+                logger.trace("Handling decrypt job callback results for {}", blobId);
+                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                if (exception == null) {
+                  logger.trace("Successfully updating decrypt job callback results for {}", blobId);
+                  BlobInfo blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(),
+                      messageInfo.getLifeVersion());
+                  operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
+                  progressTracker.setCryptoJobSuccess();
+                } else {
+                  decryptJobMetricsTracker.incrementOperationError();
+                  logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
+                  setOperationException(
+                      new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
+                          RouterErrorCode.UnexpectedInternalError));
+                  progressTracker.setCryptoJobFailed();
+                }
+                decryptJobMetricsTracker.onJobResultProcessingComplete();
+                routerCallback.onPollReady();
+              }));
     }
   }
 

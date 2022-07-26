@@ -44,10 +44,10 @@ class Http2ClientStreamStatsHandler extends SimpleChannelInboundHandler<Http2Fra
     RequestInfo requestInfo = ctx.channel().attr(Http2NetworkClient.REQUEST_INFO).get();
     if (requestInfo != null) {
       requestInfo.responseFramesCount++;
-      long time = System.currentTimeMillis() - requestInfo.getStreamSendTime();
+      long time = System.currentTimeMillis() - requestInfo.getRequestSendTime();
       if (frame instanceof Http2HeadersFrame) {
         http2ClientMetrics.http2StreamRoundTripTime.update(time);
-        requestInfo.setStreamHeaderFrameReceiveTime(System.currentTimeMillis());
+        requestInfo.setResponseHeaderReceiveTime(System.currentTimeMillis());
         logger.debug("Header Frame received. Time from send: {}ms. Request: {}", time, requestInfo);
       } else if (frame instanceof Http2DataFrame) {
         logger.debug("Data Frame size: {}. Time from send: {}ms. Request: {}",

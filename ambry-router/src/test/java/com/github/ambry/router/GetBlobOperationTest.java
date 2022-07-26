@@ -579,7 +579,7 @@ public class GetBlobOperationTest {
   }
 
   /**
-   * Test the case where all requests time out within the GetOperation.
+   * Test the case where all requests time out at router layer within the GetOperation.
    * @throws Exception
    */
   @Test
@@ -591,6 +591,46 @@ public class GetBlobOperationTest {
       time.sleep(routerConfig.routerRequestTimeoutMs + 1);
       op.poll(requestRegistrationCallback);
     }
+    // At this time requests would have been created for all replicas, as none of them were delivered,
+    // and cross-colo proxying is enabled by default.
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+        correlationIdToGetOperation.size());
+    assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
+
+    // test that timed out response won't update latency histogram if exclude timeout is enabled.
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
+    Histogram localColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName));
+    Histogram crossColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName));
+    Assert.assertEquals("Timed-out response shouldn't be counted into local colo latency histogram", 0,
+        localColoTracker.getCount());
+    Assert.assertEquals("Timed-out response shouldn't be counted into cross colo latency histogram", 0,
+        crossColoTracker.getCount());
+  }
+
+  /**
+   * Test the case where all requests time out at network layer within the GetOperation.
+   * @throws Exception
+   */
+  @Test
+  public void testNetworkRequestTimeoutAllFailure() throws Exception {
+    doPut();
+    GetBlobOperation op = createOperation(routerConfig, null);
+    op.poll(requestRegistrationCallback);
+    int count = 0;
+    while (!op.isOperationComplete()) {
+      for (RequestInfo requestInfo : requestRegistrationCallback.getRequestsToSend()) {
+        requestInfo.setRequestEnqueueTime(time.milliseconds());
+      }
+      time.sleep(routerConfig.routerRequestNetworkTimeoutMs + 1);
+      op.poll(requestRegistrationCallback);
+      count++;
+    }
+
+    Assert.assertEquals("Mismatch in expected number of polls",
+        (int) Math.ceil((double) replicasCount / routerConfig.routerGetRequestParallelism), count);
     // At this time requests would have been created for all replicas, as none of them were delivered,
     // and cross-colo proxying is enabled by default.
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
@@ -1898,7 +1938,8 @@ public class GetBlobOperationTest {
     properties.setProperty("router.get.request.parallelism", Integer.toString(2));
     properties.setProperty("router.get.success.target", Integer.toString(1));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
-    properties.setProperty("router.request.timeout.ms", Integer.toString(20));
+    properties.setProperty("router.request.timeout.ms", Integer.toString(40));
+    properties.setProperty("router.request.network.timeout.ms", Integer.toString(20));
     properties.setProperty("router.operation.tracker.exclude.timeout.enabled", Boolean.toString(excludeTimeout));
     properties.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
     properties.setProperty("router.get.blob.operation.share.memory", "true");

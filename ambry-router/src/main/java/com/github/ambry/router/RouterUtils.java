@@ -26,6 +26,7 @@ import com.github.ambry.network.LocalNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetResponse;
@@ -287,5 +288,19 @@ public class RouterUtils {
       receivedResponse = sentResponse;
     }
     return receivedResponse;
+  }
+
+  /**
+   * Checks if the request has expired due to either no response from server or it being stuck in router itself
+   * (unavailable quota, etc.) for a long time.
+   * @param requestInfo of the request.
+   * @param currentTimeInMs current time in msec.
+   * @param routerConfig router config.
+   * @return {@code True} if the request has expired waiting for the response.
+   */
+  public static boolean isRequestExpired(RequestInfo requestInfo, long currentTimeInMs, RouterConfig routerConfig) {
+    return ((requestInfo.isRequestReceivedByNetworkLayer()
+        && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
+        || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs);
   }
 }

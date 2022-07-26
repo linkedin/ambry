@@ -110,10 +110,9 @@ public class Http2NetworkClient implements NetworkClient {
     http2ClientMetrics.http2ClientSendRate.mark(requestsToSend.size());
     for (RequestInfo requestInfo : requestsToSend) {
       long streamInitiateTime = System.currentTimeMillis();
-
       long waitingTime = streamInitiateTime - requestInfo.getRequestCreateTime();
       http2ClientMetrics.requestToNetworkClientLatencyMs.update(waitingTime);
-
+      requestInfo.setRequestEnqueueTime(streamInitiateTime);
       this.pools.get(InetSocketAddress.createUnresolved(requestInfo.getHost(), requestInfo.getPort().getPort()))
           .acquire()
           .addListener((GenericFutureListener<Future<Channel>>) future -> {
@@ -136,7 +135,7 @@ public class Http2NetworkClient implements NetworkClient {
                   if (future.isSuccess()) {
                     long writeAndFlushUsedTime = System.currentTimeMillis() - streamAcquiredTime;
                     http2ClientMetrics.http2StreamWriteAndFlushTime.update(writeAndFlushUsedTime);
-                    requestInfo.setStreamSendTime(System.currentTimeMillis());
+                    requestInfo.setRequestSendTime(System.currentTimeMillis());
                     if (writeAndFlushUsedTime > http2ClientConfig.http2WriteAndFlushTimeoutMs) {
                       // This usually happens if remote can't accept data in time.
                       logger.debug(

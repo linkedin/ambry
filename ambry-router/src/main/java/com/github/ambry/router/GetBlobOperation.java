@@ -156,7 +156,8 @@ class GetBlobOperation extends GetOperation {
     this.blobIdFactory = blobIdFactory;
     this.quotaChargeCallback = quotaChargeCallback;
     this.blobMetadataCache = blobMetadataCache;
-    BlobMetadata blobMetadata = shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
+    BlobMetadata blobMetadata =
+        shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
     firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
   }
 
@@ -179,11 +180,8 @@ class GetBlobOperation extends GetOperation {
    *  False, otherwise.
    */
   boolean shouldLookupMetadataCache() {
-    return (blobMetadataCache != null &&
-        isRangeRequest() &&
-        options.getBlobOptions.hasBlobSegmentIdx() == false &&
-        options.getBlobOptions.isRawMode() == false &&
-        blobId.getBlobDataType() == BlobId.BlobDataType.METADATA);
+    return (blobMetadataCache != null && isRangeRequest() && options.getBlobOptions.hasBlobSegmentIdx() == false
+        && options.getBlobOptions.isRawMode() == false && blobId.getBlobDataType() == BlobId.BlobDataType.METADATA);
   }
 
   /**
@@ -262,7 +260,7 @@ class GetBlobOperation extends GetOperation {
       }
     }
     if (abortCause != null && abortCause instanceof RouterException) {
-      switch(((RouterException) abortCause).getErrorCode()) {
+      switch (((RouterException) abortCause).getErrorCode()) {
         /* If the blob is not found, then delete its metadata from frontend cache. */
         case BlobDoesNotExist:
         case BlobDeleted:
@@ -662,7 +660,7 @@ class GetBlobOperation extends GetOperation {
    */
   private class GetChunk {
     // map of correlation id to the request metadata for every request issued for this operation.
-    protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
+    protected final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
     protected ProgressTracker progressTracker;
     // DecryptCallBackResultInfo that holds all info about decrypt job callback
@@ -874,20 +872,24 @@ class GetBlobOperation extends GetOperation {
      */
     private void cleanupExpiredInFlightRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
       //First, check if any of the existing requests have timed out.
-      Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
+      Iterator<Map.Entry<Integer, RequestInfo>> inFlightRequestsIterator =
           correlationIdToGetRequestInfo.entrySet().iterator();
       while (inFlightRequestsIterator.hasNext()) {
-        Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
+        Map.Entry<Integer, RequestInfo> entry = inFlightRequestsIterator.next();
         int correlationId = entry.getKey();
-        GetRequestInfo info = entry.getValue();
-        if (time.milliseconds() - info.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+        RequestInfo requestInfo = entry.getValue();
+        // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
+        // throttling, etc) for long time, drop the request.
+        long currentTimeInMs = time.milliseconds();
+        if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
           logger.trace("GetBlobRequest with correlationId {} in flight has expired for replica {} ", correlationId,
-              info.replicaId.getDataNodeId());
+              requestInfo.getReplicaId().getDataNodeId());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
-          onErrorResponse(info.replicaId,
-              RouterUtils.buildTimeoutException(correlationId, info.replicaId.getDataNodeId(), chunkBlobId));
+          onErrorResponse(requestInfo.getReplicaId(),
+              RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(),
+                  chunkBlobId));
           requestRegistrationCallback.registerRequestToDrop(correlationId);
           inFlightRequestsIterator.remove();
         } else {
@@ -908,11 +910,12 @@ class GetBlobOperation extends GetOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
-        RequestInfo request = new RequestInfo(hostname, port, getRequest, replicaId, prepareQuotaCharger());
+        RequestInfo requestInfo =
+            new RequestInfo(hostname, port, getRequest, replicaId, prepareQuotaCharger(), time.milliseconds());
         int correlationId = getRequest.getCorrelationId();
-        correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
+        correlationIdToGetRequestInfo.put(correlationId, requestInfo);
         correlationIdToGetChunk.put(correlationId, this);
-        requestRegistrationCallback.registerRequestToSend(GetBlobOperation.this, request);
+        requestRegistrationCallback.registerRequestToSend(GetBlobOperation.this, requestInfo);
         if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
           logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
               replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
@@ -1012,34 +1015,35 @@ class GetBlobOperation extends GetOperation {
     void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
       int correlationId = responseInfo.getRequestInfo().getRequest().getCorrelationId();
       // Get the GetOperation that generated the request.
-      GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
+      RequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
       if (getRequestInfo == null) {
         // Ignore right away. This associated operation has completed.
         return;
       }
       if (responseInfo.isQuotaRejected()) {
-        processQuotaRejectedResponse(correlationId, getRequestInfo.replicaId);
+        processQuotaRejectedResponse(correlationId, getRequestInfo.getReplicaId());
         return;
       }
-      long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
+      // Track the over all time taken for the response since the creation of the request.
+      long requestLatencyMs = time.milliseconds() - getRequestInfo.getRequestCreateTime();
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
+      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.getReplicaId().getDataNodeId()).getRequestLatencyMs.update(
           requestLatencyMs);
       if (responseInfo.getError() != null) {
         // responseInfo.getError() returns NetworkClientErrorCode. If error is not null, it probably means (1) connection
         // checkout timed out; (2) pending connection timed out; (3) established connection timed out. In all these cases,
         // the latency histogram in adaptive operation tracker should not be updated.
         logger.trace("GetBlobRequest with response correlationId {} timed out for replica {} ", correlationId,
-            getRequestInfo.replicaId.getDataNodeId());
-        onErrorResponse(getRequestInfo.replicaId, buildChunkException(
+            getRequestInfo.getReplicaId().getDataNodeId());
+        onErrorResponse(getRequestInfo.getReplicaId(), buildChunkException(
             "Operation timed out because of " + responseInfo.getError() + " at DataNode " + responseInfo.getDataNode(),
             RouterErrorCode.OperationTimedOut));
       } else {
         if (getResponse == null) {
           logger.trace(
               "GetBlobRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
-              correlationId, getRequestInfo.replicaId.getDataNodeId());
-          onErrorResponse(getRequestInfo.replicaId,
+              correlationId, getRequestInfo.getReplicaId().getDataNodeId());
+          onErrorResponse(getRequestInfo.getReplicaId(),
               buildChunkException("Response deserialization received an unexpected error",
                   RouterErrorCode.UnexpectedInternalError));
         } else {
@@ -1049,9 +1053,9 @@ class GetBlobOperation extends GetOperation {
             // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
             // There is no other way to handle it.
             logger.trace("GetBlobRequest with response correlationId {} mismatch from response {} for replica {} ",
-                correlationId, getResponse.getCorrelationId(), getRequestInfo.replicaId.getDataNodeId());
+                correlationId, getResponse.getCorrelationId(), getRequestInfo.getReplicaId().getDataNodeId());
             routerMetrics.unknownReplicaResponseError.inc();
-            onErrorResponse(getRequestInfo.replicaId, buildChunkException(
+            onErrorResponse(getRequestInfo.getReplicaId(), buildChunkException(
                 "The correlation id in the GetResponse " + getResponse.getCorrelationId()
                     + " is not the same as the correlation id in the associated GetRequest: " + correlationId,
                 RouterErrorCode.UnexpectedInternalError));
@@ -1064,9 +1068,9 @@ class GetBlobOperation extends GetOperation {
               // detection.
               logger.trace(
                   "GetBlobRequest with response correlationId {} response deserialization failed for replica {} ",
-                  correlationId, getRequestInfo.replicaId.getDataNodeId());
+                  correlationId, getRequestInfo.getReplicaId().getDataNodeId());
               routerMetrics.responseDeserializationErrorCount.inc();
-              onErrorResponse(getRequestInfo.replicaId,
+              onErrorResponse(getRequestInfo.getReplicaId(),
                   buildChunkException("Response deserialization received an unexpected error", e,
                       RouterErrorCode.UnexpectedInternalError));
             }
@@ -1134,14 +1138,14 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException if there is an error during deserialization of the GetResponse.
      * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
      */
-    private void processGetBlobResponse(GetRequestInfo getRequestInfo, GetResponse getResponse)
+    private void processGetBlobResponse(RequestInfo getRequestInfo, GetResponse getResponse)
         throws IOException, MessageFormatException {
       ServerErrorCode getError = getResponse.getError();
       if (getError == ServerErrorCode.No_Error) {
         int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
         // Each get request issued by the router is for a single blob.
         if (partitionsInResponse != 1) {
-          onErrorResponse(getRequestInfo.replicaId, buildChunkException(
+          onErrorResponse(getRequestInfo.getReplicaId(), buildChunkException(
               "Unexpected number of partition responses, expected: 1, " + "received: " + partitionsInResponse,
               RouterErrorCode.UnexpectedInternalError));
         } else {
@@ -1150,17 +1154,17 @@ class GetBlobOperation extends GetOperation {
             PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
             int objectsInPartitionResponse = partitionResponseInfo.getMessageInfoList().size();
             if (objectsInPartitionResponse != 1) {
-              onErrorResponse(getRequestInfo.replicaId, buildChunkException(
+              onErrorResponse(getRequestInfo.getReplicaId(), buildChunkException(
                   "Unexpected number of messages in a partition response, expected: 1, " + "received: "
                       + objectsInPartitionResponse, RouterErrorCode.UnexpectedInternalError));
             } else {
               MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
               MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
               handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
-              chunkOperationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.SUCCESS);
-              if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
+              chunkOperationTracker.onResponse(getRequestInfo.getReplicaId(), TrackedRequestFinalState.SUCCESS);
+              if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.getReplicaId())) {
                 logger.trace("Cross colo request successful for remote replica in {} ",
-                    getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
+                    getRequestInfo.getReplicaId().getDataNodeId().getDatacenterName());
                 routerMetrics.crossColoSuccessCount.inc();
               }
             }
@@ -1173,11 +1177,11 @@ class GetBlobOperation extends GetOperation {
             // process and set the most relevant exception.
             RouterErrorCode routerErrorCode = processServerError(getError);
             if (getError == ServerErrorCode.Disk_Unavailable) {
-              chunkOperationTracker.onResponse(getRequestInfo.replicaId, TrackedRequestFinalState.DISK_DOWN);
+              chunkOperationTracker.onResponse(getRequestInfo.getReplicaId(), TrackedRequestFinalState.DISK_DOWN);
               setChunkException(buildChunkException("Server returned: " + getError, routerErrorCode));
               routerMetrics.routerRequestErrorCount.inc();
               routerMetrics.getDataNodeBasedMetrics(
-                  getRequestInfo.replicaId.getDataNodeId()).getRequestErrorCount.inc();
+                  getRequestInfo.getReplicaId().getDataNodeId()).getRequestErrorCount.inc();
             } else {
               if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
                   || getError == ServerErrorCode.Blob_Authorization_Failure) {
@@ -1188,16 +1192,17 @@ class GetBlobOperation extends GetOperation {
               }
               // any server error code that is not equal to ServerErrorCode.No_Error, the onErrorResponse should be invoked
               // because the operation itself doesn't succeed although the response in some cases is successful (i.e. Blob_Deleted)
-              onErrorResponse(getRequestInfo.replicaId,
+              onErrorResponse(getRequestInfo.getReplicaId(),
                   buildChunkException("Server returned: " + getError, routerErrorCode));
             }
           }
         }
       } else {
         logger.trace("Replica {} returned an error {} for a GetBlobRequest with response correlationId : {} ",
-            getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
+            getRequestInfo.getReplicaId().getDataNodeId(), getError, getResponse.getCorrelationId());
         // process and set the most relevant exception.
-        onErrorResponse(getRequestInfo.replicaId, buildChunkException("Server returned", processServerError(getError)));
+        onErrorResponse(getRequestInfo.getReplicaId(),
+            buildChunkException("Server returned", processServerError(getError)));
       }
     }
 
@@ -1375,14 +1380,10 @@ class GetBlobOperation extends GetOperation {
      *  False, otherwise.
      */
     protected boolean shouldSaveMetadata() {
-      return (blobMetadataCache != null &&
-          isRangeRequest() &&
-          options.getBlobOptions.hasBlobSegmentIdx() == false &&
-          options.getBlobOptions.isRawMode() == false &&
-          blobId.getBlobDataType() == BlobId.BlobDataType.METADATA &&
-          blobType == BlobType.MetadataBlob &&
-          totalSize >= routerConfig.routerSmallestBlobForMetadataCache &&
-          isComplete() && getChunkException() == null && getOperationException() == null);
+      return (blobMetadataCache != null && isRangeRequest() && options.getBlobOptions.hasBlobSegmentIdx() == false
+          && options.getBlobOptions.isRawMode() == false && blobId.getBlobDataType() == BlobId.BlobDataType.METADATA
+          && blobType == BlobType.MetadataBlob && totalSize >= routerConfig.routerSmallestBlobForMetadataCache
+          && isComplete() && getChunkException() == null && getOperationException() == null);
     }
 
     /**
@@ -1812,7 +1813,9 @@ class GetBlobOperation extends GetOperation {
      * @return False for cached first chunk. There is nothing to cache.
      */
     @Override
-    protected boolean shouldSaveMetadata() { return false; }
+    protected boolean shouldSaveMetadata() {
+      return false;
+    }
 
     /**
      * On an invalid cache entry, set a {@link RouterErrorCode} exception for first chunk, mark the chunk

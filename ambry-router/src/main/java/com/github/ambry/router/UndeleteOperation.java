@@ -55,7 +55,7 @@ public class UndeleteOperation {
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final Map<Integer, UndeleteRequestInfo> undeleteRequestInfos = new TreeMap<>();
+  private final Map<Integer, RequestInfo> undeleteRequestInfos = new TreeMap<>();
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
@@ -127,9 +127,9 @@ public class UndeleteOperation {
       String hostname = replica.getDataNodeId().getHostname();
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       UndeleteRequest undeleteRequest = createUndeleteRequest();
-      undeleteRequestInfos.put(undeleteRequest.getCorrelationId(),
-          new UndeleteRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger);
+      RequestInfo requestInfo =
+          new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger, time.milliseconds());
+      undeleteRequestInfos.put(undeleteRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
@@ -161,18 +161,19 @@ public class UndeleteOperation {
    */
   void handleResponse(ResponseInfo responseInfo, UndeleteResponse undeleteResponse) {
     UndeleteRequest undeleteRequest = (UndeleteRequest) responseInfo.getRequestInfo().getRequest();
-    UndeleteRequestInfo undeleteRequestInfo = undeleteRequestInfos.remove(undeleteRequest.getCorrelationId());
+    RequestInfo undeleteRequestInfo = undeleteRequestInfos.remove(undeleteRequest.getCorrelationId());
     // undeleteRequestInfo can be null if this request was timed out before this response is received. No
     // metric is updated here, as corresponding metrics have been updated when the request was timed out.
     if (undeleteRequestInfo == null) {
       return;
     }
-    ReplicaId replica = undeleteRequestInfo.replica;
+    ReplicaId replica = undeleteRequestInfo.getReplicaId();
     if (responseInfo.isQuotaRejected()) {
       processQuotaRejectedResponse(undeleteRequest.getCorrelationId(), replica);
       return;
     }
-    long requestLatencyMs = time.milliseconds() - undeleteRequestInfo.startTimeMs;
+    // Track the over all time taken for the response since the creation of the request.
+    long requestLatencyMs = time.milliseconds() - undeleteRequestInfo.getRequestCreateTime();
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).undeleteRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
@@ -261,23 +262,10 @@ public class UndeleteOperation {
    * @param replicaId {@link ReplicaId} of the request.
    */
   private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
-    LOGGER.trace(
-        "UndeleteRequest with response correlationId {} was rejected because quota was exceeded.", correlationId);
+    LOGGER.trace("UndeleteRequest with response correlationId {} was rejected because quota was exceeded.",
+        correlationId);
     onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
     checkAndMaybeComplete();
-  }
-
-  /**
-   * A wrapper class that is used to check if a request has been expired.
-   */
-  private class UndeleteRequestInfo {
-    final long startTimeMs;
-    final ReplicaId replica;
-
-    UndeleteRequestInfo(long submissionTime, ReplicaId replica) {
-      this.startTimeMs = submissionTime;
-      this.replica = replica;
-    }
   }
 
   /**
@@ -287,20 +275,23 @@ public class UndeleteOperation {
    */
   private void cleanupExpiredInflightRequests(
       RequestRegistrationCallback<UndeleteOperation> requestRegistrationCallback) {
-    Iterator<Map.Entry<Integer, UndeleteRequestInfo>> iter = undeleteRequestInfos.entrySet().iterator();
+    Iterator<Map.Entry<Integer, RequestInfo>> iter = undeleteRequestInfos.entrySet().iterator();
     while (iter.hasNext()) {
-      Map.Entry<Integer, UndeleteRequestInfo> undeleteRequestInfoEntry = iter.next();
+      Map.Entry<Integer, RequestInfo> undeleteRequestInfoEntry = iter.next();
       int correlationId = undeleteRequestInfoEntry.getKey();
-      UndeleteRequestInfo undeleteRequestInfo = undeleteRequestInfoEntry.getValue();
-      if (time.milliseconds() - undeleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
+      RequestInfo requestInfo = undeleteRequestInfoEntry.getValue();
+      // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
+      // throttling, etc) for long time, drop the request.
+      long currentTimeInMs = time.milliseconds();
+      if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
         iter.remove();
         LOGGER.warn("Undelete request with correlationid {} in flight has expired for replica {} ", correlationId,
-            undeleteRequestInfo.replica.getDataNodeId());
+            requestInfo.getReplicaId().getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
-        onErrorResponse(undeleteRequestInfo.replica,
-            RouterUtils.buildTimeoutException(correlationId, undeleteRequestInfo.replica.getDataNodeId(), blobId));
+        onErrorResponse(requestInfo.getReplicaId(),
+            RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
       } else {
         // the entries are ordered by correlation id and time. Break on the first request that has not timed out.

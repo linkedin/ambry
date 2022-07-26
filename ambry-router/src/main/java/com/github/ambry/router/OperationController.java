@@ -467,7 +467,7 @@ public class OperationController implements Runnable {
           responseHandler.onConnectionTimeout(dataNodeId);
         } else {
           if (!responseInfo.isQuotaRejected()) {
-            long responseReceiveTime = requestInfo.getStreamHeaderFrameReceiveTime();
+            long responseReceiveTime = requestInfo.getResponseHeaderReceiveTime();
             if (responseReceiveTime != -1) {
               routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
             }
@@ -518,7 +518,7 @@ public class OperationController implements Runnable {
     // as the poll timeout should not cause the request to not time out for a lot longer than the configured request
     // timeout. In the worst case, the request will time out in (request_timeout_ms + poll_timeout_ms), so the poll
     // timeout should be at least an order of magnitude smaller.
-    final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestTimeoutMs / 10;
+    final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestNetworkTimeoutMs / 10;
     try {
       while (nonBlockingRouter.isOpen.get()) {
         List<RequestInfo> requestsToSend = new ArrayList<>();
