@@ -2303,7 +2303,7 @@ class PersistentIndex {
    * @param logSegmentName the name of the log segment whose index segment files are required.
    * @return the list of {@link IndexSegment} files that refer to the log segment with name {@code logSegmentName}.
    */
-  static File[] getIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName) { // ERROR
+  static File[] getIndexSegmentFilesForLogSegment(String dataDir, final LogSegmentName logSegmentName) {
     return new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
