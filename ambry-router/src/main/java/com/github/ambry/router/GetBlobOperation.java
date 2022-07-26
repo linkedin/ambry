@@ -195,7 +195,8 @@ class GetBlobOperation extends GetOperation {
     if (firstChunk.shouldSaveMetadata()) {
       BlobMetadata blobMetadata = new BlobMetadata(blobId.toString(), blobInfo, compositeBlobInfo);
       putResult = blobMetadataCache.putObject(blobMetadata.getBlobId(), blobMetadata);
-      logger.trace("Saving metadata for blobId = {}, result = {}", blobId, putResult);
+      logger.debug("[{}] Issued save-metadata for blobId = {}, result = {}", blobMetadata.getBlobId(),
+          blobId, putResult);
     }
     return putResult;
   }
@@ -210,7 +211,8 @@ class GetBlobOperation extends GetOperation {
       return false;
     }
     boolean deleteResult = blobMetadataCache.deleteObject(blobId.toString());
-    logger.trace("Deleting metadata for blobId = {}, reason = {}, result = {}", blobId, reason, deleteResult);
+    logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = {}, result = {}", blobMetadataCache.getCacheId(),
+        blobId, reason, deleteResult);
     return deleteResult;
   }
 

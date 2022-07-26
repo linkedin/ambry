@@ -66,7 +66,7 @@ public class AmbryCache {
         .recordStats()
         .build();
     initializeAmbryCacheMetrics();
-    logger.info("Initialized cache " + this);
+    logger.info("[{}] Initialized cache {}", cacheId, this);
   }
 
   /**
@@ -78,6 +78,13 @@ public class AmbryCache {
     result += ", cacheEnabled=" + cacheEnabled;
     result += ", cacheMaxSizeBytes=" + cacheMaxSizeBytes;
     return result;
+  }
+
+  /**
+   * @return cache ID of this cache-object
+   */
+  public String getCacheId() {
+    return cacheId;
   }
 
   /**
@@ -96,9 +103,10 @@ public class AmbryCache {
     try {
       ambryCache.put(key, value);
       result = true;
+      logger.debug("[{}] Inserted cache entry for key {}", cacheId, key);
     } catch (Exception exc) {
       putErrorCount.inc();
-      logger.error("Failed to put cache entry with key " + key + " due to " + exc);
+      logger.error("[{}] Failed to put cache entry with key {} due to {}", cacheId, key, exc);
     } finally {
       putLatencyMs.update(System.currentTimeMillis() - putStartTime);
     }
@@ -119,9 +127,10 @@ public class AmbryCache {
     AmbryCacheEntry result = null;
     try {
       result = ambryCache.getIfPresent(key);
+      logger.debug("[{}] Cache-{} for key {}", cacheId, result == null ? "miss" : "hit", key);
     } catch (Exception exc) {
       getErrorCount.inc();
-      logger.error("Failed to get cache entry with key " + key + " due to " + exc);
+      logger.error("[{}] Failed to get cache entry with key {} due to {}", cacheId, key, exc);
     } finally {
       getLatencyMs.update(System.currentTimeMillis() - getStartTime);
     }
@@ -143,9 +152,10 @@ public class AmbryCache {
     try {
       ambryCache.invalidate(key);
       result = true;
+      logger.debug("[{}] Deleted cache entry for key {}", cacheId, key);
     } catch (Exception exc) {
       deleteErrorCount.inc();
-      logger.error("Failed to delete cache entry with key " + key + " due to " + exc);
+      logger.error("[{}] Failed to delete cache entry with key {} due to {}", cacheId, key, exc);
     } finally {
       deleteLatencyMs.update(System.currentTimeMillis() - deleteStartTime);
     }
@@ -171,5 +181,6 @@ public class AmbryCache {
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "NumEntries"), (Gauge<Long>) () -> ambryCache.estimatedSize());
+    logger.info("[{}] Initialized metrics for cache", cacheId);
   }
 }
