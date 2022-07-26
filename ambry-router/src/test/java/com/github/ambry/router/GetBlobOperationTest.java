@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
@@ -97,6 +98,7 @@ import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.PutManagerTest.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
+import static junit.framework.Assert.*;
 import static org.junit.Assume.*;
 
 
@@ -133,6 +135,8 @@ public class GetBlobOperationTest {
   private final RouterCallback routerCallback;
   private final String operationTrackerType;
   private final boolean testEncryption;
+  private final boolean enableMetadataCache;
+  private final AmbryCache blobMetadataCache;
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
@@ -191,11 +195,19 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false, false},
-        {SimpleOperationTracker.class.getSimpleName(), false, true},
-        {AdaptiveOperationTracker.class.getSimpleName(), false, false},
-        {AdaptiveOperationTracker.class.getSimpleName(), false, true},
-        {AdaptiveOperationTracker.class.getSimpleName(), true, false}});
+    return Arrays.asList(new Object[][]{
+        {SimpleOperationTracker.class.getSimpleName(), false, false, false},
+        {SimpleOperationTracker.class.getSimpleName(), false, true, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, false, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, true, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), true, false, false},
+        {SimpleOperationTracker.class.getSimpleName(), false, false, true},
+        {SimpleOperationTracker.class.getSimpleName(), false, true, true},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, false, true},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, true, true},
+        {AdaptiveOperationTracker.class.getSimpleName(), true, false, true},
+      }
+    );
   }
 
   /**
@@ -206,7 +218,7 @@ public class GetBlobOperationTest {
    * @param isBandwidthThrottlingEnabled value for
    * {@link com.github.ambry.config.QuotaConfig#bandwidthThrottlingFeatureEnabled}.
    */
-  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean isBandwidthThrottlingEnabled)
+  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean isBandwidthThrottlingEnabled, boolean enableMetadataCache)
       throws Exception {
     Properties properties = new Properties();
     properties.setProperty(QuotaConfig.BANDWIDTH_THROTTLING_FEATURE_ENABLED,
@@ -220,7 +232,11 @@ public class GetBlobOperationTest {
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
     blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
     mockSelectorState.set(MockSelectorState.Good);
-    VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties(true));
+    Properties routerProperties = getDefaultNonBlockingRouterProperties(true);
+    routerProperties.setProperty(RouterConfig.ROUTER_BLOB_METADATA_CACHE_ENABLED, String.valueOf(enableMetadataCache));
+    routerProperties.setProperty(RouterConfig.ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE, Long.toString(0));
+    this.enableMetadataCache = enableMetadataCache;
+    VerifiableProperties vprops = new VerifiableProperties(routerProperties);
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
@@ -240,9 +256,13 @@ public class GetBlobOperationTest {
       cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     }
+    this.blobMetadataCache = new AmbryCache("GetBlobOperationTestRouterMetadataCache",
+        routerConfig.routerBlobMetadataCacheEnabled,
+        routerConfig.routerBlobMetadataCacheMaxSizeBytes,
+        routerMetrics.getMetricRegistry());
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
-        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, blobMetadataCache);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
     routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>());
   }
@@ -1180,6 +1200,36 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test range requests on a composite blob and asserts that when the cache is enabled and metadata is found in the cache,
+   * then we only issue a blobInfo to validate the metadata entry.
+   * @throws Exception
+   */
+  @Test
+  public void testRouterMetadataCacheFirstChunkOperationFlag() throws Exception {
+    blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
+    int randomOne = random.nextInt(blobSize);
+    int randomTwo = random.nextInt(blobSize);
+    doPut();
+    assertNull("BlobMetadata must not be cached after PUT request", this.blobMetadataCache.getObject(blobIdStr));
+    options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .range(ByteRanges.fromOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo)))
+        .resolveRangeOnEmptyBlob(true)
+        .build(), false, routerMetrics.ageAtGet);
+    // First range request gets the entire blob including blobInfo
+    GetBlobOperation op1 = getAndAssertSuccess(false, false, (short) 0);
+    assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op1.getFirstChunkOperationFlag()), op1.getFirstChunkOperationFlag() == MessageFormatFlags.All);
+    // Subsequent range request gets only blobInfo to validate metadata cached by previous request
+    GetBlobOperation op2 = getAndAssertSuccess(false, false, (short) 0);
+    if (this.enableMetadataCache) {
+      assertNotNull(this.blobMetadataCache.getObject(blobIdStr));
+      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.BlobInfo, op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.BlobInfo);
+    } else {
+      assertNull(this.blobMetadataCache.getObject(blobIdStr));
+      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.All);
+    }
+  }
+
+  /**
    * Test range request behavior with 0-byte blobs.
    * @throws Exception
    */
@@ -1539,7 +1589,7 @@ public class GetBlobOperationTest {
    *                                   fetched by the router to simulate chunk arrival delay.
    * @param expectedLifeVersion the expected lifeVersion from get operation.
    */
-  private void getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet,
+  private GetBlobOperation getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet,
       short expectedLifeVersion) throws Exception {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     final AtomicReference<Throwable> readCompleteThrowable = new AtomicReference<>(null);
@@ -1624,7 +1674,7 @@ public class GetBlobOperationTest {
 
     GetBlobOperation op = createOperationAndComplete(callback);
 
-    readCompleteLatch.await();
+    readCompleteLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     if (operationException.get() != null) {
       throw operationException.get();
@@ -1644,6 +1694,8 @@ public class GetBlobOperationTest {
       }
       Assert.assertEquals("Size read must equal size written", sizeWritten, readCompleteResult.get());
     }
+
+    return op;
   }
 
   /**
@@ -1678,7 +1730,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
             routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback,
-            null);
+            this.blobMetadataCache);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     return op;
   }
