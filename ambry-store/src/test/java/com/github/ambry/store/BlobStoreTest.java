@@ -561,14 +561,13 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeStartupTests2() throws IOException, StoreException { // here
+  public void storeStartupTests2() throws IOException, StoreException {
     if (!isLogSegmented) {
       verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
       return;
     }
 
-    // Test the following LogSegment == null issue
-    // https://jira01.corp.linkedin.com:8443/browse/AMBRY-9175
+    // Test the LogSegment null pointer issue caused by matching index segment file with wrong log segment file due to same prefix
     // copy and generate:
     //    0_49_18_bloom
     //    0_49_18_index
