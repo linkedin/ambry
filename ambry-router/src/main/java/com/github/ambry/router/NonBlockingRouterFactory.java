@@ -127,6 +127,9 @@ public class NonBlockingRouterFactory implements RouterFactory {
           routerConfig.routerBlobMetadataCacheEnabled,
           routerConfig.routerBlobMetadataCacheMaxSizeBytes,
           routerMetrics.getMetricRegistry());
+      logger.info("[{}] Smallest blob to qualify for metadata caching = {} bytes",
+          blobMetadataCache.getCacheId(),
+          routerConfig.routerSmallestBlobForMetadataCache);
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
           kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache);
     } catch (IOException | ReflectiveOperationException e) {

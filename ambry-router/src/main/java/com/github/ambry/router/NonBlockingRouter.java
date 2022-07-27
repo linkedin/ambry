@@ -512,7 +512,10 @@ class NonBlockingRouter implements Router {
         }
         initiateBackgroundDeletes(deleteRequests);
         if (blobMetadataCache != null) {
-          blobMetadataCache.deleteObject(blobIdStr);
+          boolean deleteResult = blobMetadataCache.deleteObject(blobIdStr);
+          logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = Background delete operation, result = {}", blobMetadataCache.getCacheId(),
+              blobIdStr, deleteResult);
+
         }
       }
       currentBackgroundOperationsCount.decrementAndGet();
