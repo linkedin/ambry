@@ -296,11 +296,34 @@ public class RouterUtils {
    * @param requestInfo of the request.
    * @param currentTimeInMs current time in msec.
    * @param routerConfig router config.
-   * @return {@code True} if the request has expired waiting for the response.
+   * @return RouterRequestExpiryReason representing the reason for request expiry.
    */
-  public static boolean isRequestExpired(RequestInfo requestInfo, long currentTimeInMs, RouterConfig routerConfig) {
-    return ((requestInfo.isRequestReceivedByNetworkLayer()
-        && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)
-        || currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs);
+  public static RouterRequestExpiryReason isRequestExpired(RequestInfo requestInfo, long currentTimeInMs,
+      RouterConfig routerConfig) {
+    if ((requestInfo.isRequestReceivedByNetworkLayer()
+        && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)) {
+      return RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT;
+    } else if (currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
+      return RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT;
+    }
+    return RouterRequestExpiryReason.NO_TIMEOUT;
+  }
+
+  /**
+   * {@link Enum} All the reasons for router request expiry.
+   */
+  public enum RouterRequestExpiryReason {
+    /**
+     * No timeout.
+     */
+    NO_TIMEOUT,
+    /**
+     * Network timeout between router and server.
+     */
+    ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT,
+    /**
+     * Request timed out in the router.
+     */
+    ROUTER_REQUEST_TIMEOUT
   }
 }
