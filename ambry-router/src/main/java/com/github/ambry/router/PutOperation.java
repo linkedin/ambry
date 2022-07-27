@@ -1454,10 +1454,13 @@ class PutOperation {
         // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
         // throttling, etc) for long time, drop the request.
         long currentTimeInMs = time.milliseconds();
-        if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
+        RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
+            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+        if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
           onErrorResponse(requestInfo.getReplicaId(), TrackedRequestFinalState.FAILURE);
-          logger.warn("{}: PutRequest with correlationId {} in flight has expired for replica {} {}", loggingContext,
-              correlationId, requestInfo.getReplicaId().getDataNodeId(), requestInfo);
+          logger.warn("{}: PutRequest with correlationId {} in flight has expired for replica {} {} due to {} ",
+              loggingContext, correlationId, requestInfo.getReplicaId().getDataNodeId(), requestInfo,
+              routerRequestExpiryReason.name());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.

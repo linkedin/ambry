@@ -272,10 +272,12 @@ class DeleteOperation {
       // If request times out due to no response from server or due to being stuck in router itself (due to bandwidth
       // throttling, etc) for long time, drop the request.
       long currentTimeInMs = time.milliseconds();
-      if (RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig)) {
+      RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
+          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+      if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
         itr.remove();
-        logger.trace("Delete Request with correlationId {} in flight has expired for replica {} ", correlationId,
-            requestInfo.getReplicaId().getDataNodeId());
+        logger.trace("Delete Request with correlationId {} in flight has expired for replica {} due to {}",
+            correlationId, requestInfo.getReplicaId().getDataNodeId(), routerRequestExpiryReason.name());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
