@@ -154,7 +154,7 @@ class GetBlobInfoOperation extends GetOperation {
       // throttling, etc) for long time, drop the request.
       long currentTimeInMs = time.milliseconds();
       RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
       if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
         logger.trace("GetBlobInfoRequest with correlationId {} in flight has expired for replica {} due to {}",
             correlationId, requestInfo.getReplicaId().getDataNodeId(), routerRequestExpiryReason.name());
@@ -183,7 +183,8 @@ class GetBlobInfoOperation extends GetOperation {
       Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
       GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
       RequestInfo requestInfo =
-          new RequestInfo(hostname, port, getRequest, replicaId, operationQuotaCharger, time.milliseconds());
+          new RequestInfo(hostname, port, getRequest, replicaId, operationQuotaCharger, time.milliseconds(),
+              routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);

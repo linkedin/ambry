@@ -130,7 +130,8 @@ class TtlUpdateOperation {
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       TtlUpdateRequest ttlUpdateRequest = createTtlUpdateRequest();
       RequestInfo requestInfo =
-          new RequestInfo(hostname, port, ttlUpdateRequest, replica, operationQuotaCharger, time.milliseconds());
+          new RequestInfo(hostname, port, ttlUpdateRequest, replica, operationQuotaCharger, time.milliseconds(),
+              routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
       ttlUpdateRequestInfos.put(ttlUpdateRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
@@ -255,7 +256,7 @@ class TtlUpdateOperation {
       // throttling, etc) for long time, drop the request.
       long currentTimeInMs = time.milliseconds();
       RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
       if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
         itr.remove();
         LOGGER.trace("TTL Request with correlationid {} in flight has expired for replica {} due to {}", correlationId,

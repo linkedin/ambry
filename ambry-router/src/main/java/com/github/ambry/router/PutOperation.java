@@ -1455,7 +1455,7 @@ class PutOperation {
         // throttling, etc) for long time, drop the request.
         long currentTimeInMs = time.milliseconds();
         RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
         if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
           onErrorResponse(requestInfo.getReplicaId(), TrackedRequestFinalState.FAILURE);
           logger.warn("{}: PutRequest with correlationId {} in flight has expired for replica {} {} due to {} ",
@@ -1486,7 +1486,8 @@ class PutOperation {
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         PutRequest putRequest = createPutRequest();
         RequestInfo requestInfo =
-            new RequestInfo(hostname, port, putRequest, replicaId, prepareQuotaCharger(), time.milliseconds());
+            new RequestInfo(hostname, port, putRequest, replicaId, prepareQuotaCharger(), time.milliseconds(),
+                routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo.put(correlationId, requestInfo);
         correlationIdToPutChunk.put(correlationId, this);

@@ -53,7 +53,11 @@ public class RouterConfig {
   public static final String ROUTER_CONNECTIONS_WARM_UP_TIMEOUT_MS = "router.connections.warm.up.timeout.ms";
   public static final String ROUTER_CONNECTION_CHECKOUT_TIMEOUT_MS = "router.connection.checkout.timeout.ms";
   public static final String ROUTER_REQUEST_TIMEOUT_MS = "router.request.timeout.ms";
-  public static final String ROUTER_REQUEST_NETWORK_TIMEOUT_MS = "router.request.network.timeout.ms";
+  public static final String ROUTER_REQUEST_NETWORK_TIMEOUT_MS = "router.request.network.default.timeout.ms";
+  public static final String ROUTER_REQUEST_NETWORK_TIMEOUT_INCREMENT_MS =
+      "router.request.network.timeout.increment.ms";
+  public static final String ROUTER_REQUEST_NETWORK_TIMEOUT_SCALING_REQUEST_NUM =
+      "router.request.network.timeout.scaling.request.num";
   public static final String ROUTER_DROP_REQUEST_ON_TIMEOUT = "router.drop.request.on.timeout";
   public static final String ROUTER_MAX_PUT_CHUNK_SIZE_BYTES = "router.max.put.chunk.size.bytes";
   public static final String ROUTER_PUT_REQUEST_PARALLELISM = "router.put.request.parallelism";
@@ -190,15 +194,31 @@ public class RouterConfig {
    * Timeout for requests waiting at the router layer.
    */
   @Config(ROUTER_REQUEST_TIMEOUT_MS)
-  @Default("4000")
+  @Default("20000")
   public final int routerRequestTimeoutMs;
 
   /**
    * Timeout for requests waiting at the network layer.
    */
   @Config(ROUTER_REQUEST_NETWORK_TIMEOUT_MS)
-  @Default("2000")
+  @Default("10000")
   public final int routerRequestNetworkTimeoutMs;
+
+  /**
+   * Denotes how much extra time should be given for requests waiting at the network layer under heavy load.
+   */
+  @Config(ROUTER_REQUEST_NETWORK_TIMEOUT_INCREMENT_MS)
+  @Default("2500")
+  public final int routerRequestNetworkTimeoutIncrementMs;
+
+  /**
+   * Denotes the number of requests to consider when increasing the network time out. For example, if
+   * {@link this#routerRequestNetworkTimeoutIncrementMs} is 2500 and this value is 100000, it means that we will
+   * increment network timeout by 2.5 seconds for every 100K requests.
+   */
+  @Config(ROUTER_REQUEST_NETWORK_TIMEOUT_SCALING_REQUEST_NUM)
+  @Default("100000")
+  public final int routerRequestNetworkTimeoutScalingRequestNum;
 
   /**
    * {@code true} if the router should tell the network layer about requests that have timed out. The network client
@@ -748,5 +768,11 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS, false);
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
+    routerRequestNetworkTimeoutIncrementMs =
+        verifiableProperties.getIntInRange(ROUTER_REQUEST_NETWORK_TIMEOUT_INCREMENT_MS, 2500, 1,
+            MAX_NETWORK_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS);
+    routerRequestNetworkTimeoutScalingRequestNum =
+        verifiableProperties.getIntInRange(ROUTER_REQUEST_NETWORK_TIMEOUT_SCALING_REQUEST_NUM, 100000, 1,
+            Integer.MAX_VALUE);
   }
 }

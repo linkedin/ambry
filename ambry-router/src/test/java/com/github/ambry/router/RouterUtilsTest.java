@@ -178,18 +178,18 @@ public class RouterUtilsTest {
     Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(true);
     Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
     assertEquals(RouterUtils.RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT,
-        RouterUtils.isRequestExpired(requestInfo, 12L, routerConfig));
+        RouterUtils.isRequestExpired(requestInfo, 12L));
 
     Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(false);
     Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
     Mockito.when(requestInfo.getRequestCreateTime()).thenReturn(1L);
     assertEquals(RouterUtils.RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT,
-        RouterUtils.isRequestExpired(requestInfo, 12L, routerConfig));
+        RouterUtils.isRequestExpired(requestInfo, 12L));
 
     Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(false);
     Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
     Mockito.when(requestInfo.getRequestCreateTime()).thenReturn(5L);
     assertEquals(RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT,
-        RouterUtils.isRequestExpired(requestInfo, 12L, routerConfig));
+        RouterUtils.isRequestExpired(requestInfo, 12L));
   }
 }

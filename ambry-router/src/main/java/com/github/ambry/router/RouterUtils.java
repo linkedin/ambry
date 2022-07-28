@@ -295,15 +295,13 @@ public class RouterUtils {
    * (unavailable quota, etc.) for a long time.
    * @param requestInfo of the request.
    * @param currentTimeInMs current time in msec.
-   * @param routerConfig router config.
    * @return RouterRequestExpiryReason representing the reason for request expiry.
    */
-  public static RouterRequestExpiryReason isRequestExpired(RequestInfo requestInfo, long currentTimeInMs,
-      RouterConfig routerConfig) {
+  public static RouterRequestExpiryReason isRequestExpired(RequestInfo requestInfo, long currentTimeInMs) {
     if ((requestInfo.isRequestReceivedByNetworkLayer()
-        && currentTimeInMs - requestInfo.getRequestEnqueueTime() > routerConfig.routerRequestNetworkTimeoutMs)) {
+        && currentTimeInMs - requestInfo.getRequestEnqueueTime() > requestInfo.getNetworkTimeOutMs())) {
       return RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT;
-    } else if (currentTimeInMs - requestInfo.getRequestCreateTime() > routerConfig.routerRequestTimeoutMs) {
+    } else if (currentTimeInMs - requestInfo.getRequestCreateTime() > requestInfo.getFinalTimeOutMs()) {
       return RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT;
     }
     return RouterRequestExpiryReason.NO_TIMEOUT;

@@ -21,6 +21,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.EventLoopGroup;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -52,6 +53,7 @@ public class Http2ClientMetrics {
   public final Counter http2NetworkErrorCount;
   public final Counter http2RequestsToDropCount;
   public final Counter http2StreamNotWritableCount;
+  public final Counter http2InFlightRequestsCount;
 
   public final Meter http2ClientSendRate;
   public final Meter http2ClientReceiveRate;
@@ -114,10 +116,17 @@ public class Http2ClientMetrics {
 
     http2ServerCertificateValidationFailureCount =
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "http2ServerCertificateValidationFailureCount"));
+    http2InFlightRequestsCount =
+        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2InFlightRequestsCount"));
   }
 
   void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup) {
-    Gauge<Long> pendingTasksGetter =  () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
+    Gauge<Long> pendingTasksGetter = () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
     registry.register(MetricRegistry.name(Http2NetworkClient.class, "NettyPendingTasks"), pendingTasksGetter);
+  }
+
+  public void registerInFlightRequestCount(AtomicLong inFlightRequests) {
+    Gauge<Long> inFlightRequestsCount = inFlightRequests::get;
+    registry.register(MetricRegistry.name(Http2NetworkClient.class, "InFlightRequests"), inFlightRequestsCount);
   }
 }

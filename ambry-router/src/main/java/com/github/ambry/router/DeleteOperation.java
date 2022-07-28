@@ -134,7 +134,8 @@ class DeleteOperation {
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       DeleteRequest deleteRequest = createDeleteRequest();
       RequestInfo requestInfo =
-          new RequestInfo(hostname, port, deleteRequest, replica, operationQuotaCharger, time.milliseconds());
+          new RequestInfo(hostname, port, deleteRequest, replica, operationQuotaCharger, time.milliseconds(),
+              routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
       deleteRequestInfos.put(deleteRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
@@ -273,7 +274,7 @@ class DeleteOperation {
       // throttling, etc) for long time, drop the request.
       long currentTimeInMs = time.milliseconds();
       RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
       if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
         itr.remove();
         logger.trace("Delete Request with correlationId {} in flight has expired for replica {} due to {}",

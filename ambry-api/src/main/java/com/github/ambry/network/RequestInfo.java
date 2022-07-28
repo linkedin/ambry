@@ -15,6 +15,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.quota.Chargeable;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -31,6 +32,8 @@ public class RequestInfo {
   private long requestEnqueueTime = -1;
   private long requestSendTime = -1;
   private long responseHeaderReceiveTime = -1;
+  private final AtomicLong networkTimeOutMs = new AtomicLong(0);
+  private final AtomicLong finalTimeOutMs = new AtomicLong(0);
   public int responseFramesCount = 0;
 
   /**
@@ -41,19 +44,23 @@ public class RequestInfo {
    * @param replicaId the {@link ReplicaId} associated with this request.
    * @param chargeable the {@link Chargeable} associated with this request.
    * @param creationTime the creation time of this request in msec.
+   * @param networkTimeOutMs the time in msec to wait for response from server.
+   * @param finalTimeOutMs
    */
   public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId, Chargeable chargeable,
-      long creationTime) {
+      long creationTime, long networkTimeOutMs, long finalTimeOutMs) {
     this.host = host;
     this.port = port;
     this.request = request;
     this.replicaId = replicaId;
     this.chargeable = chargeable;
-    requestCreateTime = creationTime;
+    this.requestCreateTime = creationTime;
+    this.networkTimeOutMs.set(networkTimeOutMs);
+    this.finalTimeOutMs.set(finalTimeOutMs);
   }
 
   /**
-   * Construct a RequestInfo with the given parameters
+   * Construct a RequestInfo with the given parameters. This is used only for tests.
    * @param host the host to which the data is meant for
    * @param port the port on the host to which the data is meant for
    * @param request the data to be sent.
@@ -62,7 +69,7 @@ public class RequestInfo {
    */
   public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId,
       Chargeable chargeable) {
-    this(host, port, request, replicaId, chargeable, System.currentTimeMillis());
+    this(host, port, request, replicaId, chargeable, System.currentTimeMillis(), -1, -1);
   }
 
   /**
@@ -167,5 +174,35 @@ public class RequestInfo {
   public String toString() {
     return "RequestInfo{" + "host='" + host + '\'' + ", port=" + port + ", request=" + request + ", replicaId="
         + replicaId + '}';
+  }
+
+  /**
+   * @return the time to wait for response from server.
+   */
+  public long getNetworkTimeOutMs() {
+    return networkTimeOutMs.get();
+  }
+
+  /**
+   * Set the time to wait for response from server.
+   * @param networkTimeOutMs time out in milliseconds.
+   */
+  public void setNetworkTimeOutMs(long networkTimeOutMs) {
+    this.networkTimeOutMs.set(networkTimeOutMs);
+  }
+
+  /**
+   * Increase the time to wait for response from server.
+   * @param delta time in milliseconds.
+   */
+  public void incrementNetworkTimeOutMs(long delta) {
+    networkTimeOutMs.getAndAdd(delta);
+  }
+
+  /**
+   * @return the overall wait time for a request in router.
+   */
+  public long getFinalTimeOutMs() {
+    return finalTimeOutMs.get();
   }
 }

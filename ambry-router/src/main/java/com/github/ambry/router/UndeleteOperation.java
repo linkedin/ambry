@@ -128,7 +128,8 @@ public class UndeleteOperation {
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       UndeleteRequest undeleteRequest = createUndeleteRequest();
       RequestInfo requestInfo =
-          new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger, time.milliseconds());
+          new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger, time.milliseconds(),
+              routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
       undeleteRequestInfos.put(undeleteRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
@@ -284,7 +285,7 @@ public class UndeleteOperation {
       // throttling, etc) for long time, drop the request.
       long currentTimeInMs = time.milliseconds();
       RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
       if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
         iter.remove();
         LOGGER.warn("Undelete request with correlationid {} in flight has expired for replica {} due to {}",

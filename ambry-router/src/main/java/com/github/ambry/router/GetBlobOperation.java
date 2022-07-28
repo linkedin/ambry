@@ -213,8 +213,8 @@ class GetBlobOperation extends GetOperation {
     if (firstChunk.shouldSaveMetadata()) {
       BlobMetadata blobMetadata = new BlobMetadata(blobId.toString(), blobInfo, compositeBlobInfo);
       putResult = blobMetadataCache.putObject(blobMetadata.getBlobId(), blobMetadata);
-      logger.debug("[{}] Issued save-metadata for blobId = {}, result = {}", blobMetadata.getBlobId(),
-          blobId, putResult);
+      logger.debug("[{}] Issued save-metadata for blobId = {}, result = {}", blobMetadata.getBlobId(), blobId,
+          putResult);
     }
     return putResult;
   }
@@ -229,8 +229,8 @@ class GetBlobOperation extends GetOperation {
       return false;
     }
     boolean deleteResult = blobMetadataCache.deleteObject(blobId.toString());
-    logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = {}, result = {}", blobMetadataCache.getCacheId(),
-        blobId, reason, deleteResult);
+    logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = {}, result = {}",
+        blobMetadataCache.getCacheId(), blobId, reason, deleteResult);
     return deleteResult;
   }
 
@@ -898,7 +898,7 @@ class GetBlobOperation extends GetOperation {
         // throttling, etc) for long time, drop the request.
         long currentTimeInMs = time.milliseconds();
         RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
         if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
           logger.trace("GetBlobRequest with correlationId {} in flight has expired for replica {} due to {} ",
               correlationId, requestInfo.getReplicaId().getDataNodeId(), routerRequestExpiryReason.name());
@@ -929,7 +929,8 @@ class GetBlobOperation extends GetOperation {
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
         RequestInfo requestInfo =
-            new RequestInfo(hostname, port, getRequest, replicaId, prepareQuotaCharger(), time.milliseconds());
+            new RequestInfo(hostname, port, getRequest, replicaId, prepareQuotaCharger(), time.milliseconds(),
+                routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, requestInfo);
         correlationIdToGetChunk.put(correlationId, this);
