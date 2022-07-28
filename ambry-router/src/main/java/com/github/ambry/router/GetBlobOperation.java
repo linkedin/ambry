@@ -185,6 +185,26 @@ class GetBlobOperation extends GetOperation {
   }
 
   /**
+   * This helper decides if metadata must be deleted from cache or not.
+   * This mainly reduces the impact on metadata cache due to a large number of GET requests for
+   * simple blobs that do not exist.
+   * @param abortCause Reason to abort GetBlobOperation
+   * @return True if metadata must be deleted, false otherwise.
+   */
+  boolean shouldDeleteMetadata(Exception abortCause) {
+    if (abortCause != null && abortCause instanceof RouterException) {
+      switch (((RouterException) abortCause).getErrorCode()) {
+        /* If the blob is not found, then delete its metadata from frontend cache. */
+        case BlobDoesNotExist:
+        case BlobDeleted:
+        case BlobExpired:
+          return (blobMetadataCache != null && blobId.getBlobDataType() == BlobId.BlobDataType.METADATA);
+      }
+    }
+    return false;
+  }
+
+  /**
    * Conditionally saves blob metadata for composite blobs
    * @return True if metadata was saved successfully, else False.
    */
@@ -261,14 +281,8 @@ class GetBlobOperation extends GetOperation {
         blobDataChannel.completeRead();
       }
     }
-    if (abortCause != null && abortCause instanceof RouterException) {
-      switch (((RouterException) abortCause).getErrorCode()) {
-        /* If the blob is not found, then delete its metadata from frontend cache. */
-        case BlobDoesNotExist:
-        case BlobDeleted:
-        case BlobExpired:
-          deleteMetadata(((RouterException) abortCause).getErrorCode().toString());
-      }
+    if (shouldDeleteMetadata(abortCause)) {
+      deleteMetadata(((RouterException) abortCause).getErrorCode().toString());
     }
     setOperationCompleted();
   }
