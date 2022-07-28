@@ -1866,9 +1866,7 @@ class GetBlobOperation extends GetOperation {
          */
         String reason = "Cached blob property does not match received blob property";
         logger.error("[{}] {} for blobId = {}, cached blob property = {}, received blob property = {}",
-            blobMetadataCache.getCacheId(),
-            reason, blobId,
-            serverBlobProperties, receivedBlobProperties);
+            blobMetadataCache.getCacheId(), reason, blobId, serverBlobProperties, receivedBlobProperties);
         deleteMetadata(reason);
         onInvalidCacheEntry(new RouterException(reason, RouterErrorCode.UnexpectedInternalError));
         return;
