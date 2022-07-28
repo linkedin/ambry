@@ -20,7 +20,7 @@ import com.github.ambry.commons.AmbryCacheEntry;
 import java.util.concurrent.CountDownLatch;
 
 
-public class AmbryCacheWithMetrics extends AmbryCache {
+public class AmbryCacheWithStats extends AmbryCache {
 
   final CountDownLatch cacheHitCountDown;
   final CountDownLatch cacheMissCountDown;
@@ -34,13 +34,13 @@ public class AmbryCacheWithMetrics extends AmbryCache {
    * @param cacheMaxSizeBytes Maximum memory footprint of the cache
    * @param metricRegistry Instance of metrics registry to record stats
    */
-  public AmbryCacheWithMetrics(String cacheId, boolean cacheEnabled, long cacheMaxSizeBytes,
-      MetricRegistry metricRegistry, AmbryCacheMetrics ambryCacheMetrics) {
+  public AmbryCacheWithStats(String cacheId, boolean cacheEnabled, long cacheMaxSizeBytes,
+      MetricRegistry metricRegistry, AmbryCacheStats ambryCacheStats) {
     super(cacheId, cacheEnabled, cacheMaxSizeBytes, metricRegistry);
-    cacheHitCountDown = new CountDownLatch(ambryCacheMetrics.getNumCacheHit());
-    cacheMissCountDown = new CountDownLatch(ambryCacheMetrics.getNumCacheMiss());
-    putObjectCountDown = new CountDownLatch(ambryCacheMetrics.getNumPut());
-    deleteObjectCountDown = new CountDownLatch(ambryCacheMetrics.getNumDelete());
+    cacheHitCountDown = new CountDownLatch(ambryCacheStats.getNumCacheHit());
+    cacheMissCountDown = new CountDownLatch(ambryCacheStats.getNumCacheMiss());
+    putObjectCountDown = new CountDownLatch(ambryCacheStats.getNumPut());
+    deleteObjectCountDown = new CountDownLatch(ambryCacheStats.getNumDelete());
   }
 
   @Override

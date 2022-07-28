@@ -14,14 +14,14 @@
 
 package com.github.ambry.router;
 
-public class AmbryCacheMetrics {
+public class AmbryCacheStats {
 
   final int numCacheHit;
   final int numCacheMiss;
   final int numPut;
   final int numDelete;
 
-  public AmbryCacheMetrics(int numCacheHit, int numCacheMiss, int numPut, int numDelete) {
+  public AmbryCacheStats(int numCacheHit, int numCacheMiss, int numPut, int numDelete) {
     this.numCacheHit = numCacheHit;
     this.numCacheMiss = numCacheMiss;
     this.numPut = numPut;
