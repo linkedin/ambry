@@ -145,7 +145,7 @@ public class RequestPath {
         blobSegmentIdx);
   }
 
-  RequestPath(String prefix, String clusterName, String pathAfterPrefixes, String operationOrBlobId,
+  public RequestPath(String prefix, String clusterName, String pathAfterPrefixes, String operationOrBlobId,
       SubResource subResource, int blobSegmentIdx) {
     this.prefix = prefix;
     this.clusterName = clusterName;

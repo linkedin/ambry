@@ -77,9 +77,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String IS_DELETED_OR_EXPIRED = "(" + IS_DELETED + " OR " + IS_EXPIRED + ")";
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
 
-  private static final Set<GetOption> includeDeletedModes =
+  private static final Set<GetOption> includeDeletedOptions =
       new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs));
-  private static final Set<GetOption> includeExpiredModes =
+  private static final Set<GetOption> includeExpiredOptions =
       new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Expired_Blobs));
 
   /**
@@ -169,10 +169,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp expirationTime = resultSet.getTimestamp(2);
           Timestamp deletionTime = resultSet.getTimestamp(3);
           long currentTime = System.currentTimeMillis();
-          if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredModes.contains(option)) {
+          if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredOptions.contains(option)) {
             throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
                 blobName);
-          } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedModes.contains(option)) {
+          } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOptions.contains(option)) {
             throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
                 blobName);
           } else {
