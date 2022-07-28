@@ -1863,6 +1863,7 @@ class GetBlobOperation extends GetOperation {
         throws IOException, MessageFormatException {
       /* If we find blob metadata in frontend cache, validate it and use it. */
       BlobProperties receivedBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
+      updateTtlIfRequired(receivedBlobProperties, messageInfo);
       /*
        * Some cached variables are mutable.
        * Update them and then compare if other immutable variables are same or not.
@@ -1880,8 +1881,8 @@ class GetBlobOperation extends GetOperation {
          * We do not need to decrypt anything at this point.
          */
         String reason = "Cached blob property does not match received blob property";
-        logger.error("{} for blobId = {}, cached blob property = {}, received blob property = {}", reason, blobId,
-            serverBlobProperties, receivedBlobProperties);
+        logger.error("[{}] {} for blobId = {}, cached blob property = {}, received blob property = {}",
+            blobMetadataCache.getCacheId(), reason, blobId, serverBlobProperties, receivedBlobProperties);
         deleteMetadata(reason);
         onInvalidCacheEntry(new RouterException(reason, RouterErrorCode.UnexpectedInternalError));
         return;

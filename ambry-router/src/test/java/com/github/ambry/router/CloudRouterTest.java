@@ -320,5 +320,7 @@ public class CloudRouterTest extends NonBlockingRouterTest {
   @Override
   @Ignore
   public void testRouterMetadataCacheBlobDoesNotExistOnDeleteCompositeBlob() throws Exception {}
-
+  @Override
+  @Ignore
+  public void testRouterMetadataCacheUpdateTTLCompositeBlob() throws Exception {}
 }
