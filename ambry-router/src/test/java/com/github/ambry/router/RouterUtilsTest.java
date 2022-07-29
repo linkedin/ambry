@@ -167,29 +167,24 @@ public class RouterUtilsTest {
 
   @Test
   public void testIsRequestExpired() {
-    Properties properties = new Properties();
-    properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "test");
-    properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, "dc");
-    properties.setProperty(RouterConfig.ROUTER_REQUEST_NETWORK_TIMEOUT_MS, "10");
-    properties.setProperty(RouterConfig.ROUTER_REQUEST_TIMEOUT_MS, "10");
-
     RequestInfo requestInfo = Mockito.mock(RequestInfo.class);
-    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
     Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(true);
     Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
+    Mockito.when(requestInfo.getNetworkTimeOutMs()).thenReturn(10L);
     assertEquals(RouterUtils.RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT,
         RouterUtils.isRequestExpired(requestInfo, 12L));
 
     Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(false);
     Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
     Mockito.when(requestInfo.getRequestCreateTime()).thenReturn(1L);
+    Mockito.when(requestInfo.getFinalTimeOutMs()).thenReturn(10L);
     assertEquals(RouterUtils.RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT,
         RouterUtils.isRequestExpired(requestInfo, 12L));
 
     Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(false);
     Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
     Mockito.when(requestInfo.getRequestCreateTime()).thenReturn(5L);
-    assertEquals(RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT,
-        RouterUtils.isRequestExpired(requestInfo, 12L));
+    Mockito.when(requestInfo.getFinalTimeOutMs()).thenReturn(10L);
+    assertEquals(RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT, RouterUtils.isRequestExpired(requestInfo, 12L));
   }
 }

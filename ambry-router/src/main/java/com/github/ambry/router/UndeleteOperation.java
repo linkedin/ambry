@@ -60,7 +60,7 @@ public class UndeleteOperation {
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
-  private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
+  private final AtomicReference<Exception> operationException = new AtomicReference<>();
   // Quota charger for this operation.
   private final OperationQuotaCharger operationQuotaCharger;
   // Denotes whether the operation is complete.
@@ -296,10 +296,11 @@ public class UndeleteOperation {
         onErrorResponse(requestInfo.getReplicaId(),
             RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
-      } else {
-        // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
-        break;
       }
+      // Note: Even though the entries are ordered by correlation id and their creation time, we cannot break out of
+      // the while loop when we find an unexpired entry. This is because time outs for all requests may not be equal
+      // now. For example, we assign higher time outs when we find that there are lot of outstanding requests by
+      // letting Network client dynamically update the timeout via RequestInfo#incrementNetworkTimeOutMs.
     }
   }
 

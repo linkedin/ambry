@@ -53,7 +53,6 @@ public class Http2ClientMetrics {
   public final Counter http2NetworkErrorCount;
   public final Counter http2RequestsToDropCount;
   public final Counter http2StreamNotWritableCount;
-  public final Counter http2InFlightRequestsCount;
 
   public final Meter http2ClientSendRate;
   public final Meter http2ClientReceiveRate;
@@ -116,8 +115,6 @@ public class Http2ClientMetrics {
 
     http2ServerCertificateValidationFailureCount =
         registry.counter(MetricRegistry.name(Http2NetworkClient.class, "http2ServerCertificateValidationFailureCount"));
-    http2InFlightRequestsCount =
-        registry.counter(MetricRegistry.name(Http2NetworkClient.class, "Http2InFlightRequestsCount"));
   }
 
   void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup) {
@@ -127,6 +124,6 @@ public class Http2ClientMetrics {
 
   public void registerInFlightRequestCount(AtomicLong inFlightRequests) {
     Gauge<Long> inFlightRequestsCount = inFlightRequests::get;
-    registry.register(MetricRegistry.name(Http2NetworkClient.class, "InFlightRequests"), inFlightRequestsCount);
+    registry.register(MetricRegistry.name(Http2NetworkClient.class, "InFlightRequestsCount"), inFlightRequestsCount);
   }
 }

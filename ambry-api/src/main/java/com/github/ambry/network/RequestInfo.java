@@ -45,7 +45,7 @@ public class RequestInfo {
    * @param chargeable the {@link Chargeable} associated with this request.
    * @param creationTime the creation time of this request in msec.
    * @param networkTimeOutMs the time in msec to wait for response from server.
-   * @param finalTimeOutMs
+   * @param finalTimeOutMs the overall wait time for a request in router.
    */
   public RequestInfo(String host, Port port, SendWithCorrelationId request, ReplicaId replicaId, Chargeable chargeable,
       long creationTime, long networkTimeOutMs, long finalTimeOutMs) {
@@ -181,14 +181,6 @@ public class RequestInfo {
    */
   public long getNetworkTimeOutMs() {
     return networkTimeOutMs.get();
-  }
-
-  /**
-   * Set the time to wait for response from server.
-   * @param networkTimeOutMs time out in milliseconds.
-   */
-  public void setNetworkTimeOutMs(long networkTimeOutMs) {
-    this.networkTimeOutMs.set(networkTimeOutMs);
   }
 
   /**

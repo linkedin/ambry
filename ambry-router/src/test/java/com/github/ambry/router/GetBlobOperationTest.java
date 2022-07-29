@@ -195,8 +195,7 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{
-        {SimpleOperationTracker.class.getSimpleName(), false, false, false},
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false, false, false},
         {SimpleOperationTracker.class.getSimpleName(), false, true, false},
         {AdaptiveOperationTracker.class.getSimpleName(), false, false, false},
         {AdaptiveOperationTracker.class.getSimpleName(), false, true, false},
@@ -205,9 +204,7 @@ public class GetBlobOperationTest {
         {SimpleOperationTracker.class.getSimpleName(), false, true, true},
         {AdaptiveOperationTracker.class.getSimpleName(), false, false, true},
         {AdaptiveOperationTracker.class.getSimpleName(), false, true, true},
-        {AdaptiveOperationTracker.class.getSimpleName(), true, false, true},
-      }
-    );
+        {AdaptiveOperationTracker.class.getSimpleName(), true, false, true},});
   }
 
   /**
@@ -218,8 +215,8 @@ public class GetBlobOperationTest {
    * @param isBandwidthThrottlingEnabled value for
    * {@link com.github.ambry.config.QuotaConfig#bandwidthThrottlingFeatureEnabled}.
    */
-  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean isBandwidthThrottlingEnabled, boolean enableMetadataCache)
-      throws Exception {
+  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean isBandwidthThrottlingEnabled,
+      boolean enableMetadataCache) throws Exception {
     Properties properties = new Properties();
     properties.setProperty(QuotaConfig.BANDWIDTH_THROTTLING_FEATURE_ENABLED,
         String.valueOf(isBandwidthThrottlingEnabled));
@@ -235,7 +232,8 @@ public class GetBlobOperationTest {
     Properties routerProperties = getDefaultNonBlockingRouterProperties(true);
     routerProperties.setProperty(RouterConfig.ROUTER_BLOB_METADATA_CACHE_ENABLED, String.valueOf(enableMetadataCache));
     routerProperties.setProperty(RouterConfig.ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE, Long.toString(0));
-    routerProperties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, Integer.toString(RouterConfig.MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT));
+    routerProperties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES,
+        Integer.toString(RouterConfig.MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT));
     this.enableMetadataCache = enableMetadataCache;
     VerifiableProperties vprops = new VerifiableProperties(routerProperties);
     routerConfig = new RouterConfig(vprops);
@@ -257,10 +255,9 @@ public class GetBlobOperationTest {
       cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     }
-    this.blobMetadataCache = new AmbryCache("GetBlobOperationTestRouterMetadataCache",
-        routerConfig.routerBlobMetadataCacheEnabled,
-        routerConfig.routerMaxNumMetadataCacheEntries,
-        routerMetrics.getMetricRegistry());
+    this.blobMetadataCache =
+        new AmbryCache("GetBlobOperationTestRouterMetadataCache", routerConfig.routerBlobMetadataCacheEnabled,
+            routerConfig.routerMaxNumMetadataCacheEntries, routerMetrics.getMetricRegistry());
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
         new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, blobMetadataCache);
@@ -627,6 +624,66 @@ public class GetBlobOperationTest {
       }
       time.sleep(routerConfig.routerRequestNetworkTimeoutMs + 1);
       op.poll(requestRegistrationCallback);
+      count++;
+    }
+
+    Assert.assertEquals("Mismatch in expected number of polls",
+        (int) Math.ceil((double) replicasCount / routerConfig.routerGetRequestParallelism), count);
+    // At this time requests would have been created for all replicas, as none of them were delivered,
+    // and cross-colo proxying is enabled by default.
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+        correlationIdToGetOperation.size());
+    assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
+
+    // test that timed out response won't update latency histogram if exclude timeout is enabled.
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getFirstChunkOperationTrackerInUse();
+    Histogram localColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, true, localDcName));
+    Histogram crossColoTracker =
+        tracker.getLatencyHistogram(RouterTestHelpers.getAnyReplica(blobId, false, localDcName));
+    Assert.assertEquals("Timed-out response shouldn't be counted into local colo latency histogram", 0,
+        localColoTracker.getCount());
+    Assert.assertEquals("Timed-out response shouldn't be counted into cross colo latency histogram", 0,
+        crossColoTracker.getCount());
+  }
+
+  /**
+   * Test the case where all requests dynamically time out at network layer within the GetOperation.
+   */
+  @Test
+  public void testNetworkRequestDynamicTimeoutAllFailure() throws Exception {
+    doPut();
+    GetBlobOperation op = createOperation(routerConfig, null);
+    op.poll(requestRegistrationCallback);
+    int count = 0;
+    int deltaTimeOut = routerConfig.routerRequestNetworkTimeoutMs / 10;
+    while (!op.isOperationComplete()) {
+      int numRequestsToDrop = 0;
+      for (RequestInfo requestInfo : requestRegistrationCallback.getRequestsToSend()) {
+        requestInfo.setRequestEnqueueTime(time.milliseconds());
+        numRequestsToDrop++;
+      }
+      // Sleep for duration < timeout and poll
+      time.sleep(routerConfig.routerRequestNetworkTimeoutMs);
+      requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
+      requestRegistrationCallback.setRequestsToDrop(new HashSet<>());
+      op.poll(requestRegistrationCallback);
+      Assert.assertTrue("No additional requests must be polled since existing requests haven't timed out",
+          requestRegistrationCallback.getRequestsToSend().isEmpty());
+      Assert.assertTrue("No requests should be timed out yet",
+          requestRegistrationCallback.getRequestsToDrop().isEmpty());
+
+      // Sleep for additional time out duration and poll
+      time.sleep(deltaTimeOut + 1);
+      op.poll(requestRegistrationCallback);
+      if (!op.isOperationComplete()) {
+        Assert.assertFalse("Next set of requests must be polled",
+            requestRegistrationCallback.getRequestsToSend().isEmpty());
+      }
+      Assert.assertEquals("Mismatch in requests to be dropped", numRequestsToDrop,
+          requestRegistrationCallback.getRequestsToDrop().size());
+
       count++;
     }
 
@@ -1258,15 +1315,18 @@ public class GetBlobOperationTest {
         .build(), false, routerMetrics.ageAtGet);
     // First range request gets the entire blob including blobInfo
     GetBlobOperation op1 = getAndAssertSuccess(false, false, (short) 0);
-    assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op1.getFirstChunkOperationFlag()), op1.getFirstChunkOperationFlag() == MessageFormatFlags.All);
+    assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All,
+        op1.getFirstChunkOperationFlag()), op1.getFirstChunkOperationFlag() == MessageFormatFlags.All);
     // Subsequent range request gets only blobInfo to validate metadata cached by previous request
     GetBlobOperation op2 = getAndAssertSuccess(false, false, (short) 0);
     if (this.enableMetadataCache) {
       assertNotNull(this.blobMetadataCache.getObject(blobIdStr));
-      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.BlobInfo, op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.BlobInfo);
+      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.BlobInfo,
+          op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.BlobInfo);
     } else {
       assertNull(this.blobMetadataCache.getObject(blobIdStr));
-      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.All);
+      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All,
+          op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.All);
     }
   }
 
@@ -1630,8 +1690,8 @@ public class GetBlobOperationTest {
    *                                   fetched by the router to simulate chunk arrival delay.
    * @param expectedLifeVersion the expected lifeVersion from get operation.
    */
-  private GetBlobOperation getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet,
-      short expectedLifeVersion) throws Exception {
+  private GetBlobOperation getAndAssertSuccess(final boolean getChunksBeforeRead,
+      final boolean initiateReadBeforeChunkGet, short expectedLifeVersion) throws Exception {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     final AtomicReference<Throwable> readCompleteThrowable = new AtomicReference<>(null);
     final AtomicLong readCompleteResult = new AtomicLong(0);
