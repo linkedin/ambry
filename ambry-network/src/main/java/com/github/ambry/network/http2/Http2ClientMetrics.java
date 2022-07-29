@@ -124,6 +124,6 @@ public class Http2ClientMetrics {
 
   public void registerInFlightRequestCount(AtomicLong inFlightRequests) {
     Gauge<Long> inFlightRequestsCount = inFlightRequests::get;
-    registry.register(MetricRegistry.name(Http2NetworkClient.class, "InFlightRequestsCount"), inFlightRequestsCount);
+    registry.gauge(MetricRegistry.name(Http2NetworkClient.class, "InFlightRequestsCount"), () -> inFlightRequestsCount);
   }
 }
