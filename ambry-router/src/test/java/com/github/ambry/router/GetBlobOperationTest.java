@@ -235,6 +235,7 @@ public class GetBlobOperationTest {
     Properties routerProperties = getDefaultNonBlockingRouterProperties(true);
     routerProperties.setProperty(RouterConfig.ROUTER_BLOB_METADATA_CACHE_ENABLED, String.valueOf(enableMetadataCache));
     routerProperties.setProperty(RouterConfig.ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE, Long.toString(0));
+    routerProperties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, Integer.toString(RouterConfig.MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT));
     this.enableMetadataCache = enableMetadataCache;
     VerifiableProperties vprops = new VerifiableProperties(routerProperties);
     routerConfig = new RouterConfig(vprops);
@@ -258,7 +259,7 @@ public class GetBlobOperationTest {
     }
     this.blobMetadataCache = new AmbryCache("GetBlobOperationTestRouterMetadataCache",
         routerConfig.routerBlobMetadataCacheEnabled,
-        routerConfig.routerBlobMetadataCacheMaxSizeBytes,
+        routerConfig.routerMaxNumMetadataCacheEntries,
         routerMetrics.getMetricRegistry());
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,

@@ -608,6 +608,11 @@ public class RouterConfig {
   public final long routerSmallestBlobForMetadataCache;
   public static final long NUM_BYTES_IN_ONE_TB = (long) Math.pow(1024, 4);
 
+  public static final String ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES = "router.max.num.metadata.cache.entries";
+  @Config(ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES)
+  public final int routerMaxNumMetadataCacheEntries;
+  public static final int MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT = 10;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -615,6 +620,8 @@ public class RouterConfig {
   public RouterConfig(VerifiableProperties verifiableProperties) {
     routerBlobMetadataCacheId =
         verifiableProperties.getString(ROUTER_BLOB_METADATA_CACHE_ID, "routerBlobMetadataCache");
+    routerMaxNumMetadataCacheEntries =
+        verifiableProperties.getInt(ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT);
     routerBlobMetadataCacheEnabled = verifiableProperties.getBoolean(ROUTER_BLOB_METADATA_CACHE_ENABLED, false);
     routerBlobMetadataCacheMaxSizeBytes =
         verifiableProperties.getLong(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES, 64 * NUM_BYTES_IN_ONE_MB);
