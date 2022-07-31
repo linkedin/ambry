@@ -52,8 +52,8 @@ public class QuotaAwareOperationController extends OperationController {
   private final Map<QuotaResource, LinkedList<RequestInfo>> readRequestQueue = new HashMap<>();
   private final Map<QuotaResource, LinkedList<RequestInfo>> writeRequestQueue = new HashMap<>();
   private final List<RequestInfo> nonCompliantRequests = new ArrayList<>();
-  private volatile int outOfQuotaRequestsInQueue = 0;
-  private volatile int delayedRequestsInQueue = 0;
+  private volatile int outOfQuotaResourcesInQueue = 0;
+  private volatile int delayedQuotaResourcesInQueue = 0;
 
   /**
    * Constructor for {@link QuotaAwareOperationController} class.
@@ -158,8 +158,8 @@ public class QuotaAwareOperationController extends OperationController {
       pollQuotaExceedAllowedRequestsIfAny(requestsToSend, queue);
       delayedRequests += queue.size();
     }
-    outOfQuotaRequestsInQueue = outOfQuotaRequests;
-    delayedRequestsInQueue = delayedRequests;
+    outOfQuotaResourcesInQueue = outOfQuotaRequests;
+    delayedQuotaResourcesInQueue = delayedRequests;
     timer.stop();
   }
 
@@ -196,6 +196,8 @@ public class QuotaAwareOperationController extends OperationController {
             break;
           case REJECT:
             quotaAvailable = false;
+            logger.warn(
+                "Rejecting request for quota resource {} because of reject recommendation.", quotaResource.toString());
             routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
             requestQueue.get(quotaResource).removeFirst();
@@ -261,16 +263,18 @@ public class QuotaAwareOperationController extends OperationController {
   }
 
   /**
-   * @return the value of {@code outOfQuotaRequestsInQueue} representing the count of out of quota requests in the queue.
+   * @return the value of {@code outOfQuotaResourcesInQueue} representing the count of out of {@link QuotaResource}s with
+   * requests in the queue.
    */
-  int getOutOfQuotaRequestsInQueue() {
-    return outOfQuotaRequestsInQueue;
+  int getOutOfQuotaResourcesInQueue() {
+    return outOfQuotaResourcesInQueue;
   }
 
   /**
-   * @return the value of {@code delayedRequestsInQueue} representing the count of delayed requests in the queue.
+   * @return the value of {@code delayedResourcesInQueue} representing the count of {@link QuotaResource}s with delayed
+   * requests in the queue.
    */
-  int getDelayedRequestsInQueue() {
-    return delayedRequestsInQueue;
+  int getDelayedQuotaResourcesInQueue() {
+    return delayedQuotaResourcesInQueue;
   }
 }

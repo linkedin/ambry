@@ -248,8 +248,8 @@ public class NonBlockingRouterMetrics {
   public Gauge<Integer> operationControllerQueueSize;
   public Gauge<Integer> readQueuedQuotaResourceCount;
   public Gauge<Integer> writeQueuedQuotaResourceCount;
-  public Gauge<Integer> delayedRequestsInQueue;
-  public Gauge<Integer> outOfQuotaRequestsInQueue;
+  public Gauge<Integer> delayedQuotaResourcesInQueue;
+  public Gauge<Integer> outOfQuotaResourcesInQueue;
 
   // Resource to latency histogram map. Here resource can be DataNode, Partition, Disk, Replica etc.
   Map<Resource, CachedHistogram> getBlobLocalDcResourceToLatency = new HashMap<>();
@@ -795,12 +795,12 @@ public class NonBlockingRouterMetrics {
         .filter(oc -> (oc instanceof QuotaAwareOperationController))
         .map(oc -> (QuotaAwareOperationController) oc)
         .collect(Collectors.toList());
-    outOfQuotaRequestsInQueue =
-        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "OutOfQuotaRequestInQueue"),
-            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getOutOfQuotaRequestsInQueue()).sum());
-    delayedRequestsInQueue =
-        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "DelayedRequestInQueue"),
-            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getDelayedRequestsInQueue()).sum());
+    outOfQuotaResourcesInQueue =
+        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "OutOfQuotaResourcesInQueue"),
+            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getOutOfQuotaResourcesInQueue()).sum());
+    delayedQuotaResourcesInQueue =
+        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "DelayedQuotaResourcesInQueue"),
+            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getDelayedQuotaResourcesInQueue()).sum());
   }
 
   /**
