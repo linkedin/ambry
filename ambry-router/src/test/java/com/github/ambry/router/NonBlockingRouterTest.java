@@ -1498,9 +1498,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       Properties properties = getNonBlockingRouterProperties("DC1");
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
-      setRouterWithMetadataCache(properties, new AmbryCacheMetrics(1,1,1,1));
-      AmbryCacheWithMetrics ambryCacheWithMetrics = (AmbryCacheWithMetrics) router.getBlobMetadataCache();
-      assertNotNull("Metadata cache must be created", ambryCacheWithMetrics);
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(1,1,1,1));
+      AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithStats);
 
       // put a composite blob and test it is absent in the metadata cache
       setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
@@ -1512,8 +1512,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // get one byte from composite blob, and it's metadata must be present in cache
       ByteRange range = ByteRanges.fromOffsetRange(1, 2);
       router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache miss", ambryCacheWithMetrics.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue("Must put metadata in cache", ambryCacheWithMetrics.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must encounter a cache miss", ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache", ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // update TTL and make it permanent
@@ -1522,7 +1522,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // get one byte from composite blob, and it's metadata must be present in cache
       router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache hit", ambryCacheWithMetrics.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must encounter a cache hit", ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
     } finally {
       router.close();
