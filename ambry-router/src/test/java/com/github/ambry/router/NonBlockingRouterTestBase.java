@@ -218,17 +218,17 @@ public class NonBlockingRouterTestBase {
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
   }
 
-  protected void setRouterWithMetadataCache(Properties props, AmbryCacheMetrics ambryCacheMetrics)
+  protected void setRouterWithMetadataCache(Properties props, AmbryCacheStats ambryCacheStats)
       throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
-    AmbryCacheWithMetrics ambryCacheWithMetrics = new AmbryCacheWithMetrics("AmbryCacheWithMetrics",
-        true, routerConfig.routerBlobMetadataCacheMaxSizeBytes, routerMetrics.getMetricRegistry(), ambryCacheMetrics);
+    AmbryCacheWithStats ambryCacheWithStats = new AmbryCacheWithStats("AmbryCacheWithStats",
+        true, routerConfig.routerBlobMetadataCacheMaxSizeBytes, routerMetrics.getMetricRegistry(), ambryCacheStats);
     router = new NonBlockingRouter(routerConfig, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService,
-        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, ambryCacheWithMetrics);
+        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, ambryCacheWithStats);
   }
 
   /**
