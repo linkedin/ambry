@@ -1411,6 +1411,108 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
   }
 
+  /**
+   * Tests that with a metadata cache eviction works correctly with a cache size of 1.
+   * @throws Exception
+   */
+  @Test
+  public void testRouterMetadataCacheEviction() throws Exception {
+    try {
+      int NUM_PUT_COMPOSITE_BLOBS = 3;
+      int NUM_GET_COMPOSITE_BLOBS = NUM_PUT_COMPOSITE_BLOBS * 5;
+      int TEST_MAX_NUM_METADATA_CACHE_ENTRIES = 1;
+      int numMisses = NUM_GET_COMPOSITE_BLOBS;
+      int numInserts = NUM_GET_COMPOSITE_BLOBS;
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
+      properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
+      // Set the size of cache to 1 entry which means the cache can store at max of one entry at any time
+      properties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, Integer.toString(TEST_MAX_NUM_METADATA_CACHE_ENTRIES));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(0, numMisses, numInserts,0));
+      AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithStats);
+      assertEquals(String.format("Expected %s to be %s but found %s",
+          RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries()),
+          TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries());
+
+      ArrayList<String> blobIds = new ArrayList<>();
+      for(int i = 0; i < NUM_PUT_COMPOSITE_BLOBS; ++i) {
+        // put few composite blob and test it is absent in the metadata cache
+        setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
+        String blobId =
+            router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+                .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        blobIds.add(blobId);
+      }
+
+      for(int i = 0; i < NUM_GET_COMPOSITE_BLOBS; ++i) {
+        // cache miss and populate cache
+        // get the one byte from composite blob, and it's metadata must be present in cache
+        ByteRange range = ByteRanges.fromOffsetRange(1, 2);
+        String blobId = blobIds.get(i % NUM_PUT_COMPOSITE_BLOBS);
+        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+      }
+
+      assertTrue(String.format("Must encounter %s cache misses", numMisses), ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache inserts", numInserts), ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    } finally {
+      router.close();
+    }
+  }
+
+  /**
+   * Tests that there no metadata cache evictions with a large enough cache.
+   * @throws Exception
+   */
+  @Test
+  public void testRouterMetadataCacheNoEviction() throws Exception {
+    try {
+      int NUM_PUT_COMPOSITE_BLOBS = 3;
+      int NUM_GET_COMPOSITE_BLOBS = NUM_PUT_COMPOSITE_BLOBS * 5;
+      int TEST_MAX_NUM_METADATA_CACHE_ENTRIES = 10;
+      int numHits = NUM_GET_COMPOSITE_BLOBS - NUM_PUT_COMPOSITE_BLOBS;
+      int numMisses = NUM_PUT_COMPOSITE_BLOBS;
+      int numInserts = NUM_PUT_COMPOSITE_BLOBS;
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
+      properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
+      // Set the size of cache to 1 entry which means the cache can store at max of one entry at any time
+      properties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, Integer.toString(TEST_MAX_NUM_METADATA_CACHE_ENTRIES));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(numHits, numMisses, numInserts,0));
+      AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
+      assertNotNull("Metadata cache must be created", ambryCacheWithStats);
+      assertEquals(String.format("Expected %s to be %s but found %s",
+              RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries()),
+          TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries());
+
+      ArrayList<String> blobIds = new ArrayList<>();
+      for(int i = 0; i < NUM_PUT_COMPOSITE_BLOBS; ++i) {
+        // put few composite blob and test it is absent in the metadata cache
+        setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
+        String blobId =
+            router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+                .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        blobIds.add(blobId);
+      }
+
+      for(int i = 0; i < NUM_GET_COMPOSITE_BLOBS; ++i) {
+        // cache miss and populate cache
+        // get the one byte from composite blob, and it's metadata must be present in cache
+        ByteRange range = ByteRanges.fromOffsetRange(1, 2);
+        String blobId = blobIds.get(i % NUM_PUT_COMPOSITE_BLOBS);
+        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+      }
+
+      assertTrue(String.format("Must encounter %s cache hits", numHits), ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache misses", numMisses), ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache inserts", numInserts), ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    } finally {
+      router.close();
+    }
+  }
+
   @Test
   public void testRouterMetadataCacheGetCompositeBlob() throws Exception {
     try {

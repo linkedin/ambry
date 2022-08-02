@@ -31,12 +31,12 @@ public class AmbryCacheWithStats extends AmbryCache {
    * Constructs an instance of AmbryCache
    * @param cacheId String identifier for this cache
    * @param cacheEnabled Toggles cache. If true, cache is enabled. Else, cache is disabled.
-   * @param cacheMaxSizeBytes Maximum memory footprint of the cache
+   * @param maxNumCacheEntries Maximum number of cache entries
    * @param metricRegistry Instance of metrics registry to record stats
    */
-  public AmbryCacheWithStats(String cacheId, boolean cacheEnabled, long cacheMaxSizeBytes,
+  public AmbryCacheWithStats(String cacheId, boolean cacheEnabled, int maxNumCacheEntries,
       MetricRegistry metricRegistry, AmbryCacheStats ambryCacheStats) {
-    super(cacheId, cacheEnabled, cacheMaxSizeBytes, metricRegistry);
+    super(cacheId, cacheEnabled, maxNumCacheEntries, metricRegistry);
     cacheHitCountDown = new CountDownLatch(ambryCacheStats.getNumCacheHit());
     cacheMissCountDown = new CountDownLatch(ambryCacheStats.getNumCacheMiss());
     putObjectCountDown = new CountDownLatch(ambryCacheStats.getNumPut());

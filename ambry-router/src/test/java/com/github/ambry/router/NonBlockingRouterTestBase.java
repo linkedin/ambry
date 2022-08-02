@@ -224,7 +224,7 @@ public class NonBlockingRouterTestBase {
     routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     AmbryCacheWithStats ambryCacheWithStats = new AmbryCacheWithStats("AmbryCacheWithStats",
-        true, routerConfig.routerBlobMetadataCacheMaxSizeBytes, routerMetrics.getMetricRegistry(), ambryCacheStats);
+        true, routerConfig.routerMaxNumMetadataCacheEntries, routerMetrics.getMetricRegistry(), ambryCacheStats);
     router = new NonBlockingRouter(routerConfig, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService,

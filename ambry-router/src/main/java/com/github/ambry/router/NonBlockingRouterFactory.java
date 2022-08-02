@@ -125,7 +125,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     try {
       AmbryCache blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
           routerConfig.routerBlobMetadataCacheEnabled,
-          routerConfig.routerBlobMetadataCacheMaxSizeBytes,
+          routerConfig.routerMaxNumMetadataCacheEntries,
           routerMetrics.getMetricRegistry());
       logger.info("[{}] Smallest blob to qualify for metadata caching = {} bytes",
           blobMetadataCache.getCacheId(),

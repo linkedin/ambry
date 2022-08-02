@@ -34,8 +34,8 @@ public class AmbryCache {
   private final MetricRegistry metricRegistry;
   private static final Logger logger = LoggerFactory.getLogger(AmbryCache.class);
   private final String cacheId;
-  private boolean cacheEnabled;
-  private long cacheMaxSizeBytes;
+  private final boolean cacheEnabled;
+  private final int maxNumCacheEntries;
 
   // Cache metrics
   public Meter getRequestRate;
@@ -52,20 +52,19 @@ public class AmbryCache {
    * Constructs an instance of AmbryCache
    * @param cacheId String identifier for this cache
    * @param cacheEnabled Toggles cache. If true, cache is enabled. Else, cache is disabled.
-   * @param cacheMaxSizeBytes Maximum memory footprint of the cache
+   * @param maxNumCacheEntries Maximum number of cache entries
    * @param metricRegistry Instance of metrics registry to record stats
    */
-  public AmbryCache(String cacheId, boolean cacheEnabled, long cacheMaxSizeBytes, MetricRegistry metricRegistry) {
+  public AmbryCache(String cacheId, boolean cacheEnabled, int maxNumCacheEntries, MetricRegistry metricRegistry) {
     this.cacheId = cacheId;
     this.cacheEnabled = cacheEnabled;
-    this.cacheMaxSizeBytes = cacheMaxSizeBytes;
     this.metricRegistry = metricRegistry;
+    this.maxNumCacheEntries = maxNumCacheEntries;
     this.ambryCache = Caffeine.newBuilder()
-        .maximumWeight(cacheMaxSizeBytes)
-        .weigher((String key, AmbryCacheEntry value) -> key.length() + value.sizeBytes())
+        .maximumSize(maxNumCacheEntries)
         .recordStats()
         .build();
-    initializeAmbryCacheMetrics();
+    initializeAmbryCacheStats();
     logger.info("[{}] Initialized cache {}", cacheId, this);
   }
 
@@ -76,7 +75,7 @@ public class AmbryCache {
     String result = "";
     result += "cacheId=" + cacheId;
     result += ", cacheEnabled=" + cacheEnabled;
-    result += ", cacheMaxSizeBytes=" + cacheMaxSizeBytes;
+    result += ", maxNumCacheEntries=" + maxNumCacheEntries;
     return result;
   }
 
@@ -85,6 +84,13 @@ public class AmbryCache {
    */
   public String getCacheId() {
     return cacheId;
+  }
+
+  /**
+   * @return Maximum number of entries this cache is allowed to hold
+   */
+  public int getMaxNumCacheEntries() {
+    return maxNumCacheEntries;
   }
 
   /**
@@ -165,7 +171,7 @@ public class AmbryCache {
   /**
    * Initialize metrics for this instance of AmbryCache
    */
-  private void initializeAmbryCacheMetrics() {
+  private void initializeAmbryCacheStats() {
 
     if (!cacheEnabled) { return; }
 
