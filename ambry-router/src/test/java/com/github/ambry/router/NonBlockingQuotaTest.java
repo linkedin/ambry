@@ -365,8 +365,8 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
           .getBlobDataChannel()
           .readInto(retainingAsyncWritableChannel, null)
           .get();
-      Assert.assertEquals(0, (int) routerMetrics.outOfQuotaRequestsInQueue.getValue());
-      Assert.assertEquals(0, (int) routerMetrics.delayedRequestsInQueue.getValue());
+      Assert.assertEquals(0, (int) routerMetrics.outOfQuotaResourcesInQueue.getValue());
+      Assert.assertEquals(0, (int) routerMetrics.delayedQuotaResourcesInQueue.getValue());
       // read out all the chunks.
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
       quotaUsage = quotaSource.getCuUsage().get(String.valueOf(account.getId()));
