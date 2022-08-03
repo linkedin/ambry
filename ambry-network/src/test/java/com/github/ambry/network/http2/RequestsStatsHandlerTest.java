@@ -66,14 +66,14 @@ public class RequestsStatsHandlerTest {
       Assert.assertEquals("Mismatch in in flight request count", --inFlightRequestCount,
           requestsStatsHandler.getInFlightRequestCount());
       verify(requestsStatsHandler, times(1)).exceptionCaught(any(), any());
-    } catch (Exception ex) {
+    } catch (Exception ignored) {
 
     }
   }
 
   static class TestHandler extends ChannelInboundHandlerAdapter {
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
       throw new RuntimeException("Network error");
     }
   }

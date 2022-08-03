@@ -41,8 +41,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +71,7 @@ class GetBlobInfoOperation extends GetOperation {
   private final CryptoJobMetricsTracker decryptJobMetricsTracker =
       new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
   // map of correlation id to the request metadata for every request issued for this operation.
-  private final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
+  private final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new LinkedHashMap<>();
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobInfoOperation.class);
 
@@ -165,11 +165,19 @@ class GetBlobInfoOperation extends GetOperation {
             RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
         inFlightRequestsIterator.remove();
+      } else {
+        // Note: Even though the requests are ordered by correlation id and their creation time, we cannot break out of
+        // the while loop here. This is because time outs for all requests may not be equal now.
+
+        // For example, request 1 in the map may have been assigned high time out since it might be sent at a
+        // time when the load is high and request 2 may have been assigned lower time out value since the load might have
+        // decreased by the time it is sent out. In this case, we should continue iterating the loop and clean up
+        // request 2 in the map.
+
+        // The cost of iterating all entries should be okay since the map contains outstanding requests whose number
+        // should be small. The maximum outstanding requests possible would be equal to the operation parallelism value
+        // and may be few more if adaptive operation tracker is used.
       }
-      // Note: Even though the entries are ordered by correlation id and their creation time, we cannot break out of
-      // the while loop when we find an unexpired entry. This is because time outs for all requests may not be equal
-      // now. For example, we assign higher time outs when we find that there are lot of outstanding requests by
-      // letting Network client dynamically update the timeout via RequestInfo#incrementNetworkTimeOutMs.
     }
   }
 

@@ -15,7 +15,6 @@ package com.github.ambry.network;
 
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.quota.Chargeable;
-import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -32,8 +31,12 @@ public class RequestInfo {
   private long requestEnqueueTime = -1;
   private long requestSendTime = -1;
   private long responseHeaderReceiveTime = -1;
-  private final AtomicLong networkTimeOutMs = new AtomicLong(0);
-  private final AtomicLong finalTimeOutMs = new AtomicLong(0);
+  // Determines the time to wait for response once it is sent to server
+  private long networkTimeOutMs;
+  // Determines the time to wait for response once it is created. It is possible that request remains in router queues
+  // due to insufficient quota. This time out helps the request to avoid being stuck in queues for a long time and
+  // also enables to send response to client in a bounded time.
+  private final long finalTimeOutMs;
   public int responseFramesCount = 0;
 
   /**
@@ -55,8 +58,8 @@ public class RequestInfo {
     this.replicaId = replicaId;
     this.chargeable = chargeable;
     this.requestCreateTime = creationTime;
-    this.networkTimeOutMs.set(networkTimeOutMs);
-    this.finalTimeOutMs.set(finalTimeOutMs);
+    this.networkTimeOutMs = networkTimeOutMs;
+    this.finalTimeOutMs = finalTimeOutMs;
   }
 
   /**
@@ -177,24 +180,24 @@ public class RequestInfo {
   }
 
   /**
-   * @return the time to wait for response from server.
+   * @return the time to wait for response once this request is sent to server.
    */
   public long getNetworkTimeOutMs() {
-    return networkTimeOutMs.get();
+    return networkTimeOutMs;
   }
 
   /**
-   * Increase the time to wait for response from server.
+   * Increases the time to wait for response from server.
    * @param delta time in milliseconds.
    */
   public void incrementNetworkTimeOutMs(long delta) {
-    networkTimeOutMs.getAndAdd(delta);
+    networkTimeOutMs += delta;
   }
 
   /**
-   * @return the overall wait time for a request in router.
+   * @return the overall wait time for this request in router.
    */
   public long getFinalTimeOutMs() {
-    return finalTimeOutMs.get();
+    return finalTimeOutMs;
   }
 }
