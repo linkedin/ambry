@@ -45,6 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -81,9 +82,10 @@ public class DiskManager {
   private final MessageStoreHardDelete hardDelete;
   private final List<String> unexpectedDirs = new ArrayList<>();
   private final AccountService accountService;
+  private final DiskManagerConfig diskManagerConfig;
   private boolean running = false;
   private DiskHealthStatus diskHealthStatus = DiskHealthStatus.UNKNOWN_HEALTH;
-  public final DiskHealthCheck diskHealthCheck;
+  private final DiskHealthCheck diskHealthCheck;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -113,6 +115,7 @@ public class DiskManager {
       Set<String> stoppedReplicas, Time time, AccountService accountService) {
     this.disk = disk;
     this.storeConfig = storeConfig;
+    this.diskManagerConfig = diskManagerConfig;
     this.scheduler = scheduler;
     this.metrics = metrics;
     this.storeMainMetrics = storeMainMetrics;
@@ -127,8 +130,7 @@ public class DiskManager {
     File reserveFileDir = new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName);
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling, reserveFileDir,
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
-    diskHealthCheck = new DiskHealthCheck(diskManagerConfig.diskManagerDiskHealthCheckIntervalSeconds,
-        diskManagerConfig.diskManagerDiskHealthCheckOperationTimeoutSeconds,
+    diskHealthCheck = new DiskHealthCheck(diskManagerConfig.diskManagerDiskHealthCheckOperationTimeoutSeconds,
         diskManagerConfig.diskManagerDiskHealthCheckEnabled,
         disk.getMountPath() + diskManagerConfig.diskManagerDiskHealthCheckFilePath);
     this.replicaStatusDelegates = replicaStatusDelegates;
@@ -202,7 +204,7 @@ public class DiskManager {
       running = true;
       if(diskHealthCheck.isEnabled()) {
         scheduler.scheduleAtFixedRate(() -> diskHealthCheck.diskHealthTest(), 0,
-            diskHealthCheck.intervalSeconds,TimeUnit.SECONDS);
+            diskManagerConfig.diskManagerDiskHealthCheckIntervalSeconds,TimeUnit.SECONDS);
       }
     } catch (StoreException e) {
       logger.error("Error while starting the DiskManager for {} ; no stores will be accessible on this disk.",
@@ -597,14 +599,12 @@ public class DiskManager {
     Manages the disk healthchecking tasks such as creating,writing, reading, and deleting a file
    */
   private class DiskHealthCheck{
-    private final int intervalSeconds;             //time between checking the state of the disk
     private final int operationTimeoutSeconds;      //how long a read/write operation is allotted
     private final boolean enabled;                  //enabled healthchecking
-    private final String heathcheckDir;                //filepath of where the file will be created
+    private final String heathcheckDir;             //filepath of where the file will be created
 
 
-    DiskHealthCheck(int intervalSeconds, int operationTimeoutSeconds, boolean enabled, String heathcheckDir){
-      this.intervalSeconds = intervalSeconds;
+    DiskHealthCheck(int operationTimeoutSeconds, boolean enabled, String heathcheckDir){
       this.enabled = enabled;
       this.heathcheckDir = heathcheckDir;
       this.operationTimeoutSeconds = operationTimeoutSeconds;
@@ -628,8 +628,9 @@ public class DiskManager {
       if(fileChannel.isOpen()){
         try{
           fileChannel.close();
-        }catch(IOException e_io){
+        }catch(IOException e){
           diskHealthStatus = diskHealthStatus.DELETE_IO_EXCEPTION;
+          logger.error("Exception occurred when deleting a file for disk healthcheck", e);
           return false;
         }
       }
@@ -643,7 +644,6 @@ public class DiskManager {
      * 3. Writes today's date to disk
      * 4. Read and compares what was written to disk
      * 5. Deletes the file
-     * @return True/False depending on the close/delete was successful
      */
     public void diskHealthTest(){
       if(!enabled){ return;} //ensures disk checks are enabled
@@ -652,28 +652,22 @@ public class DiskManager {
       File dir = new File(heathcheckDir);
       if (!dir.exists()) dir.mkdirs();
 
-      //Checks if there is enough space for the file's content
-      String todayDate = new SimpleDateFormat("yyyy-mm-dd hh:mm:ss").format(Calendar.getInstance().getTime());
-      if( new File(heathcheckDir).getFreeSpace() < todayDate.getBytes().length){
-        diskHealthStatus = DiskHealthStatus.INSUFFICIENT_SPACE;
-        return;
-      }
-
       //Creates and opens the file
       AsynchronousFileChannel fileChannel;
       try {
-        Path path = Paths.get(heathcheckDir + "temp");
-        path.toFile().createNewFile();
+        Path path = Paths.get(heathcheckDir,"temp");
         fileChannel =
             AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,
                 StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
         fileChannel.force(true); //writes to disk immediately
       }catch(IOException e){
         diskHealthStatus = DiskHealthStatus.CREATE_IO_EXCEPTION;
+        logger.error("Exception occurred when creating a file for disk healthcheck", e);
         return;
       }
 
       //Finds today's date and stores it
+      String todayDate = new SimpleDateFormat("yyyy-mm-dd hh:mm:ss").format(Calendar.getInstance().getTime());
       ByteBuffer buffer = ByteBuffer.allocate(todayDate.getBytes().length);
       buffer.put(todayDate.getBytes());
       buffer.flip();
@@ -682,10 +676,16 @@ public class DiskManager {
       Future<Integer> writeOperation = fileChannel.write(buffer, 0);
       try{
         writeOperation.get(operationTimeoutSeconds,TimeUnit.SECONDS);
+      }catch(TimeoutException e){
+        writeOperation.cancel(true);
+        diskHealthStatus = DiskHealthStatus.WRITE_TIMEOUT;
+        logger.error("Timeout Exception occurred when writing to a file for disk healthcheck", e);
+        deleteFile(fileChannel);
+        return;
       }catch(Exception e){
         writeOperation.cancel(true);
-        diskHealthStatus = e instanceof IOException ? DiskHealthStatus.WRITE_IO_EXCEPTION :
-            DiskHealthStatus.WRITE_TIMEOUT;
+        diskHealthStatus = DiskHealthStatus.WRITE_EXCEPTION;
+        logger.error("Exception occurred when writing to a file for disk healthcheck", e);
         deleteFile(fileChannel);
         return;
       }
@@ -696,10 +696,16 @@ public class DiskManager {
 
       try{
         readOperation.get(operationTimeoutSeconds,TimeUnit.SECONDS);
+      }catch(TimeoutException e){
+        readOperation.cancel(true);
+        diskHealthStatus = DiskHealthStatus.READ_TIMEOUT;
+        logger.error("Timeout Exception occurred when reading from a file for disk healthcheck", e);
+        deleteFile(fileChannel);
+        return;
       }catch(Exception e){
         readOperation.cancel(true);
-        diskHealthStatus = e instanceof IOException ? DiskHealthStatus.READ_IO_EXCEPTION :
-            DiskHealthStatus.READ_TIMEOUT;
+        diskHealthStatus = DiskHealthStatus.READ_EXCEPTION;
+        logger.error("Exception occurred when reading from a file for disk healthcheck", e);
         deleteFile(fileChannel);
         return;
       }

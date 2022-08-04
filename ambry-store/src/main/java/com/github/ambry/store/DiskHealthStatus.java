@@ -34,14 +34,14 @@ public enum DiskHealthStatus {
   /** The Disk's healthcheck encountered a timeout when writing to disk */
   WRITE_TIMEOUT,
 
-  /** The Disk's healthcheck encountered an io exception when writing to disk */
-  WRITE_IO_EXCEPTION,
+  /** The Disk's healthcheck encountered any other exception when writing to disk */
+  WRITE_EXCEPTION,
 
   /** The Disk's healthcheck encountered a timeout when reading from disk */
   READ_TIMEOUT,
 
-  /** The Disk's healthcheck encountered an io exception when reading from disk */
-  READ_IO_EXCEPTION,
+  /** The Disk's healthcheck encountered any other exception when reading from disk */
+  READ_EXCEPTION,
 
   /** The Disk's healthcheck reads a different value than what was expected */
   READ_DIFFERENT,
