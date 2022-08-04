@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -109,6 +110,8 @@ class SimpleOperationTracker implements OperationTracker {
   private int allReplicaCount = 0;
   private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
   private final List<ReplicaId> allReplicas;
+  private final BlobId blobId;
+
 
   /**
    * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
@@ -146,12 +149,53 @@ class SimpleOperationTracker implements OperationTracker {
    */
   SimpleOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
       String originatingDcName, boolean shuffleReplicas, NonBlockingRouterMetrics routerMetrics) {
+    this(routerConfig, routerOperation, partitionId, originatingDcName, shuffleReplicas, routerMetrics, null);
+  }
+
+  /**
+   * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
+   * use eligible replicas to populate replica pool. ("eligible" replicas are those in required states for specific
+   * operation)
+   * Following are different types of operation and their eligible replica states:
+   *  ---------------------------------------------------------
+   * |  Operation Type  |        Eligible Replica State        |
+   *  ---------------------------------------------------------
+   * |      PUT         | STANDBY, LEADER                      |
+   * |      GET         | STANDBY, LEADER, BOOTSTRAP, INACTIVE |
+   * |    DELETE        | STANDBY, LEADER, BOOTSTRAP           |
+   * |   TTLUpdate      | STANDBY, LEADER, BOOTSTRAP           |
+   * |   UNDELETE       | STANDBY, LEADER, BOOTSTRAP           |
+   *  ---------------------------------------------------------
+   * Following are dynamic configs when replica state is taken into consideration: (N is number of eligible replicas)
+   *  -----------------------------------------------------------------------
+   * |  Operation Type  |        Parallelism              |  Success Target  |
+   *  -----------------------------------------------------------------------
+   * |     GET          | 1~2 decided by adaptive tracker |         1        |
+   * |     PUT          |           N                     |       N - 1      |
+   * |    DELETE        |          3~N                    |         2        |
+   * |   TTLUpdate      |          3~N                    |         2        |
+   * |   UNDELETE       |          3~N                    |  Global Quorum   |
+   *  -----------------------------------------------------------------------
+   *  Note: for now, we still use 3 as parallelism for DELETE/TTLUpdate/UNDELETE even though there are N eligible replicas, this
+   *        can be adjusted to any number between 3 and N (inclusive)
+   *        For Undelete, it needs to reach global quorum to succeed. A dedicated operation tracker is created to check that.
+   * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
+   * @param routerOperation The {@link RouterOperation} which {@link SimpleOperationTracker} is associated with.
+   * @param partitionId The partition on which the operation is performed.
+   * @param originatingDcName The original DC where blob was put.
+   * @param shuffleReplicas Indicates if the replicas need to be shuffled.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to use.
+   * @param blobId The {@link BlobId}, if available, for the operation.
+   */
+  SimpleOperationTracker(RouterConfig routerConfig, RouterOperation routerOperation, PartitionId partitionId,
+      String originatingDcName, boolean shuffleReplicas, NonBlockingRouterMetrics routerMetrics, BlobId blobId) {
     // populate tracker parameters based on operation type
     this.routerConfig = routerConfig;
     this.routerOperation = routerOperation;
     this.originatingDcName = originatingDcName;
     this.partitionId = partitionId;
     this.routerMetrics = routerMetrics;
+    this.blobId = blobId;
     datacenterName = routerConfig.routerDatacenterName;
     cloudReplicaSuccessTarget = routerConfig.routerCloudSuccessTarget;
     cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
@@ -395,9 +439,9 @@ class SimpleOperationTracker implements OperationTracker {
           "Terminating {} on {} due to Not_Found failure on some originatingDc replicas and some other originatingDc"
               + "replicas being offline. Originating Not_Found count: {}, failure threshold: {},"
               + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
-              + "diskReplicaSuccessTarget: {}", routerOperation.name(), partitionId, originatingDcNotFoundCount,
+              + "diskReplicaSuccessTarget: {} {}", routerOperation.name(), partitionId, originatingDcNotFoundCount,
           originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount, originatingDcTotalReplicaCount,
-          diskReplicaSuccessTarget);
+          diskReplicaSuccessTarget, getBlobIdLog());
       routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
       return true;
     }
@@ -406,9 +450,9 @@ class SimpleOperationTracker implements OperationTracker {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
               + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-              + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {}",
+              + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {} {}",
           routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-          diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount);
+          diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, getBlobIdLog());
       routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
       return true;
     }
@@ -424,9 +468,9 @@ class SimpleOperationTracker implements OperationTracker {
       logger.info(
           "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {},"
               + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
-              + "diskReplicaSuccessTarget: {}, allReplicaCount: {}", routerOperation.name(), partitionId,
+              + "diskReplicaSuccessTarget: {}, allReplicaCount: {} {}", routerOperation.name(), partitionId,
           originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount,
-          originatingDcTotalReplicaCount, diskReplicaSuccessTarget, allReplicaCount);
+          originatingDcTotalReplicaCount, diskReplicaSuccessTarget, allReplicaCount, getBlobIdLog());
       routerMetrics.failedOnOriginatingDcNotFoundCount.inc();
       return true;
     }
@@ -437,8 +481,9 @@ class SimpleOperationTracker implements OperationTracker {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found. CrossColoEnabled: {}, DiskDownCount: {},"
               + "TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {},"
-              + "allReplicaCount: {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
-          totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount);
+              + "allReplicaCount: {} {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
+          totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount,
+          getBlobIdLog());
       routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
     }
@@ -668,6 +713,14 @@ class SimpleOperationTracker implements OperationTracker {
 
   int getSuccessCount() {
     return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaSuccessCount : diskReplicaSuccessCount;
+  }
+
+  /**
+   * Returns string to for logging {@code BlobId}, if the blob id if not {@code null}.
+   * @return string to for logging {@code BlobId}. Returns empty string if the blob id is {@code null}.
+   */
+  private final String getBlobIdLog() {
+    return (blobId == null) ? "" : String.format(", BlobId: %s", blobId.toString());
   }
 
   /**
