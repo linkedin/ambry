@@ -780,7 +780,7 @@ class GetBlobOperation extends GetOperation {
       offset = chunkMetadata.getOffset();
       chunkSize = chunkMetadata.getSize();
       chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition(), chunkBlobId.getDatacenterId(),
-          RouterOperation.GetBlobOperation);
+          RouterOperation.GetBlobOperation, chunkBlobId);
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
       initializedTimeMs = System.currentTimeMillis();

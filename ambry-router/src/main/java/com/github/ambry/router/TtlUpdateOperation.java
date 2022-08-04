@@ -98,7 +98,7 @@ class TtlUpdateOperation {
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
-            originatingDcName, false, routerMetrics);
+            originatingDcName, false, routerMetrics, blobId);
     this.quotaChargeCallback = quotaChargeCallback;
     this.operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);

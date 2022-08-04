@@ -101,7 +101,8 @@ class GetBlobInfoOperation extends GetOperation {
     this.routerCallback = routerCallback;
     this.quotaChargeCallback = quotaChargeCallback;
     operationTracker =
-        getOperationTracker(blobId.getPartition(), blobId.getDatacenterId(), RouterOperation.GetBlobInfoOperation);
+        getOperationTracker(blobId.getPartition(), blobId.getDatacenterId(), RouterOperation.GetBlobInfoOperation,
+            blobId);
     progressTracker = new ProgressTracker(operationTracker);
     operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);

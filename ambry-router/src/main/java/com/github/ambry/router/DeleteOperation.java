@@ -105,7 +105,7 @@ class DeleteOperation {
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.DeleteOperation, blobId.getPartition(),
-            originatingDcName, false, routerMetrics);
+            originatingDcName, false, routerMetrics, blobId);
     operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
   }

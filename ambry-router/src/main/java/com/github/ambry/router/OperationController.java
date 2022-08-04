@@ -362,6 +362,7 @@ public class OperationController implements Runnable {
   private void doUpdateTtlOperation(List<String> blobIdStrs, final String serviceId, long expiresAtMs,
       FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     try {
+      logger.trace("Updatettl for blob {} with chunkids {}", blobIdStrs.get(0), blobIdStrs);
       ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback,
           quotaChargeCallback);
       routerCallback.onPollReady();
