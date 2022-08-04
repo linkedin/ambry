@@ -597,10 +597,10 @@ public class DiskManager {
     Manages the disk healthchecking tasks such as creating,writing, reading, and deleting a file
    */
   private class DiskHealthCheck{
-    private int intervalSeconds;             //time between checking the state of the disk
+    private final int intervalSeconds;             //time between checking the state of the disk
     private final int operationTimeoutSeconds;      //how long a read/write operation is allotted
     private final boolean enabled;                  //enabled healthchecking
-    private String heathcheckDir;                //filepath of where the file will be created
+    private final String heathcheckDir;                //filepath of where the file will be created
 
 
     DiskHealthCheck(int intervalSeconds, int operationTimeoutSeconds, boolean enabled, String heathcheckDir){
