@@ -57,6 +57,7 @@ public class Http2NetworkClient implements NetworkClient {
   private final Http2ClientConfig http2ClientConfig;
   private final Http2StreamFrameToHttpObjectCodec http2StreamFrameToHttpObjectCodec;
   private final AmbrySendToHttp2Adaptor ambrySendToHttp2Adaptor;
+  private final RequestsStatsHandler requestsStatsHandler;
   private final Map<Integer, Channel> correlationIdInFlightToChannelMap;
   static final AttributeKey<RequestInfo> REQUEST_INFO = AttributeKey.newInstance("RequestInfo");
 
@@ -67,6 +68,7 @@ public class Http2NetworkClient implements NetworkClient {
     this.http2ClientStreamStatsHandler = new Http2ClientStreamStatsHandler(http2ClientMetrics);
     this.http2StreamFrameToHttpObjectCodec = new Http2StreamFrameToHttpObjectCodec(false);
     this.ambrySendToHttp2Adaptor = new AmbrySendToHttp2Adaptor(false, http2ClientConfig.http2FrameMaxSize);
+    this.requestsStatsHandler = new RequestsStatsHandler(http2ClientMetrics);
     this.pools = new Http2ChannelPoolMap(sslFactory, eventLoopGroup, http2ClientConfig, http2ClientMetrics,
         new StreamChannelInitializer());
     this.http2ClientMetrics = http2ClientMetrics;
@@ -127,6 +129,10 @@ public class Http2NetworkClient implements NetworkClient {
                 logger.debug("Stream {} {} not writable. BytesBeforeWritable {} {}", streamChannel.hashCode(),
                     streamChannel, streamChannel.bytesBeforeWritable(), streamChannel.parent().bytesBeforeWritable());
               }
+
+              // Set approximate additional time that may be needed for the response when under heavy load.
+              increaseTimeoutForRequestIfNeeded(requestInfo, streamInitiateTime, streamAcquiredTime);
+
               streamChannel.writeAndFlush(requestInfo.getRequest()).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -241,6 +247,15 @@ public class Http2NetworkClient implements NetworkClient {
 
   }
 
+  private void increaseTimeoutForRequestIfNeeded(RequestInfo requestInfo, long streamInitiateTime,
+      long streamAcquiredTime) {
+    long inFlightRequestCount = requestsStatsHandler.getInFlightRequestCount();
+    long additionalRequestTimeOutMs = (streamAcquiredTime - streamInitiateTime) + (
+        (inFlightRequestCount / http2ClientConfig.http2RequestCountForScalingTimeout)
+            * http2ClientConfig.http2RequestAdditionalTimeoutMs);
+    requestInfo.incrementNetworkTimeOutMs(additionalRequestTimeOutMs);
+  }
+
   private class StreamChannelInitializer extends ChannelInitializer {
 
     public void initChannel(Channel channel) {
@@ -248,8 +263,10 @@ public class Http2NetworkClient implements NetworkClient {
       // TODO: implement ourselves' aggregator. Http2Streams to Response Object
       channel.pipeline().addLast(http2StreamFrameToHttpObjectCodec);
       channel.pipeline().addLast(new HttpObjectAggregator(http2ClientConfig.http2MaxContentLength));
-      channel.pipeline().addLast(http2ClientResponseHandler);
       channel.pipeline().addLast(ambrySendToHttp2Adaptor);
+      // Add requests stats handler before response handler since the latter closes the channel after processing the message.
+      channel.pipeline().addLast(requestsStatsHandler);
+      channel.pipeline().addLast(http2ClientResponseHandler);
       // We log hashCode because frame id is -1 at this time.
       logger.trace("Handlers added to channel: {} {} ", channel.hashCode(), channel);
     }

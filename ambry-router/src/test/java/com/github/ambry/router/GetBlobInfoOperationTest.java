@@ -49,6 +49,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -337,6 +338,69 @@ public class GetBlobInfoOperationTest {
       }
       time.sleep(routerConfig.routerRequestNetworkTimeoutMs + 1);
       op.poll(requestRegistrationCallback);
+      count++;
+    }
+
+    Assert.assertEquals("Mismatch in expected number of polls",
+        (int) Math.ceil((double) replicasCount / requestParallelism), count);
+    // At this time requests would have been created for all replicas, as none of them were delivered,
+    // and cross-colo proxying is enabled by default.
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+        correlationIdToGetOperation.size());
+    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
+    // test that time out response shouldn't update the Histogram if exclude timeout is enabled
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    AdaptiveOperationTracker tracker = (AdaptiveOperationTracker) op.getOperationTrackerInUse();
+    Assert.assertEquals("Timed-out response shouldn't be counted into local colo latency histogram", 0,
+        tracker.getLatencyHistogram(localReplica).getCount());
+    Assert.assertEquals("Timed-out response shouldn't be counted into cross colo latency histogram", 0,
+        tracker.getLatencyHistogram(remoteReplica).getCount());
+  }
+
+  /**
+   * Test the case where all requests dynamically time out at network layer within the GetOperation.
+   */
+  @Test
+  public void testNetworkRequestDynamicTimeoutAllFailure() {
+    NonBlockingRouter.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback);
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
+    requestRegistrationCallback.setRequestsToDrop(new HashSet<>());
+    op.poll(requestRegistrationCallback);
+    int count = 0;
+    int deltaTimeOut = routerConfig.routerRequestNetworkTimeoutMs / 10;
+
+    while (!op.isOperationComplete()) {
+      int numRequestsToDrop = 0;
+      for (RequestInfo requestInfo : requestRegistrationCallback.getRequestsToSend()) {
+        requestInfo.setRequestEnqueueTime(time.milliseconds());
+        requestInfo.incrementNetworkTimeOutMs(deltaTimeOut);
+        numRequestsToDrop++;
+      }
+
+      // Sleep for duration < timeout and poll
+      time.sleep(routerConfig.routerRequestNetworkTimeoutMs);
+      requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
+      requestRegistrationCallback.setRequestsToDrop(new HashSet<>());
+      op.poll(requestRegistrationCallback);
+      Assert.assertTrue("No additional requests must be polled since existing requests haven't timed out",
+          requestRegistrationCallback.getRequestsToSend().isEmpty());
+      Assert.assertTrue("No requests should be timed out yet",
+          requestRegistrationCallback.getRequestsToDrop().isEmpty());
+
+      // Sleep for additional time out duration and poll
+      time.sleep(deltaTimeOut + 1);
+      op.poll(requestRegistrationCallback);
+      if (!op.isOperationComplete()) {
+        Assert.assertFalse("Next set of requests must be polled",
+            requestRegistrationCallback.getRequestsToSend().isEmpty());
+      }
+      Assert.assertEquals("Mismatch in requests to be dropped", numRequestsToDrop,
+          requestRegistrationCallback.getRequestsToDrop().size());
       count++;
     }
 

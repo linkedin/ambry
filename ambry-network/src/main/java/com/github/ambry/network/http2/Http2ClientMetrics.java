@@ -21,6 +21,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.EventLoopGroup;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -117,7 +118,12 @@ public class Http2ClientMetrics {
   }
 
   void registerNettyPendingTasksGauge(EventLoopGroup eventLoopGroup) {
-    Gauge<Long> pendingTasksGetter =  () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
+    Gauge<Long> pendingTasksGetter = () -> Utils.getNumberOfPendingTasks(eventLoopGroup);
     registry.register(MetricRegistry.name(Http2NetworkClient.class, "NettyPendingTasks"), pendingTasksGetter);
+  }
+
+  public void registerInFlightRequestCount(AtomicLong inFlightRequests) {
+    Gauge<Long> inFlightRequestsCount = inFlightRequests::get;
+    registry.gauge(MetricRegistry.name(Http2NetworkClient.class, "InFlightRequestsCount"), () -> inFlightRequestsCount);
   }
 }

@@ -190,14 +190,14 @@ public class RouterConfig {
    * Timeout for requests waiting at the router layer.
    */
   @Config(ROUTER_REQUEST_TIMEOUT_MS)
-  @Default("4000")
+  @Default("20000")
   public final int routerRequestTimeoutMs;
 
   /**
    * Timeout for requests waiting at the network layer.
    */
   @Config(ROUTER_REQUEST_NETWORK_TIMEOUT_MS)
-  @Default("2000")
+  @Default("10000")
   public final int routerRequestNetworkTimeoutMs;
 
   /**

@@ -30,8 +30,8 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,12 +55,12 @@ public class UndeleteOperation {
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final Map<Integer, RequestInfo> undeleteRequestInfos = new TreeMap<>();
+  private final Map<Integer, RequestInfo> undeleteRequestInfos = new LinkedHashMap<>();
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
-  private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
+  private final AtomicReference<Exception> operationException = new AtomicReference<>();
   // Quota charger for this operation.
   private final OperationQuotaCharger operationQuotaCharger;
   // Denotes whether the operation is complete.
@@ -128,7 +128,8 @@ public class UndeleteOperation {
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       UndeleteRequest undeleteRequest = createUndeleteRequest();
       RequestInfo requestInfo =
-          new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger, time.milliseconds());
+          new RequestInfo(hostname, port, undeleteRequest, replica, operationQuotaCharger, time.milliseconds(),
+              routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
       undeleteRequestInfos.put(undeleteRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
@@ -284,7 +285,7 @@ public class UndeleteOperation {
       // throttling, etc) for long time, drop the request.
       long currentTimeInMs = time.milliseconds();
       RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+          RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
       if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
         iter.remove();
         LOGGER.warn("Undelete request with correlationid {} in flight has expired for replica {} due to {}",
@@ -296,8 +297,17 @@ public class UndeleteOperation {
             RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
       } else {
-        // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
-        break;
+        // Note: Even though the requests are ordered by correlation id and their creation time, we cannot break out of
+        // the while loop here. This is because time outs for all requests may not be equal now.
+
+        // For example, request 1 in the map may have been assigned high time out since it might be sent at a
+        // time when the load is high and request 2 may have been assigned lower time out value since the load might have
+        // decreased by the time it is sent out. In this case, we should continue iterating the loop and clean up
+        // request 2 in the map.
+
+        // The cost of iterating all entries should be okay since the map contains outstanding requests whose number
+        // should be small. The maximum outstanding requests possible would be equal to the operation parallelism value
+        // and may be few more if adaptive operation tracker is used.
       }
     }
   }

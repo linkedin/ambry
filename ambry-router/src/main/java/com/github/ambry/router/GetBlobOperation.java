@@ -58,10 +58,10 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -213,8 +213,8 @@ class GetBlobOperation extends GetOperation {
     if (firstChunk.shouldSaveMetadata()) {
       BlobMetadata blobMetadata = new BlobMetadata(blobId.toString(), blobInfo, compositeBlobInfo);
       putResult = blobMetadataCache.putObject(blobMetadata.getBlobId(), blobMetadata);
-      logger.debug("[{}] Issued save-metadata for blobId = {}, result = {}", blobMetadata.getBlobId(),
-          blobId, putResult);
+      logger.debug("[{}] Issued save-metadata for blobId = {}, result = {}", blobMetadata.getBlobId(), blobId,
+          putResult);
     }
     return putResult;
   }
@@ -229,8 +229,8 @@ class GetBlobOperation extends GetOperation {
       return false;
     }
     boolean deleteResult = blobMetadataCache.deleteObject(blobId.toString());
-    logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = {}, result = {}", blobMetadataCache.getCacheId(),
-        blobId, reason, deleteResult);
+    logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = {}, result = {}",
+        blobMetadataCache.getCacheId(), blobId, reason, deleteResult);
     return deleteResult;
   }
 
@@ -676,7 +676,7 @@ class GetBlobOperation extends GetOperation {
    */
   private class GetChunk {
     // map of correlation id to the request metadata for every request issued for this operation.
-    protected final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new TreeMap<>();
+    protected final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new LinkedHashMap<>();
     // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
     protected ProgressTracker progressTracker;
     // DecryptCallBackResultInfo that holds all info about decrypt job callback
@@ -898,7 +898,7 @@ class GetBlobOperation extends GetOperation {
         // throttling, etc) for long time, drop the request.
         long currentTimeInMs = time.milliseconds();
         RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
         if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
           logger.trace("GetBlobRequest with correlationId {} in flight has expired for replica {} due to {} ",
               correlationId, requestInfo.getReplicaId().getDataNodeId(), routerRequestExpiryReason.name());
@@ -911,8 +911,17 @@ class GetBlobOperation extends GetOperation {
           requestRegistrationCallback.registerRequestToDrop(correlationId);
           inFlightRequestsIterator.remove();
         } else {
-          // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
-          break;
+          // Note: Even though the requests are ordered by correlation id and their creation time, we cannot break out of
+          // the while loop here. This is because time outs for all requests may not be equal now.
+
+          // For example, request 1 in the map may have been assigned high time out since it might be sent at a
+          // time when the load is high and request 2 may have been assigned lower time out value since the load might have
+          // decreased by the time it is sent out. In this case, we should continue iterating the loop and clean up
+          // request 2 in the map.
+
+          // The cost of iterating all entries should be okay since the map contains outstanding requests whose number
+          // should be small. The maximum outstanding requests possible would be equal to the operation parallelism value
+          // and may be few more if adaptive operation tracker is used.
         }
       }
     }
@@ -929,7 +938,8 @@ class GetBlobOperation extends GetOperation {
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
         RequestInfo requestInfo =
-            new RequestInfo(hostname, port, getRequest, replicaId, prepareQuotaCharger(), time.milliseconds());
+            new RequestInfo(hostname, port, getRequest, replicaId, prepareQuotaCharger(), time.milliseconds(),
+                routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, requestInfo);
         correlationIdToGetChunk.put(correlationId, this);

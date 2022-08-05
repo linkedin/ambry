@@ -58,6 +58,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -1042,7 +1043,7 @@ class PutOperation {
     // the list of partitions already attempted for this chunk.
     private List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // map of correlation id to the request metadata for every request issued for the current chunk.
-    private final Map<Integer, RequestInfo> correlationIdToChunkPutRequestInfo = new TreeMap<>();
+    private final Map<Integer, RequestInfo> correlationIdToChunkPutRequestInfo = new LinkedHashMap<>();
     // list of buffers that were once associated with this chunk and are not yet freed.
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
     // Tracks quota charging for this chunk.
@@ -1455,7 +1456,7 @@ class PutOperation {
         // throttling, etc) for long time, drop the request.
         long currentTimeInMs = time.milliseconds();
         RouterUtils.RouterRequestExpiryReason routerRequestExpiryReason =
-            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs, routerConfig);
+            RouterUtils.isRequestExpired(requestInfo, currentTimeInMs);
         if (routerRequestExpiryReason != RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT) {
           onErrorResponse(requestInfo.getReplicaId(), TrackedRequestFinalState.FAILURE);
           logger.warn("{}: PutRequest with correlationId {} in flight has expired for replica {} {} due to {} ",
@@ -1469,8 +1470,17 @@ class PutOperation {
           requestRegistrationCallback.registerRequestToDrop(correlationId);
           inFlightRequestsIterator.remove();
         } else {
-          // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
-          break;
+          // Note: Even though the requests are ordered by correlation id and their creation time, we cannot break out of
+          // the while loop here. This is because time outs for all requests may not be equal now.
+
+          // For example, request 1 in the map may have been assigned high time out since it might be sent at a
+          // time when the load is high and request 2 may have been assigned lower time out value since the load might have
+          // decreased by the time it is sent out. In this case, we should continue iterating the loop and clean up
+          // request 2 in the map.
+
+          // The cost of iterating all entries should be okay since the map contains outstanding requests whose number
+          // should be small. The maximum outstanding requests possible would be equal to the operation parallelism value
+          // and may be few more if adaptive operation tracker is used.
         }
       }
     }
@@ -1486,7 +1496,8 @@ class PutOperation {
         Port port = RouterUtils.getPortToConnectTo(replicaId, routerConfig.routerEnableHttp2NetworkClient);
         PutRequest putRequest = createPutRequest();
         RequestInfo requestInfo =
-            new RequestInfo(hostname, port, putRequest, replicaId, prepareQuotaCharger(), time.milliseconds());
+            new RequestInfo(hostname, port, putRequest, replicaId, prepareQuotaCharger(), time.milliseconds(),
+                routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo.put(correlationId, requestInfo);
         correlationIdToPutChunk.put(correlationId, this);
