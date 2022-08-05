@@ -294,9 +294,9 @@ class SimpleOperationTracker implements OperationTracker {
 
     LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
-    if (shuffleReplicas) {
-      Collections.shuffle(replicas);
-    }
+//    if (shuffleReplicas) {
+//      Collections.shuffle(replicas);
+//    }
 
     // The priority here is local dc replicas, originating dc replicas, other dc replicas, down replicas.
     // To improve read-after-write performance across DC, we prefer to take local and originating replicas only,

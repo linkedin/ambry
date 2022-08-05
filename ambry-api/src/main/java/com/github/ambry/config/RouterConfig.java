@@ -613,6 +613,10 @@ public class RouterConfig {
   public final int routerMaxNumMetadataCacheEntries;
   public static final int MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT = 10;
 
+  @Config("router.get.chunkId.enabled")
+  @Default("false")
+  public final boolean routerGetChunkIdEnabled;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -748,5 +752,6 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS, false);
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
+    routerGetChunkIdEnabled = verifiableProperties.getBoolean("router.get.chunkId.enabled", false);
   }
 }

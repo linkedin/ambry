@@ -58,6 +58,7 @@ class NonBlockingRouter implements Router {
   private final BackgroundDeleter backgroundDeleter;
   private final int ocCount;
   // Shared with the operation managers.
+  private final RouterConfig routerConfig;
   private final NonBlockingRouterMetrics routerMetrics;
   private final KeyManagementService kms;
   private final CryptoJobHandler cryptoJobHandler;
@@ -93,6 +94,7 @@ class NonBlockingRouter implements Router {
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
       AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
       throws IOException, ReflectiveOperationException {
+    this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     this.kms = kms;
@@ -235,7 +237,9 @@ class NonBlockingRouter implements Router {
     }
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    GetBlobOptionsInternal internalOptions =
+        new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
+            routerMetrics.ageAtGet);
     routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {
@@ -502,7 +506,7 @@ class NonBlockingRouter implements Router {
         // blob could have been garbage collected and not found at all and so on.
         logger.trace("Encountered exception when attempting to get chunks of a possibly composite deleted blob {} ",
             blobIdStr, exception);
-      } else if (result.getBlobResult != null) {
+      } else if (!routerConfig.routerGetChunkIdEnabled && result.getBlobResult != null) {
         logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
       } else if (result.storeKeys != null) {
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());

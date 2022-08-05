@@ -123,15 +123,15 @@ public class NonBlockingRouterFactory implements RouterFactory {
   @Override
   public Router getRouter() {
     try {
-      AmbryCache blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
-          routerConfig.routerBlobMetadataCacheEnabled,
-          routerConfig.routerMaxNumMetadataCacheEntries,
-          routerMetrics.getMetricRegistry());
-      logger.info("[{}] Smallest blob to qualify for metadata caching = {} bytes",
-          blobMetadataCache.getCacheId(),
-          routerConfig.routerSmallestBlobForMetadataCache);
+//      AmbryCache blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
+//          routerConfig.routerBlobMetadataCacheEnabled,
+//          routerConfig.routerMaxNumMetadataCacheEntries,
+//          routerMetrics.getMetricRegistry());
+//      logger.info("[{}] Smallest blob to qualify for metadata caching = {} bytes",
+//          blobMetadataCache.getCacheId(),
+//          routerConfig.routerSmallestBlobForMetadataCache);
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache);
+          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, null);
     } catch (IOException | ReflectiveOperationException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

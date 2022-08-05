@@ -421,7 +421,12 @@ public class RestUtils {
      * where NON-NEGATIVE_INTEGER is a non-negative integer that represents the index
      * of a segment one wants to GET
      */
-    Segment
+    Segment,
+
+    /**
+     * All Chunk IDs of a composite blob ID returned as content (Admin only).
+     */
+    BlobChunkIds
   }
 
   public static final class MultipartPost {
