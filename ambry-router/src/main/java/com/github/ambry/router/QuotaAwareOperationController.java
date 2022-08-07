@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ResponseHandler;
@@ -51,8 +52,8 @@ public class QuotaAwareOperationController extends OperationController {
   private final Map<QuotaResource, LinkedList<RequestInfo>> readRequestQueue = new HashMap<>();
   private final Map<QuotaResource, LinkedList<RequestInfo>> writeRequestQueue = new HashMap<>();
   private final List<RequestInfo> nonCompliantRequests = new ArrayList<>();
-  private volatile int outOfQuotaRequestsInQueue = 0;
-  private volatile int delayedRequestsInQueue = 0;
+  private volatile int outOfQuotaResourcesInQueue = 0;
+  private volatile int delayedQuotaResourcesInQueue = 0;
 
   /**
    * Constructor for {@link QuotaAwareOperationController} class.
@@ -88,14 +89,20 @@ public class QuotaAwareOperationController extends OperationController {
 
   @Override
   protected void pollForRequests(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop) {
+    Timer.Context timer = null;
     try {
       List<RequestInfo> newRequestsToSend = new ArrayList<>();
       pollNewRequests(newRequestsToSend, requestsToDrop);
+      timer = routerMetrics.totalQuotaQueueingDelay.time();
       addToRequestQueue(newRequestsToSend);
       drainRequestQueue(requestsToSend);
     } catch (Exception e) {
       logger.error("Operation Manager poll received an unexpected error: ", e);
       routerMetrics.operationManagerPollErrorCount.inc();
+    } finally {
+      if (timer != null) {
+        timer.stop();
+      }
     }
   }
 
@@ -120,6 +127,7 @@ public class QuotaAwareOperationController extends OperationController {
    * @param requestInfos {@link List} of {@link RequestInfo} objects.
    */
   private void addToRequestQueue(List<RequestInfo> requestInfos) {
+    Timer.Context timer = routerMetrics.addToQueueTime.time();
     for (RequestInfo requestInfo : requestInfos) {
       QuotaResource quotaResource = null;
       if (requestInfo.getChargeable() != null) {
@@ -132,6 +140,7 @@ public class QuotaAwareOperationController extends OperationController {
       getRequestQueue(requestInfo.getChargeable().getQuotaMethod()).putIfAbsent(quotaResource, new LinkedList<>());
       getRequestQueue(requestInfo.getChargeable().getQuotaMethod()).get(quotaResource).add(requestInfo);
     }
+    timer.stop();
   }
 
   /**
@@ -139,6 +148,7 @@ public class QuotaAwareOperationController extends OperationController {
    * @param requestsToSend a list of {@link RequestInfo} that will contain the requests to be sent out.
    */
   private void drainRequestQueue(List<RequestInfo> requestsToSend) {
+    Timer.Context timer = routerMetrics.drainRequestQueueTime.time();
     int outOfQuotaRequests = 0;
     int delayedRequests = 0;
     for (QuotaMethod quotaMethod : QuotaMethod.values()) {
@@ -148,8 +158,9 @@ public class QuotaAwareOperationController extends OperationController {
       pollQuotaExceedAllowedRequestsIfAny(requestsToSend, queue);
       delayedRequests += queue.size();
     }
-    outOfQuotaRequestsInQueue = outOfQuotaRequests;
-    delayedRequestsInQueue = delayedRequests;
+    outOfQuotaResourcesInQueue = outOfQuotaRequests;
+    delayedQuotaResourcesInQueue = delayedRequests;
+    timer.stop();
   }
 
   /**
@@ -159,6 +170,7 @@ public class QuotaAwareOperationController extends OperationController {
    */
   private void pollQuotaCompliantRequests(List<RequestInfo> requestsToSend,
       Map<QuotaResource, LinkedList<RequestInfo>> requestQueue) {
+    Timer.Context timer = routerMetrics.pollQuotaCompliantRequestTime.time();
     Iterator<Map.Entry<QuotaResource, LinkedList<RequestInfo>>> requestQueueIterator =
         requestQueue.entrySet().iterator();
     while (requestQueueIterator.hasNext()) {
@@ -184,7 +196,9 @@ public class QuotaAwareOperationController extends OperationController {
             break;
           case REJECT:
             quotaAvailable = false;
-            routerMetrics.nonQuotaCompliantRequestRate.mark();
+            logger.warn(
+                "Rejecting request for quota resource {} because of reject recommendation.", quotaResource.toString());
+            routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
             requestQueue.get(quotaResource).removeFirst();
             break;
@@ -194,6 +208,7 @@ public class QuotaAwareOperationController extends OperationController {
         requestQueueIterator.remove();
       }
     }
+    timer.stop();
   }
 
   /**
@@ -203,6 +218,7 @@ public class QuotaAwareOperationController extends OperationController {
    */
   private void pollQuotaExceedAllowedRequestsIfAny(List<RequestInfo> requestsToSend,
       Map<QuotaResource, LinkedList<RequestInfo>> requestQueue) {
+    Timer.Context timer = routerMetrics.pollExceedAllowedRequestTime.time();
     List<QuotaResource> quotaResources = new ArrayList<>(requestQueue.keySet());
     Collections.shuffle(quotaResources);
     while (!requestQueue.isEmpty()) {
@@ -211,12 +227,14 @@ public class QuotaAwareOperationController extends OperationController {
         QuotaAction quotaAction = requestInfo.getChargeable().checkAndCharge(true);
         switch (quotaAction) {
           case ALLOW:
+            routerMetrics.exceedAllowedRequestRate.mark();
             requestsToSend.add(requestInfo);
             break;
           case DELAY:
+            routerMetrics.delayedRequestRate.mark();
             return;
           case REJECT:
-            routerMetrics.nonQuotaCompliantRequestRate.mark();
+            routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
         }
         requestQueue.get(quotaResource).removeFirst();
@@ -225,6 +243,7 @@ public class QuotaAwareOperationController extends OperationController {
         }
       }
     }
+    timer.stop();
   }
 
   @Override
@@ -244,16 +263,18 @@ public class QuotaAwareOperationController extends OperationController {
   }
 
   /**
-   * @return the value of {@code outOfQuotaRequestsInQueue} representing the count of out of quota requests in the queue.
+   * @return the value of {@code outOfQuotaResourcesInQueue} representing the count of out of {@link QuotaResource}s with
+   * requests in the queue.
    */
-  int getOutOfQuotaRequestsInQueue() {
-    return outOfQuotaRequestsInQueue;
+  int getOutOfQuotaResourcesInQueue() {
+    return outOfQuotaResourcesInQueue;
   }
 
   /**
-   * @return the value of {@code delayedRequestsInQueue} representing the count of delayed requests in the queue.
+   * @return the value of {@code delayedResourcesInQueue} representing the count of {@link QuotaResource}s with delayed
+   * requests in the queue.
    */
-  int getDelayedRequestsInQueue() {
-    return delayedRequestsInQueue;
+  int getDelayedQuotaResourcesInQueue() {
+    return delayedQuotaResourcesInQueue;
   }
 }

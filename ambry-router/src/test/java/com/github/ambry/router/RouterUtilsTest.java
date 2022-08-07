@@ -25,13 +25,18 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.Arrays;
+import java.util.Properties;
 import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -158,5 +163,28 @@ public class RouterUtilsTest {
   public void testExtractResponseAndNotifyResponseHandler() {
     ResponseInfo responseInfo = new ResponseInfo(null, true);
     assertNull(RouterUtils.extractResponseAndNotifyResponseHandler(null, null, responseInfo, null, null));
+  }
+
+  @Test
+  public void testIsRequestExpired() {
+    RequestInfo requestInfo = Mockito.mock(RequestInfo.class);
+    Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(true);
+    Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
+    Mockito.when(requestInfo.getNetworkTimeOutMs()).thenReturn(10L);
+    assertEquals(RouterUtils.RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT,
+        RouterUtils.isRequestExpired(requestInfo, 12L));
+
+    Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(false);
+    Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
+    Mockito.when(requestInfo.getRequestCreateTime()).thenReturn(1L);
+    Mockito.when(requestInfo.getFinalTimeOutMs()).thenReturn(10L);
+    assertEquals(RouterUtils.RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT,
+        RouterUtils.isRequestExpired(requestInfo, 12L));
+
+    Mockito.when(requestInfo.isRequestReceivedByNetworkLayer()).thenReturn(false);
+    Mockito.when(requestInfo.getRequestEnqueueTime()).thenReturn(1L);
+    Mockito.when(requestInfo.getRequestCreateTime()).thenReturn(5L);
+    Mockito.when(requestInfo.getFinalTimeOutMs()).thenReturn(10L);
+    assertEquals(RouterUtils.RouterRequestExpiryReason.NO_TIMEOUT, RouterUtils.isRequestExpired(requestInfo, 12L));
   }
 }

@@ -49,7 +49,7 @@ import static com.github.ambry.store.StorageManager.*;
 /**
  * Manages all the stores on a disk.
  */
-class DiskManager {
+public class DiskManager {
 
   private final ConcurrentHashMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();

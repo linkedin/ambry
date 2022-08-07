@@ -30,8 +30,8 @@ import java.util.List;
  */
 public class MessageFormatWriteSet implements MessageWriteSet {
 
-  private final InputStream streamToWrite;
-  private List<MessageInfo> streamInfo;
+  protected final InputStream streamToWrite;
+  protected List<MessageInfo> streamInfo;
 
   public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo, boolean materializeStream)
       throws IOException {

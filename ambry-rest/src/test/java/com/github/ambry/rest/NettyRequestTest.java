@@ -48,6 +48,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
+import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
@@ -103,6 +104,14 @@ public class NettyRequestTest {
 
   public NettyRequestTest() {
     NettyRequest.bufferWatermark = DEFAULT_WATERMARK;
+  }
+
+  @Test
+  public void testOpenssl() throws Exception {
+    Throwable t = OpenSsl.unavailabilityCause();
+    if (t != null) {
+      throw new Exception(t);
+    }
   }
 
   /**

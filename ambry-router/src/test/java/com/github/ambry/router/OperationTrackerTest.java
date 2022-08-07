@@ -875,18 +875,95 @@ public class OperationTrackerTest {
 
     sendRequests(ot, 3, false);
     assertEquals("Should have 3 replicas", 3, inflightReplicas.size());
-    // Send three not found response from originating dc, it will terminate the operation.
-    for (int i = 0; i < 3; i++) {
+    // Send two not found response from originating dc, it will terminate the operation.
+    for (int i = 0; i < 2; i++) {
       ReplicaId replica = inflightReplicas.poll();
-      // fail first 3 requests to local replicas
+      // fail first 2 requests to local replicas
       ot.onResponse(replica, TrackedRequestFinalState.NOT_FOUND);
       assertEquals("Should be originatingDcName DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
-      if (i < 2) {
+      if (i < 1) {
         assertFalse("Operation should not have failed on NOT_FOUND", ot.hasFailedOnNotFound());
       }
     }
     assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
     assertTrue("Operation should be done", ot.isDone());
+  }
+
+  @Test
+  public void originatingDcNotFoundWithReplicaUnavailable() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER) && replicasStateEnabled);
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    datanodes = Collections.singletonList(new MockDataNodeId(portList, mountPaths, "dc-0"));
+    mockPartition = new MockPartitionId();
+    populateReplicaList(3, ReplicaState.STANDBY);
+    localDcName = datanodes.get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    originatingDcName = localDcName;
+    OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 3, RouterOperation.GetBlobOperation, true);
+    sendRequests(ot, 3, false);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not succeed", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
+  }
+
+  @Test
+  public void originatingDcNotFoundWithMoreThanThreeReplicas() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER) && replicasStateEnabled);
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    datanodes = Collections.singletonList(new MockDataNodeId(portList, mountPaths, "dc-0"));
+    mockPartition = new MockPartitionId();
+    populateReplicaList(3, ReplicaState.STANDBY);
+    populateReplicaList(3, ReplicaState.OFFLINE);
+    localDcName = datanodes.get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    originatingDcName = localDcName;
+    OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 6, RouterOperation.GetBlobOperation, true);
+    sendRequests(ot, 6, false);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not succeed", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not succeed", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not succeed", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertTrue("Operation should have failed on NOT_FOUND", ot.hasFailedOnNotFound());
+  }
+
+  /**
+   * Test the case when we don't have enough active replicas in originating DC, then the terminate on NotFound should be disabled
+   */
+  @Test
+  public void originatingDcNotFoundDisableDueToNotEnoughActiveReplicas() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER) && replicasStateEnabled);
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    datanodes = Collections.singletonList(new MockDataNodeId(portList, mountPaths, "dc-0"));
+    mockPartition = new MockPartitionId();
+    // Populate 2 bootstrap replicas and 1 leader replica, we have less than 2 active replicas
+    // Terminate On NotFound in Originating DC should be disabled
+    populateReplicaList(2, ReplicaState.BOOTSTRAP);
+    populateReplicaList(1, ReplicaState.LEADER);
+    localDcName = datanodes.get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    originatingDcName = localDcName;
+    OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 3, RouterOperation.GetBlobOperation, true);
+    sendRequests(ot, 3, false);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not succeed", ot.hasSucceeded());
+    assertFalse("Operation should have not failed on NOT_FOUND", ot.hasFailedOnNotFound());
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+    assertTrue("Operation should succeed", ot.hasSucceeded());
   }
 
   @Test
@@ -1321,21 +1398,21 @@ public class OperationTrackerTest {
                       .mapToInt(l -> l.size())
                       .sum());
               assertEquals(bootStrapCount + standByCount + leaderCount, ot.getReplicasByState(null,
-                  EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER))
+                      EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER))
                   .values()
                   .stream()
                   .mapToInt(l -> l.size())
                   .sum());
               assertEquals(bootStrapCount + standByCount + leaderCount + inactiveCount, ot.getReplicasByState(null,
-                  EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE))
+                      EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE))
                   .values()
                   .stream()
                   .mapToInt(l -> l.size())
                   .sum());
               assertEquals(bootStrapCount + standByCount + leaderCount + inactiveCount + offlineCount,
                   ot.getReplicasByState(null,
-                      EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
-                          ReplicaState.INACTIVE, ReplicaState.OFFLINE))
+                          EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
+                              ReplicaState.INACTIVE, ReplicaState.OFFLINE))
                       .values()
                       .stream()
                       .mapToInt(l -> l.size())

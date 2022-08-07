@@ -74,10 +74,12 @@ class FrontendRestRequestService implements RestRequestService {
   private SecurityService securityService = null;
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
-  private NamedBlobListHandler listNamedBlobsHandler;
+  private NamedBlobListHandler namedBlobListHandler;
+  //private NamedBlobGetHandler namedBlobGetHandler;
+  //private NamedBlobDeleteHandler namedBlobDeleteHandler;
+  private NamedBlobPutHandler namedBlobPutHandler;
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
-  private NamedBlobPutHandler namedBlobPutHandler;
   private TtlUpdateHandler ttlUpdateHandler;
   private DeleteBlobHandler deleteBlobHandler;
   private HeadBlobHandler headBlobHandler;
@@ -157,17 +159,14 @@ class FrontendRestRequestService implements RestRequestService {
     getSignedUrlHandler =
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap);
-    listNamedBlobsHandler =
-        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
+
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager);
+
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
@@ -180,6 +179,13 @@ class FrontendRestRequestService implements RestRequestService {
     undeleteHandler =
         new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
+
+    namedBlobListHandler =
+        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
+    namedBlobPutHandler =
+        new NamedBlobPutHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
+            frontendConfig, frontendMetrics, clusterName, quotaManager);
+
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
@@ -237,8 +243,8 @@ class FrontendRestRequestService implements RestRequestService {
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
-        listNamedBlobsHandler.handle(restRequest, restResponseChannel,
-            ((result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception)));
+        namedBlobListHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         getBlobHandler.handle(requestPath, restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, r, e);
@@ -293,7 +299,7 @@ class FrontendRestRequestService implements RestRequestService {
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      deleteBlobHandler.handle(restRequest, restResponseChannel, requestPath, (r, e) -> {
+      deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
         submitResponse(restRequest, restResponseChannel, null, e);
       });
     };

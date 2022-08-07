@@ -135,7 +135,7 @@ public class OperationController implements Runnable {
             suffix, kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
     getManager =
         new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
-            cryptoJobHandler, time);
+            cryptoJobHandler, time, nonBlockingRouter.getBlobMetadataCache());
     deleteManager =
         new DeleteManager(clusterMap, responseHandler, accountService, notificationSystem, routerConfig, routerMetrics,
             routerCallback, time);
@@ -362,6 +362,7 @@ public class OperationController implements Runnable {
   private void doUpdateTtlOperation(List<String> blobIdStrs, final String serviceId, long expiresAtMs,
       FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     try {
+      logger.trace("Updatettl for blob {} with chunkids {}", blobIdStrs.get(0), blobIdStrs);
       ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback,
           quotaChargeCallback);
       routerCallback.onPollReady();
@@ -467,7 +468,7 @@ public class OperationController implements Runnable {
           responseHandler.onConnectionTimeout(dataNodeId);
         } else {
           if (!responseInfo.isQuotaRejected()) {
-            long responseReceiveTime = requestInfo.getStreamHeaderFrameReceiveTime();
+            long responseReceiveTime = requestInfo.getResponseHeaderReceiveTime();
             if (responseReceiveTime != -1) {
               routerMetrics.responseReceiveToHandleLatencyMs.update(System.currentTimeMillis() - responseReceiveTime);
             }
@@ -518,7 +519,7 @@ public class OperationController implements Runnable {
     // as the poll timeout should not cause the request to not time out for a lot longer than the configured request
     // timeout. In the worst case, the request will time out in (request_timeout_ms + poll_timeout_ms), so the poll
     // timeout should be at least an order of magnitude smaller.
-    final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestTimeoutMs / 10;
+    final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestNetworkTimeoutMs / 10;
     try {
       while (nonBlockingRouter.isOpen.get()) {
         List<RequestInfo> requestsToSend = new ArrayList<>();

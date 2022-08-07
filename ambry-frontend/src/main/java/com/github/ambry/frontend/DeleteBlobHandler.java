@@ -61,15 +61,16 @@ public class DeleteBlobHandler {
     this.quotaManager = quotaManager;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, RequestPath requestPath,
-      Callback<Void> callback) throws RestServiceException {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+      throws RestServiceException {
     RestRequestMetrics requestMetrics =
         metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+    RequestPath requestPath = getRequestPath(restRequest);
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
       accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metrics.deleteBlobMetricsGroup);
     }
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 

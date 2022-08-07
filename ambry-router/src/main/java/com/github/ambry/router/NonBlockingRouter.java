@@ -91,12 +91,17 @@ class NonBlockingRouter implements Router {
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      AccountService accountService, Time time, String defaultPartitionClass)
+      AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
       throws IOException, ReflectiveOperationException {
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     this.kms = kms;
     this.cryptoJobHandler = cryptoJobHandler;
+    /*
+     * Initialize blobMetadata cache before the operation controllers
+     * as it will be passed further down.
+     */
+    this.blobMetadataCache = blobMetadataCache;
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
@@ -122,10 +127,6 @@ class NonBlockingRouter implements Router {
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
     routerMetrics.initializeQuotaOCMetrics(ocList);
-    blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
-        routerConfig.routerBlobMetadataCacheEnabled,
-        routerConfig.routerBlobMetadataCacheMaxSizeBytes,
-        routerMetrics.getMetricRegistry());
   }
 
   /**
@@ -133,6 +134,14 @@ class NonBlockingRouter implements Router {
    */
   Cache<String, Boolean> getNotFoundCache() {
     return notFoundCache;
+  }
+
+  /**
+   * Returns an instance of blob metadata cache.
+   * @return Returns an instance of blobMetadata cache
+   */
+  public AmbryCache getBlobMetadataCache() {
+    return blobMetadataCache;
   }
 
   /**
@@ -502,6 +511,12 @@ class NonBlockingRouter implements Router {
           deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId, quotaChargeCallback));
         }
         initiateBackgroundDeletes(deleteRequests);
+        if (blobMetadataCache != null) {
+          boolean deleteResult = blobMetadataCache.deleteObject(blobIdStr);
+          logger.debug("[{}] Issued delete-metadata for blobId = {}, reason = Background delete operation, result = {}", blobMetadataCache.getCacheId(),
+              blobIdStr, deleteResult);
+
+        }
       }
       currentBackgroundOperationsCount.decrementAndGet();
     };

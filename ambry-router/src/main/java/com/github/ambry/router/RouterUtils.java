@@ -26,6 +26,7 @@ import com.github.ambry.network.LocalNetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetResponse;
@@ -287,5 +288,40 @@ public class RouterUtils {
       receivedResponse = sentResponse;
     }
     return receivedResponse;
+  }
+
+  /**
+   * Checks if the request has expired due to either no response from server or it being stuck in router itself
+   * (unavailable quota, etc.) for a long time.
+   * @param requestInfo of the request.
+   * @param currentTimeInMs current time in msec.
+   * @return RouterRequestExpiryReason representing the reason for request expiry.
+   */
+  public static RouterRequestExpiryReason isRequestExpired(RequestInfo requestInfo, long currentTimeInMs) {
+    if ((requestInfo.isRequestReceivedByNetworkLayer()
+        && currentTimeInMs - requestInfo.getRequestEnqueueTime() > requestInfo.getNetworkTimeOutMs())) {
+      return RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT;
+    } else if (currentTimeInMs - requestInfo.getRequestCreateTime() > requestInfo.getFinalTimeOutMs()) {
+      return RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT;
+    }
+    return RouterRequestExpiryReason.NO_TIMEOUT;
+  }
+
+  /**
+   * {@link Enum} All the reasons for router request expiry.
+   */
+  public enum RouterRequestExpiryReason {
+    /**
+     * No timeout.
+     */
+    NO_TIMEOUT,
+    /**
+     * Network timeout between router and server.
+     */
+    ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT,
+    /**
+     * Request timed out in the router.
+     */
+    ROUTER_REQUEST_TIMEOUT
   }
 }

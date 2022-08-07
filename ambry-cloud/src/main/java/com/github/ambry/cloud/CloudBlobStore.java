@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.FutureUtils;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -54,7 +55,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -137,11 +140,12 @@ class CloudBlobStore implements Store {
   public void start() {
     currentState = ReplicaState.STANDBY;
     started = true;
-    logger.debug("Started store: {}", this.toString());
+    logger.debug("Started store: {}", this);
   }
 
   @Override
   public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
+    // TODO: Remove the duplicate code by calling getAsync() method and wait on it once we verify that download works correctly.
     checkStarted();
     checkStoreKeyDuplicates(ids);
     List<CloudMessageReadSet.BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
@@ -188,17 +192,80 @@ class CloudBlobStore implements Store {
   }
 
   /**
-   * Returns the store info for the given ids asynchronously
+   * Returns the store info for the given ids asynchronously.
    * @param ids The list of ids whose messages need to be retrieved
    * @param storeGetOptions A set of additional options that the store needs to use while getting the message
    * @return a {@link CompletableFuture} that will eventually contain the {@link StoreInfo} for the given ids or the
    *         {@link StoreException} if an error occurred
    */
   public CompletableFuture<StoreInfo> getAsync(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) {
+    try {
+      checkStarted();
+      checkStoreKeyDuplicates(ids);
 
-    // TODO: Read both the metadata and data from Azure asynchronously and complete the future only after the blobs and
-    //  their information are stored in the CloudMessageReadSet
-    return Utils.completedExceptionally(new UnsupportedOperationException("Async get operation to be implemented"));
+      List<MessageInfo> messageInfos = new ArrayList<>(ids.size());
+      List<BlobId> blobIdList = ids.stream().map(key -> (BlobId) key).collect(Collectors.toList());
+
+      return cloudDestination.getBlobMetadataAsync(blobIdList).handleAsync((cloudBlobMetadataListMap, throwable) -> {
+        if (throwable != null) {
+          unwrapCompletionExceptionAndThrowStoreException(throwable, CloudStorageException.class,
+              this::mapToStoreException);
+          return null;
+        } else {
+          try {
+            // Metadata is fetched successfully. Validate the metadata list and return them to next completion stage.
+            if (cloudBlobMetadataListMap.size() < blobIdList.size()) {
+              // Throw StoreException with ID_Not_Found if cloudBlobMetadataListMap size is less than expected.
+              Set<BlobId> missingBlobs = blobIdList.stream()
+                  .filter(blobId -> !cloudBlobMetadataListMap.containsKey(blobId))
+                  .collect(Collectors.toSet());
+              throw new StoreException("Some of the keys were missing in the cloud metadata store: " + missingBlobs,
+                  StoreErrorCodes.ID_Not_Found);
+            }
+
+            // Validate cloud meta data, may throw StoreException with ID_Deleted, TTL_Expired and Authorization_Failure
+            long currentTimeStamp = System.currentTimeMillis();
+            validateCloudMetadata(cloudBlobMetadataListMap, storeGetOptions, currentTimeStamp, ids);
+          } catch (StoreException e) {
+            throw new CompletionException(e);
+          }
+
+          List<CloudMessageReadSet.BlobReadInfo> blobReadInfos = new ArrayList<>(ids.size());
+          for (BlobId blobId : blobIdList) {
+            CloudBlobMetadata blobMetadata = cloudBlobMetadataListMap.get(blobId.getID());
+            // TODO: need to add ttlUpdated to CloudBlobMetadata so we can use it here
+            // For now, set ttlUpdated = true for all permanent blobs, so the correct ttl
+            // is applied by GetOperation.
+            boolean ttlUpdated = blobMetadata.getExpirationTime() == Utils.Infinite_Time;
+            boolean deleted = blobMetadata.getDeletionTime() != Utils.Infinite_Time;
+            MessageInfo messageInfo =
+                new MessageInfo.Builder(blobId, blobMetadata.getSize(), (short) blobMetadata.getAccountId(),
+                    (short) blobMetadata.getContainerId(), getOperationTime(blobMetadata)).isDeleted(deleted)
+                    .isTtlUpdated(ttlUpdated)
+                    .isUndeleted(blobMetadata.isUndeleted())
+                    .expirationTimeInMs(blobMetadata.getExpirationTime())
+                    .lifeVersion(blobMetadata.getLifeVersion())
+                    .build();
+            messageInfos.add(messageInfo);
+            blobReadInfos.add(new CloudMessageReadSet.BlobReadInfo(blobMetadata, blobId));
+          }
+          return blobReadInfos;
+        }
+      }).thenCompose(blobReadInfos -> {
+        // Since prefetch is enabled by default, it should be okay to download the content here. If we want to stream
+        // content directly from Azure to output channel, it requires more refactoring of the cloud stack such as
+        // passing the output channel to the CloudDestination, StorageClient, etc. We shouldn't need streaming now since
+        // each blob stored in Azure is of max 4 MB (as large blobs are chunked to size of 4 MB at router).
+        List<CompletableFuture<Void>> operationFutures = new ArrayList<>();
+        blobReadInfos.forEach(blobReadInfo -> operationFutures.add(blobReadInfo.downloadBlobAsync(this)));
+        return CompletableFuture.allOf(operationFutures.toArray(new CompletableFuture<?>[0])).thenApply(unused -> {
+          CloudMessageReadSet messageReadSet = new CloudMessageReadSet(blobReadInfos, this);
+          return new StoreInfo(messageReadSet, messageInfos);
+        });
+      });
+    } catch (StoreException e) {
+      return FutureUtils.completedExceptionally(e);
+    }
   }
 
   /**
@@ -206,7 +273,7 @@ class CloudBlobStore implements Store {
    * If the blob was encrypted by vcr during upload, then this method also decrypts it.
    * @param cloudBlobMetadata blob metadata to determine if the blob was encrypted by vcr during upload.
    * @param blobId Id of the blob to the downloaded.
-   * @param outputStream {@code OutputStream} of the donwloaded blob.
+   * @param outputStream {@code OutputStream} of the downloaded blob.
    * @throws StoreException if there is an error in downloading the blob.
    */
   void downloadBlob(CloudBlobMetadata cloudBlobMetadata, BlobId blobId, OutputStream outputStream)
@@ -230,6 +297,52 @@ class CloudBlobStore implements Store {
       }
     } catch (CloudStorageException | GeneralSecurityException | IOException e) {
       throw new StoreException("Error occurred in downloading blob for blobid :" + blobId, StoreErrorCodes.IOError);
+    }
+  }
+
+  /**
+   * Download the blob corresponding to the {@code blobId} from the {@code CloudDestination} to the given
+   * {@code outputStream} asynchronously. If the blob was encrypted by vcr during upload, then this method also decrypts
+   * it.
+   * @param cloudBlobMetadata blob metadata to determine if the blob was encrypted by vcr during upload.
+   * @param blobId Id of the blob to the downloaded.
+   * @param outputStream {@code OutputStream} of the downloaded blob.
+   * @return a {@link CompletableFuture} that will eventually complete when the blob is downloaded to the given
+   *         {@code outputStream} or will contain the {@link StoreException} if an error occurred
+   */
+  CompletableFuture<Void> downloadBlobAsync(CloudBlobMetadata cloudBlobMetadata, BlobId blobId,
+      OutputStream outputStream) {
+    // TODO: for GET ops, avoid extra trip to fetch metadata unless config flag is set
+    // TODO: if needed, fetch metadata here and check encryption
+    if (cloudBlobMetadata.getEncryptionOrigin() == EncryptionOrigin.VCR) {
+      ByteBuffer encryptedBlob = ByteBuffer.allocate((int) cloudBlobMetadata.getEncryptedSize());
+      return cloudDestination.downloadBlobAsync(blobId, new ByteBufferOutputStream(encryptedBlob))
+          .handleAsync((unused, throwable) -> {
+            // Since we may have to decrypt the blob, use handleAsync method to avoid blocking the response thread.
+            if (throwable != null) {
+              unwrapCompletionExceptionAndThrowStoreException(throwable, CloudStorageException.class,
+                  cse -> new StoreException("Error occurred in downloading blob for blobId :" + blobId, cse,
+                      StoreErrorCodes.IOError));
+            }
+            // Download is successful. Decrypt the blob
+            ByteBuffer decryptedBlob;
+            try {
+              decryptedBlob = cryptoAgent.decrypt(encryptedBlob);
+              outputStream.write(decryptedBlob.array());
+            } catch (GeneralSecurityException | IOException e) {
+              throw new CompletionException(
+                  new StoreException("Error occurred in downloading blob for blobId :" + blobId,
+                      StoreErrorCodes.IOError));
+            }
+            return unused;
+          });
+    } else {
+      return cloudDestination.downloadBlobAsync(blobId, outputStream).exceptionally(throwable -> {
+        unwrapCompletionExceptionAndThrowStoreException(throwable, CloudStorageException.class,
+            cse -> new StoreException("Error occurred in downloading blob for blobId :" + blobId, cse,
+                StoreErrorCodes.IOError));
+        return null;
+      });
     }
   }
 
@@ -258,6 +371,7 @@ class CloudBlobStore implements Store {
    */
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
+    // TODO: Remove the duplicate code by calling putAsync() method and wait on it once we verify that upload works correctly.
     checkStarted();
     if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
       throw new IllegalArgumentException("Message write set cannot be empty");
@@ -278,9 +392,19 @@ class CloudBlobStore implements Store {
    *         store or will contain the {@link StoreException} if an error occurred
    */
   public CompletableFuture<Void> putAsync(MessageWriteSet messageSetToWrite) {
+    try {
+      checkStarted();
+      if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
+        throw new IllegalArgumentException("Message write set cannot be empty");
+      }
+      checkDuplicates(messageSetToWrite.getMessageSetInfo());
 
-    // TODO: Write the blobs in the message set asynchronously using MessageWriteSet#writeAsyncTo method.
-    return Utils.completedExceptionally(new UnsupportedOperationException("Async put operation to be implemented"));
+      CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
+      // Write the blobs in the message set to cloud write channel asynchronously
+      return ((CloudMessageFormatWriteSet) messageSetToWrite).writeAsyncTo(cloudWriter).thenApply(unused -> null);
+    } catch (StoreException e) {
+      return FutureUtils.completedExceptionally(e);
+    }
   }
 
   /**
@@ -292,6 +416,8 @@ class CloudBlobStore implements Store {
    */
   private void putBlob(MessageInfo messageInfo, ByteBuffer messageBuf, long size)
       throws CloudStorageException, IOException, StoreException {
+    // TODO: Remove the duplicate code by calling putBlobAsync() method and wait on it once we verify that upload works
+    //  correctly.
     if (shouldUpload(messageInfo)) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       boolean isRouterEncrypted = isRouterEncrypted(blobId);
@@ -349,6 +475,85 @@ class CloudBlobStore implements Store {
   }
 
   /**
+   * Upload the blob to the cloud destination asynchronously.
+   * @param messageInfo the {@link MessageInfo} containing blob metadata.
+   * @param messageBuf the bytes to be uploaded.
+   * @param size the number of bytes to upload.
+   * @return a {@link CompletableFuture} that will eventually complete successfully when the messages are written to
+   *         store or will contain the {@link CloudStorageException} if an error occurred
+   */
+  private CompletableFuture<Void> putBlobAsync(MessageInfo messageInfo, ByteBuffer messageBuf, long size) {
+    try {
+      if (shouldUpload(messageInfo)) {
+        CloudBlobMetadata blobMetadata;
+        BlobId blobId = (BlobId) messageInfo.getStoreKey();
+        boolean isRouterEncrypted;
+        isRouterEncrypted = isRouterEncrypted(blobId);
+        EncryptionOrigin encryptionOrigin = isRouterEncrypted ? EncryptionOrigin.ROUTER : EncryptionOrigin.NONE;
+        boolean encryptThisBlob = requireEncryption && !isRouterEncrypted;
+        if (encryptThisBlob) {
+          // Need to encrypt the buffer before upload
+          long encryptedSize = -1;
+          Timer.Context encryptionTimer = vcrMetrics.blobEncryptionTime.time();
+          try {
+            messageBuf = cryptoAgent.encrypt(messageBuf);
+            encryptedSize = messageBuf.remaining();
+          } catch (GeneralSecurityException ex) {
+            vcrMetrics.blobEncryptionErrorCount.inc();
+          } finally {
+            encryptionTimer.stop();
+          }
+          vcrMetrics.blobEncryptionCount.inc();
+          blobMetadata =
+              new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
+                  messageInfo.getSize(), EncryptionOrigin.VCR, cryptoAgent.getEncryptionContext(),
+                  cryptoAgentFactory.getClass().getName(), encryptedSize, messageInfo.getLifeVersion());
+          // If buffer was encrypted, we no longer know its size
+          size = (encryptedSize == -1) ? size : encryptedSize;
+        } else {
+          // PutRequest lifeVersion from frontend is -1. Should set to 0. (0 is the starting life version number for any data).
+          // Put from replication or recovery should use liferVersion as it's.
+          short lifeVersion =
+              MessageInfo.hasLifeVersion(messageInfo.getLifeVersion()) ? messageInfo.getLifeVersion() : (short) 0;
+          blobMetadata =
+              new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
+                  messageInfo.getSize(), encryptionOrigin, lifeVersion);
+        }
+
+        // Upload blob asynchronously
+        return uploadAsyncWithRetries(blobId, messageBuf, size, blobMetadata).handle((uploaded, throwable) -> {
+          if (throwable != null) {
+            throw throwable instanceof CompletionException ? (CompletionException) throwable
+                : new CompletionException(throwable);
+          }
+          addToCache(blobId.getID(), (short) 0, BlobState.CREATED);
+          if (!uploaded && !isVcr) {
+            // If put is coming from frontend, then uploadBlob must be true. Its not acceptable that a blob already exists.
+            // If put is coming from vcr, then findMissingKeys might have reported a key to be missing even though the blob
+            // was uploaded.
+            throw new CompletionException(
+                new StoreException(String.format("Another blob with same key %s exists in store", blobId.getID()),
+                    StoreErrorCodes.Already_Exist));
+          } else {
+            return null;
+          }
+        });
+      }
+      vcrMetrics.blobUploadSkippedCount.inc();
+      // The only case where its ok to see a put request for a already seen blob is, during replication if the blob is
+      // expiring within {@link CloudConfig#vcrMinTtlDays} for vcr to upload.
+      if (isVcr && !isExpiringSoon(messageInfo) && !messageInfo.isDeleted()) {
+        return FutureUtils.completedExceptionally(new StoreException(
+            String.format("Another blob with same key %s exists in store", messageInfo.getStoreKey().getID()),
+            StoreErrorCodes.Already_Exist));
+      }
+      return CompletableFuture.completedFuture(null);
+    } catch (IOException e) {
+      return FutureUtils.completedExceptionally(e);
+    }
+  }
+
+  /**
    * Upload the supplied message buffer to a blob in the cloud destination.
    * @param blobId the {@link BlobId}.
    * @param messageBuf the byte buffer to upload.
@@ -365,6 +570,22 @@ class CloudBlobStore implements Store {
       InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
       return cloudDestination.uploadBlob(blobId, bufferSize, blobMetadata, uploadInputStream);
     }, "Upload", partitionId.toPathString());
+  }
+
+  /**
+   * Upload the supplied message buffer to a blob in the cloud destination asynchronously.
+   * @param blobId the {@link BlobId}.
+   * @param messageBuf the byte buffer to upload.
+   * @param bufferSize the size of the buffer.
+   * @param blobMetadata the {@link CloudBlobMetadata} for the blob.
+   * @return a {@link CompletableFuture} that will eventually complete with a {@link Boolean} value indicating if the
+   *         upload was completed or with a {@link CloudStorageException} if an error occurred.
+   */
+  private CompletableFuture<Boolean> uploadAsyncWithRetries(BlobId blobId, ByteBuffer messageBuf, long bufferSize,
+      CloudBlobMetadata blobMetadata) {
+    // TODO: Add retries similar to synchronous operation
+    InputStream uploadInputStream = new ByteBufferInputStream(messageBuf);
+    return cloudDestination.uploadBlobAsync(blobId, bufferSize, blobMetadata, uploadInputStream);
   }
 
   /**
@@ -403,6 +624,7 @@ class CloudBlobStore implements Store {
 
   @Override
   public void delete(List<MessageInfo> infos) throws StoreException {
+    // TODO: Remove the duplicate code by calling deleteAsync() method.
     checkStarted();
     checkDuplicates(infos);
 
@@ -427,15 +649,34 @@ class CloudBlobStore implements Store {
    * Deletes all the messages in the list from the store asynchronously. When the lifeVersion is
    * {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this method is invoked by the responding to the frontend request.
    * Otherwise, it's invoked in the replication thread.
-   * @param infosToDelete The list of messages that need to be deleted. Only the StoreKey, OperationTime, LifeVersion
+   * @param infos The list of messages that need to be deleted. Only the StoreKey, OperationTime, LifeVersion
    *                      should be used in this method.
    * @return a {@link CompletableFuture} that will eventually complete successfully when all the messages are deleted
    *         from store or will contain the {@link StoreException} if an error occurred
    */
-  public CompletableFuture<Void> deleteAsync(List<MessageInfo> infosToDelete) {
+  public CompletableFuture<Void> deleteAsync(List<MessageInfo> infos) {
+    try {
+      checkStarted();
+      checkDuplicates(infos);
+      List<CompletableFuture<Boolean>> operationFutures = new ArrayList<>();
 
-    // TODO: Delete the messages from cloud asynchronously by using the async APIs of CloudDestination
-    return Utils.completedExceptionally(new UnsupportedOperationException("Async delete operation to be implemented"));
+      // Delete each message
+      for (MessageInfo msgInfo : infos) {
+        BlobId blobId = (BlobId) msgInfo.getStoreKey();
+        // TODO: Add retries similar to synchronous operation
+        operationFutures.add(deleteAsyncIfNeeded(blobId, msgInfo.getOperationTimeMs(), msgInfo.getLifeVersion()));
+      }
+
+      // Complete the result once all the individual delete operations complete. If any of the operation completes
+      // exceptionally, complete the result exceptionally as well.
+      return CompletableFuture.allOf(operationFutures.toArray(new CompletableFuture<?>[0])).exceptionally(throwable -> {
+        unwrapCompletionExceptionAndThrowStoreException(throwable, CloudStorageException.class,
+            this::mapToStoreException);
+        return null;
+      });
+    } catch (StoreException e) {
+      return FutureUtils.completedExceptionally(e);
+    }
   }
 
   /**
@@ -447,6 +688,7 @@ class CloudBlobStore implements Store {
    * @throws CloudStorageException
    */
   private boolean deleteIfNeeded(BlobId blobId, long deletionTime, short lifeVersion) throws CloudStorageException {
+    // TODO: Remove the duplicate code by calling deleteAsyncIfNeeded() method.
     String blobKey = blobId.getID();
     // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
     // in which case the cache may have been updated by another thread.
@@ -468,8 +710,38 @@ class CloudBlobStore implements Store {
     }
   }
 
+  /**
+   * Delete the specified blob if needed depending on the cache state asynchronously.
+   * @param blobId the blob to delete
+   * @param deletionTime the deletion time
+   * @param lifeVersion life version of the blob.
+   * @return a {@link CompletableFuture} that will eventually be {@code True} if the deletion was performed. If there was
+   *         an exception during the delete, it will contain the related {@link CloudStorageException}.
+   */
+  private CompletableFuture<Boolean> deleteAsyncIfNeeded(BlobId blobId, long deletionTime, short lifeVersion) {
+    String blobKey = blobId.getID();
+    // Note: always check cache before operation attempt, since this could be a retry after a CONFLICT error,
+    // in which case the cache may have been updated by another thread.
+    if (!checkCacheState(blobKey, lifeVersion, BlobState.DELETED)) {
+      return cloudDestination.deleteBlobAsync(blobId, deletionTime, lifeVersion, this::preDeleteValidation)
+          .whenComplete((isDeleted, throwable) -> {
+            if (throwable != null) {
+              // Cache entry could be stale, evict it to force refresh on retry.
+              removeFromCache(blobKey);
+            } else {
+              addToCache(blobKey, lifeVersion, BlobState.DELETED);
+            }
+          });
+    }
+    // This means that we definitely saw this delete for the same or smaller life version before.
+    return FutureUtils.completedExceptionally(new CloudStorageException("Error updating blob metadata",
+        new StoreException("Cannot delete id " + blobId.getID() + " since it is already marked as deleted in cloud.",
+            StoreErrorCodes.ID_Deleted)));
+  }
+
   @Override
   public short undelete(MessageInfo info) throws StoreException {
+    // TODO: Remove the duplicate code by calling unDeleteAsync() method.
     checkStarted();
     try {
       return requestAgent.doWithRetries(() -> undeleteIfNeeded((BlobId) info.getStoreKey(), info.getLifeVersion()),
@@ -494,9 +766,17 @@ class CloudBlobStore implements Store {
    *         {@link StoreException} if an error occurred.
    */
   public CompletableFuture<Short> undeleteAsync(MessageInfo info) {
-    // TODO: Undelete the messages from cloud asynchronously by using the async APIs of CloudDestination
-    return Utils.completedExceptionally(
-        new UnsupportedOperationException("Async undelete operation to be implemented"));
+    try {
+      checkStarted();
+      // TODO: Add retries similar to synchronous operation
+      return undeleteAsyncIfNeeded((BlobId) info.getStoreKey(), info.getLifeVersion()).exceptionally(throwable -> {
+        unwrapCompletionExceptionAndThrowStoreException(throwable, CloudStorageException.class,
+            this::mapToStoreException);
+        return null;
+      });
+    } catch (StoreException e) {
+      return FutureUtils.completedExceptionally(e);
+    }
   }
 
   /**
@@ -505,9 +785,9 @@ class CloudBlobStore implements Store {
    * @param lifeVersion life version of the deleted blob.
    * @return final updated life version of the blob.
    * @throws CloudStorageException in case any exception happens during undelete.
-   * @throws StoreException in case any {@link StoreException} is thrown.
    */
   private short undeleteIfNeeded(BlobId blobId, short lifeVersion) throws CloudStorageException, StoreException {
+    // TODO: Remove the duplicate code by calling unDeleteAsyncIfNeeded() method.
     String blobKey = blobId.getID();
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobKey, lifeVersion, BlobState.CREATED)) {
@@ -526,6 +806,30 @@ class CloudBlobStore implements Store {
   }
 
   /**
+   * Undelete the specified blob if needed depending on the cache state asynchronously.
+   * @param blobId the blob to delete.
+   * @param lifeVersion life version of the deleted blob.
+   * @return a {@link CompletableFuture} that will eventually contain the final updated life version of the blob or the
+   *         {@link CloudStorageException} or {@link StoreException} if an error occurred.
+   */
+  private CompletableFuture<Short> undeleteAsyncIfNeeded(BlobId blobId, short lifeVersion) {
+    String blobKey = blobId.getID();
+    // See note in deleteIfNeeded.
+    if (!checkCacheState(blobKey, lifeVersion, BlobState.CREATED)) {
+      return cloudDestination.undeleteBlobAsync(blobId, lifeVersion, this::preUndeleteValidation)
+          .whenComplete((newLifeVersion, throwable) -> {
+            if (throwable != null) {
+              removeFromCache(blobKey);
+            } else {
+              addToCache(blobId.getID(), newLifeVersion, BlobState.CREATED);
+            }
+          });
+    }
+    return FutureUtils.completedExceptionally(
+        new StoreException("Id " + blobId.getID() + " is already undeleted in cloud", StoreErrorCodes.ID_Undeleted));
+  }
+
+  /**
    * {@inheritDoc}
    * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
    * @param infos The list of messages that need to be updated.
@@ -533,6 +837,7 @@ class CloudBlobStore implements Store {
    */
   @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
+    // TODO: Remove the duplicate code by calling updateTtlAsync() method.
     checkStarted();
     // Note: We skipped uploading the blob on PUT record if the TTL was below threshold (threshold should be 0 for non DR cases).
     try {
@@ -569,9 +874,35 @@ class CloudBlobStore implements Store {
    *         updated successfully or will contain the {@link StoreException} if an error occurred.
    */
   public CompletableFuture<Void> updateTtlAsync(List<MessageInfo> infosToUpdate) {
-    // TODO: Update the TTL of messages from cloud asynchronously by using the async APIs of CloudDestination
-    return Utils.completedExceptionally(
-        new UnsupportedOperationException("Async updateTTL operation to be implemented"));
+    try {
+      checkStarted();
+      // Note: We skipped uploading the blob on PUT record if the TTL was below threshold (threshold should be 0 for non DR cases).
+      List<CompletableFuture<Boolean>> operationFutures = new ArrayList<>();
+      for (MessageInfo msgInfo : infosToUpdate) {
+        if (msgInfo.getExpirationTimeInMs() != Utils.Infinite_Time) {
+          return FutureUtils.completedExceptionally(
+              new StoreException("CloudBlobStore only supports removing the expiration time",
+                  StoreErrorCodes.Update_Not_Allowed));
+        }
+        if (msgInfo.isTtlUpdated()) {
+          // TODO: Add retries similar to synchronous operation
+          operationFutures.add(updateTtlAsyncIfNeeded((BlobId) msgInfo.getStoreKey()));
+        } else {
+          logger.error("updateTtl() is called but msgInfo.isTtlUpdated is not set. msgInfo: {}", msgInfo);
+          vcrMetrics.updateTtlNotSetError.inc();
+        }
+      }
+
+      // Return a completable future that completes once all async TTL update operations are complete.
+      return CompletableFuture.allOf(operationFutures.toArray(new CompletableFuture<?>[0]))
+          .exceptionally((throwable) -> {
+            unwrapCompletionExceptionAndThrowStoreException(throwable, CloudStorageException.class,
+                this::mapToStoreException);
+            return null;
+          });
+    } catch (StoreException e) {
+      return FutureUtils.completedExceptionally(e);
+    }
   }
 
   /**
@@ -581,6 +912,7 @@ class CloudBlobStore implements Store {
    * @throws CloudStorageException
    */
   private boolean updateTtlIfNeeded(BlobId blobId) throws CloudStorageException {
+    // TODO: Remove the duplicate code by calling updateTtlAsyncIfNeeded() method.
     String blobKey = blobId.getID();
     // See note in deleteIfNeeded.
     if (!checkCacheState(blobKey, BlobState.TTL_UPDATED)) {
@@ -596,6 +928,51 @@ class CloudBlobStore implements Store {
       }
     }
     return false;
+  }
+
+  /**
+   * Update the TTL of the specified blob if needed depending on the cache state asynchronously.
+   * @param blobId the blob to update
+   * @return a {@link CompletableFuture} that will eventually complete successfully if the update was performed or
+   *         will contain a {@link CloudStorageException} if an error occurred.
+   */
+  private CompletableFuture<Boolean> updateTtlAsyncIfNeeded(BlobId blobId) {
+    String blobKey = blobId.getID();
+    // See note in deleteIfNeeded.
+    if (!checkCacheState(blobKey, BlobState.TTL_UPDATED)) {
+      return cloudDestination.updateBlobExpirationAsync(blobId, Utils.Infinite_Time, this::preTtlUpdateValidation)
+          .handle((lifeVersion, throwable) -> {
+            if (throwable != null) {
+              // Cache entry could be stale, evict it to force refresh on retry.
+              removeFromCache(blobKey);
+              throw throwable instanceof CompletionException ? (CompletionException) throwable
+                  : new CompletionException(throwable);
+            }
+            addToCache(blobKey, lifeVersion, BlobState.TTL_UPDATED);
+            return (lifeVersion != -1);
+          });
+    }
+    return CompletableFuture.completedFuture(false);
+  }
+
+  private StoreException mapToStoreException(CloudStorageException cse) {
+    if (cse.getCause() instanceof StoreException) {
+      return (StoreException) cse.getCause();
+    }
+    StoreErrorCodes errorCode =
+        (cse.getStatusCode() == STATUS_NOT_FOUND) ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.IOError;
+    return new StoreException(cse, errorCode);
+  }
+
+  private <T> void unwrapCompletionExceptionAndThrowStoreException(Throwable throwable, Class<T> clazz,
+      Function<T, StoreException> exceptionFunction) throws CompletionException {
+    Exception ex = Utils.extractFutureExceptionCause(throwable);
+
+    if (clazz.isInstance(ex)) {
+      throw new CompletionException(exceptionFunction.apply((T) ex));
+    }
+    throw throwable instanceof CompletionException ? (CompletionException) throwable
+        : new CompletionException(throwable);
   }
 
   /**
@@ -1138,32 +1515,35 @@ class CloudBlobStore implements Store {
     }
 
     /**
-     * Appends the buffer into the underlying write interface (eg: file) asynchronously. Returns the number of bytes
-     * successfully written
-     * @param buffer The buffer from which data needs to be written from
-     * @return a {@link CompletableFuture} that will eventually contain the number of bytes written to the write interface
-     *         or the {@link StoreException} if an error occurred
-     */
-    public CompletableFuture<Integer> appendAsyncFrom(ByteBuffer buffer) {
-      return Utils.completedExceptionally(
-          new UnsupportedOperationException("Async append operation yet to be supported"));
-    }
-
-    /**
-     * Appends the channel to the underlying write interface. Writes "size" number of bytes
-     * to the interface asynchronously.
+     * Appends the channel to the underlying write interface. Writes "size" number of bytes to the interface.
      * @param channel The channel from which data needs to be written from
      * @param size The amount of data in bytes to be written from the channel
-     * @return a {@link CompletableFuture} that will eventually complete when all the bytes are written successfully. In
-     *         case of error, it will contain the {@link StoreException}.
+     * @return a {@link CompletableFuture} that will eventually complete successfully once the bytes are written to the
+     *         write interface or an exception if an error occurs.
      */
     public CompletableFuture<Void> appendAsyncFrom(ReadableByteChannel channel, long size) {
-
-      // TODO: Use the async upload operations provided by CloudDestination and return a future that will only complete once
-      //  we get success response from remote cloud destination
-
-      return Utils.completedExceptionally(
-          new UnsupportedOperationException("Async append operation yet to be supported"));
+      // Upload the blob corresponding to the current message index
+      MessageInfo messageInfo = messageInfoList.get(messageIndex++);
+      if (messageInfo.getSize() != size) {
+        throw new IllegalStateException("Mismatched buffer length for blob: " + messageInfo.getStoreKey().getID());
+      }
+      ByteBuffer messageBuf = ByteBuffer.allocate((int) size);
+      int bytesRead = 0;
+      try {
+        while (bytesRead < size) {
+          int readResult = channel.read(messageBuf);
+          if (readResult == -1) {
+            return FutureUtils.completedExceptionally(new IOException(
+                "Channel read returned -1 before reading expected number of bytes, blobId=" + messageInfo.getStoreKey()
+                    .getID()));
+          }
+          bytesRead += readResult;
+        }
+        messageBuf.flip();
+        return cloudBlobStore.putBlobAsync(messageInfo, messageBuf, size);
+      } catch (IOException e) {
+        return FutureUtils.completedExceptionally(new StoreException(e, StoreErrorCodes.IOError));
+      }
     }
   }
 

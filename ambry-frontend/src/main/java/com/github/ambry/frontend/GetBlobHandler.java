@@ -88,33 +88,6 @@ public class GetBlobHandler {
         callback).start();
   }
 
-  /**
-   * Fetch {@link RestRequestMetricsGroup} for GetRequest based on the {@link SubResource}.
-   * @param frontendMetrics instance of {@link FrontendMetrics} to use
-   * @param subResource {@link SubResource} corresponding to the GetRequest
-   * @return the appropriate {@link RestRequestMetricsGroup} based on the given params
-   */
-  private static RestRequestMetricsGroup getMetricsGroupForGet(FrontendMetrics frontendMetrics,
-      SubResource subResource) {
-    RestRequestMetricsGroup group = null;
-    if (subResource == null || subResource.equals(SubResource.Segment)) {
-      group = frontendMetrics.getBlobMetricsGroup;
-    } else {
-      switch (subResource) {
-        case BlobInfo:
-          group = frontendMetrics.getBlobInfoMetricsGroup;
-          break;
-        case UserMetadata:
-          group = frontendMetrics.getUserMetadataMetricsGroup;
-          break;
-        case Replicas:
-          group = frontendMetrics.getReplicasMetricsGroup;
-          break;
-      }
-    }
-    return group;
-  }
-
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;

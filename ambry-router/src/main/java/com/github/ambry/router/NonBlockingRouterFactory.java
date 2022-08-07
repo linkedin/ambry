@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Http2ClientConfig;
@@ -122,8 +123,15 @@ public class NonBlockingRouterFactory implements RouterFactory {
   @Override
   public Router getRouter() {
     try {
+      AmbryCache blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
+          routerConfig.routerBlobMetadataCacheEnabled,
+          routerConfig.routerMaxNumMetadataCacheEntries,
+          routerMetrics.getMetricRegistry());
+      logger.info("[{}] Smallest blob to qualify for metadata caching = {} bytes",
+          blobMetadataCache.getCacheId(),
+          routerConfig.routerSmallestBlobForMetadataCache);
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
+          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache);
     } catch (IOException | ReflectiveOperationException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

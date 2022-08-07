@@ -34,8 +34,8 @@ public class AmbryCache {
   private final MetricRegistry metricRegistry;
   private static final Logger logger = LoggerFactory.getLogger(AmbryCache.class);
   private final String cacheId;
-  private boolean cacheEnabled;
-  private long cacheMaxSizeBytes;
+  private final boolean cacheEnabled;
+  private final int maxNumCacheEntries;
 
   // Cache metrics
   public Meter getRequestRate;
@@ -52,21 +52,20 @@ public class AmbryCache {
    * Constructs an instance of AmbryCache
    * @param cacheId String identifier for this cache
    * @param cacheEnabled Toggles cache. If true, cache is enabled. Else, cache is disabled.
-   * @param cacheMaxSizeBytes Maximum memory footprint of the cache
+   * @param maxNumCacheEntries Maximum number of cache entries
    * @param metricRegistry Instance of metrics registry to record stats
    */
-  public AmbryCache(String cacheId, boolean cacheEnabled, long cacheMaxSizeBytes, MetricRegistry metricRegistry) {
+  public AmbryCache(String cacheId, boolean cacheEnabled, int maxNumCacheEntries, MetricRegistry metricRegistry) {
     this.cacheId = cacheId;
     this.cacheEnabled = cacheEnabled;
-    this.cacheMaxSizeBytes = cacheMaxSizeBytes;
     this.metricRegistry = metricRegistry;
+    this.maxNumCacheEntries = maxNumCacheEntries;
     this.ambryCache = Caffeine.newBuilder()
-        .maximumWeight(cacheMaxSizeBytes)
-        .weigher((String key, AmbryCacheEntry value) -> key.length() + value.sizeBytes())
+        .maximumSize(maxNumCacheEntries)
         .recordStats()
         .build();
-    initializeAmbryCacheMetrics();
-    logger.info("Initialized cache " + this);
+    initializeAmbryCacheStats();
+    logger.info("[{}] Initialized cache {}", cacheId, this);
   }
 
   /**
@@ -76,8 +75,22 @@ public class AmbryCache {
     String result = "";
     result += "cacheId=" + cacheId;
     result += ", cacheEnabled=" + cacheEnabled;
-    result += ", cacheMaxSizeBytes=" + cacheMaxSizeBytes;
+    result += ", maxNumCacheEntries=" + maxNumCacheEntries;
     return result;
+  }
+
+  /**
+   * @return cache ID of this cache-object
+   */
+  public String getCacheId() {
+    return cacheId;
+  }
+
+  /**
+   * @return Maximum number of entries this cache is allowed to hold
+   */
+  public int getMaxNumCacheEntries() {
+    return maxNumCacheEntries;
   }
 
   /**
@@ -96,9 +109,10 @@ public class AmbryCache {
     try {
       ambryCache.put(key, value);
       result = true;
+      logger.debug("[{}] Inserted cache entry for key {}", cacheId, key);
     } catch (Exception exc) {
       putErrorCount.inc();
-      logger.error("Failed to put cache entry with key " + key + " due to " + exc);
+      logger.error("[{}] Failed to put cache entry with key {} due to {}", cacheId, key, exc);
     } finally {
       putLatencyMs.update(System.currentTimeMillis() - putStartTime);
     }
@@ -119,9 +133,10 @@ public class AmbryCache {
     AmbryCacheEntry result = null;
     try {
       result = ambryCache.getIfPresent(key);
+      logger.debug("[{}] Cache-{} for key {}", cacheId, result == null ? "miss" : "hit", key);
     } catch (Exception exc) {
       getErrorCount.inc();
-      logger.error("Failed to get cache entry with key " + key + " due to " + exc);
+      logger.error("[{}] Failed to get cache entry with key {} due to {}", cacheId, key, exc);
     } finally {
       getLatencyMs.update(System.currentTimeMillis() - getStartTime);
     }
@@ -143,9 +158,10 @@ public class AmbryCache {
     try {
       ambryCache.invalidate(key);
       result = true;
+      logger.debug("[{}] Deleted cache entry for key {}", cacheId, key);
     } catch (Exception exc) {
       deleteErrorCount.inc();
-      logger.error("Failed to delete cache entry with key " + key + " due to " + exc);
+      logger.error("[{}] Failed to delete cache entry with key {} due to {}", cacheId, key, exc);
     } finally {
       deleteLatencyMs.update(System.currentTimeMillis() - deleteStartTime);
     }
@@ -155,7 +171,7 @@ public class AmbryCache {
   /**
    * Initialize metrics for this instance of AmbryCache
    */
-  private void initializeAmbryCacheMetrics() {
+  private void initializeAmbryCacheStats() {
 
     if (!cacheEnabled) { return; }
 
@@ -171,5 +187,6 @@ public class AmbryCache {
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "NumEntries"), (Gauge<Long>) () -> ambryCache.estimatedSize());
+    logger.info("[{}] Initialized metrics for cache", cacheId);
   }
 }

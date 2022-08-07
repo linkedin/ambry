@@ -2307,7 +2307,13 @@ class PersistentIndex {
     return new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
-        return name.startsWith(logSegmentName.toString()) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+        // If not segmented, log name is log_current
+        // index name has the format of <offset>_index, for example 0_index, 265_index
+        // In this case, input parameter logSegmentName == ""
+        if (logSegmentName.toString().isEmpty())
+          return name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+        else
+          return name.startsWith(logSegmentName.toString()+BlobStore.SEPARATOR) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
       }
     });
   }
@@ -2323,8 +2329,11 @@ class PersistentIndex {
     File[] filesToCleanup = new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
-        return name.startsWith(logSegmentName.toString()) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
-            || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        if (logSegmentName.toString().isEmpty())
+          return (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        else
+          return name.startsWith(logSegmentName.toString()+BlobStore.SEPARATOR) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
+              || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
       }
     });
     if (filesToCleanup == null) {

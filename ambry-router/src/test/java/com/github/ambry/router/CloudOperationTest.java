@@ -53,11 +53,9 @@ import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import java.nio.ByteBuffer;
-import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -196,7 +194,7 @@ public class CloudOperationTest {
     NetworkClientFactory networkClientFactory = new CompositeNetworkClientFactory(childFactories);
     router = new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
         mockClusterMap, null, null, null, new InMemAccountService(false, true), time,
-        MockClusterMap.DEFAULT_PARTITION_CLASS);
+        MockClusterMap.DEFAULT_PARTITION_CLASS, null);
 
     NetworkClient compNetworkClient = networkClientFactory.getNetworkClient();
     mockNetworkClient = new MockCompositeNetworkClient(compNetworkClient);
@@ -366,7 +364,7 @@ public class CloudOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
-            routerCallback, blobIdFactory, null, null, null, time, false, null);
+            routerCallback, blobIdFactory, null, null, null, time, false, null, null);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
 
     // Wait operation to complete

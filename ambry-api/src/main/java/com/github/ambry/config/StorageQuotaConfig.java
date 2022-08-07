@@ -27,6 +27,8 @@ public class StorageQuotaConfig {
   public static final String MYSQL_STORE_RETRY_MAX_COUNT = STORAGE_QUOTA_PREFIX + "mysql.store.retry.max.count";
   public static final String SHOULD_THROTTLE = STORAGE_QUOTA_PREFIX + "should.throttle";
   public static final String USE_PHYSICAL_STORAGE = STORAGE_QUOTA_PREFIX + "use.physical.storage";
+  public static final String SHOULD_REJECT_REQUEST_WITHOUT_QUOTA =
+      STORAGE_QUOTA_PREFIX + "should.reject.request.without.quota";
 
   /**
    * The interval in milliseconds for refresher to refresh storage usage from its source.
@@ -103,6 +105,13 @@ public class StorageQuotaConfig {
   public final boolean usePhysicalStorage;
 
   /**
+   * True to reject request when there is no storage quota created for this targeted account or container.
+   */
+  @Config(SHOULD_REJECT_REQUEST_WITHOUT_QUOTA)
+  @Default("false")
+  public final boolean shouldRejectRequestWithoutQuota;
+
+  /**
    * Constructor to create a {@link StorageQuotaConfig}.
    * @param verifiableProperties The {@link VerifiableProperties} that contains all the properties.
    */
@@ -116,5 +125,6 @@ public class StorageQuotaConfig {
     mysqlMonthlyBaseFetchOffsetSec = verifiableProperties.getLong(MYSQL_MONTHLY_BASE_FETCH_OFFSET_SEC, 60 * 60);
     shouldThrottle = verifiableProperties.getBoolean(SHOULD_THROTTLE, true);
     usePhysicalStorage = verifiableProperties.getBoolean(USE_PHYSICAL_STORAGE, false);
+    shouldRejectRequestWithoutQuota = verifiableProperties.getBoolean(SHOULD_REJECT_REQUEST_WITHOUT_QUOTA, false);
   }
 }

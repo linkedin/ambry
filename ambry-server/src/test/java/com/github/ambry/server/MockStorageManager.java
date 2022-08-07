@@ -591,4 +591,17 @@ class MockStorageManager extends StorageManager {
     tokenReceived = null;
     maxTotalSizeOfEntriesReceived = null;
   }
+
+  /**
+   * Starts all test BlobStores
+   * @throws InterruptedException
+   * @throws StoreException
+   */
+  @Override
+  public void start() throws InterruptedException, StoreException {
+    super.start();
+    for(Store store: storeMap.values()){
+      ((TestStore) store).start();
+    }
+  }
 }

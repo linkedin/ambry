@@ -49,6 +49,7 @@ import com.github.ambry.network.SocketRequestResponseChannel;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.AdminResponseWithContent;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
@@ -100,6 +101,7 @@ import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -302,7 +304,7 @@ public class AmbryServerRequestsTest {
    * @throws IOException
    */
   @Test
-  public void scheduleCompactionFailureTest() throws InterruptedException, IOException {
+  public void scheduleCompactionFailureTest() throws InterruptedException, IOException, StoreException {
     // partitionId not specified
     doScheduleCompactionTest(null, ServerErrorCode.Bad_Request);
 
@@ -677,7 +679,7 @@ public class AmbryServerRequestsTest {
    * @throws IOException
    */
   @Test
-  public void stopBlobStoreFailureTest() throws InterruptedException, IOException {
+  public void stopBlobStoreFailureTest() throws InterruptedException, IOException, StoreException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     short numReplicasCaughtUpPerPartition = 3;
@@ -937,6 +939,53 @@ public class AmbryServerRequestsTest {
     assertEquals("cross-colo fetch bytes are not expected", responseList.get(0).sizeInBytes(),
         serverMetrics.crossColoFetchBytesRate.get(remoteNode.getDatacenterName()).getCount());
     responseList.forEach(Response::release);
+  }
+
+  /**
+   * Tests for appropriate responses from healthCheck admin endpoint
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void healthCheckTest() throws InterruptedException, IOException {
+
+    //retrieves writeable partitions to test with
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+
+    for (PartitionId id : partitionIds) {
+
+      int correlationId = TestUtils.RANDOM.nextInt();
+      String clientId = TestUtils.getRandomString(10);
+
+      // Test 1: "Good" response excepted where the host state is in either Standby or Leader
+      ReplicaState originalPartitionState = storageManager.getStore(id).getCurrentState();
+
+      //change Partition to Standby or Leader
+      storageManager.getStore(id).setCurrentState(
+            TestUtils.RANDOM.nextInt() % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.LEADER);
+
+      AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
+      AdminResponseWithContent response =
+          (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
+
+      assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+      assertEquals("Payload was expected to be {\"health\":\"GOOD\"}","{\"health\":\"GOOD\"}",
+          new String(response.getContent(),StandardCharsets.UTF_8));
+
+      //Test 2: "BAD" response expected where change replicas to error State on this partition
+      //change all replica states in partition to ERROR
+      storageManager.getStore(id).setCurrentState(ReplicaState.ERROR);
+
+      adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, id, correlationId, clientId);
+      response = (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
+
+      assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+      assertEquals("Payload was expected to be {\"health\":\"BAD\"}","{\"health\":\"BAD\"}",
+          new String(response.getContent(),StandardCharsets.UTF_8));
+
+      //restore the state of the Partition
+      storageManager.getStore(id).setCurrentState(originalPartitionState);
+    }
   }
 
   // helpers

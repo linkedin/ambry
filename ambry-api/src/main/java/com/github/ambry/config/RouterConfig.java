@@ -33,6 +33,10 @@ public class RouterConfig {
   public static final double DEFAULT_LATENCY_TOLERANCE_QUANTILE = 0.9;
   public static final long DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS = 1000L;
   public static final long ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS = 24 * 60 * 1000L;
+  public static final int MAX_NETWORK_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS = 60 * 1000;
+  // This is a theoretical maximum value. Configured value may be much smaller since we might need to respond back to
+  // client with either success or failure much sooner.
+  public static final int MAX_OVERALL_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS = 60 * 60 * 1000;
 
   // config keys
   public static final String ROUTER_SCALING_UNIT_COUNT = "router.scaling.unit.count";
@@ -49,6 +53,7 @@ public class RouterConfig {
   public static final String ROUTER_CONNECTIONS_WARM_UP_TIMEOUT_MS = "router.connections.warm.up.timeout.ms";
   public static final String ROUTER_CONNECTION_CHECKOUT_TIMEOUT_MS = "router.connection.checkout.timeout.ms";
   public static final String ROUTER_REQUEST_TIMEOUT_MS = "router.request.timeout.ms";
+  public static final String ROUTER_REQUEST_NETWORK_TIMEOUT_MS = "router.request.network.timeout.ms";
   public static final String ROUTER_DROP_REQUEST_ON_TIMEOUT = "router.drop.request.on.timeout";
   public static final String ROUTER_MAX_PUT_CHUNK_SIZE_BYTES = "router.max.put.chunk.size.bytes";
   public static final String ROUTER_PUT_REQUEST_PARALLELISM = "router.put.request.parallelism";
@@ -182,11 +187,18 @@ public class RouterConfig {
   public final int routerConnectionCheckoutTimeoutMs;
 
   /**
-   * Timeout for requests issued by the router to the network layer.
+   * Timeout for requests waiting at the router layer.
    */
   @Config(ROUTER_REQUEST_TIMEOUT_MS)
-  @Default("2000")
+  @Default("20000")
   public final int routerRequestTimeoutMs;
+
+  /**
+   * Timeout for requests waiting at the network layer.
+   */
+  @Config(ROUTER_REQUEST_NETWORK_TIMEOUT_MS)
+  @Default("10000")
+  public final int routerRequestNetworkTimeoutMs;
 
   /**
    * {@code true} if the router should tell the network layer about requests that have timed out. The network client
@@ -589,7 +601,17 @@ public class RouterConfig {
   public static final String ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES = "router.blob.metadata.cache.max.size.bytes";
   @Config(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES)
   public final long routerBlobMetadataCacheMaxSizeBytes;
-  long numBytesInOneMb = (long) Math.pow(1024, 2);
+  public static final long NUM_BYTES_IN_ONE_MB = (long) Math.pow(1024, 2);
+
+  public static final String ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE = "router.smallest.blob.for.metadata.cache";
+  @Config(ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE)
+  public final long routerSmallestBlobForMetadataCache;
+  public static final long NUM_BYTES_IN_ONE_TB = (long) Math.pow(1024, 4);
+
+  public static final String ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES = "router.max.num.metadata.cache.entries";
+  @Config(ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES)
+  public final int routerMaxNumMetadataCacheEntries;
+  public static final int MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT = 10;
 
   /**
    * Create a RouterConfig instance.
@@ -598,10 +620,13 @@ public class RouterConfig {
   public RouterConfig(VerifiableProperties verifiableProperties) {
     routerBlobMetadataCacheId =
         verifiableProperties.getString(ROUTER_BLOB_METADATA_CACHE_ID, "routerBlobMetadataCache");
-    routerBlobMetadataCacheEnabled =
-        verifiableProperties.getBoolean(ROUTER_BLOB_METADATA_CACHE_ENABLED, false);
+    routerMaxNumMetadataCacheEntries =
+        verifiableProperties.getInt(ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT);
+    routerBlobMetadataCacheEnabled = verifiableProperties.getBoolean(ROUTER_BLOB_METADATA_CACHE_ENABLED, false);
     routerBlobMetadataCacheMaxSizeBytes =
-        verifiableProperties.getLong(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES, 64 * numBytesInOneMb);
+        verifiableProperties.getLong(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES, 64 * NUM_BYTES_IN_ONE_MB);
+    routerSmallestBlobForMetadataCache =
+        verifiableProperties.getLong(ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE, NUM_BYTES_IN_ONE_TB);
     routerScalingUnitCount = verifiableProperties.getIntInRange(ROUTER_SCALING_UNIT_COUNT, 1, 1, Integer.MAX_VALUE);
     routerHostname = verifiableProperties.getString(ROUTER_HOSTNAME);
     routerDatacenterName = verifiableProperties.getString(ROUTER_DATACENTER_NAME);
@@ -617,7 +642,10 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_CONNECTIONS_WARM_UP_TIMEOUT_MS, 5000, 0, Integer.MAX_VALUE);
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange(ROUTER_CONNECTION_CHECKOUT_TIMEOUT_MS, 1000, 1, 5000);
-    routerRequestTimeoutMs = verifiableProperties.getIntInRange(ROUTER_REQUEST_TIMEOUT_MS, 2000, 1, 10000);
+    routerRequestTimeoutMs = verifiableProperties.getIntInRange(ROUTER_REQUEST_TIMEOUT_MS, 4000, 1,
+        MAX_OVERALL_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS);
+    routerRequestNetworkTimeoutMs = verifiableProperties.getIntInRange(ROUTER_REQUEST_NETWORK_TIMEOUT_MS, 2000, 1,
+        MAX_NETWORK_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS);
     routerDropRequestOnTimeout = verifiableProperties.getBoolean(ROUTER_DROP_REQUEST_ON_TIMEOUT, false);
     routerMaxPutChunkSizeBytes =
         verifiableProperties.getIntInRange(ROUTER_MAX_PUT_CHUNK_SIZE_BYTES, 4 * 1024 * 1024, 1, Integer.MAX_VALUE);

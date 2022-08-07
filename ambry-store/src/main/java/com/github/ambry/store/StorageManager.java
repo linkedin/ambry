@@ -180,7 +180,7 @@ public class StorageManager implements StoreManager {
    * Start the {@link DiskManager}s for all disks on this node.
    * @throws InterruptedException
    */
-  public void start() throws InterruptedException {
+  public void start() throws InterruptedException, StoreException {
     long startTimeMs = time.milliseconds();
     try {
       logger.info("Starting storage manager");
@@ -448,6 +448,22 @@ public class StorageManager implements StoreManager {
    */
   protected void updatePartitionToDiskManager(ReplicaId replicaId) {
     partitionToDiskManager.put(replicaId.getPartitionId(), diskToDiskManager.get(replicaId.getDiskId()));
+  }
+
+  /**
+   * Getter utility for protected diskToDiskManager
+   * @return diskToDiskManager
+   */
+  public ConcurrentHashMap<DiskId, DiskManager> getDiskToDiskManager(){
+    return diskToDiskManager;
+  }
+
+  /**
+   * Getter utility for protected parititontoDiskManager
+   * @return parititontoDiskManager
+   */
+  public ConcurrentHashMap<PartitionId, DiskManager> getPartitionToDiskManager(){
+    return partitionToDiskManager;
   }
 
   /**

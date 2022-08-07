@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.Resource;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.utils.CachedHistogram;
 import com.github.ambry.utils.Pair;
@@ -70,7 +71,21 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    */
   AdaptiveOperationTracker(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       RouterOperation routerOperation, PartitionId partitionId, String originatingDcName, Time time) {
-    super(routerConfig, routerOperation, partitionId, originatingDcName, true, routerMetrics);
+    this(routerConfig, routerMetrics, routerOperation, partitionId, originatingDcName, time, null);
+  }
+  /**
+   * Constructs an {@link AdaptiveOperationTracker}
+   * @param routerConfig The {@link RouterConfig} containing the configs for operation tracker.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} that contains histograms used by this operation tracker.
+   * @param routerOperation The {@link RouterOperation} which {@link AdaptiveOperationTracker} is associated with.
+   * @param partitionId The partition on which the operation is performed.
+   * @param originatingDcName name of originating DC whose replicas should be tried first.
+   * @param blobId {@link BlobId}, if available, for the operation.
+   * @param time the {@link Time} instance to use.
+   */
+  AdaptiveOperationTracker(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      RouterOperation routerOperation, PartitionId partitionId, String originatingDcName, Time time, BlobId blobId) {
+    super(routerConfig, routerOperation, partitionId, originatingDcName, true, routerMetrics, blobId);
     this.routerConfig = routerConfig;
     this.time = time;
     this.localDcHistogram = getWholeDcTracker(routerOperation, true);
