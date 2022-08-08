@@ -18,35 +18,45 @@ package com.github.ambry.store;
  * When determining the health of the disk we can use these levels to determine what went wrong with the healthcheck
  */
 public enum DiskHealthStatus {
-
-  /** The Disk is healthy after performing the disk healthcheck */
+  /**
+   * The Disk is healthy after performing the disk healthcheck
+   */
   HEALTHY,
-
-  /** Initialization purposes until the health checking begins */
+  /**
+   * Initialization purposes until the health checking begins
+   */
   UNKNOWN_HEALTH,
-
-  /** There is no space to write the file used for healthcheck */
+  /**
+   * There is no space to write the file used for healthcheck
+   */
   INSUFFICIENT_SPACE,
-
-  /** The Disk's healthcheck encountered an exception when creating a file or directory to disk */
+  /**
+   * The Disk's healthcheck encountered an exception when creating a file or directory to disk
+   */
   CREATE_EXCEPTION,
-
-  /** The Disk's healthcheck encountered a timeout when writing to disk */
+  /**
+   * The Disk's healthcheck encountered a timeout when writing to disk
+   */
   WRITE_TIMEOUT,
-
-  /** The Disk's healthcheck encountered any other exception when writing to disk */
+  /**
+   * The Disk's healthcheck encountered any other exception when writing to disk
+   */
   WRITE_EXCEPTION,
-
-  /** The Disk's healthcheck encountered a timeout when reading from disk */
+  /**
+   * The Disk's healthcheck encountered a timeout when reading from disk
+   */
   READ_TIMEOUT,
-
-  /** The Disk's healthcheck encountered any other exception when reading from disk */
+  /**
+   * The Disk's healthcheck encountered any other exception when reading from disk
+   */
   READ_EXCEPTION,
-
-  /** The Disk's healthcheck reads a different value than what was expected */
+  /**
+   * The Disk's healthcheck reads a different value than what was expected
+   */
   READ_DIFFERENT,
-
-  /** The Disk's healthcheck encountered an io exception when deleting a file from disk */
+  /**
+   * The Disk's healthcheck encountered an io exception when deleting a file from disk
+   */
   DELETE_IO_EXCEPTION,
 }
 

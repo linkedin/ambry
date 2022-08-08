@@ -18,11 +18,13 @@ package com.github.ambry.server;
  * Each level determines the health of the server. This can be extended to include bootstrapping
  */
 public enum ServerHealthStatus {
-
-  /** The server is healthy based on the replica state's and disk state*/
+  /**
+   * The server is healthy based on the replica state's and disk state
+   */
   GOOD,
-
-  /** There was at least one issue with either the replica state or disk state on this server*/
+  /**
+   * There was at least one issue with either the replica state or disk state on this server
+   */
   BAD,
 }
 

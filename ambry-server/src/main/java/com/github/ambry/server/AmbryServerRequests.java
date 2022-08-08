@@ -429,13 +429,13 @@ public class AmbryServerRequests extends AmbryRequests {
    */
   private AdminResponse handleHealthCheckRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws StoreException, IOException {
-    ServerHealthStatus serverHealthStatus = ServerHealthStatus.BAD; //used to determine if the server is ever unhealthy
+    ServerHealthStatus serverHealthStatus = this.storeManager instanceof StorageManager ? ServerHealthStatus.GOOD
+        : ServerHealthStatus.BAD; //used to determine if the server is ever unhealthy
     JSONArray brokenDisks = new JSONArray();        // indicate which disks didn't pass the disk healthcheck
     JSONArray unstablePartitions = new JSONArray(); // indicate which partitions aren't in leader/standby state
 
     if (this.storeManager instanceof StorageManager) {
       StorageManager storageManager = (StorageManager) this.storeManager;
-      serverHealthStatus = ServerHealthStatus.GOOD;
 
       //Finds all partitions on this host
       List<PartitionId> partitionsInThisHost = Collections.list(storageManager.getPartitionToDiskManager().keys());
@@ -452,7 +452,6 @@ public class AmbryServerRequests extends AmbryRequests {
             (hostBlobStore.getCurrentState() != ReplicaState.STANDBY) && (hostBlobStore.getCurrentState()
                 != ReplicaState.LEADER))) {
 
-          serverHealthStatus = ServerHealthStatus.BAD;
           JSONObject unstablePartition = new JSONObject();
           unstablePartition.put("partitionId", partitionId);
           unstablePartition.put("reason", hostBlobStore.getCurrentState());
@@ -474,7 +473,6 @@ public class AmbryServerRequests extends AmbryRequests {
           if (!partitionsDiskManagers.contains(mountedDiskManager)
               || mountedDiskManager.getDiskHealthStatus() != DiskHealthStatus.HEALTHY) {
 
-            serverHealthStatus = ServerHealthStatus.BAD;
             JSONObject brokenDisk = new JSONObject();
             brokenDisk.put("disk", entry.getKey().getMountPath());
             brokenDisk.put("reason", mountedDiskManager.getDiskHealthStatus());
@@ -483,6 +481,9 @@ public class AmbryServerRequests extends AmbryRequests {
         }
       }
     }
+    //if there are any issues on the partition or disk state then considered BAD
+    serverHealthStatus =
+        unstablePartitions.length() > 0 || brokenDisks.length() > 0 ? ServerHealthStatus.BAD : serverHealthStatus;
 
     //Initializing the content of the response as a json
     JSONObject contentJSON = new JSONObject();
