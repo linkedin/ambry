@@ -643,13 +643,13 @@ public class DiskManager {
      * operation if there was an exception
      * @param fileChannel used to perform the read/write operation
      * @param buffer either used to write from or read to the buffer in the respective operation
-     * @param timeoutException indicate if the timeout is from reading or writing
-     * @param otherException indicate if the other exceptions are from reading or writing
+     * @param timeoutStatus indicate if the timeout is from reading or writing
+     * @param otherStatus indicate if the other exceptions are from reading or writing
      * @param isWriting inform the function to either write or read with the buffer and filechannel
      * @return True/False to indicate if the operation completed with no issues or not
      */
     private boolean performOperation(AsynchronousFileChannel fileChannel, ByteBuffer buffer,
-        DiskHealthStatus timeoutException, DiskHealthStatus otherException, boolean isWriting) {
+        DiskHealthStatus timeoutStatus, DiskHealthStatus otherStatus, boolean isWriting) {
       Future<Integer> result = null;
       try {
         if (isWriting) {
@@ -660,10 +660,10 @@ public class DiskManager {
         result.get(operationTimeoutSeconds, TimeUnit.SECONDS);
         return true;
       } catch (TimeoutException e) {
-        diskHealthStatus = timeoutException;
+        diskHealthStatus = timeoutStatus;
         logger.error("Timeout Exception occurred when operating on a file for disk healthcheck", e);
       } catch (Exception e) {
-        diskHealthStatus = otherException;
+        diskHealthStatus = otherStatus;
         logger.error("Exception occurred when operating on a file for disk healthcheck", e);
       }
       if (result != null) {
@@ -686,7 +686,7 @@ public class DiskManager {
         Path path = Paths.get(healthcheckDir, "temp");
         AsynchronousFileChannel fileChannel =
             AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,
-                StandardOpenOption.SYNC, StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
+                StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
         return fileChannel;
       } catch (Exception e) {
         diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
@@ -748,7 +748,6 @@ public class DiskManager {
       if (deleteFile(fileChannel, successful) && successful) {
         diskHealthStatus = DiskHealthStatus.HEALTHY;
       }
-      ;
     }
   }
 }
