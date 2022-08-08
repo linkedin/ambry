@@ -949,20 +949,36 @@ public class AmbryServerRequestsTest {
   }
 
   /**
-   * Compares two json arrays to ensure what is seen is the same as what is expected
+   * Compares two json arrays to ensure what is seen is the same as what is expected without caring about order
    * @param expected JSONArray of what's expected in the response's content
    * @param seen JSONArray of what's seen in the response's content
    * @return True/False indicate if the two arrays were equal or not
    */
   public boolean compareJSONArrayNoOrder(JSONArray expected, JSONArray seen) {
-    HashSet<JSONObject> seenJSONObjects = new HashSet<>();
-    for (int i = 0; i < seen.length(); i++) {
-      seenJSONObjects.add((JSONObject) expected.get(i));
-    }
-    for (int i = 0; i < expected.length(); i++) {
-      if (seenJSONObjects.contains((JSONObject) expected.get(i))) {
-        seenJSONObjects.remove((JSONObject) expected.get(i));
-      } else {
+
+    //Iterates through the expected elements
+    for (Object expectedObject : expected) {
+      JSONObject expectedJSONObject = (JSONObject) expectedObject;
+      boolean comparisonMatch = false;
+
+      //Finds which seen json object is identical to what's expected
+      for (int i = 0; i < seen.length(); i++) {
+        JSONObject seenJSONObject = (JSONObject) seen.get(i);
+        boolean foundCopy = true;
+
+        //compares each value by string
+        for (String key : expectedJSONObject.keySet()) {
+          foundCopy = foundCopy && seenJSONObject.get(key).toString().equals(expectedJSONObject.get(key).toString());
+        }
+
+        //if this is the identical copy then we can compare the next expected element
+        if (foundCopy) {
+          comparisonMatch = true;
+          break;
+        }
+      }
+      //the match wasn't found so the seen array isn't identical to the expected array
+      if (!comparisonMatch) {
         return false;
       }
     }
