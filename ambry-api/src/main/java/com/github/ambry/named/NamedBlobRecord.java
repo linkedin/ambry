@@ -26,8 +26,8 @@ public class NamedBlobRecord {
   private final String containerName;
   private final String blobName;
   private final String blobId;
-  private long version;
   private final long expirationTimeMs;
+  private long version;
 
   /**
    * @param accountName the account name.
@@ -43,6 +43,24 @@ public class NamedBlobRecord {
     this.blobName = blobName;
     this.blobId = blobId;
     this.expirationTimeMs = expirationTimeMs;
+  }
+
+  /**
+   * @param accountName the account name.
+   * @param containerName the container name.
+   * @param blobName the blob name within the container.
+   * @param blobId the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param version the version of this named blob.
+   */
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long version) {
+    this.accountName = accountName;
+    this.containerName = containerName;
+    this.blobName = blobName;
+    this.blobId = blobId;
+    this.expirationTimeMs = expirationTimeMs;
+    this.version = version;
   }
 
   /**
@@ -71,14 +89,6 @@ public class NamedBlobRecord {
    */
   public String getBlobId() {
     return blobId;
-  }
-
-  /**
-   * @set the version for the named blob map.
-   * TODO Will add this to constructor when adding version in all the code places that call this class
-   */
-  public void setVersion(long versionNew) {
-    this.version = versionNew;;
   }
 
   /**
