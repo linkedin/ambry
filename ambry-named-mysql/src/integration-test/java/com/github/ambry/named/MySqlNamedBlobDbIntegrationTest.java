@@ -186,7 +186,7 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     String blobId = getBlobId(account, container);
     String blobName = "name";
-    long expirationTime = System.currentTimeMillis();
+    long expirationTime = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(24);
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
     namedBlobDb.put(record).get();
