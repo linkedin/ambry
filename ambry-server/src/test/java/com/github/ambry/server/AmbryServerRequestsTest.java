@@ -950,20 +950,6 @@ public class AmbryServerRequestsTest {
   }
 
   /**
-   * Checks the response is a valid JSON Object
-   * @param content the content from {@link AdminResponseWithContent}
-   * @return True/False if Json or not
-   */
-  public boolean isJSONValid(String content) {
-    try {
-      new JSONObject(content);
-    } catch (JSONException ex) {
-      return false;
-    }
-    return true;
-  }
-
-  /**
    * Performs the AdminRequest and Response as well as checking if the content is a json and expected
    * @param partitionId necessary to fulfill the {@link AdminRequest}
    * @param description for what this function call is attempting to test
@@ -971,24 +957,22 @@ public class AmbryServerRequestsTest {
    * @throws IOException
    * @throws InterruptedException
    */
-  public void doRequestAndHealthCheck(PartitionId partitionId, String description,JSONObject expectedResponse)
+  public void doRequestAndHealthCheck(PartitionId partitionId, String description, JSONObject expectedResponse)
       throws IOException, InterruptedException {
 
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
 
-    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, partitionId, correlationId,
-        clientId);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.HealthCheck, partitionId, correlationId, clientId);
 
     AdminResponseWithContent response =
         (AdminResponseWithContent) sendRequestGetResponse(adminRequest, ServerErrorCode.No_Error);
-    String content = new String(response.getContent(),StandardCharsets.UTF_8);
+    String content = new String(response.getContent(), StandardCharsets.UTF_8);
 
-    //Ensures the response is AdminResponse, json and as expected
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    assertTrue("Response is not a json object",isJSONValid(content));
-    JSONObject contentJSON  = new JSONObject(content);
-    assertEquals(description,expectedResponse.toString(), contentJSON.toString());
+    //Ensures the response is as expected
+    JSONObject contentJSON = new JSONObject(content);
+    assertEquals(description, expectedResponse.toString(), contentJSON.toString());
   }
 
   /**
@@ -1000,20 +984,19 @@ public class AmbryServerRequestsTest {
    * @throws InterruptedException
    * @throws StoreException
    */
-  public void setPropertyToAmbryRequests(Properties properties,String propertyKey,String propertyValue)
+  public void setPropertyToAmbryRequests(Properties properties, String propertyKey, String propertyValue)
       throws IOException, InterruptedException, StoreException {
     storageManager.shutdown();
-    properties.setProperty(propertyKey,propertyValue); //Adds the new key-value pair
+    properties.setProperty(propertyKey, propertyValue); //Adds the new key-value pair
 
     //Initializes the new environment through clusterMap, storageManager, and AmbryRequests
     ClusterMap clusterMap = new MockClusterMap();
     DiskManagerConfig diskManagerConfig = new DiskManagerConfig(new VerifiableProperties(properties));
     storageManager =
-        new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, null,diskManagerConfig);
-    ambryRequests =
-        new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-            clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager,
-            null, serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
+        new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, null, diskManagerConfig);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
+        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
     storageManager.start();
   }
 
@@ -1023,13 +1006,13 @@ public class AmbryServerRequestsTest {
    * @throws IOException
    */
   @Test
-  public void healthCheckTest()
-      throws InterruptedException, StoreException, IOException {
+  public void healthCheckTest() throws InterruptedException, StoreException, IOException {
 
     //retrieves writeable partitions to test with
     List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
     JSONObject expectedJSONReponse = new JSONObject();
-    expectedJSONReponse.put("brokenDisks",new JSONArray());
+    expectedJSONReponse.put("brokenDisks", new JSONArray());
+    expectedJSONReponse.put("unstablePartitions", new JSONArray());
 
     for (PartitionId id : partitionIds) {
 
@@ -1037,57 +1020,63 @@ public class AmbryServerRequestsTest {
       ReplicaState originalPartitionState = storageManager.getStore(id).getCurrentState();
 
       //change Partition to Standby or Leader
-      storageManager.getStore(id).setCurrentState(
-            TestUtils.RANDOM.nextInt() % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.LEADER);
+      storageManager.getStore(id)
+          .setCurrentState(TestUtils.RANDOM.nextInt() % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.LEADER);
 
-      expectedJSONReponse.put("health",ServerHealthStatus.GOOD);
-      doRequestAndHealthCheck(id,"Payload was expected to indicate healthy host",expectedJSONReponse);
+      expectedJSONReponse.put("health", ServerHealthStatus.GOOD);
+      doRequestAndHealthCheck(id, "Payload was expected to indicate healthy host", expectedJSONReponse);
 
       //Test 2: "BAD" response expected where we change partition to error State
       //change all replica states in partition to ERROR
       storageManager.getStore(id).setCurrentState(ReplicaState.ERROR);
 
-      expectedJSONReponse.put("health",ServerHealthStatus.BAD);
-      doRequestAndHealthCheck(id,"Payload was expected to be BAD with no disk healthchecks",expectedJSONReponse);
+      expectedJSONReponse.put("health", ServerHealthStatus.BAD);
+      JSONArray unstablePartitions = new JSONArray();
+      JSONObject unstablePartition = new JSONObject();
+      unstablePartition.put("partitionId", id);
+      unstablePartition.put("reason", ReplicaState.ERROR);
+      unstablePartitions.put(unstablePartition);
+      expectedJSONReponse.put("unstablePartitions", unstablePartitions);
+      doRequestAndHealthCheck(id, "Payload was expected to be BAD with no disk healthchecks", expectedJSONReponse);
 
       //restore the state of the Partition
       storageManager.getStore(id).setCurrentState(originalPartitionState);
-
+      expectedJSONReponse.put("unstablePartitions", new JSONArray());
     }
 
     //Test 3: "GOOD" response expected, enabling disk healthchecking on the partition of interest and
     // disk's should be healthy
 
     Properties currentProperties = createProperties(validateRequestOnStoreState, true);
-    setPropertyToAmbryRequests(currentProperties,"disk.manager.disk.healthcheck.enabled","true");
+    setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.enabled", "true");
     TimeUnit.SECONDS.sleep(5); // Enough time to perform each step of disk healthcheck(create,write,read,delete)
 
-    expectedJSONReponse.put("health",ServerHealthStatus.GOOD);
-    doRequestAndHealthCheck(partitionIds.get(0),"Payload was expected to be GOOD with all disks passing disk healthcheck",
-        expectedJSONReponse);
+    expectedJSONReponse.put("health", ServerHealthStatus.GOOD);
+    doRequestAndHealthCheck(partitionIds.get(0),
+        "Payload was expected to be GOOD with all disks passing disk healthcheck", expectedJSONReponse);
 
     //Test 4: "BAD" response expected, insufficient Write Timeouts on partition of interest so the test will fail
     // when writing to disk
-    setPropertyToAmbryRequests(currentProperties,"disk.manager.disk.healthcheck.operation.timeout.seconds","0");
+    setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.operation.timeout.seconds", "0");
     TimeUnit.SECONDS.sleep(5); //Sufficient time to write, fail and save the health of disk to then retrieve
 
     //All the disks should have failed since the all their write timeouts were set to 0
     JSONArray brokenDisks = new JSONArray();
-    for(DiskId entry : storageManager.getDiskToDiskManager().keySet()) {
+    for (DiskId entry : storageManager.getDiskToDiskManager().keySet()) {
       JSONObject brokenDisk = new JSONObject();
       brokenDisk.put("disk", entry.getMountPath());
       brokenDisk.put("reason", DiskHealthStatus.WRITE_TIMEOUT);
       brokenDisks.put(brokenDisk);
     }
-    expectedJSONReponse.put("brokenDisks",brokenDisks);
-    expectedJSONReponse.put("health",ServerHealthStatus.BAD);
+    expectedJSONReponse.put("brokenDisks", brokenDisks);
+    expectedJSONReponse.put("health", ServerHealthStatus.BAD);
 
-    doRequestAndHealthCheck(partitionIds.get(0),"Payload was expected to be BAD with one disk failing timeout",
+    doRequestAndHealthCheck(partitionIds.get(0), "Payload was expected to be BAD with one disk failing timeout",
         expectedJSONReponse);
 
     //Restores the environment from no longer using disk healthchecks
     currentProperties = createProperties(validateRequestOnStoreState, true);
-    setPropertyToAmbryRequests(currentProperties,"disk.manager.disk.healthcheck.enabled","false");
+    setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.enabled", "false");
   }
 
   // helpers

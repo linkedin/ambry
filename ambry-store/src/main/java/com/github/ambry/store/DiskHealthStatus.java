@@ -28,8 +28,8 @@ public enum DiskHealthStatus {
   /** There is no space to write the file used for healthcheck */
   INSUFFICIENT_SPACE,
 
-  /** The Disk's healthcheck encountered an io exception when creating a file to disk */
-  CREATE_IO_EXCEPTION,
+  /** The Disk's healthcheck encountered an exception when creating a file or directory to disk */
+  CREATE_EXCEPTION,
 
   /** The Disk's healthcheck encountered a timeout when writing to disk */
   WRITE_TIMEOUT,

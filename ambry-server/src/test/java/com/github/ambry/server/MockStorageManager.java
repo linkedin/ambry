@@ -496,10 +496,9 @@ class MockStorageManager extends StorageManager {
   MockStorageManager(Set<StoreKey> validKeysInStore, ClusterMap clusterMap, DataNodeId dataNodeId,
       FindTokenHelper findTokenHelper, ClusterParticipant clusterParticipant, DiskManagerConfig diskManagerConfig)
       throws StoreException {
-    super(new StoreConfig(VPROPS), diskManagerConfig, Utils.newScheduler(1, true), new MetricRegistry(),
-        null, clusterMap, dataNodeId, null,
-        clusterParticipant == null ? null : Collections.singletonList(clusterParticipant), new MockTime(), null,
-        new InMemAccountService(false, false));
+    super(new StoreConfig(VPROPS), diskManagerConfig, Utils.newScheduler(1, true), new MetricRegistry(), null,
+        clusterMap, dataNodeId, null, clusterParticipant == null ? null : Collections.singletonList(clusterParticipant),
+        new MockTime(), null, new InMemAccountService(false, false));
     this.validKeysInStore = validKeysInStore;
     this.findTokenHelper = findTokenHelper;
     for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
@@ -614,7 +613,7 @@ class MockStorageManager extends StorageManager {
   @Override
   public void start() throws InterruptedException, StoreException {
     super.start();
-    for(Store store: storeMap.values()){
+    for (Store store : storeMap.values()) {
       ((TestStore) store).start();
     }
   }

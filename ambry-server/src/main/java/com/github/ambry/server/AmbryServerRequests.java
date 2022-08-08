@@ -95,7 +95,7 @@ public class AmbryServerRequests extends AmbryRequests {
   AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
-      ServerConfig serverConfig, DiskManagerConfig diskManagerConfig,StoreKeyConverterFactory storeKeyConverterFactory,
+      ServerConfig serverConfig, DiskManagerConfig diskManagerConfig, StoreKeyConverterFactory storeKeyConverterFactory,
       StatsManager statsManager, ClusterParticipant clusterParticipant) {
     super(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
         operationNotification, replicationEngine, storeKeyFactory, storeKeyConverterFactory);
@@ -430,14 +430,15 @@ public class AmbryServerRequests extends AmbryRequests {
   private AdminResponse handleHealthCheckRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws StoreException, IOException {
     ServerHealthStatus serverHealthStatus = ServerHealthStatus.BAD; //used to determine if the server is ever unhealthy
-    JSONArray brokenDisks = new JSONArray();
+    JSONArray brokenDisks = new JSONArray();        // indicate which disks didn't pass the disk healthcheck
+    JSONArray unstablePartitions = new JSONArray(); // indicate which partitions aren't in leader/standby state
 
     if (this.storeManager instanceof StorageManager) {
       StorageManager storageManager = (StorageManager) this.storeManager;
       serverHealthStatus = ServerHealthStatus.GOOD;
 
       //Finds all partitions on this host
-      List<PartitionId> partitionsInThisHost =Collections.list(storageManager.getPartitionToDiskManager().keys());
+      List<PartitionId> partitionsInThisHost = Collections.list(storageManager.getPartitionToDiskManager().keys());
 
       /*
        Checks if the Host's BlobStore exists,started and is Leader/Standby ReplicaState for all Partitions
@@ -447,42 +448,49 @@ public class AmbryServerRequests extends AmbryRequests {
         BlobStore hostBlobStore = (BlobStore) storageManager.getStore(partitionId);
 
         //if any fail, this host isn't healthy
-        if (hostBlobStore == null || !hostBlobStore.isStarted() ||
-            ((hostBlobStore.getCurrentState() != ReplicaState.STANDBY) &&
-                (hostBlobStore.getCurrentState() != ReplicaState.LEADER))) {
+        if (hostBlobStore == null || !hostBlobStore.isStarted() || (
+            (hostBlobStore.getCurrentState() != ReplicaState.STANDBY) && (hostBlobStore.getCurrentState()
+                != ReplicaState.LEADER))) {
+
           serverHealthStatus = ServerHealthStatus.BAD;
-          break;
+          JSONObject unstablePartition = new JSONObject();
+          unstablePartition.put("partitionId", partitionId);
+          unstablePartition.put("reason", hostBlobStore.getCurrentState());
+          unstablePartitions.put(unstablePartition);
         }
       }
 
       /*
        Checks if every disk that's assigned to a partition is also mounted and disk is healthy
        */
-      HashSet<DiskManager> partitionsDiskManagers = new HashSet<>(storageManager.getPartitionToDiskManager().values());
-      for(Map.Entry<DiskId,DiskManager> entry : storageManager.getDiskToDiskManager().entrySet()){
-        DiskManager mountedDiskManager = entry.getValue();
+      if (diskManagerConfig.diskManagerDiskHealthCheckEnabled) {
+        HashSet<DiskManager> partitionsDiskManagers =
+            new HashSet<>(storageManager.getPartitionToDiskManager().values());
+        for (Map.Entry<DiskId, DiskManager> entry : storageManager.getDiskToDiskManager().entrySet()) {
+          DiskManager mountedDiskManager = entry.getValue();
 
-        //Checks Disk healthchecking is enabled and
-        // if a disk isn't healthy then store that disk to return in the response
-        if(diskManagerConfig.diskManagerDiskHealthCheckEnabled &&
-            (!partitionsDiskManagers.contains(mountedDiskManager) ||
-            mountedDiskManager.getDiskHealthStatus() != DiskHealthStatus.HEALTHY)){
+          //Checks Disk healthchecking is enabled and
+          // if a disk isn't mounted as expected or isn't healthy then store it as part of the response
+          if (!partitionsDiskManagers.contains(mountedDiskManager)
+              || mountedDiskManager.getDiskHealthStatus() != DiskHealthStatus.HEALTHY) {
 
-          serverHealthStatus = ServerHealthStatus.BAD;
-          JSONObject brokenDisk = new JSONObject();
-          brokenDisk.put("disk",entry.getKey().getMountPath());
-          brokenDisk.put("reason",mountedDiskManager.getDiskHealthStatus());
-          brokenDisks.put(brokenDisk);
+            serverHealthStatus = ServerHealthStatus.BAD;
+            JSONObject brokenDisk = new JSONObject();
+            brokenDisk.put("disk", entry.getKey().getMountPath());
+            brokenDisk.put("reason", mountedDiskManager.getDiskHealthStatus());
+            brokenDisks.put(brokenDisk);
+          }
         }
       }
     }
 
     //Initializing the content of the response as a json
     JSONObject contentJSON = new JSONObject();
-    contentJSON.put("health",serverHealthStatus);
-    contentJSON.put("brokenDisks",brokenDisks);
+    contentJSON.put("health", serverHealthStatus);
+    contentJSON.put("brokenDisks", brokenDisks);
+    contentJSON.put("unstablePartitions", unstablePartitions);
 
-    byte[] content =  contentJSON.toString().getBytes(StandardCharsets.UTF_8);
+    byte[] content = contentJSON.toString().getBytes(StandardCharsets.UTF_8);
     ServerErrorCode error = ServerErrorCode.No_Error;
 
     return new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(), error, content);

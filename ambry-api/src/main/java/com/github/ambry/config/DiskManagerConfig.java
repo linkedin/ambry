@@ -54,8 +54,7 @@ public class DiskManagerConfig {
     diskManagerRequiredSwapSegmentsPerSize =
         verifiableProperties.getIntInRange("disk.manager.required.swap.segments.per.size", 1, 0, 1000);
     diskManagerEnableSegmentPooling = verifiableProperties.getBoolean("disk.manager.enable.segment.pooling", false);
-    diskManagerDiskHealthCheckEnabled =
-        verifiableProperties.getBoolean("disk.manager.disk.healthcheck.enabled", false);
+    diskManagerDiskHealthCheckEnabled = verifiableProperties.getBoolean("disk.manager.disk.healthcheck.enabled", false);
     diskManagerDiskHealthCheckIntervalSeconds =
         verifiableProperties.getInt("disk.manager.disk.healthcheck.interval.seconds", 60);
     diskManagerDiskHealthCheckFilePath =

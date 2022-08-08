@@ -202,9 +202,9 @@ public class DiskManager {
       compactionManager.enable();
       reportUnrecognizedDirs();
       running = true;
-      if(diskHealthCheck.isEnabled()) {
+      if (diskHealthCheck.isEnabled()) {
         scheduler.scheduleAtFixedRate(() -> diskHealthCheck.diskHealthTest(), 0,
-            diskManagerConfig.diskManagerDiskHealthCheckIntervalSeconds,TimeUnit.SECONDS);
+            diskManagerConfig.diskManagerDiskHealthCheckIntervalSeconds, TimeUnit.SECONDS);
       }
     } catch (StoreException e) {
       logger.error("Error while starting the DiskManager for {} ; no stores will be accessible on this disk.",
@@ -591,31 +591,29 @@ public class DiskManager {
     }
   }
 
-  public DiskHealthStatus getDiskHealthStatus(){
+  public DiskHealthStatus getDiskHealthStatus() {
     return diskHealthStatus;
   }
 
   /**
-    Manages the disk healthchecking tasks such as creating,writing, reading, and deleting a file
+   Manages the disk healthchecking tasks such as creating,writing, reading, and deleting a file
    */
-  private class DiskHealthCheck{
+  private class DiskHealthCheck {
     private final int operationTimeoutSeconds;      //how long a read/write operation is allotted
     private final boolean enabled;                  //enabled healthchecking
-    private final String heathcheckDir;             //filepath of where the file will be created
+    private final String healthcheckDir;            //filepath of where the file will be created
 
-
-    DiskHealthCheck(int operationTimeoutSeconds, boolean enabled, String heathcheckDir){
+    DiskHealthCheck(int operationTimeoutSeconds, boolean enabled, String healthcheckDir) {
       this.enabled = enabled;
-      this.heathcheckDir = heathcheckDir;
+      this.healthcheckDir = healthcheckDir;
       this.operationTimeoutSeconds = operationTimeoutSeconds;
-
     }
 
     /**
      * Getter utility for enabled boolean
      * @return flag to indicate disk healthchecking or not
      */
-    public boolean isEnabled(){
+    private boolean isEnabled() {
       return enabled;
     }
 
@@ -624,17 +622,78 @@ public class DiskManager {
      * @param fileChannel the file used for disk healthcheck
      * @return True/False depending on the close/delete was successful
      */
-    private boolean deleteFile(AsynchronousFileChannel fileChannel){
-      if(fileChannel.isOpen()){
-        try{
+    private boolean deleteFile(AsynchronousFileChannel fileChannel, boolean successfulThusFar) {
+      if (fileChannel.isOpen()) {
+        try {
           fileChannel.close();
-        }catch(IOException e){
-          diskHealthStatus = diskHealthStatus.DELETE_IO_EXCEPTION;
+        } catch (IOException e) {
+          //ensures that any error code won't be overwritten thus far
+          if (successfulThusFar) {
+            diskHealthStatus = diskHealthStatus.DELETE_IO_EXCEPTION;
+          }
           logger.error("Exception occurred when deleting a file for disk healthcheck", e);
           return false;
         }
       }
       return true;
+    }
+
+    /**
+     * Will perform either a read or write operation on the disk while checking for exceptions and canceling the
+     * operation if there was an exception
+     * @param fileChannel used to perform the read/write operation
+     * @param buffer either used to write from or read to the buffer in the respective operation
+     * @param timeoutException indicate if the timeout is from reading or writing
+     * @param otherException indicate if the other exceptions are from reading or writing
+     * @param isWriting inform the function to either write or read with the buffer and filechannel
+     * @return True/False to indicate if the operation completed with no issues or not
+     */
+    private boolean performOperation(AsynchronousFileChannel fileChannel, ByteBuffer buffer,
+        DiskHealthStatus timeoutException, DiskHealthStatus otherException, boolean isWriting) {
+      Future<Integer> result = null;
+      try {
+        if (isWriting) {
+          result = fileChannel.write(buffer, 0);
+        } else {
+          result = fileChannel.read(buffer, 0);
+        }
+        result.get(operationTimeoutSeconds, TimeUnit.SECONDS);
+        return true;
+      } catch (TimeoutException e) {
+        diskHealthStatus = timeoutException;
+        logger.error("Timeout Exception occurred when operating on a file for disk healthcheck", e);
+      } catch (Exception e) {
+        diskHealthStatus = otherException;
+        logger.error("Exception occurred when operating on a file for disk healthcheck", e);
+      }
+      if (result != null) {
+        result.cancel(true);
+      }
+      return false;
+    }
+
+    /**
+     * creates the directory to store the file if it doesn't already exist and
+     * creates filechannel used to perform the disk healthcheck read/write operations
+     * @return filechannel if everything functioned without errors or null if there was an exception
+     */
+    private AsynchronousFileChannel createFileChannel() {
+      try {
+        File dir = new File(healthcheckDir);
+        if (!dir.exists() && !dir.mkdir()) {
+          throw new Error(String.format("%s directory wasn't created", healthcheckDir));
+        }
+        Path path = Paths.get(healthcheckDir, "temp");
+        AsynchronousFileChannel fileChannel =
+            AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,
+                StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
+        fileChannel.force(true); //writes to disk immediately
+        return fileChannel;
+      } catch (Exception e) {
+        diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
+        logger.error("Exception occurred when creating a file/directory for disk healthcheck", e);
+        return null;
+      }
     }
 
     /**
@@ -645,24 +704,15 @@ public class DiskManager {
      * 4. Read and compares what was written to disk
      * 5. Deletes the file
      */
-    public void diskHealthTest(){
-      if(!enabled){ return;} //ensures disk checks are enabled
+    public void diskHealthTest() {
+      //ensures disk healthchecks are enabled
+      if (!enabled) {
+        return;
+      }
 
-      //Creates directory for the file if not already there
-      File dir = new File(heathcheckDir);
-      if (!dir.exists()) dir.mkdirs();
-
-      //Creates and opens the file
-      AsynchronousFileChannel fileChannel;
-      try {
-        Path path = Paths.get(heathcheckDir,"temp");
-        fileChannel =
-            AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,
-                StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
-        fileChannel.force(true); //writes to disk immediately
-      }catch(IOException e){
-        diskHealthStatus = DiskHealthStatus.CREATE_IO_EXCEPTION;
-        logger.error("Exception occurred when creating a file for disk healthcheck", e);
+      //Creates the directory and opens the file
+      AsynchronousFileChannel fileChannel = createFileChannel();
+      if (fileChannel == null) {
         return;
       }
 
@@ -672,56 +722,34 @@ public class DiskManager {
       buffer.put(todayDate.getBytes());
       buffer.flip();
 
+      boolean successful = false; //success indicator for write and read operation
+
       //Write to file in operationTimeoutSeconds seconds
-      Future<Integer> writeOperation = fileChannel.write(buffer, 0);
-      try{
-        writeOperation.get(operationTimeoutSeconds,TimeUnit.SECONDS);
-      }catch(TimeoutException e){
-        writeOperation.cancel(true);
-        diskHealthStatus = DiskHealthStatus.WRITE_TIMEOUT;
-        logger.error("Timeout Exception occurred when writing to a file for disk healthcheck", e);
-        deleteFile(fileChannel);
-        return;
-      }catch(Exception e){
-        writeOperation.cancel(true);
-        diskHealthStatus = DiskHealthStatus.WRITE_EXCEPTION;
-        logger.error("Exception occurred when writing to a file for disk healthcheck", e);
-        deleteFile(fileChannel);
-        return;
-      }
+      successful =
+          performOperation(fileChannel, buffer, DiskHealthStatus.WRITE_TIMEOUT, DiskHealthStatus.WRITE_EXCEPTION, true);
 
       //Reads from the file in operationTimeoutSeconds seconds
-      buffer.clear();
-      Future<Integer> readOperation = fileChannel.read(buffer, 0);
-
-      try{
-        readOperation.get(operationTimeoutSeconds,TimeUnit.SECONDS);
-      }catch(TimeoutException e){
-        readOperation.cancel(true);
-        diskHealthStatus = DiskHealthStatus.READ_TIMEOUT;
-        logger.error("Timeout Exception occurred when reading from a file for disk healthcheck", e);
-        deleteFile(fileChannel);
-        return;
-      }catch(Exception e){
-        readOperation.cancel(true);
-        diskHealthStatus = DiskHealthStatus.READ_EXCEPTION;
-        logger.error("Exception occurred when reading from a file for disk healthcheck", e);
-        deleteFile(fileChannel);
-        return;
+      if (successful) {
+        buffer.clear();
+        successful =
+            performOperation(fileChannel, buffer, DiskHealthStatus.READ_TIMEOUT, DiskHealthStatus.READ_EXCEPTION,
+                false);
       }
 
       //Checks if the content matches what was written
-      String fileContent = new String(buffer.array()).trim();
-      if(!fileContent.equals(todayDate)){
-        diskHealthStatus = DiskHealthStatus.READ_DIFFERENT;
-        deleteFile(fileChannel);
-        return;
+      if (successful) {
+        String fileContent = new String(buffer.array()).trim();
+        successful = fileContent.equals(todayDate);
+        if (!successful) {
+          diskHealthStatus = DiskHealthStatus.READ_DIFFERENT;
+        }
       }
 
-      //Deletes this test file
-      if(deleteFile(fileChannel)){
+      //Deletes this test file and only specifies healthy if everything successful
+      if (deleteFile(fileChannel, successful) && successful) {
         diskHealthStatus = DiskHealthStatus.HEALTHY;
-      };
+      }
+      ;
     }
   }
 }
