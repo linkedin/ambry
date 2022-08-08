@@ -28,6 +28,7 @@ public class NamedBlobRecord {
   private final String blobId;
   private final long expirationTimeMs;
   private final long version;
+  private boolean hasDataIssue;
 
   /**
    * @param accountName the account name.
@@ -38,7 +39,7 @@ public class NamedBlobRecord {
    */
   public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
       long expirationTimeMs) {
-    this(accountName, containerName, blobName, blobId, expirationTimeMs, 0L);
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, 0);
   }
 
   /**
@@ -95,6 +96,20 @@ public class NamedBlobRecord {
   }
 
   /**
+   * @param hasDataIssue whether has data issue for this query (eg data inconsistency between old and new tables).
+   */
+  public void setHasDataIssue(boolean hasDataIssue) {
+    this.hasDataIssue = hasDataIssue;
+  }
+
+  /**
+   * @return the hasDataIssue for the named blob query.
+   */
+  public boolean getHasDataIssue() {
+    return hasDataIssue;
+  }
+
+  /**
    * @return the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    */
   public long getExpirationTimeMs() {
@@ -112,6 +127,16 @@ public class NamedBlobRecord {
     NamedBlobRecord record = (NamedBlobRecord) o;
     return expirationTimeMs == record.expirationTimeMs && Objects.equals(accountName, record.accountName)
         && Objects.equals(containerName, record.containerName) && Objects.equals(blobName, record.blobName)
-        && Objects.equals(blobId, record.blobId) && Objects.equals(version, record.version);
+        && Objects.equals(blobId, record.blobId);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(blobId);
+  }
+
+  public String toString() {
+    return "NamedBlobRecord[accountName=" + accountName + ",containerName=" + containerName + ",blobName=" + blobName +
+        ",blobId=" + blobId + ",expirationTimeMs=" + expirationTimeMs + "]";
   }
 }

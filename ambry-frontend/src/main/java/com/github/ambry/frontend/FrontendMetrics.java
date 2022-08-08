@@ -232,6 +232,11 @@ public class FrontendMetrics {
   public final Meter putWithAccountAndContainerHeaderRate;
   public final Meter putWithAccountAndContainerUriRate;
 
+  // Named Blob
+  public final Counter namedDataInconsistentGetCount;
+  public final Counter namedDataInconsistentListCount;
+  public final Counter namedDataInconsistentDeleteCount;
+
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
@@ -585,5 +590,13 @@ public class FrontendMetrics {
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerHeaderRate"));
     putWithAccountAndContainerUriRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerUriRate"));
+
+    // Named Blob
+    namedDataInconsistentGetCount = metricRegistry.counter(
+        MetricRegistry.name(FrontendRestRequestService.class, "namedDataInconsistentGetCount"));
+    namedDataInconsistentListCount = metricRegistry.counter(
+        MetricRegistry.name(FrontendRestRequestService.class, "namedDataInconsistentListCount"));
+    namedDataInconsistentDeleteCount = metricRegistry.counter(
+        MetricRegistry.name(FrontendRestRequestService.class, "namedDataInconsistentDeleteCount"));
   }
 }

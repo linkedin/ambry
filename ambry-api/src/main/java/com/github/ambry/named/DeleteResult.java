@@ -15,12 +15,16 @@
 
 package com.github.ambry.named;
 
+import java.util.Objects;
+
+
 /**
  * Class to convey information about a successful deletion from {@link NamedBlobDb}.
  */
 public class DeleteResult {
   private final String blobId;
   private final boolean alreadyDeleted;
+  private boolean hasDataIssue;
 
   /**
    * @param blobId the blob ID from the deleted record.
@@ -43,5 +47,37 @@ public class DeleteResult {
    */
   public boolean isAlreadyDeleted() {
     return alreadyDeleted;
+  }
+
+
+  /**
+   * @param hasDataIssue whether has data issue for this query (eg data inconsistency between old and new tables).
+   */
+  public void setHasDataIssue(boolean hasDataIssue) {
+    this.hasDataIssue = hasDataIssue;
+  }
+
+
+  /**
+   * @return the hasDataIssue for the named blob query.
+   */
+  public boolean getHasDataIssue() {
+    return hasDataIssue;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    DeleteResult record = (DeleteResult) o;
+    return Objects.equals(getBlobId(), record.getBlobId()) && Objects.equals(isAlreadyDeleted(), record.isAlreadyDeleted());
+  }
+
+  public String toString() {
+    return "DeleteResult[blobId=" + getBlobId() + ",isAlreadyDeleted=" + isAlreadyDeleted() + "]";
   }
 }

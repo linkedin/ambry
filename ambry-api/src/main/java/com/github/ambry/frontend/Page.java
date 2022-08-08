@@ -33,6 +33,7 @@ public class Page<T> {
 
   private final List<T> entries;
   private final String nextPageToken;
+  private boolean hasDataIssue;
 
   /**
    *
@@ -81,5 +82,19 @@ public class Page<T> {
         : Utils.listView(entriesArray::length, i -> entryDeserializer.apply(entriesArray.getJSONObject(i)));
     String nextPageToken = jsonObject.optString(NEXT_PAGE_TOKEN_KEY, null);
     return new Page<>(entries, nextPageToken);
+  }
+
+  /**
+   * @param hasDataIssue whether has data issue for this query (eg data inconsistency between old and new tables).
+   */
+  public void setHasDataIssue(boolean hasDataIssue) {
+    this.hasDataIssue = hasDataIssue;
+  }
+
+  /**
+   * @return the hasDataIssue for the named blob query.
+   */
+  public boolean getHasDataIssue() {
+    return hasDataIssue;
   }
 }

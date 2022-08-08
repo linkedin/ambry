@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -174,72 +175,24 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
   }
 
-
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
       GetOption option) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
-      try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobName);
-        try (ResultSet resultSet = statement.executeQuery()) {
-          if (!resultSet.next()) {
-            throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
-                blobName);
-          }
-          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-          Timestamp expirationTime = resultSet.getTimestamp(2);
-          Timestamp deletionTime = resultSet.getTimestamp(3);
-          long currentTime = System.currentTimeMillis();
-          if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredOptions.contains(option)) {
-            throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
-                blobName);
-          } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOptions.contains(option)) {
-            throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
-                blobName);
-          } else {
-            return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime));
-          }
-        }
+      NamedBlobRecord record, recordV2 = null;
+      record = run_get(accountName, containerName, blobName, option, accountId, containerId, connection);
+      try {
+        recordV2 = run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
+      } catch (Exception e) {
+        logger.error("NAMED GET: Data Error: old table succeed while new table failed: ", e);
       }
-    }, transactionStateTracker);
-  }
-
-  public CompletableFuture<NamedBlobRecord> get_v2(String accountName, String containerName, String blobName,
-      GetOption option) {
-    TransactionStateTracker transactionStateTracker =
-        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
-    return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
-      try (PreparedStatement statement = connection.prepareStatement(GET_QUERY_V2)) {
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobName);
-        try (ResultSet resultSet = statement.executeQuery()) {
-          if (!resultSet.next()) {
-            throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
-                blobName);
-          }
-          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-          long version = resultSet.getLong(2);
-          Timestamp expirationTime = resultSet.getTimestamp(3);
-          Timestamp deletionTime = resultSet.getTimestamp(4);
-          long currentTime = System.currentTimeMillis();
-          if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredOptions.contains(option)) {
-            throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
-                blobName);
-          } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOptions.contains(option)) {
-            throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
-                blobName);
-          } else {
-            NamedBlobRecord record = new NamedBlobRecord(accountName, containerName, blobName, blobId,
-                timestampToMs(expirationTime), version);
-            return record;
-          }
-        }
+      if (!record.equals(recordV2)) {
+        logger.warn("NAMED GET: Data Inconsistence: old record='{}', new record='{}'", record, recordV2);
+        record.setHasDataIssue(true);
       }
+      return record;
     }, transactionStateTracker);
   }
 
@@ -247,83 +200,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
       String pageToken) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
-      try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY)) {
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobNamePrefix + "%");
-        statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
-        statement.setInt(5, config.listMaxResults + 1);
-        try (ResultSet resultSet = statement.executeQuery()) {
-          String nextContinuationToken = null;
-          List<NamedBlobRecord> entries = new ArrayList<>();
-          long currentTime = System.currentTimeMillis();
-          int resultIndex = 0;
-          while (resultSet.next()) {
-            if (resultIndex++ == config.listMaxResults) {
-              nextContinuationToken = resultSet.getString(1);
-              break;
-            }
-            String blobName = resultSet.getString(1);
-            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
-            Timestamp expirationTime = resultSet.getTimestamp(3);
-            Timestamp deletionTime = resultSet.getTimestamp(4);
-
-            if (compareTimestamp(expirationTime, currentTime) <= 0) {
-              logger.trace("LIST: Blob expired, ignoring in list response; account='{}', container='{}', name='{}'",
-                  accountName, containerName, blobName);
-            } else if (compareTimestamp(deletionTime, currentTime) <= 0) {
-              logger.trace("LIST: Blob deleted, ignoring in list response; account='{}', container='{}', name='{}'",
-                  accountName, containerName, blobName);
-            } else {
-              entries.add(
-                  new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime)));
-            }
-          }
-          return new Page<>(entries, nextContinuationToken);
-        }
+      Page<NamedBlobRecord> recordPage, recordPageV2=null;
+      recordPage = run_list(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
+      try {
+        recordPageV2 = run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
+      } catch (Exception e) {
+        logger.error("NAMED LIST: Data Error: old table succeed while new table failed: ", e);
       }
-    }, null);
-  }
-
-  public CompletableFuture<Page<NamedBlobRecord>> list_v2(String accountName, String containerName, String blobNamePrefix,
-      String pageToken) {
-    return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
-      try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY)) {
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobNamePrefix + "%");
-        statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
-        statement.setInt(5, config.listMaxResults + 1);
-        try (ResultSet resultSet = statement.executeQuery()) {
-          String nextContinuationToken = null;
-          List<NamedBlobRecord> entries = new ArrayList<>();
-          long currentTime = System.currentTimeMillis();
-          int resultIndex = 0;
-          while (resultSet.next()) {
-            if (resultIndex++ == config.listMaxResults) {
-              nextContinuationToken = resultSet.getString(1);
-              break;
-            }
-            String blobName = resultSet.getString(1);
-            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
-            long version = resultSet.getLong(3);
-            Timestamp expirationTime = resultSet.getTimestamp(4);
-            Timestamp deletionTime = resultSet.getTimestamp(5);
-
-            if (compareTimestamp(expirationTime, currentTime) <= 0) {
-              logger.trace("LIST: Blob expired, ignoring in list response; account='{}', container='{}', name='{}'",
-                  accountName, containerName, blobName);
-            } else if (compareTimestamp(deletionTime, currentTime) <= 0) {
-              logger.trace("LIST: Blob deleted, ignoring in list response; account='{}', container='{}', name='{}'",
-                  accountName, containerName, blobName);
-            } else {
-              entries.add(
-                  new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime), version));
-            }
-          }
-          return new Page<>(entries, nextContinuationToken);
-        }
+      if (!Objects.equals(recordPage.getEntries(), recordPageV2.getEntries())) {
+        logger.warn("NAMED LIST: Data Inconsistence: old record='{}', new record='{}'", recordPage, recordPageV2);
+        recordPage.setHasDataIssue(true);
       }
+      return recordPage;
     }, null);
   }
 
@@ -331,146 +219,32 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<PutResult> put(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
-          boolean rowAlreadyExists = false;
-          // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
-          try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
-            statement.setInt(1, accountId);
-            statement.setInt(2, containerId);
-            statement.setString(3, record.getBlobName());
-            statement.setBytes(4, Base64.decodeBase64(record.getBlobId()));
-            if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
-              statement.setTimestamp(5, new Timestamp(record.getExpirationTimeMs()));
-            } else {
-              statement.setTimestamp(5, null);
-            }
-            statement.executeUpdate();
-          } catch (SQLIntegrityConstraintViolationException e) {
-            rowAlreadyExists = true;
+          PutResult putResult;
+          putResult = run_put(record, accountId, containerId, connection);
+          try {
+            run_put_v2(record, accountId, containerId, connection);
+          } catch (Exception e) {
+            logger.error("NAMED PUT: Data Error: old table succeed while new table failed: ", e);
           }
-          // 2. If the row already exists, attempt an update, checking that the update should be allowed (the current
-          //    row in the db represents a blob that was soft deleted or expired. Since soft deleted records are not
-          //    deleted from the table before a long retention period, there is no risk of the row not existing when
-          //    this query is run.
-          if (rowAlreadyExists) {
-            try (PreparedStatement statement = connection.prepareStatement(UPDATE_IF_DELETED_OR_EXPIRED_QUERY)) {
-              // fields to update
-              statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
-              if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
-                statement.setTimestamp(2, new Timestamp(record.getExpirationTimeMs()));
-              } else {
-                statement.setTimestamp(2, null);
-              }
-              // primary key fields
-              statement.setInt(3, accountId);
-              statement.setInt(4, containerId);
-              statement.setString(5, record.getBlobName());
-              // the number of rows found will be 0 if there is currently an entry for this blob name that is
-              // not expired or deleted.
-              if (statement.executeUpdate() == 0) {
-                throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
-                    record.getContainerName(), record.getBlobName());
-              }
-            }
-          }
-          return new PutResult(record);
-        }, null);
-  }
-
-  public CompletableFuture<PutResult> put_v2(NamedBlobRecord record) {
-    return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
-        (accountId, containerId, connection) -> {
-          // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
-          try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
-            statement.setInt(1, accountId);
-            statement.setInt(2, containerId);
-            statement.setString(3, record.getBlobName());
-            statement.setBytes(4, Base64.decodeBase64(record.getBlobId()));
-            if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
-              statement.setTimestamp(5, new Timestamp(record.getExpirationTimeMs()));
-            } else {
-              statement.setTimestamp(5, null);
-            }
-            statement.setLong(6, buildVersion());
-            statement.setString(7, NamedBlobState.READY.name());
-            statement.executeUpdate();
-          } catch (SQLIntegrityConstraintViolationException e) {
-            throw e;
-          }
-          return new PutResult(record);
+          return putResult;
         }, null);
   }
 
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
-      String blobId;
-      Timestamp currentTime;
-      boolean alreadyDeleted;
-      try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY)) {
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobName);
-        try (ResultSet resultSet = statement.executeQuery()) {
-          if (!resultSet.next()) {
-            throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
-                blobName);
-          }
-          blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-          Timestamp deletionTime = resultSet.getTimestamp(2);
-          currentTime = resultSet.getTimestamp(3);
-          alreadyDeleted = (deletionTime != null && currentTime.after(deletionTime));
-        }
+      DeleteResult deleteResult, deleteResultV2=null;
+      deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
+      try {
+        deleteResultV2 = run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
+      } catch (Exception e) {
+        logger.error("NAMED DELETE: Data Error: old table succeed while new table failed: ", e);
       }
-      // only need to issue an update statement if the row was not already marked as deleted.
-      if (!alreadyDeleted) {
-        try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY)) {
-          // use the current time
-          statement.setTimestamp(1, currentTime);
-          statement.setInt(2, accountId);
-          statement.setInt(3, containerId);
-          statement.setString(4, blobName);
-          statement.executeUpdate();
-        }
+      if (!deleteResult.equals(deleteResultV2)) {
+        logger.warn("NAMED DELETE: Data Inconsistence: old record='{}', new record='{}'", deleteResult, deleteResultV2);
+        deleteResult.setHasDataIssue(true);
       }
-      return new DeleteResult(blobId, alreadyDeleted);
-    }, null);
-  }
-
-  public CompletableFuture<DeleteResult> delete_v2(String accountName, String containerName, String blobName) {
-    return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
-      String blobId;
-      long version;
-      Timestamp currentTime;
-      boolean alreadyDeleted;
-      try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY_V2)) {
-        statement.setInt(1, accountId);
-        statement.setInt(2, containerId);
-        statement.setString(3, blobName);
-        try (ResultSet resultSet = statement.executeQuery()) {
-          if (!resultSet.next()) {
-            throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
-                blobName);
-          }
-          blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-          version = resultSet.getLong(2);
-          Timestamp deletionTime = resultSet.getTimestamp(3);
-          currentTime = resultSet.getTimestamp(4);
-          alreadyDeleted = (deletionTime != null && currentTime.after(deletionTime));
-        }
-      }
-      // only need to issue an update statement if the row was not already marked as deleted.
-      if (!alreadyDeleted) {
-        try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
-          // use the current time
-          statement.setTimestamp(1, currentTime);
-          statement.setInt(2, accountId);
-          statement.setInt(3, containerId);
-          statement.setString(4, blobName);
-          statement.setLong(5, version);
-          statement.executeUpdate();
-        }
-      }
-      return new DeleteResult(blobId, alreadyDeleted);
+      return deleteResult;
     }, null);
   }
 
@@ -579,6 +353,283 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return transactionExecutors.entrySet()
         .stream()
         .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getDataSource()));
+  }
+
+  private NamedBlobRecord run_get(String accountName, String containerName, String blobName, GetOption option, short accountId,
+      short containerId, Connection connection) throws Exception {
+    try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, blobName);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        if (!resultSet.next()) {
+          throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
+              blobName);
+        }
+        String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+        Timestamp expirationTime = resultSet.getTimestamp(2);
+        Timestamp deletionTime = resultSet.getTimestamp(3);
+        long currentTime = System.currentTimeMillis();
+        if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredOptions.contains(option)) {
+          throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
+              blobName);
+        } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOptions.contains(option)) {
+          throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
+              blobName);
+        } else {
+          return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime));
+        }
+      }
+    }
+  }
+
+  private NamedBlobRecord run_get_v2(String accountName, String containerName, String blobName, GetOption option, short accountId,
+      short containerId, Connection connection) throws Exception {
+    try (PreparedStatement statement = connection.prepareStatement(GET_QUERY_V2)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, blobName);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        if (!resultSet.next()) {
+          throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
+              blobName);
+        }
+        String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+        long version = resultSet.getLong(2);
+        Timestamp expirationTime = resultSet.getTimestamp(3);
+        Timestamp deletionTime = resultSet.getTimestamp(4);
+        long currentTime = System.currentTimeMillis();
+        if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredOptions.contains(option)) {
+          throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
+              blobName);
+        } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOptions.contains(option)) {
+          throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
+              blobName);
+        } else {
+          NamedBlobRecord record = new NamedBlobRecord(accountName, containerName, blobName, blobId,
+              timestampToMs(expirationTime), version);
+          return record;
+        }
+      }
+    }
+  }
+
+  private Page<NamedBlobRecord> run_list(String accountName, String containerName, String blobNamePrefix,
+      String pageToken, short accountId, short containerId, Connection connection) throws Exception {
+    try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, blobNamePrefix + "%");
+      statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+      statement.setInt(5, config.listMaxResults + 1);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        String nextContinuationToken = null;
+        List<NamedBlobRecord> entries = new ArrayList<>();
+        long currentTime = System.currentTimeMillis();
+        int resultIndex = 0;
+        while (resultSet.next()) {
+          if (resultIndex++ == config.listMaxResults) {
+            nextContinuationToken = resultSet.getString(1);
+            break;
+          }
+          String blobName = resultSet.getString(1);
+          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
+          Timestamp expirationTime = resultSet.getTimestamp(3);
+          Timestamp deletionTime = resultSet.getTimestamp(4);
+
+          if (compareTimestamp(expirationTime, currentTime) <= 0) {
+            logger.trace("LIST: Blob expired, ignoring in list response; account='{}', container='{}', name='{}'",
+                accountName, containerName, blobName);
+          } else if (compareTimestamp(deletionTime, currentTime) <= 0) {
+            logger.trace("LIST: Blob deleted, ignoring in list response; account='{}', container='{}', name='{}'",
+                accountName, containerName, blobName);
+          } else {
+            entries.add(
+                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime)));
+          }
+        }
+        return new Page<>(entries, nextContinuationToken);
+      }
+    }
+  }
+
+  private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
+      String pageToken, short accountId, short containerId, Connection connection) throws Exception {
+    try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY_V2)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, blobNamePrefix + "%");
+      statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+      statement.setInt(5, config.listMaxResults + 1);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        String nextContinuationToken = null;
+        List<NamedBlobRecord> entries = new ArrayList<>();
+        long currentTime = System.currentTimeMillis();
+        int resultIndex = 0;
+        while (resultSet.next()) {
+          if (resultIndex++ == config.listMaxResults) {
+            nextContinuationToken = resultSet.getString(1);
+            break;
+          }
+          String blobName = resultSet.getString(1);
+          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
+          long version = resultSet.getLong(3);
+          Timestamp expirationTime = resultSet.getTimestamp(4);
+          Timestamp deletionTime = resultSet.getTimestamp(5);
+
+          if (compareTimestamp(expirationTime, currentTime) <= 0) {
+            logger.trace("LIST: Blob expired, ignoring in list response; account='{}', container='{}', name='{}'",
+                accountName, containerName, blobName);
+          } else if (compareTimestamp(deletionTime, currentTime) <= 0) {
+            logger.trace("LIST: Blob deleted, ignoring in list response; account='{}', container='{}', name='{}'",
+                accountName, containerName, blobName);
+          } else {
+            entries.add(
+                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime), version));
+          }
+        }
+        return new Page<>(entries, nextContinuationToken);
+      }
+    }
+  }
+
+  private PutResult run_put(NamedBlobRecord record, short accountId, short containerId, Connection connection)
+      throws Exception {
+    boolean rowAlreadyExists = false;
+    // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
+    try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, record.getBlobName());
+      statement.setBytes(4, Base64.decodeBase64(record.getBlobId()));
+      if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
+        statement.setTimestamp(5, new Timestamp(record.getExpirationTimeMs()));
+      } else {
+        statement.setTimestamp(5, null);
+      }
+      statement.executeUpdate();
+    } catch (SQLIntegrityConstraintViolationException e) {
+      rowAlreadyExists = true;
+    }
+    // 2. If the row already exists, attempt an update, checking that the update should be allowed (the current
+    //    row in the db represents a blob that was soft deleted or expired. Since soft deleted records are not
+    //    deleted from the table before a long retention period, there is no risk of the row not existing when
+    //    this query is run.
+    if (rowAlreadyExists) {
+      try (PreparedStatement statement = connection.prepareStatement(UPDATE_IF_DELETED_OR_EXPIRED_QUERY)) {
+        // fields to update
+        statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
+        if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
+          statement.setTimestamp(2, new Timestamp(record.getExpirationTimeMs()));
+        } else {
+          statement.setTimestamp(2, null);
+        }
+        // primary key fields
+        statement.setInt(3, accountId);
+        statement.setInt(4, containerId);
+        statement.setString(5, record.getBlobName());
+        // the number of rows found will be 0 if there is currently an entry for this blob name that is
+        // not expired or deleted.
+        if (statement.executeUpdate() == 0) {
+          throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
+              record.getContainerName(), record.getBlobName());
+        }
+      }
+    }
+    return new PutResult(record);
+  }
+
+  private PutResult run_put_v2(NamedBlobRecord record, short accountId, short containerId, Connection connection)
+      throws Exception {
+    // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
+    try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, record.getBlobName());
+      statement.setBytes(4, Base64.decodeBase64(record.getBlobId()));
+      if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
+        statement.setTimestamp(5, new Timestamp(record.getExpirationTimeMs()));
+      } else {
+        statement.setTimestamp(5, null);
+      }
+      statement.setLong(6, buildVersion());
+      statement.setString(7, NamedBlobState.READY.name());
+      statement.executeUpdate();
+    } catch (SQLIntegrityConstraintViolationException e) {
+      throw e;
+    }
+    return new PutResult(record);
+  }
+
+  private DeleteResult run_delete(String accountName, String containerName, String blobName, short accountId,
+      short containerId, Connection connection) throws Exception {
+    String blobId;
+    Timestamp currentTime;
+    boolean alreadyDeleted;
+    try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, blobName);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        if (!resultSet.next()) {
+          throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
+              blobName);
+        }
+        blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+        Timestamp deletionTime = resultSet.getTimestamp(2);
+        currentTime = resultSet.getTimestamp(3);
+        alreadyDeleted = (deletionTime != null && currentTime.after(deletionTime));
+      }
+    }
+    // only need to issue an update statement if the row was not already marked as deleted.
+    if (!alreadyDeleted) {
+      try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY)) {
+        // use the current time
+        statement.setTimestamp(1, currentTime);
+        statement.setInt(2, accountId);
+        statement.setInt(3, containerId);
+        statement.setString(4, blobName);
+        statement.executeUpdate();
+      }
+    }
+    return new DeleteResult(blobId, alreadyDeleted);
+  }
+
+  private DeleteResult run_delete_v2(String accountName, String containerName, String blobName, short accountId,
+      short containerId, Connection connection) throws Exception {
+    String blobId;
+    long version;
+    Timestamp currentTime;
+    boolean alreadyDeleted;
+    try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY_V2)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, blobName);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        if (!resultSet.next()) {
+          throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
+              blobName);
+        }
+        blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+        version = resultSet.getLong(2);
+        Timestamp deletionTime = resultSet.getTimestamp(3);
+        currentTime = resultSet.getTimestamp(4);
+        alreadyDeleted = (deletionTime != null && currentTime.after(deletionTime));
+      }
+    }
+    // only need to issue an update statement if the row was not already marked as deleted.
+    if (!alreadyDeleted) {
+      try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
+        // use the current time
+        statement.setTimestamp(1, currentTime);
+        statement.setInt(2, accountId);
+        statement.setInt(3, containerId);
+        statement.setString(4, blobName);
+        statement.setLong(5, version);
+        statement.executeUpdate();
+      }
+    }
+    return new DeleteResult(blobId, alreadyDeleted);
   }
 
   /**
