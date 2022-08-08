@@ -27,7 +27,7 @@ public class NamedBlobRecord {
   private final String blobName;
   private final String blobId;
   private final long expirationTimeMs;
-  private long version;
+  private final long version;
 
   /**
    * @param accountName the account name.
@@ -38,11 +38,7 @@ public class NamedBlobRecord {
    */
   public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
       long expirationTimeMs) {
-    this.accountName = accountName;
-    this.containerName = containerName;
-    this.blobName = blobName;
-    this.blobId = blobId;
-    this.expirationTimeMs = expirationTimeMs;
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, 0L);
   }
 
   /**
