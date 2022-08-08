@@ -949,43 +949,6 @@ public class AmbryServerRequestsTest {
   }
 
   /**
-   * Compares two json arrays to ensure what is seen is the same as what is expected without caring about order
-   * @param expected JSONArray of what's expected in the response's content
-   * @param seen JSONArray of what's seen in the response's content
-   * @return True/False indicate if the two arrays were equal or not
-   */
-  public boolean compareJSONArrayNoOrder(JSONArray expected, JSONArray seen) {
-
-    //Iterates through the expected elements
-    for (Object expectedObject : expected) {
-      JSONObject expectedJSONObject = (JSONObject) expectedObject;
-      boolean comparisonMatch = false;
-
-      //Finds which seen json object is identical to what's expected
-      for (int i = 0; i < seen.length(); i++) {
-        JSONObject seenJSONObject = (JSONObject) seen.get(i);
-        boolean foundCopy = true;
-
-        //compares each value by string
-        for (String key : expectedJSONObject.keySet()) {
-          foundCopy = foundCopy && seenJSONObject.get(key).toString().equals(expectedJSONObject.get(key).toString());
-        }
-
-        //if this is the identical copy then we can compare the next expected element
-        if (foundCopy) {
-          comparisonMatch = true;
-          break;
-        }
-      }
-      //the match wasn't found so the seen array isn't identical to the expected array
-      if (!comparisonMatch) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
    * Performs the AdminRequest and Response as well as checking if the content is a json and expected
    * @param partitionId necessary to fulfill the {@link AdminRequest}
    * @param description for what this function call is attempting to test
@@ -1010,14 +973,7 @@ public class AmbryServerRequestsTest {
     JSONObject contentJSON = new JSONObject(content);
 
     //Either compares the health by string or compares the arrays without order
-    for (String key : expectedResponse.keySet()) {
-      if (expectedResponse.get(key) instanceof ServerHealthStatus) {
-        assertEquals(description, expectedResponse.get(key).toString(), contentJSON.get(key).toString());
-      } else {
-        assertTrue(description,
-            compareJSONArrayNoOrder((JSONArray) expectedResponse.get(key), (JSONArray) contentJSON.get(key)));
-      }
-    }
+    assertEquals(description, expectedResponse.toString(), contentJSON.toString());
   }
 
   /**
@@ -1099,26 +1055,6 @@ public class AmbryServerRequestsTest {
     expectedJSONReponse.put("health", ServerHealthStatus.GOOD);
     doRequestAndHealthCheck(partitionIds.get(0),
         "Payload was expected to be GOOD with all disks passing disk healthcheck", expectedJSONReponse);
-
-    //Test 4: "BAD" response expected, insufficient Write Timeouts on partition of interest so the test will fail
-    // when writing to disk
-    setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.operation.timeout.seconds", "0");
-    TimeUnit.SECONDS.sleep(5); //Sufficient time to write, fail and save the health of disk to then retrieve
-
-    //All the disks should have failed since the all their write timeouts were set to 0
-    JSONArray brokenDisks = new JSONArray();
-    for (DiskId entry : storageManager.getDiskToDiskManager().keySet()) {
-      JSONObject brokenDisk = new JSONObject();
-      brokenDisk.put("disk", entry.getMountPath());
-      brokenDisk.put("reason", DiskHealthStatus.WRITE_TIMEOUT);
-      brokenDisks.put(brokenDisk);
-    }
-
-    expectedJSONReponse.put("brokenDisks", brokenDisks);
-    expectedJSONReponse.put("health", ServerHealthStatus.BAD);
-
-    doRequestAndHealthCheck(partitionIds.get(0), "Payload was expected to be BAD with all disk failing timeout",
-        expectedJSONReponse);
 
     //Restores the environment from no longer using disk healthchecks
     currentProperties = createProperties(validateRequestOnStoreState, true);
