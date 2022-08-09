@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
@@ -78,15 +79,12 @@ class NamedBlobDeleteHandler {
     // delete and put, then we will have a totally different blob id under this blob name. And we shouldn't delete this new blob id
     // from database.
     namedBlobDb.delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName())
-        .whenComplete((deleteResult, exception) -> {
+        .thenApply(DeleteResult::getBlobId)
+        .whenComplete((blobId, exception) -> {
           if (exception != null) {
             Exception dbException = Utils.extractFutureExceptionCause(exception);
             callback.onCompletion(null, dbException);
             return;
-          }
-          String blobId = deleteResult.getBlobId();
-          if (deleteResult.getHasDataIssue()) {
-            metrics.namedDataInconsistentDeleteCount.inc();
           }
           // What if this blobName is already deleted?
           // We still want to issue DELETE to router, since router might still have a valid blob because we delete blobName

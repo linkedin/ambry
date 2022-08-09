@@ -15,6 +15,8 @@
 
 package com.github.ambry.named;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -152,13 +154,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   private final AccountService accountService;
   private final String localDatacenter;
+  private final MetricRegistry metricRegistry;
   private final List<String> remoteDatacenters;
   private final RetryExecutor retryExecutor;
   private final Map<String, TransactionExecutor> transactionExecutors;
   private final MySqlNamedBlobDbConfig config;
+  private final Counter namedDataInconsistentGetCount;
+  private final Counter namedDataInconsistentListCount;
+  private final Counter namedDataInconsistentDeleteCount;
 
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
-      String localDatacenter) {
+      String localDatacenter, MetricRegistry metricRegistry) {
     this.accountService = accountService;
     this.config = config;
     this.localDatacenter = localDatacenter;
@@ -173,6 +179,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                 dataSourceFactory.getDataSource(dbEndpoint),
                 localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
+    this.metricRegistry = metricRegistry;
+    this.namedDataInconsistentGetCount = metricRegistry.counter(
+        MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentGetCount"));
+    this.namedDataInconsistentListCount = metricRegistry.counter(
+        MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentListCount"));
+    this.namedDataInconsistentDeleteCount = metricRegistry.counter(
+        MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentDeleteCount"));
   }
 
   @Override
@@ -190,7 +203,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       if (!record.equals(recordV2)) {
         logger.warn("NAMED GET: Data Inconsistence: old record='{}', new record='{}'", record, recordV2);
-        record.setHasDataIssue(true);
+        this.namedDataInconsistentGetCount.inc();
       }
       return record;
     }, transactionStateTracker);
@@ -209,7 +222,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       if (!Objects.equals(recordPage.getEntries(), recordPageV2.getEntries())) {
         logger.warn("NAMED LIST: Data Inconsistence: old record='{}', new record='{}'", recordPage, recordPageV2);
-        recordPage.setHasDataIssue(true);
+        this.namedDataInconsistentListCount.inc();
       }
       return recordPage;
     }, null);
@@ -242,7 +255,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       if (!deleteResult.equals(deleteResultV2)) {
         logger.warn("NAMED DELETE: Data Inconsistence: old record='{}', new record='{}'", deleteResult, deleteResultV2);
-        deleteResult.setHasDataIssue(true);
+        this.namedDataInconsistentDeleteCount.inc();
       }
       return deleteResult;
     }, null);

@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
@@ -75,15 +76,11 @@ class NamedBlobGetHandler {
     NamedBlobPath namedBlobPath = NamedBlobPath.parse(namedBlobId, Collections.emptyMap());
     GetOption getOption = getGetOption(restRequest, GetOption.None);
     namedBlobDb.get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(),
-        getOption).whenComplete((record, exception) -> {
+        getOption).thenApply(NamedBlobRecord::getBlobId).whenComplete((blobId, exception) -> {
       if (exception != null) {
         callback.onCompletion(null, Utils.extractFutureExceptionCause(exception));
         return;
       }
-      if (record.getHasDataIssue()){
-        metrics.namedDataInconsistentGetCount.inc();
-      }
-      String blobId = record.getBlobId();
       RequestPath newRequestPath =
           new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
               "/" + blobId + "." + DEFAULT_EXTENSION, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());

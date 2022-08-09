@@ -28,7 +28,6 @@ public class NamedBlobRecord {
   private final String blobId;
   private final long expirationTimeMs;
   private final long version;
-  private boolean hasDataIssue;
 
   /**
    * @param accountName the account name.
@@ -93,20 +92,6 @@ public class NamedBlobRecord {
    */
   public long getVersion() {
     return version;
-  }
-
-  /**
-   * @param hasDataIssue whether has data issue for this query (eg data inconsistency between old and new tables).
-   */
-  public void setHasDataIssue(boolean hasDataIssue) {
-    this.hasDataIssue = hasDataIssue;
-  }
-
-  /**
-   * @return the hasDataIssue for the named blob query.
-   */
-  public boolean getHasDataIssue() {
-    return hasDataIssue;
   }
 
   /**

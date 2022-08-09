@@ -24,7 +24,6 @@ import java.util.Objects;
 public class DeleteResult {
   private final String blobId;
   private final boolean alreadyDeleted;
-  private boolean hasDataIssue;
 
   /**
    * @param blobId the blob ID from the deleted record.
@@ -47,22 +46,6 @@ public class DeleteResult {
    */
   public boolean isAlreadyDeleted() {
     return alreadyDeleted;
-  }
-
-
-  /**
-   * @param hasDataIssue whether has data issue for this query (eg data inconsistency between old and new tables).
-   */
-  public void setHasDataIssue(boolean hasDataIssue) {
-    this.hasDataIssue = hasDataIssue;
-  }
-
-
-  /**
-   * @return the hasDataIssue for the named blob query.
-   */
-  public boolean getHasDataIssue() {
-    return hasDataIssue;
   }
 
   @Override

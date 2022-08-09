@@ -147,9 +147,6 @@ public class NamedBlobListHandler {
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
         finalCallback.onCompletion(channel, null);
-        if (page.getHasDataIssue()) {
-          frontendMetrics.namedDataInconsistentListCount.inc();
-        }
       }, uri, LOGGER, finalCallback);
     }
   }
