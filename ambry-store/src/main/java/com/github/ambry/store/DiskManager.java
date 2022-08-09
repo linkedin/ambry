@@ -686,7 +686,7 @@ public class DiskManager {
         Path path = Paths.get(healthcheckDir, "temp");
         AsynchronousFileChannel fileChannel =
             AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,
-                StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
+                StandardOpenOption.SYNC, StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
         return fileChannel;
       } catch (Exception e) {
         diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
