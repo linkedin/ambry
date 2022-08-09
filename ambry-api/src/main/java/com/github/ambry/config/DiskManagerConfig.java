@@ -37,7 +37,7 @@ public class DiskManagerConfig {
   public final boolean diskManagerDiskHealthCheckEnabled;
 
   @Config("disk.manager.disk.healthcheck.interval.seconds")
-  @Default("60")
+  @Default("180")
   public final int diskManagerDiskHealthCheckIntervalSeconds;
 
   @Config("disk.manager.disk.healthcheck.file.path")
