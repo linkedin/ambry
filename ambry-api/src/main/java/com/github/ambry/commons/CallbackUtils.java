@@ -18,6 +18,7 @@ package com.github.ambry.commons;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 
@@ -70,5 +71,22 @@ public class CallbackUtils {
   public static <T> void callCallbackAfter(CompletionStage<T> completionStage, Callback<T> callback) {
     completionStage.whenComplete(
         (result, throwable) -> callback.onCompletion(result, Utils.extractFutureExceptionCause(throwable)));
+  }
+
+  /**
+   * Create a callback that would complete the given {@link CompletableFuture} when the corresponding result
+   * comes to callback.
+   * @param future The given {@link CompletableFuture} to complete.
+   * @param <T> The result's type.
+   * @return
+   */
+  public static <T> Callback<T> fromCompletableFuture(CompletableFuture<T> future) {
+    return (result, exception) -> {
+      if (exception != null) {
+        future.completeExceptionally(exception);
+      } else {
+        future.complete(result);
+      }
+    };
   }
 }
