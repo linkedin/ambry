@@ -454,7 +454,7 @@ public class AmbryServerRequests extends AmbryRequests {
 
           JSONObject unstablePartition = new JSONObject();
           unstablePartition.put("partitionId", partitionId);
-          unstablePartition.put("reason", hostBlobStore.getCurrentState());
+          unstablePartition.put("reason", hostBlobStore != null ? hostBlobStore.getCurrentState() : "Missing");
           unstablePartitions.put(unstablePartition);
         }
       }
