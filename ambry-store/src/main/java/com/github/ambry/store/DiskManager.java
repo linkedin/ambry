@@ -202,6 +202,7 @@ public class DiskManager {
       reportUnrecognizedDirs();
       running = true;
       if (diskHealthCheck.isEnabled()) {
+        logger.trace("Starting Disk Healthchecker");
         scheduler.scheduleAtFixedRate(() -> diskHealthCheck.diskHealthTest(), 0,
             diskManagerConfig.diskManagerDiskHealthCheckIntervalSeconds, TimeUnit.SECONDS);
       }
