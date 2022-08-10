@@ -522,12 +522,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         // fields to update
         statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
         if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
-          Timestamp expirationTime = new Timestamp(record.getExpirationTimeMs());
-          if (expirationTime.before(existingDeleteTime)) {
-            existingDeleteTime = expirationTime;
-          }
+          statement.setTimestamp(2, new Timestamp(record.getExpirationTimeMs()));
+        } else {
+          statement.setTimestamp(2, null);
         }
-        statement.setTimestamp(2, existingDeleteTime);
         // primary key fields
         statement.setInt(3, accountId);
         statement.setInt(4, containerId);
