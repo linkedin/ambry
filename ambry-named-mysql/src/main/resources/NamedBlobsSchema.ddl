@@ -26,10 +26,10 @@ CREATE TABLE IF NOT EXISTS named_blobs_v2 (
     account_id int NOT NULL,
     container_id int NOT NULL,
     blob_name varchar(191) NOT NULL,
+    version bigint NOT NULL,
     blob_id varbinary(50) NOT NULL,
     deleted_ts datetime(6) DEFAULT NULL,
-    version bigint NOT NULL,
-    blob_state varchar(20) NOT NULL,
+    blob_state smallint NOT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
 )
 ENGINE=InnoDB

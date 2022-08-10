@@ -15,6 +15,13 @@
 package com.github.ambry.named;
 
 public enum NamedBlobState {
-  WIP,
-  READY
+  WIP(0),
+  READY(1);
+
+  private final int value;
+  NamedBlobState(final int newValue) {
+    value = newValue;
+  }
+
+  public int getValue() { return value; }
 }

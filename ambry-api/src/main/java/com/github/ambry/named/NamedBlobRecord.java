@@ -119,6 +119,7 @@ public class NamedBlobRecord {
     return Objects.hash(blobId);
   }
 
+  @Override
   public String toString() {
     return "NamedBlobRecord[accountName=" + accountName + ",containerName=" + containerName + ",blobName=" + blobName +
         ",blobId=" + blobId + ",expirationTimeMs=" + expirationTimeMs + "]";

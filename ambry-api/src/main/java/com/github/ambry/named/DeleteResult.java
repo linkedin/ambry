@@ -57,9 +57,10 @@ public class DeleteResult {
       return false;
     }
     DeleteResult record = (DeleteResult) o;
-    return Objects.equals(getBlobId(), record.getBlobId()) && Objects.equals(isAlreadyDeleted(), record.isAlreadyDeleted());
+    return Objects.equals(blobId, record.blobId) && Objects.equals(alreadyDeleted, record.alreadyDeleted);
   }
 
+  @Override
   public String toString() {
     return "DeleteResult[blobId=" + getBlobId() + ",isAlreadyDeleted=" + isAlreadyDeleted() + "]";
   }

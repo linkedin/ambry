@@ -81,7 +81,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String IS_DELETED = String.format(CURRENT_TIME_COMPARISON, DELETED_TS);
   private static final String IS_EXPIRED = String.format(CURRENT_TIME_COMPARISON, EXPIRES_TS);
   private static final String IS_DELETED_OR_EXPIRED = "(" + IS_DELETED + " OR " + IS_EXPIRED + ")";
-  private static final String STATE_MATCH = String.format("%s = '%s'", BLOB_STATE, NamedBlobState.READY);
+  private static final String STATE_MATCH = String.format("%s = %s", BLOB_STATE, NamedBlobState.READY.getValue());
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
   private static final String PK_MATCH_VERSION = String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID,
       CONTAINER_ID, BLOB_NAME, VERSION);
@@ -157,9 +157,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private final RetryExecutor retryExecutor;
   private final Map<String, TransactionExecutor> transactionExecutors;
   private final MySqlNamedBlobDbConfig config;
-  private final Counter namedDataInconsistentGetCount;
-  private final Counter namedDataInconsistentListCount;
-  private final Counter namedDataInconsistentDeleteCount;
+  private final Metrics metricsRecoder;
 
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
       String localDatacenter, MetricRegistry metricRegistry) {
@@ -177,12 +175,26 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                 dataSourceFactory.getDataSource(dbEndpoint),
                 localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
-    this.namedDataInconsistentGetCount = metricRegistry.counter(
-        MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentGetCount"));
-    this.namedDataInconsistentListCount = metricRegistry.counter(
-        MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentListCount"));
-    this.namedDataInconsistentDeleteCount = metricRegistry.counter(
-        MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentDeleteCount"));
+    this.metricsRecoder = new MySqlNamedBlobDb.Metrics(metricRegistry);
+  }
+
+  private static class Metrics {
+    public final Counter namedDataInconsistentGetCount;
+    public final Counter namedDataInconsistentListCount;
+    public final Counter namedDataInconsistentDeleteCount;
+
+    /**
+     * Constructor to create the Metrics.
+     * @param metricRegistry The {@link MetricRegistry}.
+     */
+    public Metrics(MetricRegistry metricRegistry) {
+      namedDataInconsistentGetCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentGetCount"));
+      namedDataInconsistentListCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentListCount"));
+      namedDataInconsistentDeleteCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentDeleteCount"));
+    }
   }
 
   @Override
@@ -200,7 +212,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       if (!record.equals(recordV2)) {
         logger.warn("NAMED GET: Data Inconsistence: old record='{}', new record='{}'", record, recordV2);
-        this.namedDataInconsistentGetCount.inc();
+        metricsRecoder.namedDataInconsistentGetCount.inc();
       }
       return record;
     }, transactionStateTracker);
@@ -219,7 +231,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       if (!Objects.equals(recordPage.getEntries(), recordPageV2.getEntries())) {
         logger.warn("NAMED LIST: Data Inconsistence: old record='{}', new record='{}'", recordPage, recordPageV2);
-        this.namedDataInconsistentListCount.inc();
+        metricsRecoder.namedDataInconsistentListCount.inc();
       }
       return recordPage;
     }, null);
@@ -252,7 +264,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       if (!deleteResult.equals(deleteResultV2)) {
         logger.warn("NAMED DELETE: Data Inconsistence: old record='{}', new record='{}'", deleteResult, deleteResultV2);
-        this.namedDataInconsistentDeleteCount.inc();
+        metricsRecoder.namedDataInconsistentDeleteCount.inc();
       }
       return deleteResult;
     }, null);
@@ -564,7 +576,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setTimestamp(5, null);
       }
       statement.setLong(6, buildVersion());
-      statement.setString(7, NamedBlobState.READY.name());
+      statement.setInt(7, NamedBlobState.READY.getValue());
       statement.executeUpdate();
     }
     return new PutResult(record);
