@@ -131,8 +131,7 @@ public class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling, reserveFileDir,
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     diskHealthCheck = new DiskHealthCheck(diskManagerConfig.diskManagerDiskHealthCheckOperationTimeoutSeconds,
-        diskManagerConfig.diskManagerDiskHealthCheckEnabled,
-        disk.getMountPath() + diskManagerConfig.diskManagerDiskHealthCheckFilePath);
+        diskManagerConfig.diskManagerDiskHealthCheckEnabled, disk.getMountPath());
     this.replicaStatusDelegates = replicaStatusDelegates;
     this.stoppedReplicas = stoppedReplicas;
     expectedDirs.add(reserveFileDir.getAbsolutePath());

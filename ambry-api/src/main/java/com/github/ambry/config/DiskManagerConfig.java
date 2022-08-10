@@ -40,10 +40,6 @@ public class DiskManagerConfig {
   @Default("180")
   public final int diskManagerDiskHealthCheckIntervalSeconds;
 
-  @Config("disk.manager.disk.healthcheck.file.path")
-  @Default("/ambry-data/")
-  public final String diskManagerDiskHealthCheckFilePath;
-
   @Config("disk.manager.disk.healthcheck.operation.timeout.seconds")
   @Default("5")
   public final int diskManagerDiskHealthCheckOperationTimeoutSeconds;
@@ -57,8 +53,6 @@ public class DiskManagerConfig {
     diskManagerDiskHealthCheckEnabled = verifiableProperties.getBoolean("disk.manager.disk.healthcheck.enabled", false);
     diskManagerDiskHealthCheckIntervalSeconds =
         verifiableProperties.getInt("disk.manager.disk.healthcheck.interval.seconds", 60);
-    diskManagerDiskHealthCheckFilePath =
-        verifiableProperties.getString("disk.manager.disk.healthcheck.file.path", "/ambry-data/");
     diskManagerDiskHealthCheckOperationTimeoutSeconds =
         verifiableProperties.getInt("disk.manager.disk.healthcheck.operation.timeout.seconds", 5);
   }
