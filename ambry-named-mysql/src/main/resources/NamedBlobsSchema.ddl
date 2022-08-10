@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS named_blobs_v2 (
     blob_name varchar(191) NOT NULL,
     blob_id varbinary(50) NOT NULL,
     deleted_ts datetime(6) DEFAULT NULL,
-    expires_ts datetime(6) DEFAULT NULL,
     version bigint NOT NULL,
     blob_state varchar(20) NOT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
@@ -40,9 +39,6 @@ COMMENT='Holds mappings between blob names and blob IDs';
 
 /* Soft Delete Index */
 CREATE INDEX named_blobs_dt_v2 ON named_blobs_v2(deleted_ts);
-
-/* Expired Index */
-CREATE INDEX named_blobs_et_v2 ON named_blobs_v2(expires_ts);
 
 /* Reverse Lookup Index */
 CREATE INDEX named_blobs_id_v2 ON named_blobs_v2(blob_id);
