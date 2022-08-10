@@ -532,6 +532,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setInt(3, accountId);
         statement.setInt(4, containerId);
         statement.setString(5, record.getBlobName());
+        statement.executeUpdate();
       }
     } else {
       // 3. The row does not exist, do insertion here
