@@ -179,6 +179,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private static class Metrics {
+    public final Counter namedDataNotFoundGetCount;
+    public final Counter namedDataErrorGetCount;
     public final Counter namedDataInconsistentGetCount;
     public final Counter namedDataInconsistentListCount;
     public final Counter namedDataInconsistentDeleteCount;
@@ -188,12 +190,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
      * @param metricRegistry The {@link MetricRegistry}.
      */
     public Metrics(MetricRegistry metricRegistry) {
+      namedDataNotFoundGetCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundGetCount"));
+      namedDataErrorGetCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorGetCount"));
       namedDataInconsistentGetCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentGetCount"));
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentGetCount"));
       namedDataInconsistentListCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentListCount"));
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentListCount"));
       namedDataInconsistentDeleteCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "namedDataInconsistentDeleteCount"));
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentDeleteCount"));
     }
   }
 
@@ -203,16 +209,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
-      NamedBlobRecord record, recordV2 = null;
+      NamedBlobRecord record, recordV2;
       record = run_get(accountName, containerName, blobName, option, accountId, containerId, connection);
       try {
         recordV2 = run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
+        if (!record.equals(recordV2)) {
+          logger.warn("NAMED GET: Data Inconsistence: old record='{}', new record='{}'", record, recordV2);
+          metricsRecoder.namedDataInconsistentGetCount.inc();
+        }
       } catch (Exception e) {
-        logger.error("NAMED GET: Data Error: old table succeed while new table failed: ", e);
-      }
-      if (!record.equals(recordV2)) {
-        logger.warn("NAMED GET: Data Inconsistence: old record='{}', new record='{}'", record, recordV2);
-        metricsRecoder.namedDataInconsistentGetCount.inc();
+        if (e instanceof RestServiceException &&
+            ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
+          logger.warn("NAMED GET: Data Not Found: old table succeed while new table got NotFound error: ", e);
+          metricsRecoder.namedDataNotFoundGetCount.inc();
+        } else {
+          logger.error("NAMED GET: Data Error: old table succeed while new table failed: ", e);
+          metricsRecoder.namedDataErrorGetCount.inc();
+        }
       }
       return record;
     }, transactionStateTracker);
