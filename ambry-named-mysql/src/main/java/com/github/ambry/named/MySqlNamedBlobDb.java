@@ -182,8 +182,14 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     public final Counter namedDataNotFoundGetCount;
     public final Counter namedDataErrorGetCount;
     public final Counter namedDataInconsistentGetCount;
+
     public final Counter namedDataInconsistentListCount;
+
+    public final Counter namedDataNotFoundDeleteCount;
+    public final Counter namedDataErrorDeleteCount;
     public final Counter namedDataInconsistentDeleteCount;
+
+    public final Counter namedDataErrorPutCount;
 
     /**
      * Constructor to create the Metrics.
@@ -196,10 +202,19 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorGetCount"));
       namedDataInconsistentGetCount = metricRegistry.counter(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentGetCount"));
+
       namedDataInconsistentListCount = metricRegistry.counter(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentListCount"));
+
+      namedDataNotFoundDeleteCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundDeleteCount"));
+      namedDataErrorDeleteCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorDeleteCount"));
       namedDataInconsistentDeleteCount = metricRegistry.counter(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentDeleteCount"));
+
+      namedDataErrorPutCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorPutCount"));
     }
   }
 
@@ -260,6 +275,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             run_put_v2(record, accountId, containerId, connection);
           } catch (Exception e) {
             logger.error("NAMED PUT: Data Error: old table succeed while new table failed: ", e);
+            metricsRecoder.namedDataErrorPutCount.inc();
           }
           return putResult;
         }, null);
@@ -268,16 +284,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
-      DeleteResult deleteResult, deleteResultV2=null;
+      DeleteResult deleteResult, deleteResultV2;
       deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
       try {
         deleteResultV2 = run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
+        if (!deleteResult.equals(deleteResultV2)) {
+          logger.warn("NAMED DELETE: Data Inconsistence: old record='{}', new record='{}'", deleteResult, deleteResultV2);
+          metricsRecoder.namedDataInconsistentDeleteCount.inc();
+        }
       } catch (Exception e) {
-        logger.error("NAMED DELETE: Data Error: old table succeed while new table failed: ", e);
-      }
-      if (!deleteResult.equals(deleteResultV2)) {
-        logger.warn("NAMED DELETE: Data Inconsistence: old record='{}', new record='{}'", deleteResult, deleteResultV2);
-        metricsRecoder.namedDataInconsistentDeleteCount.inc();
+        if (e instanceof RestServiceException &&
+            ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
+          logger.warn("NAMED DELETE: Data Not Found: old table succeed while new table got NotFound error: ", e);
+          metricsRecoder.namedDataNotFoundDeleteCount.inc();
+        } else {
+          logger.error("NAMED DELETE: Data Error: old table succeed while new table failed: ", e);
+          metricsRecoder.namedDataErrorDeleteCount.inc();
+        }
       }
       return deleteResult;
     }, null);
