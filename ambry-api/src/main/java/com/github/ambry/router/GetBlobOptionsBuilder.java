@@ -32,6 +32,7 @@ public class GetBlobOptionsBuilder {
   private boolean rawMode = false;
   private RestRequest restRequest = null;
   private int blobSegmentIdx = NO_BLOB_SEGMENT_IDX_SPECIFIED;
+  private String partiallyReadableBlobName = null;
 
   /**
    * @param operationType the {@link GetBlobOptions.OperationType} for this request.
@@ -101,10 +102,19 @@ public class GetBlobOptionsBuilder {
   }
 
   /**
+   * @param name the blob's name in the Named Blob request.
+   * @return this builder
+   */
+  public GetBlobOptionsBuilder partiallyReadableBlobName(String name) {
+    this.partiallyReadableBlobName = name;
+    return this;
+  }
+
+  /**
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
     return new GetBlobOptions(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx,
-        restRequest);
+        restRequest, partiallyReadableBlobName);
   }
 }

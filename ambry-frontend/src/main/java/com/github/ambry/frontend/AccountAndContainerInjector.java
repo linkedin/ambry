@@ -287,16 +287,16 @@ public class AccountAndContainerInjector {
     if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
       namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
     }
-    if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
+    /*if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
         || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false)) || (
         namedBlobPath != null && Account.UNKNOWN_ACCOUNT_NAME.equals(namedBlobPath.getAccountName()))) {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
-    }
+    }*/
     String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
+    /*if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
         && Container.UNKNOWN_CONTAINER_NAME.equals(namedBlobPath.getContainerName()))) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
-    }
+    }*/
     List<String> prohibitedHeaders = Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);
     for (String prohibitedHeader : prohibitedHeaders) {
       if (restRequest.getArgs().get(prohibitedHeader) != null) {

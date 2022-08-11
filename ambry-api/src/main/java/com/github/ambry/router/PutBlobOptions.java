@@ -27,6 +27,7 @@ public class PutBlobOptions {
   private final boolean chunkUpload;
   private final long maxUploadSize;
   private final RestRequest restRequest;
+  private String partiallyReadableBlobName;
 
   /**
    * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
@@ -38,6 +39,21 @@ public class PutBlobOptions {
     this.chunkUpload = chunkUpload;
     this.maxUploadSize = maxUploadSize;
     this.restRequest = restRequest;
+  }
+
+  /**
+   * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
+   *                    stitched blob.
+   * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
+   * @param restRequest The {@link RestRequest} that triggered this put operation.
+   * @param partiallyReadableBlobName The name of the partially readable blob. If the name is not null, it is a partial
+   *                                  put request. If it is null, the blob is not partially readable
+   */
+  public PutBlobOptions(boolean chunkUpload, long maxUploadSize, RestRequest restRequest, String partiallyReadableBlobName) {
+    this.chunkUpload = chunkUpload;
+    this.maxUploadSize = maxUploadSize;
+    this.restRequest = restRequest;
+    this.partiallyReadableBlobName = partiallyReadableBlobName;
   }
 
   /**
@@ -60,6 +76,13 @@ public class PutBlobOptions {
    */
   public RestRequest getRestRequest() {
     return restRequest;
+  }
+
+  /**
+   * @return the name of the partially readable blob. If it is null, the blob is not partially readable.
+   */
+  public String getPartiallyReadableBlobName() {
+    return partiallyReadableBlobName;
   }
 
   @Override

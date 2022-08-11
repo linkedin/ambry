@@ -339,6 +339,11 @@ public class NamedBlobPutHandler {
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
       PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(false).restRequest(restRequest);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
+      String isPartiallyReadableHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.IS_PARTIALLY_READABLE, false);
+      String fileNameHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.AMBRY_FILENAME, false);
+      if (isPartiallyReadableHeader != null && fileNameHeader != null) {
+        builder.partiallyReadableBlobName(fileNameHeader);
+      }
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);
       }

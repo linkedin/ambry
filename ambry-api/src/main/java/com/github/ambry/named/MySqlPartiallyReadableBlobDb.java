@@ -1,22 +1,16 @@
 package com.github.ambry.named;
 
-import com.github.ambry.utils.Utils;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountService;
-import com.github.ambry.account.Container;
 
 
 public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
@@ -24,116 +18,123 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
   private static final String USERNAME = "root";
   private static final String PASSWORD = "L!nhX!nh1803";
-  private static final String JDBC_URL = "jdbc:mysql://localhost:3306/partial?useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC";
+  private static final String JDBC_URL = "jdbc:mysql://localhost:3306/partial?useSSL=false&serverTimezone=UTC";
 
   // table name
   private static final String BLOB_CHUNKS = "blob_chunks";
   // column names
-  private static final String ACCOUNT_ID = "account_id";
-  private static final String CONTAINER_ID = "container_id";
+  private static final String ACCOUNT_NAME = "account_name";
+  private static final String CONTAINER_NAME = "container_name";
   private static final String BLOB_NAME = "blob_name";
-  private static final String CHUNK_ORDER = "chunk_order";
+  private static final String CHUNK_OFFSET = "chunk_offset";
+  private static final String CHUNK_SIZE = "chunk_size";
   private static final String CHUNK_ID = "chunk_id";
   private static final String STATUS = "status";
   private static final String LAST_UPDATED_TS = "last_updated_ts";
 
-  private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
-  private static final String ORDER_MATCH = String.format("(%s) >= (?)", CHUNK_ORDER);
+  private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME);
+  private static final String ORDER_MATCH = String.format("(%s) >= (?)", CHUNK_OFFSET);
 
   private static final String INSERT_QUERY =
-      String.format("INSERT INTO %s (%s, %s, %s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)", BLOB_CHUNKS, ACCOUNT_ID,
-          CONTAINER_ID, BLOB_NAME, CHUNK_ORDER, CHUNK_ID, STATUS, LAST_UPDATED_TS);
+      String.format("INSERT INTO %s (%s, %s, %s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", BLOB_CHUNKS, ACCOUNT_NAME,
+          CONTAINER_NAME, BLOB_NAME, CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS, LAST_UPDATED_TS);
 
   private static final String GET_QUERY =
-      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s AND %s", CHUNK_ORDER, CHUNK_ID, STATUS, LAST_UPDATED_TS, BLOB_CHUNKS, PK_MATCH, ORDER_MATCH);
+      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s AND %s", CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS, LAST_UPDATED_TS, BLOB_CHUNKS, PK_MATCH, ORDER_MATCH);
+
+  private static final long EXPIRATION_DURATION = 1000;
 
   public MySqlPartiallyReadableBlobDb() {
+
   }
 
   @Override
-  public List<PartiallyReadableBlobRecord> get(String accountId, String containerId, String blobName, int startingChunkOrder) {
+  public List<PartiallyReadableBlobRecord> get(String accountName, String containerName, String blobName,
+      long startingChunkOffset) throws RestServiceException {
     List<PartiallyReadableBlobRecord> chunksRecord = new ArrayList<>();
 
     try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
            PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
 
-        statement.setString(1, accountId);
-        statement.setString(2, containerId);
+        statement.setString(1, accountName);
+        statement.setString(2, containerName);
         statement.setString(3, blobName);
-        statement.setInt(4, startingChunkOrder);
+        statement.setLong(4, startingChunkOffset);
 
         try (ResultSet resultSet = statement.executeQuery()) {
           while (resultSet.next()) {
-            int chunkOrder = resultSet.getInt(1);
-            String chunkId = resultSet.getString(2);
-            String status = resultSet.getString(3);
-            long lastUpdatedTs = resultSet.getLong(4);
+            long chunkOffset = resultSet.getLong(1);
+            long chunkSize = resultSet.getLong(2);
+            String chunkId = resultSet.getString(3);
+            String status = resultSet.getString(4);
+            long lastUpdatedTs = resultSet.getLong(5);
 
             long currentTime = System.currentTimeMillis();
 
-            if ((currentTime - lastUpdatedTs) >= 500) {
+            if ((currentTime - lastUpdatedTs) >= EXPIRATION_DURATION) {
               // handle error for timeout
+              throw buildException("GET: Chunk expired", RestServiceErrorCode.Deleted, accountName, containerName,
+                  blobName);
             }
-
-            if (status == "ERROR") {
-              // handle error status
-            } else {
-               chunksRecord.add(new PartiallyReadableBlobRecord(accountId, containerId, blobName, chunkId, chunkOrder,
-                  lastUpdatedTs, status));
+            if (status.equals(PartialPutStatus.ERROR.name())) {
+              throw buildException("Error occurred during the POST process", RestServiceErrorCode.InternalServerError,
+                  accountName, containerName, blobName);
             }
+            chunksRecord.add(new PartiallyReadableBlobRecord(accountName, containerName, blobName, chunkId, chunkOffset,
+                chunkSize, lastUpdatedTs, status));
           }
         } catch (SQLException e) {
-            System.out.println(e);
+          throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError,
+              accountName, containerName, blobName);
         }
       }
       catch (SQLException e) {
-        System.out.println(e);
+        throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError,
+            accountName, containerName, blobName);
       }
       return chunksRecord;
   }
 
   @Override
-  public void put(PartiallyReadableBlobRecord record) {
-
+  public void put(PartiallyReadableBlobRecord record) throws RestServiceException {
     try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
-         PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
+        PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
 
-      statement.setString(1, record.getAccountId());
-      statement.setString(2, record.getContainerId());
+      statement.setString(1, record.getAccountName());
+      statement.setString(2, record.getContainerName());
       statement.setString(3, record.getBlobName());
-      statement.setInt(4, record.getChunkOrder());
-      statement.setString(5, record.getChunkId());
-      statement.setString(6, record.getStatus());
-      statement.setLong(7, record.getLastUpdatedTs());
-
+      statement.setLong(4, record.getChunkOffset());
+      statement.setLong(5, record.getChunkSize());
+      statement.setString(6, record.getChunkId());
+      statement.setString(7, record.getStatus());
+      statement.setLong(8, record.getLastUpdatedTs());
       try {
         int rowUpdated = statement.executeUpdate();
 
-        if (rowUpdated < 1) {
-          // error for put fails
-        }
-        else {
+        if (rowUpdated == 0) {
+          // error for put fails as there might be a conflict
+          throw buildException("Put unsuccessfully", RestServiceErrorCode.Conflict, record.getAccountName(),
+              record.getContainerName(), record.getBlobName());
+        } else {
           System.out.println("Successfully inserted record with name " + record.getBlobName() + " and chunkId " + record.getChunkId());
         }
       }
       catch (SQLException e) {
-        System.out.println(e);
+        throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError,
+            record.getAccountName(), record.getContainerName(), record.getBlobName());
       }
+
     }
     catch (SQLException e) {
-      System.out.println(e);
+      throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError,
+          record.getAccountName(), record.getContainerName(), record.getBlobName());
     }
   }
 
-  public static void main(String[] args) {
-    PartiallyReadableBlobRecord record = new PartiallyReadableBlobRecord("A", "A", "Name",
-        "112", 2, 100000, "IN_PROGRESS");
-    MySqlPartiallyReadableBlobDb db = new MySqlPartiallyReadableBlobDb();
-//    db.put(record);
-    List<PartiallyReadableBlobRecord> list = db.get("A", "A", "Name", 2);
-    for (PartiallyReadableBlobRecord item : list) {
-      System.out.println(item.getChunkOrder());
-      System.out.println(item.getBlobName());
-    }
+  private static RestServiceException buildException(String message, RestServiceErrorCode errorCode, String accountName,
+      String containerName, String blobName) {
+    return new RestServiceException(
+        message + "; account='" + accountName + "', container='" + containerName + "', name='" + blobName + "'",
+        errorCode);
   }
 }

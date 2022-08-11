@@ -20,6 +20,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.PartiallyReadableBlobDb;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
@@ -163,8 +164,9 @@ public class OperationController implements Runnable {
    * @param callback The callback which will be invoked on the completion of the request.
    */
   protected void getBlob(String blobIdStr, GetBlobOptionsInternal options,
-      final Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
-    getManager.submitGetBlobOperation(blobIdStr, options, callback, quotaChargeCallback);
+      final Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback,
+      PartiallyReadableBlobDb partiallyReadableBlobDb) throws RouterException {
+    getManager.submitGetBlobOperation(blobIdStr, options, callback, quotaChargeCallback, partiallyReadableBlobDb);
     routerCallback.onPollReady();
   }
 
@@ -179,12 +181,12 @@ public class OperationController implements Runnable {
    */
   protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     if (!putManager.isOpen()) {
       handlePutManagerClosed(blobProperties, false, futureResult, callback);
     } else {
       putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback,
-          quotaChargeCallback);
+          quotaChargeCallback, partiallyReadableBlobDb);
       routerCallback.onPollReady();
     }
   }
@@ -257,7 +259,7 @@ public class OperationController implements Runnable {
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
    */
   protected void undeleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
-      final Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+      final Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     doOperationTowardsMaybeCompositeBlob(blobIdStr, futureResult, callback,
         new CompositeBlobOperationHelper("UNDELETE", GetOption.Include_Deleted_Blobs, routerMetrics.ageAtUndelete,
             (blobIds) -> {
@@ -325,7 +327,7 @@ public class OperationController implements Runnable {
           .build();
       GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, helper.getMetrics());
       try {
-        getBlob(blobIdStr, optionsInternal, internalCallback, quotaChargeCallback);
+        getBlob(blobIdStr, optionsInternal, internalCallback, quotaChargeCallback, null);
       } catch (RouterException e) {
         helper.getCompleteOperationAtException().accept(e);
       }
@@ -600,7 +602,7 @@ class BackgroundDeleter extends OperationController {
   @Override
   protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     RouterException routerException = new RouterException("Illegal attempt to put blob through BackgroundDeleter",
         RouterErrorCode.UnexpectedInternalError);
     routerMetrics.operationDequeuingRate.mark();

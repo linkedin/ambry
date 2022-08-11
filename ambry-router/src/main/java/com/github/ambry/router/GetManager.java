@@ -20,6 +20,7 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.named.PartiallyReadableBlobDb;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
@@ -106,7 +107,8 @@ class GetManager {
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitGetBlobOperation(String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
+      Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback,
+      PartiallyReadableBlobDb partiallyReadableBlobDb) throws RouterException {
     GetOperation getOperation;
     BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     boolean isEncrypted = false;
@@ -127,11 +129,18 @@ class GetManager {
       getOperation =
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeCallback);
-    } else {
+    }
+    else if (options.getBlobOptions.getPartiallyReadableBlobName() != null) {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
-              quotaChargeCallback);
+              quotaChargeCallback, options.getBlobOptions.getPartiallyReadableBlobName(), partiallyReadableBlobDb);
+    }
+    else {
+      getOperation =
+          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
+              quotaChargeCallback, null, null);
     }
     getOperations.add(getOperation);
   }

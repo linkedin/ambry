@@ -95,6 +95,7 @@ subprojects {
 
     dependencies {
         compile "org.slf4j:slf4j-api:$slf4jVersion"
+        compile group: 'mysql', name: 'mysql-connector-java', version: '8.0.15'
         testCompile "org.apache.logging.log4j:log4j-core:$log4jVersion"
         testCompile "org.apache.logging.log4j:log4j-api:$log4jVersion"
         testCompile "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
@@ -419,6 +420,7 @@ project(':ambry-router') {
                 project(':ambry-network'),
                 project(':ambry-cloud'),
                 project(':ambry-rest')
+                project(':ambry-named-mysql')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
         testCompile project(':ambry-test-utils')
@@ -435,7 +437,8 @@ project(':ambry-frontend') {
                 project(':ambry-commons'),
                 project(':ambry-rest'),
                 project(':ambry-router'),
-                project(':ambry-quota')
+                project(':ambry-quota'),
+                project(':ambry-named-mysql')
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(':ambry-quota')

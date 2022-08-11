@@ -175,6 +175,8 @@ class GetSignedUrlHandler {
         }
       } catch (Exception e) {
         exception = e;
+        // if this is a get blob and exception == NOT FOUND and header == partially readable
+        // then let the request go through
       } finally {
         metrics.getSignedUrlIdConverterCallbackProcessingTimeInMs.update(
             SystemTime.getInstance().milliseconds() - processingStartTimeMs);

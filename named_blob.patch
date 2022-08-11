@@ -1,0 +1,52 @@
+diff --git a/ambry-api/src/main/java/com/github/ambry/account/Container.java b/ambry-api/src/main/java/com/github/ambry/account/Container.java
+index e5946cf8f..b7178a6e4 100644
+--- a/ambry-api/src/main/java/com/github/ambry/account/Container.java
++++ b/ambry-api/src/main/java/com/github/ambry/account/Container.java
+@@ -83,7 +83,7 @@ public class Container {
+   static final long CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE = 0;
+   static final boolean SECURE_PATH_REQUIRED_DEFAULT_VALUE = false;
+   static final boolean OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE = false;
+-  static final NamedBlobMode NAMED_BLOB_MODE_DEFAULT_VALUE = NamedBlobMode.DISABLED;
++  static final NamedBlobMode NAMED_BLOB_MODE_DEFAULT_VALUE = NamedBlobMode.OPTIONAL;
+   static final boolean CACHEABLE_DEFAULT_VALUE = true;
+   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
+   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
+diff --git a/ambry-frontend/src/main/java/com/github/ambry/frontend/AccountAndContainerInjector.java b/ambry-frontend/src/main/java/com/github/ambry/frontend/AccountAndContainerInjector.java
+index b85f418d4..6f9b384ec 100644
+--- a/ambry-frontend/src/main/java/com/github/ambry/frontend/AccountAndContainerInjector.java
++++ b/ambry-frontend/src/main/java/com/github/ambry/frontend/AccountAndContainerInjector.java
+@@ -287,16 +287,16 @@ public class AccountAndContainerInjector {
+     if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
+       namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+     }
+-    if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
++    /*if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
+         || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false)) || (
+         namedBlobPath != null && Account.UNKNOWN_ACCOUNT_NAME.equals(namedBlobPath.getAccountName()))) {
+       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
+-    }
++    }*/
+     String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
+-    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
++    /*if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
+         && Container.UNKNOWN_CONTAINER_NAME.equals(namedBlobPath.getContainerName()))) {
+       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
+-    }
++    }*/
+     List<String> prohibitedHeaders = Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);
+     for (String prohibitedHeader : prohibitedHeaders) {
+       if (restRequest.getArgs().get(prohibitedHeader) != null) {
+diff --git a/build.gradle b/build.gradle
+index 9ee4530ef..3cd6348e7 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -437,7 +437,8 @@ project(':ambry-frontend') {
+                 project(':ambry-commons'),
+                 project(':ambry-rest'),
+                 project(':ambry-router'),
+-                project(':ambry-quota')
++                project(':ambry-quota'),
++                project(':ambry-named-mysql')
+         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
+         testCompile project(':ambry-test-utils')
+         testCompile project(':ambry-quota')

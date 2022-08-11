@@ -21,6 +21,8 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.MySqlPartiallyReadableBlobDb;
+import com.github.ambry.named.PartiallyReadableBlobDb;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
@@ -60,6 +62,9 @@ class NonBlockingRouter implements Router {
   // Resources that need to be shut down when the router does.
   private final List<Closeable> resourcesToClose;
   private final AtomicInteger currentBackgroundOperationsCount = new AtomicInteger(0);
+
+  // Variable for uploading partially readable blob
+  private PartiallyReadableBlobDb partiallyReadableBlobDb;
 
   /**
    * Constructs a NonBlockingRouter.
@@ -105,6 +110,7 @@ class NonBlockingRouter implements Router {
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount,
         backgroundDeleter.getConcurrentBackgroundDeleteOperationCount());
     resourcesToClose = new ArrayList<>();
+    partiallyReadableBlobDb = new MySqlPartiallyReadableBlobDb();
   }
 
   /**
@@ -208,7 +214,7 @@ class NonBlockingRouter implements Router {
           if (callback != null) {
             callback.onCompletion(getBlobResult, exception);
           }
-        }, quotaChargeCallback);
+        }, quotaChargeCallback, partiallyReadableBlobDb);
       } else {
         boolean isEncrypted = false;
         try {
@@ -255,7 +261,7 @@ class NonBlockingRouter implements Router {
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback,
-          quotaChargeCallback);
+          quotaChargeCallback, partiallyReadableBlobDb);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -349,7 +355,7 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().undeleteBlob(blobId, serviceId, futureResult, callback, quotaChargeCallback);
+      getOperationController().undeleteBlob(blobId, serviceId, futureResult, callback, quotaChargeCallback, partiallyReadableBlobDb);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -443,7 +449,7 @@ class NonBlockingRouter implements Router {
         .getOption(GetOption.Include_All)
         .build();
     GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, routerMetrics.ageAtDelete);
-    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback, quotaChargeCallback);
+    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback, quotaChargeCallback, partiallyReadableBlobDb);
   }
 
   /**

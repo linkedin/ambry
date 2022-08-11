@@ -35,6 +35,8 @@ public class GetBlobOptions {
   private final int blobSegmentIdx;
   private final RestRequest restRequest;
   public static final int NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
+  // Variable indicating whether the request is for a partially readable blob (null means not supported)
+  private final String partiallyReadableBlobName;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
@@ -50,7 +52,7 @@ public class GetBlobOptions {
    * @param restRequest the {@link RestRequest} that triggered this get operation.
    */
   GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean resolveRangeOnEmptyBlob,
-      boolean rawMode, int blobSegmentIdx, RestRequest restRequest) {
+      boolean rawMode, int blobSegmentIdx, RestRequest restRequest, String partiallyReadableBlobName) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }
@@ -67,6 +69,7 @@ public class GetBlobOptions {
     this.rawMode = rawMode;
     this.blobSegmentIdx = blobSegmentIdx;
     this.restRequest = restRequest;
+    this.partiallyReadableBlobName = partiallyReadableBlobName;
   }
 
   /**
@@ -124,6 +127,13 @@ public class GetBlobOptions {
    */
   public RestRequest getRestRequest() {
     return restRequest;
+  }
+
+  /**
+   * @return The name of the blob. If the name is null, the request for partially readable blob is not supported
+   */
+  public String getPartiallyReadableBlobName() {
+    return partiallyReadableBlobName;
   }
 
   @Override

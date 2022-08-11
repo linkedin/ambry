@@ -25,10 +25,15 @@ import com.github.ambry.commons.BlobId.BlobIdType;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
+import com.github.ambry.named.MySqlPartiallyReadableBlobDb;
+import com.github.ambry.named.PartialPutStatus;
+import com.github.ambry.named.PartiallyReadableBlobDb;
+import com.github.ambry.named.PartiallyReadableBlobRecord;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -42,6 +47,9 @@ import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -167,8 +175,11 @@ class PutOperation {
   // Variables to keep track of netty chunks
   private final RestRequest restRequest;
   private final String loggingContext;
-
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
+
+  // Variables for uploading partial readable blob
+  private PartiallyReadableBlobDb partiallyReadableBlobDb;
+  private String partiallyReadableBlobName;
 
   /**
    * Construct a PutOperation with the given parameters. For any operation, based on the max chunk size for puts,
@@ -207,6 +218,20 @@ class PutOperation {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
         cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+  }
+
+  static PutOperation forPartialUpload(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      ClusterMap clusterMap, NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
+      ReadableStreamChannel channel, PutBlobOptions options, FutureResult<String> futureResult,
+      Callback<String> callback, RouterCallback routerCallback,
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb,
+      String partiallyReadableBlobName) {
+    return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
+        channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
+        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback,
+        partiallyReadableBlobDb, partiallyReadableBlobName);
   }
 
   /**
@@ -304,6 +329,46 @@ class PutOperation {
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
+  }
+
+  private PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
+      ReadableStreamChannel channel, List<ChunkInfo> chunksToStitch, PutBlobOptions options,
+      FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb,
+      String partiallyReadableBlobName) {
+    submissionTimeMs = time.milliseconds();
+    this.routerConfig = routerConfig;
+    this.routerMetrics = routerMetrics;
+    this.clusterMap = clusterMap;
+    this.notificationSystem = notificationSystem;
+    this.accountService = accountService;
+    this.passedInBlobProperties = blobProperties;
+    this.userMetadata = userMetadata;
+    this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
+    this.channel = channel;
+    this.options = options;
+    this.chunksToStitch = chunksToStitch;
+    this.futureResult = futureResult;
+    this.callback = callback;
+    this.routerCallback = routerCallback;
+    this.kms = kms;
+    this.cryptoService = cryptoService;
+    this.cryptoJobHandler = cryptoJobHandler;
+    this.time = time;
+    this.quotaChargeCallback = quotaChargeCallback;
+    bytesFilledSoFar = 0;
+    chunkCounter = -1;
+    putChunks = new ConcurrentLinkedQueue<>();
+    metadataPutChunk = new MetadataPutChunk();
+    chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
+    isEncryptionEnabled = passedInBlobProperties.isEncrypted();
+    restRequest = options.getRestRequest();
+    loggingContext = makeLoggingContext();
+    this.partiallyReadableBlobDb = partiallyReadableBlobDb;
+    this.partiallyReadableBlobName = partiallyReadableBlobName;
   }
 
   /**
@@ -996,6 +1061,13 @@ class PutOperation {
     }
   }
 
+  private PartiallyReadableBlobDb getPartiallyReadableBlobDb() throws RestServiceException {
+    if (partiallyReadableBlobDb == null) {
+      throw new RestServiceException("Partially readable blob support not enabled", RestServiceErrorCode.BadRequest);
+    }
+    return partiallyReadableBlobDb;
+  }
+
   /**
    * PutChunk is responsible for storing chunks to be put, managing their state and completing the operation on the
    * chunks. A PutChunk object is not really associated with one single chunk of data. Instead, it acts a holder that
@@ -1471,7 +1543,8 @@ class PutOperation {
     /**
      * Fetch {@link PutRequest}s to send for the current data chunk.
      */
-    private void fetchRequests(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
+    private void
+    fetchRequests(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
       Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
       while (replicaIterator.hasNext()) {
         ReplicaId replicaId = replicaIterator.next();
@@ -1771,7 +1844,29 @@ class PutOperation {
      * @param chunkIndex the position of the associated data chunk in the overall blob.
      */
     void addChunkId(StoreKey storeKey, long chunkSize, int chunkIndex) {
+      MySqlPartiallyReadableBlobDb db = new MySqlPartiallyReadableBlobDb();
+      try {
+        db.put(new PartiallyReadableBlobRecord("AA", "AA", "Dummy name", storeKey.getID(), chunkIndex, chunkSize, 2L,
+            PartialPutStatus.PENDING.name()));
+      }
+      catch (RestServiceException e) {}
+
       indexToChunkIdsAndChunkSizes.put(chunkIndex, new Pair<>(storeKey, chunkSize));
+      // if this is a partially readable blob request
+      if (partiallyReadableBlobName != null) {
+        try {
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+          // insert new row to MySql
+          long lastUpdatedTs = System.currentTimeMillis();
+          getPartiallyReadableBlobDb().put(
+              new PartiallyReadableBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+                  namedBlobPath.getBlobName(), storeKey.getID(), chunkIndex, chunkSize, lastUpdatedTs,
+                  PartialPutStatus.PENDING.name()));
+        }
+        catch (RestServiceException e) {
+          // handle error not supporting partially readable blob
+        }
+      }
     }
 
     /**
