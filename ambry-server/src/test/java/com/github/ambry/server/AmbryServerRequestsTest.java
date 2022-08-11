@@ -124,8 +124,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -160,8 +158,6 @@ public class AmbryServerRequestsTest {
   private MockStorageManager storageManager;
   private MockHelixParticipant helixParticipant;
   private AmbryServerRequests ambryRequests;
-
-  private static final Logger logger = LoggerFactory.getLogger(AmbryServerRequestsTest.class);
 
   public AmbryServerRequestsTest(boolean validateRequestOnStoreState)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
@@ -1019,8 +1015,7 @@ public class AmbryServerRequestsTest {
 
     for (PartitionId id : partitionIds) {
 
-      logger.trace(
-          "Disk HealthCheck Test 1: \"Good\" response excepted where the host state is in either Standby or Leader");
+      // Test 1: "Good" response excepted where the host state is in either Standby or Leader
       ReplicaState originalPartitionState = storageManager.getStore(id).getCurrentState();
 
       //change Partition to Standby or Leader
@@ -1030,7 +1025,7 @@ public class AmbryServerRequestsTest {
       expectedJSONReponse.put("health", ServerHealthStatus.GOOD);
       doRequestAndHealthCheck(id, "Payload was expected to indicate healthy host", expectedJSONReponse);
 
-      logger.trace("Disk HealthCheck Test 2: \"BAD\" response expected where we change partition to error State");
+      //Test 2: "BAD" response expected where we change partition to error State
       //change all replica states in partition to ERROR
       storageManager.getStore(id).setCurrentState(ReplicaState.ERROR);
 
@@ -1048,9 +1043,8 @@ public class AmbryServerRequestsTest {
       expectedJSONReponse.put("unstablePartitions", new JSONArray());
     }
 
-    logger.trace(
-        "Disk HealthCheck Test 3: \"GOOD\" response expected, enabling disk healthchecking on the partition of interest"
-            + " and disk's should be healthy");
+    //Test 3: "GOOD" response expected, enabling disk healthchecking on the partition of interest and
+    // disk's should be healthy
 
     Properties currentProperties = createProperties(validateRequestOnStoreState, true);
     setPropertyToAmbryRequests(currentProperties, "disk.manager.disk.healthcheck.enabled", "true");

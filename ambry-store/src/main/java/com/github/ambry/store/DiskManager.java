@@ -709,6 +709,8 @@ public class DiskManager {
         return;
       }
 
+      logger.trace("Performing the disk healthcheck test");
+
       //Creates the directory and opens the file
       AsynchronousFileChannel fileChannel = createFileChannel();
       if (fileChannel == null) {
