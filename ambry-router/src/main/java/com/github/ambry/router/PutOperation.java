@@ -30,7 +30,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
-import com.github.ambry.named.MySqlPartiallyReadableBlobDb;
 import com.github.ambry.named.PartialPutStatus;
 import com.github.ambry.named.PartiallyReadableBlobDb;
 import com.github.ambry.named.PartiallyReadableBlobRecord;
@@ -179,7 +178,7 @@ class PutOperation {
 
   // Variables for uploading partial readable blob
   private PartiallyReadableBlobDb partiallyReadableBlobDb;
-  private String partiallyReadableBlobName;
+  private boolean isPartiallyReadableBlob = false;
 
   /**
    * Construct a PutOperation with the given parameters. For any operation, based on the max chunk size for puts,
@@ -226,12 +225,11 @@ class PutOperation {
       Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb,
-      String partiallyReadableBlobName) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
         cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback,
-        partiallyReadableBlobDb, partiallyReadableBlobName);
+        partiallyReadableBlobDb);
   }
 
   /**
@@ -337,8 +335,7 @@ class PutOperation {
       FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb,
-      String partiallyReadableBlobName) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -368,7 +365,7 @@ class PutOperation {
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
     this.partiallyReadableBlobDb = partiallyReadableBlobDb;
-    this.partiallyReadableBlobName = partiallyReadableBlobName;
+    this.isPartiallyReadableBlob = true;
   }
 
   /**
@@ -1844,27 +1841,21 @@ class PutOperation {
      * @param chunkIndex the position of the associated data chunk in the overall blob.
      */
     void addChunkId(StoreKey storeKey, long chunkSize, int chunkIndex) {
-      MySqlPartiallyReadableBlobDb db = new MySqlPartiallyReadableBlobDb();
-      try {
-        db.put(new PartiallyReadableBlobRecord("AA", "AA", "Dummy name", storeKey.getID(), chunkIndex, chunkSize, 2L,
-            PartialPutStatus.PENDING.name()));
-      }
-      catch (RestServiceException e) {}
-
       indexToChunkIdsAndChunkSizes.put(chunkIndex, new Pair<>(storeKey, chunkSize));
       // if this is a partially readable blob request
-      if (partiallyReadableBlobName != null) {
+      if (isPartiallyReadableBlob) {
         try {
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
           // insert new row to MySql
           long lastUpdatedTs = System.currentTimeMillis();
+
           getPartiallyReadableBlobDb().put(
               new PartiallyReadableBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
                   namedBlobPath.getBlobName(), storeKey.getID(), chunkIndex, chunkSize, lastUpdatedTs,
                   PartialPutStatus.PENDING.name()));
         }
         catch (RestServiceException e) {
-          // handle error not supporting partially readable blob
+          // handle error not supporting named blob/partially readable blob
         }
       }
     }

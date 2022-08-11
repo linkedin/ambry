@@ -26,6 +26,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -44,6 +45,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -339,10 +341,12 @@ public class NamedBlobPutHandler {
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
       PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(false).restRequest(restRequest);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
-      String isPartiallyReadableHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.IS_PARTIALLY_READABLE, false);
-      String fileNameHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.AMBRY_FILENAME, false);
-      if (isPartiallyReadableHeader != null && fileNameHeader != null) {
-        builder.partiallyReadableBlobName(fileNameHeader);
+      String containsPartialReadSupportedHeader =
+          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.IS_PARTIALLY_READABLE, false);
+      boolean isNamedBlobRequest = restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+          .matchesOperation(Operations.NAMED_BLOB);
+      if (Objects.equals(containsPartialReadSupportedHeader, "true") && isNamedBlobRequest) {
+        builder.isPartiallyReadableBlob(true);
       }
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);

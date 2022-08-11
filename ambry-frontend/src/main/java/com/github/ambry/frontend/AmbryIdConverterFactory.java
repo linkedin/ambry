@@ -153,6 +153,13 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private CompletionStage<String> convertId(String input, RestRequest restRequest, BlobInfo blobInfo)
         throws RestServiceException {
       CompletionStage<String> conversionFuture;
+      String containsPartialReadSupportedHeader;
+      try {
+        containsPartialReadSupportedHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.IS_PARTIALLY_READABLE, false);
+      }
+      catch (RestServiceException e) {
+        containsPartialReadSupportedHeader = null;
+      }
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         if (restRequest.getRestMethod() == RestMethod.DELETE) {
@@ -161,7 +168,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
         } else {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName()).thenApply(NamedBlobRecord::getBlobId);
+              namedBlobPath.getBlobName(), containsPartialReadSupportedHeader).thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB)) {
@@ -173,7 +180,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
-        conversionFuture = getNamedBlobDb().put(record).thenApply(result -> result.getInsertedRecord().getBlobId());
+        conversionFuture = getNamedBlobDb().put(record, containsPartialReadSupportedHeader).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);

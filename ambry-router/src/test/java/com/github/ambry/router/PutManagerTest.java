@@ -761,7 +761,7 @@ public class PutManagerTest {
     MockReadableStreamChannel channel =
         new MockReadableStreamChannel(chunkSize / 2, false); // make sure we are not sending the entire chunk
     FutureResult<String> future = new FutureResult<>();
-    manager.submitPutBlobOperation(blobProperties, userMetadata, channel, PutBlobOptions.DEFAULT, future, null, null);
+    manager.submitPutBlobOperation(blobProperties, userMetadata, channel, PutBlobOptions.DEFAULT, future, null, null, null);
     channel.write(ByteBuffer.wrap(content));
 
     // Sleep until

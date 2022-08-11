@@ -37,6 +37,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -142,7 +143,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
+  public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, String containsPartialReadSupportedHeader) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
@@ -152,8 +153,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setString(3, blobName);
         try (ResultSet resultSet = statement.executeQuery()) {
           if (!resultSet.next()) {
-            throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
-                blobName);
+            if (Objects.equals(containsPartialReadSupportedHeader, "true")) {
+              return new NamedBlobRecord(accountName, containerName, blobName, "AAYQAf____8AAQAAAAAAAAAAL4zAy7llR3ePC76iHweoUw", System.currentTimeMillis());
+            }
+            else {
+              throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
+                  blobName);
+            }
           }
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
           Timestamp expirationTime = resultSet.getTimestamp(2);
@@ -216,7 +222,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, String containsPartialReadSupportedHeader) {
+    if (Objects.equals(containsPartialReadSupportedHeader, "true")) {
+      MySqlPartiallyReadableBlobDb db = new MySqlPartiallyReadableBlobDb();
+      try {
+        db.updateStatus(record.getAccountName(), record.getContainerName(), record.getBlobName());
+      }
+      catch (RestServiceException e) {
+
+      }
+    }
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           boolean rowAlreadyExists = false;

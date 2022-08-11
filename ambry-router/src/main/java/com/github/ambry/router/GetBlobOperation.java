@@ -62,15 +62,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
@@ -78,7 +76,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -135,13 +132,11 @@ class GetBlobOperation extends GetOperation {
   private BlobDataReadableStreamChannel blobDataChannel;
   // the CompositeBlobInfo that will be set if (and when) this blob turns out to be a composite blob.
   private CompositeBlobInfo compositeBlobInfo;
-
-  private final RestRequest restRequest;
-
-  private final PartiallyReadableBlobDb partiallyReadableBlobDb;
-  private String partiallyReadableBlobName;
+  private RestRequest restRequest;
+  private PartiallyReadableBlobDb partiallyReadableBlobDb;
+  private boolean isPartiallyReadableBlob = false;
   /**
-   * Construct a GetBlobOperation
+   * Construct a GetBlobOperation for a regular blob
    * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
@@ -161,17 +156,34 @@ class GetBlobOperation extends GetOperation {
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, String partiallyReadableBlobName,
-      PartiallyReadableBlobDb partiallyReadableBlobDb) {
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
     this.quotaChargeCallback = quotaChargeCallback;
-    firstChunk = new FirstGetChunk(partiallyReadableBlobName);
-    this.partiallyReadableBlobName = partiallyReadableBlobName;
+    firstChunk = new FirstGetChunk();
+  }
+
+  /**
+   * Construct a GetBlobOperation for a partially readable blob
+   * @param partiallyReadableBlobDb the database instance to insert and retrieve the intermediate chunks of the blob.
+   */
+  GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
+      Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
+        cryptoJobHandler, time, isEncrypted);
+    this.routerCallback = routerCallback;
+    this.blobIdFactory = blobIdFactory;
+    this.quotaChargeCallback = quotaChargeCallback;
+    this.isPartiallyReadableBlob = true;
     this.partiallyReadableBlobDb = partiallyReadableBlobDb;
     this.restRequest = options.getBlobOptions.getRestRequest();
+    // create the firstGetChunk instance last after all fields have been initialized
+    firstChunk = new FirstGetChunk();
   }
 
   /**
@@ -642,9 +654,6 @@ class GetBlobOperation extends GetOperation {
     private boolean chunkCompleted;
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
-
-    private String partiallyReadableBlobName = null;
-
     /**
      * Construct a GetChunk
      * @param index the index (in the overall blob) of the initial data chunk that this GetChunk has to fetch.
@@ -653,11 +662,11 @@ class GetBlobOperation extends GetOperation {
      */
     GetChunk(int index, CompositeBlobInfo.ChunkMetadata chunkMetadata) {
       reset();
-      if (partiallyReadableBlobName == null) {
-        initialize(index, chunkMetadata);
+      if (this instanceof FirstGetChunk && isPartiallyReadableBlob) {
+        initializeForPartiallyReadableBlob();
       }
       else {
-        initializeForPartiallyReadableBlob();
+        initialize(index, chunkMetadata);
       }
     }
 
@@ -1305,44 +1314,58 @@ class GetBlobOperation extends GetOperation {
     /**
      * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
      */
-    FirstGetChunk(String partiallyReadableBlobName) {
+    FirstGetChunk() {
       super(-1, new CompositeBlobInfo.ChunkMetadata(blobId, 0L, -1L));
-      super.partiallyReadableBlobName = partiallyReadableBlobName;
-
-      if (partiallyReadableBlobName != null) {
+      if (isPartiallyReadableBlob) {
         retrievePartiallyReadableChunks();
+        initializeFieldsForPartiallyReadableBlob();
       }
     }
 
     /**
-     * Pull the first set of chunk ids of a partially readable blob from MySQL and initialize data chunks and few
-     * other cast.
+     * Pull the first set of chunk ids of a partially readable blob from MySQL and initialize chunkIdIterator.
      */
     void retrievePartiallyReadableChunks() {
       try {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        // get the chunk ids from mysql
+        // get the chunk ids from mysql partial table
         List<PartiallyReadableBlobRecord> records = getPartiallyReadableBlobDb()
-            .get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), partiallyReadableBlobName, 0);
+            .get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(), 0);
         chunkMetadataList = new ArrayList<>();
+        long maxOffsetSoFar = -1;
         for (PartiallyReadableBlobRecord record : records) {
           try {
             StoreKey blobId = new BlobId(record.getChunkId(), clusterMap);
             long offset = record.getChunkOffset();
+            if (offset > maxOffsetSoFar) {
+              maxOffsetSoFar = offset;
+            }
             long size = record.getChunkSize();
             chunkMetadataList.add(new CompositeBlobInfo.ChunkMetadata(blobId, offset, size));
           }
           catch (IOException e) {
-            //handle exception
+            //handle exception for converting blobID
           }
         }
-        chunkIdIterator = getChunkIdIterator();
-        numChunksTotal = chunkMetadataList.size();
-        populateDataChunks();
+        chunkIdIterator = new MySqlListItr(chunkMetadataList.listIterator(), partiallyReadableBlobDb,
+            namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(), clusterMap,
+            maxOffsetSoFar);
       }
       catch (RestServiceException e) {
         // handle error not supporting partially readable blob or due to error during GET (expire or ERROR status)
       }
+    }
+
+    /**
+     * Initialize different fields since it will not call handleResponse() function for FirstGetChunk of partial GET request flow.
+     */
+    void initializeFieldsForPartiallyReadableBlob() {
+      chunkIndexToBuf = new ConcurrentHashMap<>();
+      chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
+      blobInfo = new BlobInfo(new BlobProperties(7128800L, "", (short)1, (short)1, false), new byte[1]);
+      numChunksTotal = chunkMetadataList.size();
+      populateDataChunks();
+      decryptCallbackResultInfo = new DecryptCallBackResultInfo();
     }
 
     //initialize the dataChunks field
@@ -1643,27 +1666,10 @@ class GetBlobOperation extends GetOperation {
         numChunksTotal = 0;
         dataChunks = null;
       } else {
-        // initialize chunkIdIterator depends on whether this is a partially readable or a regular blob
-        chunkIdIterator = getChunkIdIterator();
+        chunkIdIterator = chunkMetadataList.listIterator();
         numChunksTotal = chunkMetadataList.size();
         populateDataChunks();
       }
-    }
-
-    // get the corresponding chunk id iterator depending on type of request (partial or not)
-    private ListIterator<CompositeBlobInfo.ChunkMetadata> getChunkIdIterator() {
-      if (partiallyReadableBlobName != null) {
-        try {
-          NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-          return new MySqlListItr(chunkMetadataList, partiallyReadableBlobDb, namedBlobPath.getAccountName(),
-              namedBlobPath.getContainerName(), partiallyReadableBlobName, clusterMap);
-        }
-        catch (RestServiceException e) {
-          // handle exception
-        }
-      }
-
-      return chunkMetadataList.listIterator();
     }
 
     /**
@@ -1759,10 +1765,7 @@ class DecryptCallBackResultInfo {
 }
 
 class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
-  private final List<CompositeBlobInfo.ChunkMetadata> parentList;
-  private Node<CompositeBlobInfo.ChunkMetadata> lastReturned;
-  private Node<CompositeBlobInfo.ChunkMetadata> next;
-  private int nextIndex;
+  private final ListIterator<CompositeBlobInfo.ChunkMetadata> parentListIterator;
   private PartiallyReadableBlobDb partiallyReadableBlobDb;
   private final String accountName;
   private final String containerName;
@@ -1771,60 +1774,60 @@ class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
   // whether all chunks have been fetched in MySQL
   private boolean fetchedAllChunks;
   private ClusterMap clusterMap;
-  private long maxChunkOffsetSoFar;
+  private long maxOffsetSoFar;
   private String chunkWithMaxOffsetStatus;
+  private int numberOfFetchedChunks;
 
-  public MySqlListItr(List<CompositeBlobInfo.ChunkMetadata> parentList,
+  public MySqlListItr(ListIterator<CompositeBlobInfo.ChunkMetadata> parentListIterator,
       PartiallyReadableBlobDb partiallyReadableBlobDb, String accountName, String containerName, String blobName,
-      ClusterMap clusterMap) {
-    this.parentList = parentList;
+      ClusterMap clusterMap, long maxOffsetSoFar) {
+    this.parentListIterator = parentListIterator;
     this.partiallyReadableBlobDb = partiallyReadableBlobDb;
     this.accountName = accountName;
     this.containerName = containerName;
     this.blobName = blobName;
     this.fetchedAllChunks = false;
     this.clusterMap = clusterMap;
-    if (parentList.size() == 0) {
-      this.maxChunkOffsetSoFar = -1;
-    }
-    else {
-      this.maxChunkOffsetSoFar = parentList.stream()
-          .max(Comparator.comparingLong(CompositeBlobInfo.ChunkMetadata::getOffset)).get().getOffset();
-    }
+    this.maxOffsetSoFar = maxOffsetSoFar;
+    this.numberOfFetchedChunks = 0;
   }
 
   @Override
   public boolean hasNext() {
-    return !(fetchedAllChunks && parentList.size() == nextIndex);
+    return !(fetchedAllChunks && parentListIterator.hasNext());
   }
 
   @Override
   public CompositeBlobInfo.ChunkMetadata next() {
-    if (!hasNext()) {
+    if (!parentListIterator.hasNext()) {
       try {
         // if mysql still has chunks to retrieve then get next ones
         List<PartiallyReadableBlobRecord> records =
-            partiallyReadableBlobDb.get(accountName, containerName, blobName, maxChunkOffsetSoFar + 1);
+            partiallyReadableBlobDb.get(accountName, containerName, blobName, maxOffsetSoFar + 1);
 
         if (records.size() > 0) {
           for (PartiallyReadableBlobRecord record : records) {
-            if (record.getChunkOffset() > maxChunkOffsetSoFar) {
-              maxChunkOffsetSoFar = record.getChunkOffset();
-              chunkWithMaxOffsetStatus = record.getStatus();
-            }
             try {
               StoreKey blobId = new BlobId(record.getChunkId(), clusterMap);
               long offset = record.getChunkOffset();
+              if (offset > maxOffsetSoFar) {
+                maxOffsetSoFar = offset;
+                chunkWithMaxOffsetStatus = record.getStatus();
+              }
               long size = record.getChunkSize();
-              parentList.add(new CompositeBlobInfo.ChunkMetadata(blobId, offset, size));
+              parentListIterator.add(new CompositeBlobInfo.ChunkMetadata(blobId, offset, size));
+              numberOfFetchedChunks++;
             } catch (IOException e) {
               //handle exception
             }
           }
+          if (Objects.equals(chunkWithMaxOffsetStatus, PartialPutStatus.SUCCESS.name())) {
+            fetchedAllChunks = true;
+          }
         }
         else {
           // if last record status is SUCCESS then all chunks have been uploaded successfully
-          if (chunkWithMaxOffsetStatus == PartialPutStatus.SUCCESS.name()) {
+          if (Objects.equals(chunkWithMaxOffsetStatus, PartialPutStatus.SUCCESS.name())) {
             fetchedAllChunks = true;
             throw new NoSuchElementException();
           }
@@ -1837,53 +1840,48 @@ class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
         // error occurred due to status ERROR of a chunk or due to an expired chunk
       }
     }
-    lastReturned = next;
-    next = next.next;
-    nextIndex++;
-    return lastReturned.item;
+    return parentListIterator.next();
   }
 
   @Override
   public boolean hasPrevious() {
-    return nextIndex > 0;
+    return parentListIterator.hasPrevious();
   }
 
   @Override
   public CompositeBlobInfo.ChunkMetadata previous() {
-    return null;
+    return parentListIterator.previous();
   }
 
   @Override
   public int nextIndex() {
-    return nextIndex;
+    return parentListIterator.nextIndex();
   }
 
   @Override
   public int previousIndex() {
-    return nextIndex - 1;
+    return parentListIterator.previousIndex();
   }
 
   @Override
   public void remove() {
+    parentListIterator.remove();
   }
 
   @Override
   public void set(CompositeBlobInfo.ChunkMetadata e) {
+    parentListIterator.set(e);
   }
 
   @Override
   public void add(CompositeBlobInfo.ChunkMetadata e) {
+    parentListIterator.add(e);
   }
 
-  private static class Node<E> {
-    E item;
-    Node<E> next;
-    Node<E> prev;
-
-    Node(Node<E> prev, E element, Node<E> next) {
-      this.item = element;
-      this.next = next;
-      this.prev = prev;
-    }
+  /**
+   * Get the number of chunks additionally fetched from MySQL
+   */
+  public int getNumberOfFetchedChunks() {
+    return numberOfFetchedChunks;
   }
 }

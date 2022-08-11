@@ -34,6 +34,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME);
   private static final String ORDER_MATCH = String.format("(%s) >= (?)", CHUNK_OFFSET);
+  private static final String FIND_MAX_OFFSET_RECORD = String.format("SELECT MAX(%s) FROM (SELECT * FROM %s) AS BLOB_CHUNKS WHERE %s", CHUNK_OFFSET, BLOB_CHUNKS, PK_MATCH);
 
   private static final String INSERT_QUERY =
       String.format("INSERT INTO %s (%s, %s, %s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", BLOB_CHUNKS, ACCOUNT_NAME,
@@ -41,6 +42,8 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
   private static final String GET_QUERY =
       String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s AND %s", CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS, LAST_UPDATED_TS, BLOB_CHUNKS, PK_MATCH, ORDER_MATCH);
+
+  private static final String UPDATE_STATUS_QUERY = String.format("UPDATE %s SET %s = ? WHERE %s AND %s = (%s)", BLOB_CHUNKS, STATUS, PK_MATCH, CHUNK_OFFSET, FIND_MAX_OFFSET_RECORD);
 
   private static final long EXPIRATION_DURATION = 1000;
 
@@ -71,11 +74,11 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
             long currentTime = System.currentTimeMillis();
 
-            if ((currentTime - lastUpdatedTs) >= EXPIRATION_DURATION) {
-              // handle error for timeout
-              throw buildException("GET: Chunk expired", RestServiceErrorCode.Deleted, accountName, containerName,
-                  blobName);
-            }
+//            if ((currentTime - lastUpdatedTs) >= EXPIRATION_DURATION) {
+//              // handle error for timeout
+//              throw buildException("GET: Chunk expired", RestServiceErrorCode.Deleted, accountName, containerName,
+//                  blobName);
+//            }
             if (status.equals(PartialPutStatus.ERROR.name())) {
               throw buildException("Error occurred during the POST process", RestServiceErrorCode.InternalServerError,
                   accountName, containerName, blobName);
@@ -116,7 +119,9 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
           throw buildException("Put unsuccessfully", RestServiceErrorCode.Conflict, record.getAccountName(),
               record.getContainerName(), record.getBlobName());
         } else {
-          System.out.println("Successfully inserted record with name " + record.getBlobName() + " and chunkId " + record.getChunkId());
+          logger.trace("Successfully inserted record with account='" + record.getAccountName() +
+              "', container='" + record.getContainerName() + "', name='" + record.getBlobName() + "'"
+              + " and chunkId='" + record.getChunkId() + "'");
         }
       }
       catch (SQLException e) {
@@ -128,6 +133,35 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
     catch (SQLException e) {
       throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError,
           record.getAccountName(), record.getContainerName(), record.getBlobName());
+    }
+  }
+
+  public void updateStatus(String accountName, String containerName, String blobName) throws RestServiceException{
+    try {
+      Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
+      PreparedStatement statement = connection.prepareStatement(UPDATE_STATUS_QUERY);
+
+      statement.setString(1, PartialPutStatus.SUCCESS.name());
+      statement.setString(2, accountName);
+      statement.setString(3, containerName);
+      statement.setString(4, blobName);
+      statement.setString(5, accountName);
+      statement.setString(6, containerName);
+      statement.setString(7, blobName);
+
+      int rowUpdated = statement.executeUpdate();
+
+      if (rowUpdated == 0) {
+        throw buildException("Updated unsuccessfully", RestServiceErrorCode.Conflict, accountName, containerName, blobName);
+      }
+      else {
+        logger.trace("Successfully update record with account='" + accountName +
+            "', container='" + containerName + "', name='" + blobName + "'");
+      }
+    }
+    catch (SQLException e) {
+      throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError,
+          accountName, containerName, blobName);
     }
   }
 

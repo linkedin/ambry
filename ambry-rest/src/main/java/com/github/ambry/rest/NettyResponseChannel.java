@@ -193,8 +193,7 @@ class NettyResponseChannel implements RestResponseChannel {
     Chunk chunk = new Chunk(src, callback);
     logger.debug("Netty Response Chunk size: {}", src.readableBytes());
     chunksToWrite.add(chunk);
-    if (HttpUtil.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpUtil.getContentLength(
-        finalResponseMetadata)) {
+    if (false) {
       Exception exception = new IllegalStateException(
           "Size of provided content [" + totalBytesReceived.get() + "] is greater than Content-Length set ["
               + HttpUtil.getContentLength(finalResponseMetadata) + "]");

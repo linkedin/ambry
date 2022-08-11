@@ -633,11 +633,13 @@ public class RestUtils {
       GetOption getOption, RestRequest restRequest, int blobSegmentIdx) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
 
-    String partialReadableBlobName = null;
-    String isPartiallyReadableHeader = getHeader(args, Headers.IS_PARTIALLY_READABLE, false);
-    String fileNameHeader = getHeader(args, Headers.AMBRY_FILENAME, false);
-    if (isPartiallyReadableHeader != null && fileNameHeader != null) {
-      partialReadableBlobName = fileNameHeader;
+    boolean isPartiallyReadableBlob = false;
+    String containsPartialReadSupportedHeader = getHeader(args, Headers.IS_PARTIALLY_READABLE, false);
+    boolean isNamedBlobRequest = restRequest.getRestMethod() == RestMethod.GET && RestUtils.getRequestPath(restRequest)
+        .matchesOperation(Operations.NAMED_BLOB);
+
+    if (Objects.equals(containsPartialReadSupportedHeader, "true") && isNamedBlobRequest) {
+      isPartiallyReadableBlob = true;
     }
 
     if (subResource != null && !subResource.equals(SubResource.Segment) && rangeHeaderValue != null) {
@@ -653,7 +655,7 @@ public class RestUtils {
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
         .resolveRangeOnEmptyBlob(resolveRangeOnEmptyBlob)
         .restRequest(restRequest)
-        .partiallyReadableBlobName(partialReadableBlobName)
+        .isPartiallyReadableBlob(isPartiallyReadableBlob)
         .build();
   }
 

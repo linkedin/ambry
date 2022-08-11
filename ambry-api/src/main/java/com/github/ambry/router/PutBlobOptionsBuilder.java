@@ -26,7 +26,7 @@ public class PutBlobOptionsBuilder {
   private long maxUploadSize = Long.MAX_VALUE;
   private RestRequest restRequest = null;
   // variable to flag whether the put operation is for a partially readable blob
-  private String partiallyReadableBlobName = null;
+  private boolean isPartiallyReadableBlob = false;
 
   /**
    * @param chunkUpload {@code true} to indicate that this is an upload of a data chunk of a stitched upload.
@@ -55,8 +55,8 @@ public class PutBlobOptionsBuilder {
     return this;
   }
 
-  public PutBlobOptionsBuilder partiallyReadableBlobName(String partiallyReadableBlobName) {
-    this.partiallyReadableBlobName = partiallyReadableBlobName;
+  public PutBlobOptionsBuilder isPartiallyReadableBlob(boolean isPartiallyReadableBlob) {
+    this.isPartiallyReadableBlob = isPartiallyReadableBlob;
     return this;
   }
 
@@ -64,6 +64,6 @@ public class PutBlobOptionsBuilder {
    * @return the {@link PutBlobOptions} built.
    */
   public PutBlobOptions build() {
-    return new PutBlobOptions(chunkUpload, maxUploadSize, restRequest, partiallyReadableBlobName);
+    return new PutBlobOptions(chunkUpload, maxUploadSize, restRequest, isPartiallyReadableBlob);
   }
 }

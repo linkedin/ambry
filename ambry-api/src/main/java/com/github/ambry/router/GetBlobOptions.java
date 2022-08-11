@@ -35,8 +35,8 @@ public class GetBlobOptions {
   private final int blobSegmentIdx;
   private final RestRequest restRequest;
   public static final int NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
-  // Variable indicating whether the request is for a partially readable blob (null means not supported)
-  private final String partiallyReadableBlobName;
+  // Variable indicating whether the request is for a partially readable blob
+  private final boolean isPartiallyReadableBlob;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
@@ -50,9 +50,10 @@ public class GetBlobOptions {
    * @param blobSegmentIdx if not NO_BLOB_SEGMENT_IDX_SPECIFIED, the blob segment requested to be returned (only
    *                       relevant for metadata blobs)
    * @param restRequest the {@link RestRequest} that triggered this get operation.
+   * @param isPartiallyReadableBlob whether the request is for a regular or partially readable blob.
    */
   GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean resolveRangeOnEmptyBlob,
-      boolean rawMode, int blobSegmentIdx, RestRequest restRequest, String partiallyReadableBlobName) {
+      boolean rawMode, int blobSegmentIdx, RestRequest restRequest, boolean isPartiallyReadableBlob) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }
@@ -69,7 +70,7 @@ public class GetBlobOptions {
     this.rawMode = rawMode;
     this.blobSegmentIdx = blobSegmentIdx;
     this.restRequest = restRequest;
-    this.partiallyReadableBlobName = partiallyReadableBlobName;
+    this.isPartiallyReadableBlob = isPartiallyReadableBlob;
   }
 
   /**
@@ -130,10 +131,10 @@ public class GetBlobOptions {
   }
 
   /**
-   * @return The name of the blob. If the name is null, the request for partially readable blob is not supported
+   * @return whether the request is for a partially readable blob
    */
-  public String getPartiallyReadableBlobName() {
-    return partiallyReadableBlobName;
+  public boolean isPartiallyReadableBlob() {
+    return isPartiallyReadableBlob;
   }
 
   @Override
@@ -153,12 +154,14 @@ public class GetBlobOptions {
     GetBlobOptions that = (GetBlobOptions) o;
     return resolveRangeOnEmptyBlob == that.resolveRangeOnEmptyBlob && rawMode == that.rawMode
         && blobSegmentIdx == that.blobSegmentIdx && operationType == that.operationType && getOption == that.getOption
+        && isPartiallyReadableBlob == that.isPartiallyReadableBlob
         && Objects.equals(range, that.range) && Objects.equals(restRequest, that.restRequest);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx, restRequest);
+    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx, restRequest,
+        isPartiallyReadableBlob);
   }
 
   /**

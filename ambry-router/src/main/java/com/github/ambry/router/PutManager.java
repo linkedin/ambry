@@ -150,12 +150,12 @@ class PutManager {
     PutOperation putOperation;
 
     // if this is a partially readable blob put request
-    if (options.getPartiallyReadableBlobName() != null) {
+    if (options.isPartiallyReadableBlob()) {
       putOperation =
           PutOperation.forPartialUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
               userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
               cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback,
-              partiallyReadableBlobDb, options.getPartiallyReadableBlobName());
+              partiallyReadableBlobDb);
     }
     else {
       putOperation = PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,

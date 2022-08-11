@@ -130,17 +130,18 @@ class GetManager {
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeCallback);
     }
-    else if (options.getBlobOptions.getPartiallyReadableBlobName() != null) {
+    // if this is partial read request and the blob name is not found in the named blob table
+//    else if (options.getBlobOptions.isPartiallyReadableBlob() && blobIdStr == null) {
+    else if (options.getBlobOptions.isPartiallyReadableBlob()) {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
-              quotaChargeCallback, options.getBlobOptions.getPartiallyReadableBlobName(), partiallyReadableBlobDb);
+              quotaChargeCallback, partiallyReadableBlobDb);
     }
     else {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
-              quotaChargeCallback, null, null);
+              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeCallback);
     }
     getOperations.add(getOperation);
   }

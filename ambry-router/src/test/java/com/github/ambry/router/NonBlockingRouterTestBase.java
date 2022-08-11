@@ -623,13 +623,13 @@ public class NonBlockingRouterTestBase {
           futureResult = new FutureResult<String>();
           ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
           putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT,
-              futureResult, null, null);
+              futureResult, null, null, null);
           break;
         case GET:
           final FutureResult<GetBlobResultInternal> getFutureResult = new FutureResult<>();
           getManager.submitGetBlobOperation(blobId.getID(), new GetBlobOptionsInternal(
               new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
-              routerMetrics.ageAtGet), getFutureResult::done, null);
+              routerMetrics.ageAtGet), getFutureResult::done, null, null);
           futureResult = getFutureResult;
           break;
         case DELETE:

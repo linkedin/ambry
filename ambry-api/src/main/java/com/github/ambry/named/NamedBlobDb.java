@@ -32,7 +32,7 @@ public interface NamedBlobDb {
    * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
    *         blob or an exception if an error occurred.
    */
-  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName);
+  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, String containsPartiallyReadableSupportedHeader);
 
   /**
    * List blobs that start with a provided prefix in a container. This returns paginated results. If there are
@@ -55,7 +55,7 @@ public interface NamedBlobDb {
    * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
    *         occurred.
    */
-  CompletableFuture<PutResult> put(NamedBlobRecord record);
+  CompletableFuture<PutResult> put(NamedBlobRecord record, String containsPartiallyReadableSupportedHeader);
 
   /**
    * Delete a record for a blob in the database.
