@@ -131,8 +131,7 @@ public class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling, reserveFileDir,
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     diskHealthCheck = new DiskHealthCheck(diskManagerConfig.diskManagerDiskHealthCheckOperationTimeoutSeconds,
-        diskManagerConfig.diskManagerDiskHealthCheckEnabled,
-        disk.getMountPath() + diskManagerConfig.diskManagerDiskHealthCheckFilePath);
+        diskManagerConfig.diskManagerDiskHealthCheckEnabled, disk.getMountPath());
     this.replicaStatusDelegates = replicaStatusDelegates;
     this.stoppedReplicas = stoppedReplicas;
     expectedDirs.add(reserveFileDir.getAbsolutePath());
@@ -203,6 +202,7 @@ public class DiskManager {
       reportUnrecognizedDirs();
       running = true;
       if (diskHealthCheck.isEnabled()) {
+        logger.info("Starting Disk Healthchecker");
         scheduler.scheduleAtFixedRate(() -> diskHealthCheck.diskHealthTest(), 0,
             diskManagerConfig.diskManagerDiskHealthCheckIntervalSeconds, TimeUnit.SECONDS);
       }
@@ -708,6 +708,8 @@ public class DiskManager {
       if (!enabled) {
         return;
       }
+
+      logger.trace("Performing the disk healthcheck test");
 
       //Creates the directory and opens the file
       AsynchronousFileChannel fileChannel = createFileChannel();
