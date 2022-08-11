@@ -84,7 +84,7 @@ public class DiskManager {
   private final AccountService accountService;
   private final DiskManagerConfig diskManagerConfig;
   private boolean running = false;
-  private DiskHealthStatus diskHealthStatus = DiskHealthStatus.UNKNOWN_HEALTH;
+  private DiskHealthStatus diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
   private final DiskHealthCheck diskHealthCheck;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -131,7 +131,7 @@ public class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling, reserveFileDir,
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     diskHealthCheck = new DiskHealthCheck(diskManagerConfig.diskManagerDiskHealthCheckOperationTimeoutSeconds,
-        diskManagerConfig.diskManagerDiskHealthCheckEnabled, disk.getMountPath());
+        diskManagerConfig.diskManagerDiskHealthCheckEnabled);
     this.replicaStatusDelegates = replicaStatusDelegates;
     this.stoppedReplicas = stoppedReplicas;
     expectedDirs.add(reserveFileDir.getAbsolutePath());
@@ -601,11 +601,9 @@ public class DiskManager {
   private class DiskHealthCheck {
     private final int operationTimeoutSeconds;      //how long a read/write operation is allotted
     private final boolean enabled;                  //enabled healthchecking
-    private final String healthcheckDir;            //filepath of where the file will be created
 
-    DiskHealthCheck(int operationTimeoutSeconds, boolean enabled, String healthcheckDir) {
+    DiskHealthCheck(int operationTimeoutSeconds, boolean enabled) {
       this.enabled = enabled;
-      this.healthcheckDir = healthcheckDir;
       this.operationTimeoutSeconds = operationTimeoutSeconds;
     }
 
@@ -679,17 +677,15 @@ public class DiskManager {
      */
     private AsynchronousFileChannel createFileChannel() {
       try {
-        File dir = new File(healthcheckDir);
-        if (!dir.exists() && !dir.mkdir()) {
-          throw new Error(String.format("%s directory wasn't created", healthcheckDir));
-        }
-        Path path = Paths.get(healthcheckDir, "temp");
+        checkMountPathAccessible();
+        Path path = Paths.get(disk.getMountPath(), "temp");
         AsynchronousFileChannel fileChannel =
             AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,
                 StandardOpenOption.SYNC, StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
         return fileChannel;
       } catch (Exception e) {
-        diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
+        diskHealthStatus =
+            e instanceof StoreException ? DiskHealthStatus.MOUNT_NOT_ACCESSIBLE : DiskHealthStatus.CREATE_EXCEPTION;
         logger.error("Exception occurred when creating a file/directory for disk healthcheck", e);
         return null;
       }

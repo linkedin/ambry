@@ -23,13 +23,9 @@ public enum DiskHealthStatus {
    */
   HEALTHY,
   /**
-   * Initialization purposes until the health checking begins
+   * The Disk's mountpath isn't accessible
    */
-  UNKNOWN_HEALTH,
-  /**
-   * There is no space to write the file used for healthcheck
-   */
-  INSUFFICIENT_SPACE,
+  MOUNT_NOT_ACCESSIBLE,
   /**
    * The Disk's healthcheck encountered an exception when creating a file or directory to disk
    */
