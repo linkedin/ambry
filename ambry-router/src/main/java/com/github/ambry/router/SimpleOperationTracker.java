@@ -72,9 +72,9 @@ class SimpleOperationTracker implements OperationTracker {
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
   protected final String datacenterName;
   protected final String originatingDcName;
-  protected final int diskReplicaSuccessTarget;
-  protected final int diskReplicaParallelism;
-  protected final boolean diskReplicasPresent;
+  protected final int replicaSuccessTarget;
+  protected final int replicaParallelism;
+  protected final boolean replicasPresent;
   // How many NotFound responses from originating dc will terminate the operation.
   // It is set to tolerate one random failure in the originating dc if all other responses are not found.
   protected final int originatingDcNotFoundFailureThreshold;
@@ -87,8 +87,8 @@ class SimpleOperationTracker implements OperationTracker {
   private final RouterConfig routerConfig;
   private final boolean crossColoEnabled;
   protected int inflightCount = 0;
-  protected int diskReplicaSuccessCount = 0;
-  protected int diskReplicaInPoolOrFlightCount = 0;
+  protected int replicaSuccessCount = 0;
+  protected int replicaInPoolOrFlightCount = 0;
   protected int failedCount = 0;
   protected boolean quotaRejected = false;
   protected int disabledCount = 0;
@@ -207,8 +207,8 @@ class SimpleOperationTracker implements OperationTracker {
     switch (routerOperation) {
       case GetBlobOperation:
       case GetBlobInfoOperation:
-        diskReplicaSuccessTarget = routerConfig.routerGetSuccessTarget;
-        diskReplicaParallelism = routerConfig.routerGetRequestParallelism;
+        replicaSuccessTarget = routerConfig.routerGetSuccessTarget;
+        replicaParallelism = routerConfig.routerGetRequestParallelism;
         crossColoEnabled = routerConfig.routerGetCrossDcEnabled;
         Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(null,
             EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE,
@@ -222,43 +222,43 @@ class SimpleOperationTracker implements OperationTracker {
         break;
       case PutOperation:
         eligibleReplicas = getEligibleReplicas(datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
-        diskReplicaSuccessTarget =
+        replicaSuccessTarget =
             routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
                 routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
-        diskReplicaParallelism =
+        replicaParallelism =
             routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.min(eligibleReplicas.size(),
                 routerConfig.routerPutRequestParallelism) : routerConfig.routerPutRequestParallelism;
         crossColoEnabled = false;
         break;
       case DeleteOperation:
-        diskReplicaSuccessTarget = routerConfig.routerDeleteSuccessTarget;
-        diskReplicaParallelism = routerConfig.routerDeleteRequestParallelism;
+        replicaSuccessTarget = routerConfig.routerDeleteSuccessTarget;
+        replicaParallelism = routerConfig.routerDeleteRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas =
             getEligibleReplicas(null, EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case TtlUpdateOperation:
-        diskReplicaSuccessTarget = routerConfig.routerTtlUpdateSuccessTarget;
-        diskReplicaParallelism = routerConfig.routerTtlUpdateRequestParallelism;
+        replicaSuccessTarget = routerConfig.routerTtlUpdateSuccessTarget;
+        replicaParallelism = routerConfig.routerTtlUpdateRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas =
             getEligibleReplicas(null, EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         break;
       case UndeleteOperation:
-        diskReplicaParallelism = routerConfig.routerUndeleteRequestParallelism;
+        replicaParallelism = routerConfig.routerUndeleteRequestParallelism;
         crossColoEnabled = true;
         eligibleReplicas =
             getEligibleReplicas(null, EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
         // Undelete operation need to get global quorum. It will require a different criteria for success.
         // Here set the success target to the number of eligible replicas.
-        diskReplicaSuccessTarget = eligibleReplicas.size();
+        replicaSuccessTarget = eligibleReplicas.size();
         break;
       default:
         throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
     }
-    if (diskReplicaParallelism < 1) {
+    if (replicaParallelism < 1) {
       throw new IllegalArgumentException(
-          "Parallelism has to be > 0. diskParallelism=" + diskReplicaParallelism + ", routerOperation="
+          "Parallelism has to be > 0. Parallelism=" + replicaParallelism + ", routerOperation="
               + routerOperation);
     }
 
@@ -344,7 +344,7 @@ class SimpleOperationTracker implements OperationTracker {
       }
     }
     totalReplicaCount = replicaPool.size();
-    diskReplicasPresent = diskReplicaInPoolOrFlightCount > 0;
+    replicasPresent = replicaInPoolOrFlightCount > 0;
     originatingDcOfflineReplicaCount =
         getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
     originatingDcTotalReplicaCount = allReplicas.stream()
@@ -379,7 +379,7 @@ class SimpleOperationTracker implements OperationTracker {
     this.otIterator = new OpTrackerIterator();
     logger.debug(
         "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}, originatingDC = {}",
-        routerOperation, diskReplicaSuccessTarget, diskReplicaParallelism, originatingDcNotFoundFailureThreshold,
+        routerOperation, replicaSuccessTarget, replicaParallelism, originatingDcNotFoundFailureThreshold,
         replicaPool, originatingDcName);
   }
 
@@ -400,12 +400,12 @@ class SimpleOperationTracker implements OperationTracker {
   public boolean hasSucceeded() {
     boolean hasSucceeded;
     if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
-      // this logic only applies to disk replicas where the quorum can change during replica movement
+      // this logic only applies to replicas where the quorum can change during replica movement
       int dynamicSuccessTarget = Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
-      hasSucceeded = diskReplicaSuccessCount >= dynamicSuccessTarget;
+      hasSucceeded = replicaSuccessCount >= dynamicSuccessTarget;
     } else {
       hasSucceeded =
-          diskReplicaSuccessCount >= diskReplicaSuccessTarget;
+          replicaSuccessCount >= replicaSuccessTarget;
     }
     return hasSucceeded;
   }
@@ -420,26 +420,26 @@ class SimpleOperationTracker implements OperationTracker {
     // remaining set of replicas. The offline replicas can come back up in future to make the request successful, and
     // hence such a failure should be deemed as retryable.
     if (hasFailedOnOriginatingDcNotFound()
-        && originatingDcTotalReplicaCount - originatingDcNotFoundCount >= diskReplicaSuccessTarget
+        && originatingDcTotalReplicaCount - originatingDcNotFoundCount >= replicaSuccessTarget
         && originatingDcOfflineReplicaCount > 0) {
       logger.info(
           "Terminating {} on {} due to Not_Found failure on some originatingDc replicas and some other originatingDc"
               + "replicas being offline. Originating Not_Found count: {}, failure threshold: {},"
               + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
-              + "diskReplicaSuccessTarget: {} {}", routerOperation.name(), partitionId, originatingDcNotFoundCount,
+              + "replicaSuccessTarget: {} {}", routerOperation.name(), partitionId, originatingDcNotFoundCount,
           originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount, originatingDcTotalReplicaCount,
-          diskReplicaSuccessTarget, getBlobIdLog());
+          replicaSuccessTarget, getBlobIdLog());
       routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
       return true;
     }
-    if (hasFailedOnCrossColoNotFound() && allReplicaCount - totalNotFoundCount >= diskReplicaSuccessTarget
+    if (hasFailedOnCrossColoNotFound() && allReplicaCount - totalNotFoundCount >= replicaSuccessTarget
         && totalOfflineReplicaCount > 0) {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
               + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-              + "TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {} {}",
+              + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {} {}",
           routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-          diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, getBlobIdLog());
+          replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, getBlobIdLog());
       routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
       return true;
     }
@@ -455,21 +455,21 @@ class SimpleOperationTracker implements OperationTracker {
       logger.info(
           "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {},"
               + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
-              + "diskReplicaSuccessTarget: {}, allReplicaCount: {} {}", routerOperation.name(), partitionId,
+              + "replicaSuccessTarget: {}, allReplicaCount: {} {}", routerOperation.name(), partitionId,
           originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount,
-          originatingDcTotalReplicaCount, diskReplicaSuccessTarget, allReplicaCount, getBlobIdLog());
+          originatingDcTotalReplicaCount, replicaSuccessTarget, allReplicaCount, getBlobIdLog());
       routerMetrics.failedOnOriginatingDcNotFoundCount.inc();
       return true;
     }
     // To account for GET operation, the threshold should be  >= totalReplicaCount - (success target - 1)
-    // Right now, this only applies for disk replica only partitions and may not be completely accurate if there are
+    // Right now, this only applies for replica only partitions and may not be completely accurate if there are
     // failures responses other than not found.
     if (hasFailedOnCrossColoNotFound()) {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found. CrossColoEnabled: {}, DiskDownCount: {},"
-              + "TotalNotFoundCount: {}, TotalReplicaCount: {}, DiskReplicaSuccessTarget: {}, OfflineReplicaCount: {},"
+              + "TotalNotFoundCount: {}, TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {},"
               + "allReplicaCount: {} {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
-          totalNotFoundCount, totalReplicaCount, diskReplicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount,
+          totalNotFoundCount, totalReplicaCount, replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount,
           getBlobIdLog());
       routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
@@ -489,7 +489,7 @@ class SimpleOperationTracker implements OperationTracker {
     modifyReplicasInPoolOrInFlightCount(replicaId.getReplicaType(), -1);
     switch (trackedRequestFinalState) {
       case SUCCESS:
-        diskReplicaSuccessCount++;
+        replicaSuccessCount++;
         break;
       // Request disabled may happen when PUT/DELETE/TTLUpdate requests attempt to perform on replicas that are being
       // decommissioned (i.e STANDBY -> INACTIVE). This is because decommission may take some time and frontends still
@@ -561,7 +561,7 @@ class SimpleOperationTracker implements OperationTracker {
    * {@code false} otherwise.
    */
   private boolean hasFailedOnCrossColoNotFound() {
-    return (crossColoEnabled && (diskDownCount + totalNotFoundCount > totalReplicaCount - diskReplicaSuccessTarget));
+    return (crossColoEnabled && (diskDownCount + totalNotFoundCount > totalReplicaCount - replicaSuccessTarget));
   }
 
   /**
@@ -606,13 +606,13 @@ class SimpleOperationTracker implements OperationTracker {
       return true;
     }
     if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget
-        && diskReplicasPresent) {
+        && replicasPresent) {
       return totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
           routerConfig.routerPutSuccessTarget + disabledCount);
     } else {
-      // if there is no possible way to use the remaining replicas to meet the disk success target,
+      // if there is no possible way to use the remaining replicas to meet the success target,
       // deem the operation a failure.
-      if (!diskReplicasPresent || diskReplicaInPoolOrFlightCount + diskReplicaSuccessCount < diskReplicaSuccessTarget) {
+      if (!replicasPresent || replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget) {
         return true;
       }
       return maybeFailedDueToOfflineReplicas() || hasFailedOnNotFound();
@@ -651,14 +651,14 @@ class SimpleOperationTracker implements OperationTracker {
    * @param delta the value to add to the counter.
    */
   private void modifyReplicasInPoolOrInFlightCount(ReplicaType replicaType, int delta) {
-    diskReplicaInPoolOrFlightCount += delta;
+    replicaInPoolOrFlightCount += delta;
   }
 
   /**
    * @return the success target number of this operation tracker for the provided replica type.
    */
   int getSuccessTarget() {
-    return diskReplicaSuccessTarget;
+    return replicaSuccessTarget;
   }
 
   /**
@@ -667,7 +667,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @return the parallelism setting to honor.
    */
   int getCurrentParallelism() {
-    return diskReplicaParallelism;
+    return replicaParallelism;
   }
 
   /**
@@ -685,7 +685,7 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   int getSuccessCount() {
-    return diskReplicaSuccessCount;
+    return replicaSuccessCount;
   }
 
   /**
