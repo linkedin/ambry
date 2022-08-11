@@ -101,11 +101,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
           "Operation tracker disk replica parallelism (%s) is larger than adaptive tracker max inflight number (%s)",
           diskReplicaParallelism, routerConfig.routerOperationTrackerMaxInflightRequests));
     }
-    if (cloudReplicaParallelism > routerConfig.routerOperationTrackerMaxInflightRequests) {
-      throw new IllegalArgumentException(String.format(
-          "Operation tracker cloud replica parallelism (%s) is larger than adaptive tracker max inflight number (%s)",
-          diskReplicaParallelism, routerConfig.routerOperationTrackerMaxInflightRequests));
-    }
   }
 
   @Override
@@ -301,7 +296,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
         }
       }
       unexpiredRequestSendTimes.put(lastReturnedByIterator, new Pair<>(false, time.milliseconds()));
-      inFlightReplicaType = lastReturnedByIterator.getReplicaType();
       inflightCount++;
     }
 
@@ -321,7 +315,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
       if (routerConfig.routerAdaptiveOperationTrackerWaitingForResponse) {
         int parallelism = getCurrentParallelism();
         int successCount = getSuccessCount();
-        int successTarget = getSuccessTarget(inFlightReplicaType);
+        int successTarget = getSuccessTarget();
         return inflightCount < parallelism && successCount + inflightCount < successTarget;
       } else {
         return inflightCount < getCurrentParallelism();

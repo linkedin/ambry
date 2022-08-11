@@ -1107,7 +1107,7 @@ public class OperationTrackerTest {
       // ensure the success target matches the number specified for each type of operaiton
       if (operationTracker != null) {
         assertEquals("The suggest target doesn't match", (long) entry.getValue(),
-            operationTracker.getSuccessTarget(ReplicaType.DISK_BACKED));
+            operationTracker.getSuccessTarget());
       }
     }
   }

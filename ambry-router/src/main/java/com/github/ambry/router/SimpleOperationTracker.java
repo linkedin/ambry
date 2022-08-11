@@ -74,9 +74,6 @@ class SimpleOperationTracker implements OperationTracker {
   protected final String originatingDcName;
   protected final int diskReplicaSuccessTarget;
   protected final int diskReplicaParallelism;
-  protected final int cloudReplicaSuccessTarget;
-  protected final int cloudReplicaParallelism;
-  protected final boolean cloudReplicasPresent;
   protected final boolean diskReplicasPresent;
   // How many NotFound responses from originating dc will terminate the operation.
   // It is set to tolerate one random failure in the originating dc if all other responses are not found.
@@ -91,9 +88,7 @@ class SimpleOperationTracker implements OperationTracker {
   private final boolean crossColoEnabled;
   protected int inflightCount = 0;
   protected int diskReplicaSuccessCount = 0;
-  protected int cloudReplicaSuccessCount = 0;
   protected int diskReplicaInPoolOrFlightCount = 0;
-  protected int cloudReplicaInPoolOrFlightCount = 0;
   protected int failedCount = 0;
   protected boolean quotaRejected = false;
   protected int disabledCount = 0;
@@ -101,7 +96,6 @@ class SimpleOperationTracker implements OperationTracker {
   protected int totalNotFoundCount = 0;
   protected int diskDownCount = 0;
   protected ReplicaId lastReturnedByIterator = null;
-  protected ReplicaType inFlightReplicaType;
   private Iterator<ReplicaId> replicaIterator;
   private String reassignedOriginDc = null;
   private int originatingDcOfflineReplicaCount = 0;
@@ -197,8 +191,7 @@ class SimpleOperationTracker implements OperationTracker {
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
     datacenterName = routerConfig.routerDatacenterName;
-    cloudReplicaSuccessTarget = routerConfig.routerCloudSuccessTarget;
-    cloudReplicaParallelism = routerConfig.routerCloudRequestParallelism;
+
     // Note that we get a snapshot of replicas by state only once in this class, and use the same snapshot everywhere
     // to avoid the case where a replica state might change in between an operation.
     allDcReplicasByState =
@@ -263,10 +256,10 @@ class SimpleOperationTracker implements OperationTracker {
       default:
         throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
     }
-    if (diskReplicaParallelism < 1 || cloudReplicaParallelism < 1) {
+    if (diskReplicaParallelism < 1) {
       throw new IllegalArgumentException(
-          "Parallelism has to be > 0. diskParallelism=" + diskReplicaParallelism + ", cloudParallelism="
-              + cloudReplicaParallelism + ", routerOperation=" + routerOperation);
+          "Parallelism has to be > 0. diskParallelism=" + diskReplicaParallelism + ", routerOperation="
+              + routerOperation);
     }
 
     // Order the replicas so that local healthy replicas are ordered and returned first,
@@ -351,7 +344,6 @@ class SimpleOperationTracker implements OperationTracker {
       }
     }
     totalReplicaCount = replicaPool.size();
-    cloudReplicasPresent = cloudReplicaInPoolOrFlightCount > 0;
     diskReplicasPresent = diskReplicaInPoolOrFlightCount > 0;
     originatingDcOfflineReplicaCount =
         getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
@@ -365,11 +357,7 @@ class SimpleOperationTracker implements OperationTracker {
     Supplier<IllegalArgumentException> notEnoughReplicasException = () -> new IllegalArgumentException(
         generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
             routerOperation));
-    // initialize this to the replica type of the first request to send so that parallelism is set correctly for the
-    // first request
-    inFlightReplicaType =
-        replicaPool.stream().findFirst().map(ReplicaId::getReplicaType).orElseThrow(notEnoughReplicasException);
-    if (totalReplicaCount < getSuccessTarget(inFlightReplicaType)) {
+    if (totalReplicaCount < getSuccessTarget()) {
       throw notEnoughReplicasException.get();
     }
 
@@ -411,14 +399,13 @@ class SimpleOperationTracker implements OperationTracker {
   @Override
   public boolean hasSucceeded() {
     boolean hasSucceeded;
-    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget
-        && inFlightReplicaType == ReplicaType.DISK_BACKED) {
+    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
       // this logic only applies to disk replicas where the quorum can change during replica movement
       int dynamicSuccessTarget = Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
       hasSucceeded = diskReplicaSuccessCount >= dynamicSuccessTarget;
     } else {
       hasSucceeded =
-          diskReplicaSuccessCount >= diskReplicaSuccessTarget || cloudReplicaSuccessCount >= cloudReplicaSuccessTarget;
+          diskReplicaSuccessCount >= diskReplicaSuccessTarget;
     }
     return hasSucceeded;
   }
@@ -502,11 +489,7 @@ class SimpleOperationTracker implements OperationTracker {
     modifyReplicasInPoolOrInFlightCount(replicaId.getReplicaType(), -1);
     switch (trackedRequestFinalState) {
       case SUCCESS:
-        if (replicaId.getReplicaType() == ReplicaType.CLOUD_BACKED) {
-          cloudReplicaSuccessCount++;
-        } else {
-          diskReplicaSuccessCount++;
-        }
+        diskReplicaSuccessCount++;
         break;
       // Request disabled may happen when PUT/DELETE/TTLUpdate requests attempt to perform on replicas that are being
       // decommissioned (i.e STANDBY -> INACTIVE). This is because decommission may take some time and frontends still
@@ -550,7 +533,6 @@ class SimpleOperationTracker implements OperationTracker {
     @Override
     public void remove() {
       replicaIterator.remove();
-      inFlightReplicaType = lastReturnedByIterator.getReplicaType();
       inflightCount++;
     }
 
@@ -628,13 +610,10 @@ class SimpleOperationTracker implements OperationTracker {
       return totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
           routerConfig.routerPutSuccessTarget + disabledCount);
     } else {
-      // if there is no possible way to use the remaining replicas to meet either the disk or cloud success target,
+      // if there is no possible way to use the remaining replicas to meet the disk success target,
       // deem the operation a failure.
       if (!diskReplicasPresent || diskReplicaInPoolOrFlightCount + diskReplicaSuccessCount < diskReplicaSuccessTarget) {
-        if (!cloudReplicasPresent
-            || cloudReplicaInPoolOrFlightCount + cloudReplicaSuccessCount < cloudReplicaSuccessTarget) {
-          return true;
-        }
+        return true;
       }
       return maybeFailedDueToOfflineReplicas() || hasFailedOnNotFound();
     }
@@ -672,29 +651,23 @@ class SimpleOperationTracker implements OperationTracker {
    * @param delta the value to add to the counter.
    */
   private void modifyReplicasInPoolOrInFlightCount(ReplicaType replicaType, int delta) {
-    if (replicaType == ReplicaType.CLOUD_BACKED) {
-      cloudReplicaInPoolOrFlightCount += delta;
-    } else {
-      diskReplicaInPoolOrFlightCount += delta;
-    }
+    diskReplicaInPoolOrFlightCount += delta;
   }
 
   /**
-   * @param replicaType the {@link ReplicaType}
    * @return the success target number of this operation tracker for the provided replica type.
    */
-  int getSuccessTarget(ReplicaType replicaType) {
-    return replicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaSuccessTarget : diskReplicaSuccessTarget;
+  int getSuccessTarget() {
+    return diskReplicaSuccessTarget;
   }
 
   /**
    * This method determines the current number of parallel requests to send, based on the last request sent out or the
-   * first replica in the pool if this is the first request sent. If we are currently sending out requests to a cloud
-   * replica, we want to ensure that its parallelism is honored to prevent sending out unneeded requests.
+   * first replica in the pool if this is the first request sent.
    * @return the parallelism setting to honor.
    */
   int getCurrentParallelism() {
-    return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaParallelism : diskReplicaParallelism;
+    return diskReplicaParallelism;
   }
 
   /**
@@ -712,7 +685,7 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   int getSuccessCount() {
-    return inFlightReplicaType == ReplicaType.CLOUD_BACKED ? cloudReplicaSuccessCount : diskReplicaSuccessCount;
+    return diskReplicaSuccessCount;
   }
 
   /**
