@@ -683,12 +683,16 @@ public class DiskManager {
             AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,
                 StandardOpenOption.SYNC, StandardOpenOption.CREATE, StandardOpenOption.DELETE_ON_CLOSE);
         return fileChannel;
+      } catch (StoreException e) {
+        if (e.getErrorCode() == StoreErrorCodes.Initialization_Error) {
+          diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
+          logger.error("Exception occurred when checking if the mount is accessible", e);
+        }
       } catch (Exception e) {
-        diskHealthStatus =
-            e instanceof StoreException ? DiskHealthStatus.MOUNT_NOT_ACCESSIBLE : DiskHealthStatus.CREATE_EXCEPTION;
+        diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
         logger.error("Exception occurred when creating a file/directory for disk healthcheck", e);
-        return null;
       }
+      return null;
     }
 
     /**
