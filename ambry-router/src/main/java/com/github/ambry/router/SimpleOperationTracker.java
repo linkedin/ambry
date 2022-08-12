@@ -74,7 +74,6 @@ class SimpleOperationTracker implements OperationTracker {
   protected final String originatingDcName;
   protected final int replicaSuccessTarget;
   protected final int replicaParallelism;
-  protected final boolean replicasPresent;
   // How many NotFound responses from originating dc will terminate the operation.
   // It is set to tolerate one random failure in the originating dc if all other responses are not found.
   protected final int originatingDcNotFoundFailureThreshold;
@@ -344,7 +343,6 @@ class SimpleOperationTracker implements OperationTracker {
       }
     }
     totalReplicaCount = replicaPool.size();
-    replicasPresent = replicaInPoolOrFlightCount > 0;
     originatingDcOfflineReplicaCount =
         getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
     originatingDcTotalReplicaCount = allReplicas.stream()
@@ -486,7 +484,7 @@ class SimpleOperationTracker implements OperationTracker {
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     inflightCount--;
     // once a response has been received, a replica is no longer in the pool or currently in flight.
-    modifyReplicasInPoolOrInFlightCount(replicaId.getReplicaType(), -1);
+    modifyReplicasInPoolOrInFlightCount(-1);
     switch (trackedRequestFinalState) {
       case SUCCESS:
         replicaSuccessCount++;
@@ -605,14 +603,13 @@ class SimpleOperationTracker implements OperationTracker {
     if (quotaRejected) {
       return true;
     }
-    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget
-        && replicasPresent) {
+    if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
       return totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
           routerConfig.routerPutSuccessTarget + disabledCount);
     } else {
       // if there is no possible way to use the remaining replicas to meet the success target,
       // deem the operation a failure.
-      if (!replicasPresent || replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget) {
+      if (replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget) {
         return true;
       }
       return maybeFailedDueToOfflineReplicas() || hasFailedOnNotFound();
@@ -632,7 +629,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param replicaId the replica to add.
    */
   private void addToBeginningOfPool(ReplicaId replicaId) {
-    modifyReplicasInPoolOrInFlightCount(replicaId.getReplicaType(), 1);
+    modifyReplicasInPoolOrInFlightCount(1);
     replicaPool.addFirst(replicaId);
   }
 
@@ -641,16 +638,15 @@ class SimpleOperationTracker implements OperationTracker {
    * @param replicaId the replica to add.
    */
   private void addToEndOfPool(ReplicaId replicaId) {
-    modifyReplicasInPoolOrInFlightCount(replicaId.getReplicaType(), 1);
+    modifyReplicasInPoolOrInFlightCount(1);
     replicaPool.addLast(replicaId);
   }
 
   /**
    * Add {@code delta} to a replicas in pool or in flight counter.
-   * @param replicaType the {@link ReplicaType} of the counter to use.
    * @param delta the value to add to the counter.
    */
-  private void modifyReplicasInPoolOrInFlightCount(ReplicaType replicaType, int delta) {
+  private void modifyReplicasInPoolOrInFlightCount(int delta) {
     replicaInPoolOrFlightCount += delta;
   }
 
