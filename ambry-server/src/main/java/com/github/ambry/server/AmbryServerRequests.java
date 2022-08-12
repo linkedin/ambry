@@ -469,9 +469,9 @@ public class AmbryServerRequests extends AmbryRequests {
           DiskManager mountedDiskManager = entry.getValue();
 
           //Checks Disk healthchecking is enabled and
-          // if a disk isn't mounted as expected or isn't healthy then store it as part of the response
-          if (!partitionsDiskManagers.contains(mountedDiskManager)
-              || mountedDiskManager.getDiskHealthStatus() != DiskHealthStatus.HEALTHY) {
+          // if a disk manager is assigned to a partition and isn't healthy then store it as part of the response
+          if (partitionsDiskManagers.contains(mountedDiskManager)
+              && mountedDiskManager.getDiskHealthStatus() != DiskHealthStatus.HEALTHY) {
 
             JSONObject brokenDisk = new JSONObject();
             brokenDisk.put("disk", entry.getKey().getMountPath());
