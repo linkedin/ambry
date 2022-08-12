@@ -88,7 +88,7 @@ public class MySqlNamedBlobDbIntegrationTest {
           NamedBlobRecord record =
               new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
 
-          namedBlobDb.put(record, "").get();
+          namedBlobDb.put(record, null, null, null).get();
           records.add(record);
         }
       }
@@ -97,7 +97,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     // get records just inserted
     for (NamedBlobRecord record : records) {
       NamedBlobRecord recordFromStore =
-          namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(), "").get();
+          namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(), null).get();
       assertEquals("Record does not match expectations.", record, recordFromStore);
     }
 
@@ -118,7 +118,7 @@ public class MySqlNamedBlobDbIntegrationTest {
           String blobName = "name/" + i + "/more path segments--";
           NamedBlobRecord record =
               new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
-          checkErrorCode(() -> namedBlobDb.put(record, ""), RestServiceErrorCode.Conflict);
+          checkErrorCode(() -> namedBlobDb.put(record, null, null, null), RestServiceErrorCode.Conflict);
         }
       }
     }
@@ -129,7 +129,7 @@ public class MySqlNamedBlobDbIntegrationTest {
           namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
       assertEquals("Unexpected deleted ID", record.getBlobId(), deleteResult.getBlobId());
       assertFalse("Unexpected alreadyDeleted value", deleteResult.isAlreadyDeleted());
-      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(), ""),
+      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(), null),
           RestServiceErrorCode.Deleted);
     }
 
@@ -144,7 +144,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     // delete and get for non existent blobs should return not found.
     for (NamedBlobRecord record : records) {
       String nonExistentName = record.getBlobName() + "-other";
-      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), nonExistentName, ""),
+      checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), nonExistentName, null),
           RestServiceErrorCode.NotFound);
       checkErrorCode(() -> namedBlobDb.delete(record.getAccountName(), record.getContainerName(), nonExistentName),
           RestServiceErrorCode.NotFound);
@@ -161,7 +161,7 @@ public class MySqlNamedBlobDbIntegrationTest {
               i % 2 == 1 ? Utils.Infinite_Time : System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1);
           NamedBlobRecord record =
               new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
-          namedBlobDb.put(record, "").get();
+          namedBlobDb.put(record, null, null, null).get();
           records.add(record);
         }
       }
@@ -181,18 +181,18 @@ public class MySqlNamedBlobDbIntegrationTest {
     long expirationTime = System.currentTimeMillis();
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
-    namedBlobDb.put(record, "").get();
+    namedBlobDb.put(record, null, null, null).get();
 
     Thread.sleep(100);
-    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName, ""),
+    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName, null),
         RestServiceErrorCode.Deleted);
 
     // replacement should succeed
     blobId = getBlobId(account, container);
     record = new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
-    namedBlobDb.put(record, "").get();
+    namedBlobDb.put(record, null, null, null).get();
     assertEquals("Record should have been replaced", record,
-        namedBlobDb.get(account.getName(), container.getName(), blobName, "").get());
+        namedBlobDb.get(account.getName(), container.getName(), blobName, null).get());
   }
 
   /**

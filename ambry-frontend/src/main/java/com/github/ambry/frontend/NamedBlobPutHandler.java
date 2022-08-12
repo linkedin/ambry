@@ -343,9 +343,9 @@ public class NamedBlobPutHandler {
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       String containsPartialReadSupportedHeader =
           RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.IS_PARTIALLY_READABLE, false);
-      boolean isNamedBlobRequest = restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+      boolean isNamedBlobPutRequest = restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB);
-      if (Objects.equals(containsPartialReadSupportedHeader, "true") && isNamedBlobRequest) {
+      if (Objects.equals(containsPartialReadSupportedHeader, "true") && isNamedBlobPutRequest) {
         builder.isPartiallyReadableBlob(true);
       }
       if (maxUploadSize != null) {

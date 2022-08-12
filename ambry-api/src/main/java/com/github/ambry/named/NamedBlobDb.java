@@ -16,6 +16,8 @@
 package com.github.ambry.named;
 
 import com.github.ambry.frontend.Page;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.rest.RestRequest;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -55,7 +57,7 @@ public interface NamedBlobDb {
    * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
    *         occurred.
    */
-  CompletableFuture<PutResult> put(NamedBlobRecord record, String containsPartiallyReadableSupportedHeader);
+  CompletableFuture<PutResult> put(NamedBlobRecord record, RestRequest restRequest, BlobInfo blobInfo, String containsPartiallyReadableSupportedHeader);
 
   /**
    * Delete a record for a blob in the database.

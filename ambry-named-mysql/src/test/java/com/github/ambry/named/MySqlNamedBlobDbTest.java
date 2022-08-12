@@ -93,12 +93,12 @@ public class MySqlNamedBlobDbTest {
   public void testRetryGetNamedBlobFromDiffDcs() throws Exception {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
     dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
-    NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName", "").get();
+    NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName", null).get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
-    NamedBlobRecord namedBlobRecord1 = namedBlobDb.get(account.getName(), container.getName(), "blobName", "").get();
+    NamedBlobRecord namedBlobRecord1 = namedBlobDb.get(account.getName(), container.getName(), "blobName", null).get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord1.getBlobId());
     dataSourceFactory.triggerEmptyResultSetForAllDataCenters(datacenters);
-    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), "blobName", ""), RestServiceErrorCode.NotFound);
+    checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), "blobName", null), RestServiceErrorCode.NotFound);
   }
 
   @Test
@@ -116,7 +116,7 @@ public class MySqlNamedBlobDbTest {
     SQLException sqlException = new SQLException("bad");
     dataSourceFactory.triggerConnectionError(localDatacenter, sqlException);
     TestUtils.assertException(ExecutionException.class,
-        () -> namedBlobDb.get(account.getName(), container.getName(), "blobName", "").get(),
+        () -> namedBlobDb.get(account.getName(), container.getName(), "blobName", null).get(),
         e -> Assert.assertEquals(sqlException, e.getCause()));
   }
 
@@ -128,7 +128,7 @@ public class MySqlNamedBlobDbTest {
     SQLException sqlException = new SQLException("bad");
     dataSourceFactory.triggerQueryExecutionError(localDatacenter, sqlException);
     TestUtils.assertException(ExecutionException.class,
-        () -> namedBlobDb.get(account.getName(), container.getName(), "blobName", "").get(),
+        () -> namedBlobDb.get(account.getName(), container.getName(), "blobName", null).get(),
         e -> Assert.assertEquals(sqlException, e.getCause()));
   }
 

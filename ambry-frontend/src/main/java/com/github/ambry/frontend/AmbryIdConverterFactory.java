@@ -180,7 +180,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
-        conversionFuture = getNamedBlobDb().put(record, containsPartialReadSupportedHeader).thenApply(result -> result.getInsertedRecord().getBlobId());
+        conversionFuture = getNamedBlobDb().put(record, restRequest, blobInfo, containsPartialReadSupportedHeader).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);

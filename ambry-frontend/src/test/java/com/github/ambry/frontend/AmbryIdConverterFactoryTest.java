@@ -117,10 +117,10 @@ public class AmbryIdConverterFactoryTest {
     String outputId = "dummy-id";
     reset(idSigningService);
     reset(namedBlobDb);
-    when(namedBlobDb.get(any(), any(), any(), "")).thenReturn(
+    when(namedBlobDb.get(any(), any(), any(), null)).thenReturn(
         CompletableFuture.completedFuture(new NamedBlobRecord("", "", "", outputId, Utils.Infinite_Time)));
     testConversion(idConverter, RestMethod.GET, null, outputId, NAMED_BLOB_PATH);
-    verify(namedBlobDb).get(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, "");
+    verify(namedBlobDb).get(ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, null);
 
     reset(idSigningService);
     reset(namedBlobDb);
@@ -213,11 +213,11 @@ public class AmbryIdConverterFactoryTest {
     for (String id : idList) {
       reset(idSigningService);
       reset(namedBlobDb);
-      when(namedBlobDb.put(any(), "")).thenReturn(
+      when(namedBlobDb.put(any(), null, null, null)).thenReturn(
           CompletableFuture.completedFuture(new PutResult(new NamedBlobRecord("", "", "", id, Utils.Infinite_Time))));
       testConversionForNamedBlob(idConverter, RestMethod.PUT, null, id, id);
       verify(idSigningService, never()).getSignedId(any(), any());
-      verify(namedBlobDb).put(any(), "");
+      verify(namedBlobDb).put(any(), null, null, null);
     }
   }
 

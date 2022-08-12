@@ -1842,7 +1842,6 @@ class PutOperation {
      */
     void addChunkId(StoreKey storeKey, long chunkSize, int chunkIndex) {
       indexToChunkIdsAndChunkSizes.put(chunkIndex, new Pair<>(storeKey, chunkSize));
-      // if this is a partially readable blob request
       if (isPartiallyReadableBlob) {
         try {
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());

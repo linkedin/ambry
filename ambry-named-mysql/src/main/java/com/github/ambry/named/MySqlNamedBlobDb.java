@@ -23,8 +23,10 @@ import com.github.ambry.commons.RetryExecutor;
 import com.github.ambry.commons.RetryPolicies;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
@@ -222,14 +224,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record, String containsPartialReadSupportedHeader) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, RestRequest restRequest, BlobInfo blobInfo,
+      String containsPartialReadSupportedHeader) {
     if (Objects.equals(containsPartialReadSupportedHeader, "true")) {
       MySqlPartiallyReadableBlobDb db = new MySqlPartiallyReadableBlobDb();
       try {
         db.updateStatus(record.getAccountName(), record.getContainerName(), record.getBlobName());
+        db.putBlobInfo(record.getAccountName(), record.getContainerName(), record.getBlobName(), restRequest.getBlobBytesReceived(),
+            blobInfo.getBlobProperties().getServiceId(), blobInfo.getUserMetadata());
       }
       catch (RestServiceException e) {
-
+        logger.error(e.getMessage() + "; account='" + record.getAccountName() + "', container='" + record.getContainerName()
+            + "', name='" + record.getBlobName() + "'");
       }
     }
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
