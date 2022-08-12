@@ -82,7 +82,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String IS_DELETED = String.format(CURRENT_TIME_COMPARISON, DELETED_TS);
   private static final String IS_EXPIRED = String.format(CURRENT_TIME_COMPARISON, EXPIRES_TS);
   private static final String IS_DELETED_OR_EXPIRED = "(" + IS_DELETED + " OR " + IS_EXPIRED + ")";
-  private static final String STATE_MATCH = String.format("%s = %s", BLOB_STATE, NamedBlobState.READY.getValue());
+  private static final String STATE_MATCH = String.format("%s = %s", BLOB_STATE, NamedBlobState.READY.ordinal());
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
   private static final String PK_MATCH_VERSION = String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID,
       CONTAINER_ID, BLOB_NAME, VERSION);
@@ -236,7 +236,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } catch (Exception e) {
         if (e instanceof RestServiceException &&
             ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
-          logger.warn("NAMED GET: Data Not Found: old table succeed while new table got NotFound error: ", e);
           metricsRecoder.namedDataNotFoundGetCount.inc();
         } else {
           logger.error("NAMED GET: Data Error: old table succeed while new table failed: ", e);
@@ -611,7 +610,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setTimestamp(5, null);
       }
       statement.setLong(6, buildVersion());
-      statement.setInt(7, NamedBlobState.READY.getValue());
+      statement.setInt(7, NamedBlobState.READY.ordinal());
       statement.executeUpdate();
     } catch (SQLIntegrityConstraintViolationException e) {
       throw e;
