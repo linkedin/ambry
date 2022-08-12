@@ -105,7 +105,6 @@ class SimpleOperationTracker implements OperationTracker {
   private final List<ReplicaId> allReplicas;
   private final BlobId blobId;
 
-
   /**
    * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
    * use eligible replicas to populate replica pool. ("eligible" replicas are those in required states for specific
@@ -224,9 +223,8 @@ class SimpleOperationTracker implements OperationTracker {
         replicaSuccessTarget =
             routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
                 routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
-        replicaParallelism =
-            routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.min(eligibleReplicas.size(),
-                routerConfig.routerPutRequestParallelism) : routerConfig.routerPutRequestParallelism;
+        replicaParallelism = routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.min(eligibleReplicas.size(),
+            routerConfig.routerPutRequestParallelism) : routerConfig.routerPutRequestParallelism;
         crossColoEnabled = false;
         break;
       case DeleteOperation:
@@ -257,8 +255,7 @@ class SimpleOperationTracker implements OperationTracker {
     }
     if (replicaParallelism < 1) {
       throw new IllegalArgumentException(
-          "Parallelism has to be > 0. Parallelism=" + replicaParallelism + ", routerOperation="
-              + routerOperation);
+          "Parallelism has to be > 0. Parallelism=" + replicaParallelism + ", routerOperation=" + routerOperation);
     }
 
     // Order the replicas so that local healthy replicas are ordered and returned first,
@@ -377,8 +374,8 @@ class SimpleOperationTracker implements OperationTracker {
     this.otIterator = new OpTrackerIterator();
     logger.debug(
         "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}, originatingDC = {}",
-        routerOperation, replicaSuccessTarget, replicaParallelism, originatingDcNotFoundFailureThreshold,
-        replicaPool, originatingDcName);
+        routerOperation, replicaSuccessTarget, replicaParallelism, originatingDcNotFoundFailureThreshold, replicaPool,
+        originatingDcName);
   }
 
   /**
@@ -402,8 +399,7 @@ class SimpleOperationTracker implements OperationTracker {
       int dynamicSuccessTarget = Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
       hasSucceeded = replicaSuccessCount >= dynamicSuccessTarget;
     } else {
-      hasSucceeded =
-          replicaSuccessCount >= replicaSuccessTarget;
+      hasSucceeded = replicaSuccessCount >= replicaSuccessTarget;
     }
     return hasSucceeded;
   }
