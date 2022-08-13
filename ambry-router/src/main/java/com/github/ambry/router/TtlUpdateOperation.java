@@ -361,8 +361,14 @@ class TtlUpdateOperation {
         operationException.set(new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
             RouterErrorCode.AmbryUnavailable));
       } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(
-            new RouterException("TtlUpdateOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+        if (operationTracker.getSuccessCount() > 0) {
+          operationException.set(
+              new RouterException("TtlUpdateOperation failed possibly because of unavailable replicas",
+                  RouterErrorCode.AmbryUnavailable));
+        } else {
+          operationException.set(new RouterException("TtlUpdateOperation failed because of BlobNotFound",
+              RouterErrorCode.BlobDoesNotExist));
+        }
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {

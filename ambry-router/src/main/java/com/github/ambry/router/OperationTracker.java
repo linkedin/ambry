@@ -95,4 +95,10 @@ interface OperationTracker {
    * @return An iterator that iterates all possible and valid replicas.
    */
   Iterator<ReplicaId> getReplicaIterator();
+
+  /**
+   * Return the count of successful responses from replicates
+   * @return an {@code int} that represent the number of successful responses from replicates
+   */
+  int getSuccessCount();
 }

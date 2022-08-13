@@ -16,11 +16,9 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
-import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -199,7 +197,7 @@ class SimpleOperationTracker implements OperationTracker {
     totalOfflineReplicaCount =
         getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE)).getOrDefault(ReplicaState.OFFLINE,
             Collections.emptyList()).size();
-    allReplicas = allDcReplicasByState.values().stream().flatMap(Collection::stream).collect(Collectors.toList());
+    allReplicas = partitionId.getReplicaIds().stream().collect(Collectors.toList());
     allReplicaCount = allReplicas.size();
 
     switch (routerOperation) {
@@ -472,6 +470,11 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
+  public int getSuccessCount() {
+    return replicaSuccessCount;
+  }
+
+  @Override
   public boolean isDone() {
     return hasSucceeded() || hasFailed();
   }
@@ -674,10 +677,6 @@ class SimpleOperationTracker implements OperationTracker {
    */
   int getFailedCount() {
     return failedCount;
-  }
-
-  int getSuccessCount() {
-    return replicaSuccessCount;
   }
 
   /**
