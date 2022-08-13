@@ -107,8 +107,7 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{true, QuotaMode.TRACKING}, {false, QuotaMode.TRACKING}, {true, QuotaMode.THROTTLING},
-            {false, QuotaMode.THROTTLING}});
+        new Object[][]{{false, QuotaMode.TRACKING}, {false, QuotaMode.THROTTLING}});
   }
 
   /**
