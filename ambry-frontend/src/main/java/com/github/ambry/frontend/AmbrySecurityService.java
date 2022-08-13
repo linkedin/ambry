@@ -133,15 +133,6 @@ class AmbrySecurityService implements SecurityService {
       } else if (hostLevelThrottler.shouldThrottle(restRequest)) {
         exception = new RestServiceException("Too many requests", RestServiceErrorCode.TooManyRequests);
       } else {
-        if (QuotaUtils.isRequestResourceQuotaManaged(restRequest) && quotaManager != null) {
-          ThrottlingRecommendation throttlingRecommendation = quotaManager.recommend(restRequest);
-          if (throttlingRecommendation != null && throttlingRecommendation.shouldThrottle()
-              && quotaManager.getQuotaMode() == QuotaMode.THROTTLING) {
-            Map<String, String> quotaHeaderMap = RestUtils.buildUserQuotaHeadersMap(throttlingRecommendation);
-            throw new RestServiceException("User Quota Exceeded", RestServiceErrorCode.TooManyRequests, true, true,
-                quotaHeaderMap);
-          }
-        }
         if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
           accountAndContainerNamePreconditionCheck(restRequest);
         } else if (restRequest.getRestMethod() == RestMethod.GET) {
