@@ -73,10 +73,12 @@ public class NettySslFactory implements SSLFactory {
       sslParams.setEndpointIdentificationAlgorithm(endpointIdentification);
       sslEngine.setSSLParameters(sslParams);
     }
-    String[] supportedProtocols = sslEngine.getSupportedProtocols();
-    String[] enabledProtocols = sslEngine.getEnabledProtocols();
-    logger.info("NettySslFactory creating SSLEngine for {}: supportedProtocols: {}, enabledProtocols: {}", mode.name(),
-        String.join(",", supportedProtocols), String.join(",", enabledProtocols));
+    if (logger.isTraceEnabled()) {
+      String[] supportedProtocols = sslEngine.getSupportedProtocols();
+      String[] enabledProtocols = sslEngine.getEnabledProtocols();
+      logger.info("NettySslFactory creating SSLEngine for {}: supportedProtocols: {}, enabledProtocols: {}", mode.name(),
+          String.join(",", supportedProtocols), String.join(",", enabledProtocols));
+    }
     return sslEngine;
   }
 
