@@ -16,6 +16,7 @@
 package com.github.ambry.named;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
@@ -108,12 +109,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String LIST_QUERY = String.format("SELECT %1$s, %2$s, %3$s, %4$s FROM %5$s "
           + "WHERE (%6$s, %7$s) = (?, ?) AND %1$s LIKE ? AND %1$s >= ? ORDER BY %1$s ASC LIMIT ?", BLOB_NAME, BLOB_ID,
       EXPIRES_TS, DELETED_TS, NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID);
-  private static final String LIST_QUERY_V2 = String.format("SELECT t1.blob_name, t1.blob_id, t1.version, t1.expires_ts, t1.deleted_ts "
-          + "FROM named_blobs_v2 t1 INNER JOIN (SELECT account_id, container_id, blob_name, max(version) as version FROM named_blobs_v2 "
-          + "WHERE (account_id, container_id) = (?, ?) AND %1$s GROUP BY account_id, container_id, blob_name) t2 ON "
-          + "(t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",
-      STATE_MATCH);
+  // @formatter:off
+  private static final String LIST_QUERY_V2 = String.format(""
+          + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.expires_ts, t1.deleted_ts "
+          + "FROM named_blobs_v2 t1 "
+          + "INNER JOIN "
+          + "(SELECT account_id, container_id, blob_name, max(version) as version "
+          + "FROM named_blobs_v2 "
+          + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+          + "        GROUP BY account_id, container_id, blob_name) t2 "
+          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+          + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH);
+  // @formatter:on
 
   /**
    * Attempt to insert a new mapping into the database.
@@ -192,6 +199,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     public final Counter namedDataErrorPutCount;
 
+    public final Histogram namedBlobGetTimeInMs;
+    public final Histogram namedBlobListTimeInMs;
+    public final Histogram namedBlobPutTimeInMs;
+    public final Histogram namedBlobDeleteTimeInMs;
+
     /**
      * Constructor to create the Metrics.
      * @param metricRegistry The {@link MetricRegistry}.
@@ -216,6 +228,15 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
       namedDataErrorPutCount = metricRegistry.counter(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorPutCount"));
+
+      namedBlobGetTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetTimeInMs"));
+      namedBlobListTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobListTimeInMs"));
+      namedBlobPutTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPutTimeInMs"));
+      namedBlobDeleteTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDeleteTimeInMs"));
     }
   }
 
@@ -225,6 +246,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
+      long startTime = System.currentTimeMillis();
       NamedBlobRecord record, recordV2;
       record = run_get(accountName, containerName, blobName, option, accountId, containerId, connection);
       try {
@@ -242,6 +264,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           metricsRecoder.namedDataErrorGetCount.inc();
         }
       }
+      metricsRecoder.namedBlobGetTimeInMs.update(System.currentTimeMillis() - startTime);
       return record;
     }, transactionStateTracker);
   }
@@ -250,6 +273,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
       String pageToken) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
+      long startTime = System.currentTimeMillis();
       Page<NamedBlobRecord> recordPage, recordPageV2=null;
       recordPage = run_list(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
       try {
@@ -261,6 +285,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         logger.warn("NAMED LIST: Data Inconsistence: old record='{}', new record='{}'", recordPage, recordPageV2);
         metricsRecoder.namedDataInconsistentListCount.inc();
       }
+      metricsRecoder.namedBlobListTimeInMs.update(System.currentTimeMillis() - startTime);
       return recordPage;
     }, null);
   }
@@ -269,6 +294,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<PutResult> put(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
+          long startTime = System.currentTimeMillis();
           PutResult putResult;
           putResult = run_put(record, accountId, containerId, connection);
           try {
@@ -277,6 +303,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             logger.error("NAMED PUT: Data Error: old table succeed while new table failed: ", e);
             metricsRecoder.namedDataErrorPutCount.inc();
           }
+          metricsRecoder.namedBlobPutTimeInMs.update(System.currentTimeMillis() - startTime);
           return putResult;
         }, null);
   }
@@ -284,6 +311,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
+      long startTime = System.currentTimeMillis();
       DeleteResult deleteResult, deleteResultV2;
       deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
       try {
@@ -302,6 +330,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           metricsRecoder.namedDataErrorDeleteCount.inc();
         }
       }
+      metricsRecoder.namedBlobDeleteTimeInMs.update(System.currentTimeMillis() - startTime);
       return deleteResult;
     }, null);
   }
