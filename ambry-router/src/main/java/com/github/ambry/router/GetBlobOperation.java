@@ -1398,6 +1398,10 @@ class GetBlobOperation extends GetOperation {
         int idx = chunkIdIterator.nextIndex();
         CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
         dataChunks[i] = new GetChunk(idx, keyAndOffset);
+
+        if (isPartiallyReadableBlob && chunkIdIterator instanceof MySqlListItr) {
+          numChunksTotal+= ((MySqlListItr) chunkIdIterator).getNumberOfAddedChunks();
+        }
       }
     }
 
@@ -1798,6 +1802,8 @@ class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
   private String chunkWithMaxOffsetStatus;
   // whether all chunks have been fetched in MySQL
   private boolean fetchedAllChunks;
+  // number of additional chunks fetched from MySQL
+  private int numberOfAddedChunks;
 
   public MySqlListItr(ListIterator<CompositeBlobInfo.ChunkMetadata> parentListIterator,
       PartiallyReadableBlobDb partiallyReadableBlobDb, String accountName, String containerName, String blobName,
@@ -1810,6 +1816,7 @@ class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
     this.clusterMap = clusterMap;
     this.maxOffsetSoFar = maxOffsetSoFar;
     this.fetchedAllChunks = fetchedAllChunks;
+    this.numberOfAddedChunks = 0;
   }
 
   @Override
@@ -1839,6 +1846,7 @@ class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
               }
               long size = record.getChunkSize();
               parentListIterator.add(new CompositeBlobInfo.ChunkMetadata(blobId, offset, size));
+              numberOfAddedChunks++;
             } catch (IOException e) {
               //handle exception
             }
@@ -1898,5 +1906,9 @@ class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
   @Override
   public void add(CompositeBlobInfo.ChunkMetadata e) {
     parentListIterator.add(e);
+  }
+
+  public int getNumberOfAddedChunks() {
+    return numberOfAddedChunks;
   }
 }
