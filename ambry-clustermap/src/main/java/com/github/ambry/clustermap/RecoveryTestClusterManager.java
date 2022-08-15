@@ -59,6 +59,7 @@ public class RecoveryTestClusterManager implements ClusterMap {
     } catch (IOException e) {
       // for composite blob, it has the list of Blob IDs. It may not exist in the static cluster map.
       // swallow the exception and try with helixClusterManager
+      logger.error("staticClusterManager getPartitionIdFromStream throws {}", e.getMessage());
     }
 
     if (partitionIdStatic == null) {
