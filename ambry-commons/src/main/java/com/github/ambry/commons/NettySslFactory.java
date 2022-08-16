@@ -76,7 +76,7 @@ public class NettySslFactory implements SSLFactory {
     if (logger.isTraceEnabled()) {
       String[] supportedProtocols = sslEngine.getSupportedProtocols();
       String[] enabledProtocols = sslEngine.getEnabledProtocols();
-      logger.info("NettySslFactory creating SSLEngine for {}: supportedProtocols: {}, enabledProtocols: {}", mode.name(),
+      logger.trace("NettySslFactory creating SSLEngine for {}: supportedProtocols: {}, enabledProtocols: {}", mode.name(),
           String.join(",", supportedProtocols), String.join(",", enabledProtocols));
     }
     return sslEngine;
