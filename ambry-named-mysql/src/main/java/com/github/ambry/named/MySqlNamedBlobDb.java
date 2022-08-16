@@ -282,7 +282,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         logger.error("NAMED LIST: Data Error: old table succeed while new table failed: ", e);
       }
       if (!Objects.equals(recordPage.getEntries(), recordPageV2.getEntries())) {
-        logger.warn("NAMED LIST: Data Inconsistence: old record='{}', new record='{}'", recordPage, recordPageV2);
         metricsRecoder.namedDataInconsistentListCount.inc();
       }
       metricsRecoder.namedBlobListTimeInMs.update(System.currentTimeMillis() - startTime);
@@ -323,7 +322,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } catch (Exception e) {
         if (e instanceof RestServiceException &&
             ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
-          logger.warn("NAMED DELETE: Data Not Found: old table succeed while new table got NotFound error: ", e);
           metricsRecoder.namedDataNotFoundDeleteCount.inc();
         } else {
           logger.error("NAMED DELETE: Data Error: old table succeed while new table failed: ", e);
@@ -641,8 +639,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setLong(6, buildVersion());
       statement.setInt(7, NamedBlobState.READY.ordinal());
       statement.executeUpdate();
-    } catch (SQLIntegrityConstraintViolationException e) {
-      throw e;
     }
     return new PutResult(record);
   }
