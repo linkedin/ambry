@@ -467,16 +467,17 @@ public class OperationTrackerTest {
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
     // set up one node per data center for testing
-    datanodes = new ArrayList<>(Arrays.asList(new MockDataNodeId(portList, mountPaths, "dc-0"),
-        new MockDataNodeId(portList, mountPaths, "dc-1")));
+    MockDataNodeId origintingDcNode = new MockDataNodeId(portList, mountPaths, "dc-0");
+    MockDataNodeId remoteDcNode = new MockDataNodeId(portList, mountPaths, "dc-1");
+    datanodes = new ArrayList<>(Arrays.asList(origintingDcNode, remoteDcNode));
     mockPartition = new MockPartitionId();
     localDcName = datanodes.get(0).getDatacenterName();
+    originatingDcName = localDcName;
     mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
-    // put two STANDBY replicas in each data center (note that "populateReplicaList" method alternatively distributes
-    // the replica, so here we set 4 for two dc in total)
-    populateReplicaList(4, ReplicaState.STANDBY);
-    // put one no-state replica in each data center
-    populateReplicaList(2, null);
+    // One replica down, one with no-state, one is ok
+    populateReplicaList(3, ReplicaState.STANDBY, Collections.singletonList(origintingDcNode));
+    populateReplicaList(2, ReplicaState.OFFLINE, Collections.singletonList(origintingDcNode));
+    populateReplicaList(1, null, Collections.singletonList(origintingDcNode));
 
     // test both delete and Ttl Update cases
     for (RouterOperation operation : EnumSet.of(RouterOperation.DeleteOperation, RouterOperation.TtlUpdateOperation)) {
@@ -489,7 +490,7 @@ public class OperationTrackerTest {
         ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
       }
       // for replicaState enabled operation tracker, only 1 eligible replica left, so numRequestsExpected = 1
-      sendRequests(ot, replicasStateEnabled ? 1 : 2, false);
+      sendRequests(ot, replicasStateEnabled ? 0 : 2, false);
       // make 1 requests fail and 1 request succeed then replicaState enabled operation tracker should fail
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
