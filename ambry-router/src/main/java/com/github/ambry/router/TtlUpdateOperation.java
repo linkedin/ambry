@@ -362,6 +362,7 @@ class TtlUpdateOperation {
             RouterErrorCode.AmbryUnavailable));
       } else if (operationTracker.hasFailedOnNotFound()) {
         if (operationTracker.getSuccessCount() > 0) {
+          routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
           operationException.set(
               new RouterException("TtlUpdateOperation failed possibly because of unavailable replicas",
                   RouterErrorCode.AmbryUnavailable));
