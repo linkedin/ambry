@@ -109,6 +109,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String LIST_QUERY = String.format("SELECT %1$s, %2$s, %3$s, %4$s FROM %5$s "
           + "WHERE (%6$s, %7$s) = (?, ?) AND %1$s LIKE ? AND %1$s >= ? ORDER BY %1$s ASC LIMIT ?", BLOB_NAME, BLOB_ID,
       EXPIRES_TS, DELETED_TS, NAMED_BLOBS, ACCOUNT_ID, CONTAINER_ID);
+
+  /**
+   * Below is the query for named blob list api
+   * It contains two main parts:
+   * 1. Pull out the max version for rows meeting below conditions:
+   *     a). The account and container matches with user query
+   *     b). The 'blob_state' is READY (1), not IN_PROGRESS (0)
+   * 2. Use the result of step 1 to inner join with raw table on (account_id, container_id, blob_name, version),
+   *    with filter on the blob_name, and order by blob_name.
+   */
   // @formatter:off
   private static final String LIST_QUERY_V2 = String.format(""
           + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.expires_ts, t1.deleted_ts "

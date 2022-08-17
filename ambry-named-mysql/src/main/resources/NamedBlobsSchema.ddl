@@ -46,3 +46,6 @@ CREATE INDEX named_blobs_et_v2 ON named_blobs_v2(expires_ts);
 
 /* Reverse Lookup Index */
 CREATE INDEX named_blobs_id_v2 ON named_blobs_v2(blob_id);
+
+/* Blob Name Index */
+CREATE INDEX named_blobs_name_v2 ON named_blobs_v2(blob_name);
