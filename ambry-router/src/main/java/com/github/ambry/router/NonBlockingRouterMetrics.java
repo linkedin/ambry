@@ -221,6 +221,7 @@ public class NonBlockingRouterMetrics {
   public final Counter failedOnTotalNotFoundCount;
   public final Counter failedMaybeDueToOriginatingDcOfflineReplicasCount;
   public final Counter failedMaybeDueToTotalOfflineReplicasCount;
+  public final Counter failedMaybeDueToUnavailableReplicasCount;
 
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
@@ -536,6 +537,8 @@ public class NonBlockingRouterMetrics {
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToTotalOfflineReplicasCount"));
     failedMaybeDueToOriginatingDcOfflineReplicasCount = metricRegistry.counter(
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToOriginatingDcOfflineReplicasCount"));
+    failedMaybeDueToUnavailableReplicasCount = metricRegistry.counter(
+        MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToUnavailableReplicasCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");

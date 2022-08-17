@@ -27,7 +27,6 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
-import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -37,10 +36,6 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.QuotaException;
-import com.github.ambry.quota.QuotaMethod;
-import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.server.ServerErrorCode;
@@ -71,9 +66,12 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.LongStream;
@@ -702,12 +700,12 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
-    FutureResult<String> future =
-        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options);
+    CompletableFuture<String> future =
+        router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+            requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
-    future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
+    future.get(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
     requestAndResult.result = future;
   }
 
@@ -722,16 +720,15 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
-    FutureResult<String> future =
-        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options);
+    CompletableFuture<String> future =
+        router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+            requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
 
     //Make the channel act bad.
     putChannel.beBad();
 
     pushWithDelay(src, putChannel, blobSize, future);
-    future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
     requestAndResult.result = future;
     Exception expectedException = new Exception("Channel encountered an error");
     assertFailure(expectedException, true);
@@ -831,9 +828,9 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
-    FutureResult<String> future =
-        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, requestAndResult.options);
+    CompletableFuture<String> future =
+        router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+            requestAndResult.options);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
@@ -854,8 +851,11 @@ public class PutManagerTest {
     Assert.assertTrue(
         "ChunkFillerThread should have gone to WAITING state as the only active operation is now complete",
         waitForThreadState(chunkFillerThread, Thread.State.WAITING));
-    Assert.assertTrue("Operation should not take too long to complete",
-        future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS));
+    try {
+      future.get(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      Assert.fail("Operation should not take too long to complete");
+    }
     requestAndResult.result = future;
     assertSuccess();
     assertCloseCleanup();
@@ -1054,16 +1054,18 @@ public class PutManagerTest {
           ReadableStreamChannel putChannel =
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
           if (requestAndResult.chunksToStitch == null) {
-            requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, requestAndResult.options);
+            requestAndResult.result =
+                router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
+                    requestAndResult.options);
           } else {
-            requestAndResult.result = (FutureResult<String>) router.stitchBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, requestAndResult.chunksToStitch);
+            requestAndResult.result =
+                router.stitchBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+                    requestAndResult.chunksToStitch);
           }
-          requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
+          requestAndResult.result.get(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
-          requestAndResult.result = new FutureResult<>();
-          requestAndResult.result.done(null, e);
+          requestAndResult.result = new CompletableFuture<>();
+          requestAndResult.result.completeExceptionally(e);
         } finally {
           doneLatch.countDown();
         }
@@ -1093,11 +1095,7 @@ public class PutManagerTest {
 
     // Go through each request, and ensure all of them have succeeded.
     for (RequestAndResult requestAndResult : requestAndResultsList) {
-      String blobId = requestAndResult.result.result();
-      Exception exception = requestAndResult.result.error();
-      if (exception != null) {
-        throw exception;
-      }
+      String blobId = requestAndResult.result.join();
       Assert.assertNotNull("blobId should not be null", blobId);
       verifyBlob(requestAndResult, allChunks);
     }
@@ -1111,7 +1109,7 @@ public class PutManagerTest {
    */
   private void verifyBlob(RequestAndResult requestAndResult, HashMap<String, ByteBuffer> serializedRequests)
       throws Exception {
-    String blobId = requestAndResult.result.result();
+    String blobId = requestAndResult.result.join();
     ByteBuffer serializedRequest = serializedRequests.get(blobId);
     PutRequest request = deserializePutRequest(serializedRequest);
     NotificationBlobType notificationBlobType;
@@ -1301,12 +1299,15 @@ public class PutManagerTest {
    */
   private void assertFailure(Exception expectedException, boolean testNotifications) {
     for (RequestAndResult requestAndResult : requestAndResultsList) {
-      String blobId = requestAndResult.result.result();
-      Exception exception = requestAndResult.result.error();
-      Assert.assertNull("blobId should be null", blobId);
-      Assert.assertNotNull("exception should not be null", exception);
-      Assert.assertTrue("Exception received should be the expected Exception",
-          exceptionsAreEqual(expectedException, exception));
+      try {
+        String blobId = requestAndResult.result.join();
+        Assert.fail("Excepting a failure");
+      } catch (Exception e) {
+        Exception exception = Utils.extractFutureExceptionCause(e);
+        Assert.assertNotNull("exception should not be null", exception);
+        Assert.assertTrue("Exception received should be the expected Exception",
+            exceptionsAreEqual(expectedException, exception));
+      }
     }
     if (testNotifications) {
       notificationSystem.verifyNotificationsForFailedPut();
@@ -1375,7 +1376,7 @@ public class PutManagerTest {
     byte[] putContent;
     PutBlobOptions options;
     List<ChunkInfo> chunksToStitch;
-    FutureResult<String> result;
+    CompletableFuture<String> result;
 
     RequestAndResult(int blobSize) {
       this(blobSize, null, PutBlobOptions.DEFAULT, null);

@@ -38,6 +38,7 @@ import com.github.ambry.quota.QuotaName;
 import com.github.ambry.quota.QuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaResource;
 import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcer;
@@ -390,6 +391,10 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
           quotaMetrics.perQuotaResourceOutOfQuotaMap.get(Integer.toString(account.getId())).getCount() > 0);
       Assert.assertTrue(
           quotaMetrics.perQuotaResourceWouldBeThrottledMap.get(Integer.toString(account.getId())).getCount() > 0);
+      Assert.assertEquals(quotaMetrics.frontendUsageReadAmplificationGauge.getValue(),
+          (Integer) ChargeTesterQuotaManager.routerConfig.routerGetRequestParallelism);
+      Assert.assertEquals(quotaMetrics.frontendUsageWriteAmplificationGauge.getValue(),
+          (Integer) ChargeTesterQuotaManager.routerConfig.routerPutRequestParallelism);
       retainingAsyncWritableChannel.consumeContentAsInputStream().close();
     } finally {
       if (router != null) {
@@ -466,6 +471,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
    * {@link AmbryQuotaManager} extension to test behavior with default implementation.
    */
   static class ChargeTesterQuotaManager extends AmbryQuotaManager {
+    public static final RouterConfig routerConfig = QuotaTestUtils.getDefaultRouterConfig();
     private final AtomicInteger chargeCalledCount;
 
     /**
@@ -481,7 +487,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
         QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
         AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics, AtomicInteger chargeCalledCount)
         throws ReflectiveOperationException {
-      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, quotaMetrics);
+      super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, quotaMetrics, routerConfig);
       this.chargeCalledCount = chargeCalledCount;
     }
 

@@ -32,11 +32,28 @@ public class DiskManagerConfig {
   @Default("false")
   public final boolean diskManagerEnableSegmentPooling;
 
+  @Config("disk.manager.disk.healthcheck.enabled")
+  @Default("false")
+  public final boolean diskManagerDiskHealthCheckEnabled;
+
+  @Config("disk.manager.disk.healthcheck.interval.seconds")
+  @Default("180")
+  public final int diskManagerDiskHealthCheckIntervalSeconds;
+
+  @Config("disk.manager.disk.healthcheck.operation.timeout.seconds")
+  @Default("5")
+  public final int diskManagerDiskHealthCheckOperationTimeoutSeconds;
+
   public DiskManagerConfig(VerifiableProperties verifiableProperties) {
     diskManagerReserveFileDirName =
         verifiableProperties.getString("disk.manager.reserve.file.dir.name", "reserve-pool");
     diskManagerRequiredSwapSegmentsPerSize =
         verifiableProperties.getIntInRange("disk.manager.required.swap.segments.per.size", 1, 0, 1000);
     diskManagerEnableSegmentPooling = verifiableProperties.getBoolean("disk.manager.enable.segment.pooling", false);
+    diskManagerDiskHealthCheckEnabled = verifiableProperties.getBoolean("disk.manager.disk.healthcheck.enabled", false);
+    diskManagerDiskHealthCheckIntervalSeconds =
+        verifiableProperties.getInt("disk.manager.disk.healthcheck.interval.seconds", 60);
+    diskManagerDiskHealthCheckOperationTimeoutSeconds =
+        verifiableProperties.getInt("disk.manager.disk.healthcheck.operation.timeout.seconds", 5);
   }
 }

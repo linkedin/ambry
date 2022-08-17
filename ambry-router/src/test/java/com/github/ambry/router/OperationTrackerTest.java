@@ -461,6 +461,50 @@ public class OperationTrackerTest {
     }
   }
 
+  @Test
+  public void noReplicaStateTtlUpdateTest() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    // set up one node per data center for testing
+    MockDataNodeId origintingDcNode = new MockDataNodeId(portList, mountPaths, "dc-0");
+    MockDataNodeId remoteDcNode = new MockDataNodeId(portList, mountPaths, "dc-1");
+    datanodes = new ArrayList<>(Arrays.asList(origintingDcNode, remoteDcNode));
+    mockPartition = new MockPartitionId();
+    localDcName = datanodes.get(0).getDatacenterName();
+    originatingDcName = localDcName;
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    // One replica down, one with no-state, one is ok
+    populateReplicaList(3, ReplicaState.STANDBY, Collections.singletonList(origintingDcNode));
+    populateReplicaList(2, ReplicaState.OFFLINE, Collections.singletonList(origintingDcNode));
+    populateReplicaList(1, null, Collections.singletonList(origintingDcNode));
+
+    // test both delete and Ttl Update cases
+    for (RouterOperation operation : EnumSet.of(RouterOperation.DeleteOperation, RouterOperation.TtlUpdateOperation)) {
+      repetitionTracker.clear();
+      OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 2, operation, true);
+      // issue delete/ttlUpdate requests to 2 local replica and 1 remote replica
+      sendRequests(ot, 3, false);
+
+      for (int i = 0; i < 2; ++i) {
+        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+      }
+      // for replicaState enabled operation tracker, only 1 eligible replica left, so numRequestsExpected = 1
+      sendRequests(ot, replicasStateEnabled ? 0 : 2, false);
+      // make 1 requests fail and 1 request succeed then replicaState enabled operation tracker should fail
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+      if (replicasStateEnabled) {
+        assertFalse("Operation should fail", ot.hasSucceeded());
+      } else {
+        // if replicasStateEnabled = false, operation tracker is able to succeed after 1 more request succeed
+        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+        assertTrue("Operation should succeed", ot.hasSucceeded());
+      }
+      assertTrue("Operation should be done", ot.isDone());
+    }
+  }
+
   /**
    * Test delete/ttlUpdate operation when replicasStateEnabled is enabled/disabled.
    * local dc: 2 STANDBY and 1 INACTIVE; remote dc: 2 STANDBY and 1 INACTIVE
@@ -1107,133 +1151,9 @@ public class OperationTrackerTest {
       // ensure the success target matches the number specified for each type of operaiton
       if (operationTracker != null) {
         assertEquals("The suggest target doesn't match", (long) entry.getValue(),
-            operationTracker.getSuccessTarget(ReplicaType.DISK_BACKED));
+            operationTracker.getSuccessTarget());
       }
     }
-  }
-
-  /**
-   * Test cases with cloud replicas in the local datacenter and disk replicas in the originating datacenter.
-   */
-  @Test
-  public void localDcCloudOriginatingDcDiskTest() {
-    initializeWithCloudDcs(true);
-    originatingDcName = getDatacenters(ReplicaType.DISK_BACKED, localDcName).iterator().next();
-
-    // test success in cloud dc
-    OperationTracker ot = getOperationTrackerForGetOrPut(true, 2, 3, RouterOperation.GetBlobOperation, true);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    // parallelism of 1 for cloud replicas, so only one request should be sent
-    sendRequests(ot, 1, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
-    // success target of 1 with cloud replicas.
-    assertTrue("Operation should have succeeded", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
-
-    // test failure in cloud dc with fallback to disk DC.
-    repetitionTracker.clear();
-    ot = getOperationTrackerForGetOrPut(true, 2, 3, RouterOperation.GetBlobOperation, true);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, 1, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    // parallelism should switch back to the default of 3.
-    sendRequests(ot, 3, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    // 1 failure, 2 successes should meet disk success target.
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
-    }
-    assertTrue("Operation should have succeeded", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
-
-    // test quota rejection failure.
-    repetitionTracker.clear();
-    ot = getOperationTrackerForGetOrPut(true, 2, 3, RouterOperation.GetBlobOperation, true);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, 1, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.QUOTA_REJECTED);
-    assertTrue("Operation should be done", ot.isDone());
-    assertFalse("Operation shouldn't have succeeded", ot.hasSucceeded());
-  }
-
-  /**
-   * Test cases with cloud replicas in the local datacenter and cloud replicas in the originating datacenter.
-   */
-  @Test
-  public void localDcCloudOriginatingDcCloudTest() {
-    initializeWithCloudDcs(true);
-    // test failure in cloud dc with fallback to cloud DC.
-    originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED, localDcName).iterator().next();
-    OperationTracker ot = getOperationTrackerForGetOrPut(true, 2, 3, RouterOperation.GetBlobOperation, true);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, 1, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    // parallelism should still be 1.
-    sendRequests(ot, 1, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
-    assertTrue("Operation should have succeeded", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
-
-    // test failure in all cloud DCs, fall back to non originating DCs, fail there too
-    repetitionTracker.clear();
-    ot = getOperationTrackerForGetOrPut(true, 2, 3, RouterOperation.GetBlobOperation, true);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, 1, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    // parallelism should still be 1.
-    sendRequests(ot, 1, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    assertFalse("Operation should not be done", ot.isDone());
-    // only disk replicas should remain, so parallelism of three will be used from now on
-    sendRequests(ot, 3, false);
-    for (int i = 0; i < 3; i++) {
-      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    }
-    assertFalse("Operation should not be done", ot.isDone());
-    sendRequests(ot, 3, false);
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    assertFalse("Operation should not be done", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    // after the second failure in the last DC, the operation should have failed
-    // (hasFailed logic should know that only disk replicas are left, which have a success target of 2)
-    assertTrue("Operation should be done", ot.isDone());
-    assertFalse("Operation should not have succeeded", ot.hasSucceeded());
-  }
-
-  /**
-   * Test cases with disk replicas in the local datacenter and cloud replicas in the originating datacenter.
-   */
-  @Test
-  public void localDcDiskOriginatingDcCloudTest() {
-    initializeWithCloudDcs(false);
-    // test failure in disk dc with fallback to cloud DC
-    originatingDcName = getDatacenters(ReplicaType.CLOUD_BACKED, localDcName).iterator().next();
-    OperationTracker ot = getOperationTrackerForGetOrPut(true, 2, 3, RouterOperation.GetBlobOperation, true);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    // parallelism of 3 for disk replicas (local dc).
-    sendRequests(ot, 3, false);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    // one response frees up a spot to send a cloud request
-    sendRequests(ot, 1, false);
-    for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-      // parallelism should have changed to 1 after cloud request was sent
-      sendRequests(ot, 0, false);
-    }
-    assertFalse("Operation should not have been done.", ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
-    assertTrue("Operation should have succeeded", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
   }
 
   /**
@@ -1277,16 +1197,6 @@ public class OperationTrackerTest {
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
     }
     assertFalse("Operation should not have been done.", ot.isDone());
-    // now we are running against cloud DCs
-    sendRequests(ot, 1, false);
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    // hasFailed logic should know that only cloud replicas are left, which have a success target of 1,
-    // so all replicas must be tried)
-    sendRequests(ot, 1, false);
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    assertTrue("Operation should be done", ot.isDone());
-    assertFalse("Operation should not have succeeded", ot.hasSucceeded());
   }
 
   /**

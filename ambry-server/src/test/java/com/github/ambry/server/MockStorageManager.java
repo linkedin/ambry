@@ -493,6 +493,19 @@ class MockStorageManager extends StorageManager {
     }
   }
 
+  MockStorageManager(Set<StoreKey> validKeysInStore, ClusterMap clusterMap, DataNodeId dataNodeId,
+      FindTokenHelper findTokenHelper, ClusterParticipant clusterParticipant, DiskManagerConfig diskManagerConfig)
+      throws StoreException {
+    super(new StoreConfig(VPROPS), diskManagerConfig, Utils.newScheduler(1, true), new MetricRegistry(), null,
+        clusterMap, dataNodeId, null, clusterParticipant == null ? null : Collections.singletonList(clusterParticipant),
+        new MockTime(), null, new InMemAccountService(false, false));
+    this.validKeysInStore = validKeysInStore;
+    this.findTokenHelper = findTokenHelper;
+    for (ReplicaId replica : clusterMap.getReplicaIds(dataNodeId)) {
+      storeMap.put(replica.getPartitionId(), new TestStore(replica, clusterParticipant));
+    }
+  }
+
   MockStorageManager(Map<PartitionId, Store> map, DataNodeId dataNodeId) throws Exception {
     super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), null,
         new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null,
@@ -600,7 +613,7 @@ class MockStorageManager extends StorageManager {
   @Override
   public void start() throws InterruptedException, StoreException {
     super.start();
-    for(Store store: storeMap.values()){
+    for (Store store : storeMap.values()) {
       ((TestStore) store).start();
     }
   }

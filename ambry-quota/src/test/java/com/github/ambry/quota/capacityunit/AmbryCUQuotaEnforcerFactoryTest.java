@@ -20,6 +20,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
+import com.github.ambry.quota.QuotaTestUtils;
 import java.io.IOException;
 import java.util.Properties;
 import org.junit.Assert;
@@ -35,7 +36,8 @@ public class AmbryCUQuotaEnforcerFactoryTest {
   public void testGetRequestQuotaEnforcer() throws IOException {
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(new Properties()));
     QuotaSource quotaSource =
-        new AmbryCUQuotaSource(quotaConfig, Mockito.mock(AccountService.class), new QuotaMetrics(new MetricRegistry()));
+        new AmbryCUQuotaSource(quotaConfig, Mockito.mock(AccountService.class), new QuotaMetrics(new MetricRegistry()),
+            QuotaTestUtils.getDefaultRouterConfig());
     AccountStatsStore mockAccountStatsStore = Mockito.mock(AccountStatsStore.class);
     AmbryCUQuotaEnforcerFactory ambryCUQuotaEnforcerFactory =
         new AmbryCUQuotaEnforcerFactory(quotaConfig, quotaSource, mockAccountStatsStore,

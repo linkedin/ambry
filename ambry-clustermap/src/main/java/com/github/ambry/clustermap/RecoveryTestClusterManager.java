@@ -36,6 +36,7 @@ public class RecoveryTestClusterManager implements ClusterMap {
   final Map<AmbryDisk, Disk> ambryDiskToDiskMap;
   final Map<AmbryDataNode, DataNode> ambryDataNodeToDataNodeMap;
 
+  private static final Logger logger = LoggerFactory.getLogger(Replica.class);
   /**
    * Construct a RecoveryTestClusterManager instance.
    * @param staticClusterManager the {@link StaticClusterManager} object.
@@ -52,7 +53,19 @@ public class RecoveryTestClusterManager implements ClusterMap {
   public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
     DuplicatingInputStream duplicatingInputStream = new DuplicatingInputStream(stream);
     duplicatingInputStream.mark(0);
-    PartitionId partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
+    PartitionId partitionIdStatic = null;
+    try {
+      partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
+    } catch (IOException e) {
+      // for composite blob, it has the list of Blob IDs. It may not exist in the static cluster map.
+      // swallow the exception and try with helixClusterManager
+    }
+
+    if (partitionIdStatic == null) {
+      duplicatingInputStream.reset();
+      partitionIdStatic = helixClusterManager.getPartitionIdFromStream(duplicatingInputStream);
+      logger.trace("DR: partition doesn't exist in staticClusterManager, try helixClusterManager {}", partitionIdStatic);
+    }
     return partitionIdStatic;
   }
 

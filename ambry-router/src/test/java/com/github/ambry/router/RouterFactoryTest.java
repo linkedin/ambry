@@ -73,8 +73,6 @@ public class RouterFactoryTest {
     List<FactoryAndRouter> factoryAndRouters = new ArrayList<FactoryAndRouter>();
     factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.NonBlockingRouterFactory",
         "com.github.ambry.router.NonBlockingRouter"));
-    factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.CloudRouterFactory",
-        "com.github.ambry.router.NonBlockingRouter"));
 
     for (FactoryAndRouter factoryAndRouter : factoryAndRouters) {
       RouterFactory routerFactory =

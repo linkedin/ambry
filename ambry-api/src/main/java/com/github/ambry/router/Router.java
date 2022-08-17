@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
@@ -21,6 +22,7 @@ import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 
@@ -129,8 +131,10 @@ public interface Router extends Closeable {
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
-  default Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
-    return getBlob(blobId, options, null, null);
+  default CompletableFuture<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
+    CompletableFuture<GetBlobResult> future = new CompletableFuture<>();
+    getBlob(blobId, options, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
   }
 
   /**
@@ -145,8 +149,11 @@ public interface Router extends Closeable {
    *                       fields are set accurately.
    * @return A future that would contain the BlobId eventually.
    */
-  default Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch) {
-    return stitchBlob(blobProperties, userMetadata, chunksToStitch, null, null);
+  default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch) {
+    CompletableFuture<String> future = new CompletableFuture<>();
+    stitchBlob(blobProperties, userMetadata, chunksToStitch, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
   }
 
   /**
@@ -159,9 +166,11 @@ public interface Router extends Closeable {
    * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @return A future that would contain the BlobId eventually.
    */
-  default Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      PutBlobOptions options) {
-    return putBlob(blobProperties, userMetadata, channel, options, null, null);
+  default CompletableFuture<String> putBlob(BlobProperties blobProperties, byte[] userMetadata,
+      ReadableStreamChannel channel, PutBlobOptions options) {
+    CompletableFuture<String> future = new CompletableFuture<>();
+    putBlob(blobProperties, userMetadata, channel, options, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
   }
 
   /**
@@ -171,8 +180,10 @@ public interface Router extends Closeable {
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
-  default Future<Void> deleteBlob(String blobId, String serviceId) {
-    return deleteBlob(blobId, serviceId, null, null);
+  default CompletableFuture<Void> deleteBlob(String blobId, String serviceId) {
+    CompletableFuture<Void> future = new CompletableFuture<>();
+    deleteBlob(blobId, serviceId, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
   }
 
   /**
@@ -184,8 +195,10 @@ public interface Router extends Closeable {
    *                    permanent
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
-  default Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
-    return updateBlobTtl(blobId, serviceId, expiresAtMs, null, null);
+  default CompletableFuture<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
+    CompletableFuture<Void> future = new CompletableFuture<>();
+    updateBlobTtl(blobId, serviceId, expiresAtMs, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
   }
 
   /**
@@ -195,7 +208,9 @@ public interface Router extends Closeable {
    * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
    * @return A future that would contain information about whether the undelete succeeded or not, eventually.
    */
-  default Future<Void> undeleteBlob(String blobId, String serviceId) {
-    return undeleteBlob(blobId, serviceId, null, null);
+  default CompletableFuture<Void> undeleteBlob(String blobId, String serviceId) {
+    CompletableFuture<Void> future = new CompletableFuture<>();
+    undeleteBlob(blobId, serviceId, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
   }
 }
