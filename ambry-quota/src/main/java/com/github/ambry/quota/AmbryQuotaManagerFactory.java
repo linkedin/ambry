@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 
 
 /**
@@ -31,13 +32,15 @@ public class AmbryQuotaManagerFactory implements QuotaManagerFactory {
    * @param accountService {@link AccountService} object.
    * @param accountStatsStore {@link AccountStatsStore} object.
    * @param metricRegistry {@link MetricRegistry} object.
+   * @param routerConfig {@link RouterConfig} object.
    * @throws ReflectiveOperationException
    */
   public AmbryQuotaManagerFactory(QuotaConfig quotaConfig,
       QuotaRecommendationMergePolicy quotaRecommendationMergePolicy, AccountService accountService,
-      AccountStatsStore accountStatsStore, MetricRegistry metricRegistry) throws ReflectiveOperationException {
+      AccountStatsStore accountStatsStore, MetricRegistry metricRegistry, RouterConfig routerConfig)
+      throws ReflectiveOperationException {
     quotaManager = new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore,
-        new QuotaMetrics(metricRegistry));
+        new QuotaMetrics(metricRegistry), routerConfig);
   }
 
   @Override

@@ -15,6 +15,7 @@ package com.github.ambry.quota.capacityunit;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
@@ -32,9 +33,11 @@ public class AmbryCUQuotaSourceFactory implements QuotaSourceFactory {
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    * @param quotaMetrics {@link QuotaMetrics} object.
+   * @param routerConfig {@link RouterConfig} object.
    */
-  public AmbryCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics) throws IOException {
-    ambryCUQuotaSource = new AmbryCUQuotaSource(quotaConfig, accountService, quotaMetrics);
+  public AmbryCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics,
+      RouterConfig routerConfig) throws IOException {
+    ambryCUQuotaSource = new AmbryCUQuotaSource(quotaConfig, accountService, quotaMetrics, routerConfig);
   }
 
   @Override

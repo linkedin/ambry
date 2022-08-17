@@ -16,6 +16,7 @@ package com.github.ambry.quota.capacityunit;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.quota.Quota;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaMetrics;
@@ -61,6 +62,8 @@ public class AmbryCUQuotaSource implements QuotaSource {
   protected final ConcurrentMap<String, CapacityUnit> cuUsage; // in memory quota usage for all resources.
   private final ScheduledExecutorService usageRefresher;
   private final long aggregationWindowsInSecs;
+  private final int feReadUsageAmplificationFactor;
+  private final int feWriteUsageAmplificationFactor;
   private final AtomicBoolean isReady;
   private final QuotaMetrics quotaMetrics;
 
@@ -69,10 +72,11 @@ public class AmbryCUQuotaSource implements QuotaSource {
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    * @param quotaMetrics {@link QuotaMetrics} object.
+   * @param routerConfig {@link RouterConfig} object.
    * @throws IOException in case of any exception.
    */
-  public AmbryCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics)
-      throws IOException {
+  public AmbryCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics,
+      RouterConfig routerConfig) throws IOException {
     feQuota = JsonCUQuotaDataProviderUtil.getFeCUCapacityFromJson(quotaConfig.frontendCUCapacityInJson);
     cuQuota = new ConcurrentHashMap<>(
         JsonCUQuotaDataProviderUtil.getCUQuotasFromJson(quotaConfig.resourceCUQuotaInJson, accountService));
@@ -82,6 +86,10 @@ public class AmbryCUQuotaSource implements QuotaSource {
     isReady = new AtomicBoolean(false);
     feUsage = new AtomicReference<>(null);
     this.quotaMetrics = quotaMetrics;
+    this.feReadUsageAmplificationFactor = routerConfig.routerGetRequestParallelism;
+    this.feWriteUsageAmplificationFactor = routerConfig.routerPutRequestParallelism;
+    quotaMetrics.setupFeUsageAmplificationFactorMetrics(feReadUsageAmplificationFactor,
+        feWriteUsageAmplificationFactor);
   }
 
   @Override
@@ -143,9 +151,9 @@ public class AmbryCUQuotaSource implements QuotaSource {
   @Override
   public void chargeSystemResourceUsage(QuotaName quotaName, double usageCost) {
     if (quotaName == QuotaName.READ_CAPACITY_UNIT) {
-      feUsage.get().incrementRcu((long) Math.ceil(usageCost));
+      feUsage.get().incrementRcu((long) Math.ceil(calculateFeUsageCost(quotaName, usageCost)));
     } else {
-      feUsage.get().incrementWcu((long) Math.ceil(usageCost));
+      feUsage.get().incrementWcu((long) Math.ceil(calculateFeUsageCost(quotaName, usageCost)));
     }
   }
 
@@ -184,6 +192,20 @@ public class AmbryCUQuotaSource implements QuotaSource {
    */
   public Map<String, CapacityUnit> getAllQuotaUsage() {
     return Collections.unmodifiableMap(cuUsage);
+  }
+
+  /**
+   * Calculate the amplified frontend usage cost to serve the usageCost for a {@link QuotaResource}.
+   * Frontend usage cost could get amplified because to serve one copy of data, frontend might need to simultaneously
+   * read or write the data over network to multiple storage nodes. The amplification factor is determined by the configs
+   * defined in {@link RouterConfig}.
+   * @param quotaName {@link QuotaName} object.
+   * @param usageCost the usage cost for {@link QuotaResource}.
+   * @return amplified frontend usage cost.
+   */
+  private double calculateFeUsageCost(QuotaName quotaName, double usageCost) {
+    return quotaName == QuotaName.READ_CAPACITY_UNIT ? usageCost * feReadUsageAmplificationFactor
+        : usageCost * feWriteUsageAmplificationFactor;
   }
 
   /**

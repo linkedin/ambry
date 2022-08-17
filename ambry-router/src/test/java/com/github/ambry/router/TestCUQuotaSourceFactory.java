@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaSource;
 import com.github.ambry.quota.QuotaSourceFactory;
@@ -32,23 +33,27 @@ public class TestCUQuotaSourceFactory implements QuotaSourceFactory {
   private final QuotaConfig quotaConfig;
   private final AccountService accountService;
   private final QuotaMetrics quotaMetrics;
+  private final RouterConfig routerConfig;
 
   /**
    * Constructor for {@link AmbryCUQuotaSourceFactory}.
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    * @param quotaMetrics {@link QuotaMetrics} object.
+   * @param routerConfig {@link RouterConfig} object.
    */
-  public TestCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics) {
+  public TestCUQuotaSourceFactory(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics,
+      RouterConfig routerConfig) {
     this.quotaConfig = quotaConfig;
     this.accountService = accountService;
     this.quotaMetrics = quotaMetrics;
+    this.routerConfig = routerConfig;
   }
 
   @Override
   public QuotaSource getQuotaSource() {
     try {
-      return new TestCUQuotaSource(quotaConfig, accountService, quotaMetrics);
+      return new TestCUQuotaSource(quotaConfig, accountService, quotaMetrics, routerConfig);
     } catch (IOException ioException) {
       return null;
     }
@@ -65,10 +70,12 @@ class TestCUQuotaSource extends AmbryCUQuotaSource {
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    * @param quotaMetrics {@link QuotaMetrics} object.
+   * @param routerConfig {@link RouterConfig} object.
    * @throws IOException in case of any exception.
    */
-  public TestCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics) throws IOException {
-    super(quotaConfig, accountService, quotaMetrics);
+  public TestCUQuotaSource(QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics,
+      RouterConfig routerConfig) throws IOException {
+    super(quotaConfig, accountService, quotaMetrics, routerConfig);
   }
 
   /**

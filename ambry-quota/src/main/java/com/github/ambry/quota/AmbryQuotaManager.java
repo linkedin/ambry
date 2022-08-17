@@ -18,6 +18,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -64,16 +65,17 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param accountService {@link AccountService} object to get all the accounts and container information.
    * @param accountStatsStore {@link AccountStatsStore} object to get all the account stats related information.
    * @param quotaMetrics {@link QuotaMetrics} object.
+   * @param routerConfig {@link RouterConfig} object.
    * @throws ReflectiveOperationException in case of any exception.
    */
   public AmbryQuotaManager(QuotaConfig quotaConfig, QuotaRecommendationMergePolicy quotaRecommendationMergePolicy,
-      AccountService accountService, AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics)
-      throws ReflectiveOperationException {
+      AccountService accountService, AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics,
+      RouterConfig routerConfig) throws ReflectiveOperationException {
     List<Pair<String, String>> quotaEnforcerSourcePairs =
         parseQuotaEnforcerAndSourceInfo(quotaConfig.requestQuotaEnforcerSourcePairInfoJson);
     Map<String, QuotaSource> quotaSourceObjectMap =
         buildQuotaSources(quotaEnforcerSourcePairs.stream().map(Pair::getSecond).collect(Collectors.toList()),
-            quotaConfig, accountService, quotaMetrics);
+            quotaConfig, accountService, quotaMetrics, routerConfig);
     quotaEnforcers = new HashSet<>();
     for (Pair<String, String> quotaEnforcerSourcePair : quotaEnforcerSourcePairs) {
       quotaEnforcers.add(((QuotaEnforcerFactory) Utils.getObj(quotaEnforcerSourcePair.getFirst(), quotaConfig,
@@ -299,18 +301,19 @@ public class AmbryQuotaManager implements QuotaManager {
    * @param quotaConfig {@link QuotaConfig} object.
    * @param accountService {@link AccountService} object.
    * @param quotaMetrics {@link QuotaMetrics} object.
+   * @param routerConfig {@link RouterConfig} object.
    * @return Map of {@link QuotaSourceFactory} class names to {@link QuotaSource} objects.
    * @throws ReflectiveOperationException if the source objects could not be created.
    */
   private Map<String, QuotaSource> buildQuotaSources(Collection<String> quotaSourceFactoryClasses,
-      QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics)
+      QuotaConfig quotaConfig, AccountService accountService, QuotaMetrics quotaMetrics, RouterConfig routerConfig)
       throws ReflectiveOperationException {
     Map<String, QuotaSource> quotaSourceObjectMap = new HashMap<>();
     for (String quotaSourceFactoryClass : quotaSourceFactoryClasses) {
       if (!quotaSourceObjectMap.containsKey(quotaSourceFactoryClass)) {
         quotaSourceObjectMap.put(quotaSourceFactoryClass,
             ((QuotaSourceFactory) Utils.getObj(quotaSourceFactoryClass, quotaConfig, accountService,
-                quotaMetrics)).getQuotaSource());
+                quotaMetrics, routerConfig)).getQuotaSource());
       }
     }
     return quotaSourceObjectMap;

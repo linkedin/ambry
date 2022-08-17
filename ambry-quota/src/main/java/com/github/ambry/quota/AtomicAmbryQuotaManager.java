@@ -16,6 +16,7 @@ package com.github.ambry.quota;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.rest.RestRequest;
 import java.util.Map;
 
@@ -48,12 +49,13 @@ public class AtomicAmbryQuotaManager extends AmbryQuotaManager {
    * @param accountService {@link AccountService} object.
    * @param accountStatsStore {@link AccountStatsStore} object.
    * @param quotaMetrics {@link QuotaMetrics} object.
+   * @param routerConfig {@link RouterConfig} object.
    * @throws ReflectiveOperationException if {@link AtomicAmbryQuotaManager} could not be created.
    */
   public AtomicAmbryQuotaManager(QuotaConfig quotaConfig, QuotaRecommendationMergePolicy quotaRecommendationMergePolicy,
-      AccountService accountService, AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics)
-      throws ReflectiveOperationException {
-    super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, quotaMetrics);
+      AccountService accountService, AccountStatsStore accountStatsStore, QuotaMetrics quotaMetrics,
+      RouterConfig routerConfig) throws ReflectiveOperationException {
+    super(quotaConfig, quotaRecommendationMergePolicy, accountService, accountStatsStore, quotaMetrics, routerConfig);
     quotaResourceSynchronizer = new QuotaResourceSynchronizer(quotaMetrics);
   }
 
