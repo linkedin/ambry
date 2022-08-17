@@ -15,6 +15,9 @@
 
 package com.github.ambry.named;
 
+import java.util.Objects;
+
+
 /**
  * Class to convey information about a successful deletion from {@link NamedBlobDb}.
  */
@@ -43,5 +46,22 @@ public class DeleteResult {
    */
   public boolean isAlreadyDeleted() {
     return alreadyDeleted;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    DeleteResult record = (DeleteResult) o;
+    return Objects.equals(blobId, record.blobId) && Objects.equals(alreadyDeleted, record.alreadyDeleted);
+  }
+
+  @Override
+  public String toString() {
+    return "DeleteResult[blobId=" + getBlobId() + ",isAlreadyDeleted=" + isAlreadyDeleted() + "]";
   }
 }

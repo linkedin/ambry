@@ -41,7 +41,7 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
 
   @Override
   public MySqlNamedBlobDb getNamedBlobDb() {
-    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter);
+    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter, metricRegistry);
   }
 
   /**

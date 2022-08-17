@@ -27,6 +27,7 @@ public class NamedBlobRecord {
   private final String blobName;
   private final String blobId;
   private final long expirationTimeMs;
+  private final long version;
 
   /**
    * @param accountName the account name.
@@ -37,11 +38,25 @@ public class NamedBlobRecord {
    */
   public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
       long expirationTimeMs) {
+    this(accountName, containerName, blobName, blobId, expirationTimeMs, 0);
+  }
+
+  /**
+   * @param accountName the account name.
+   * @param containerName the container name.
+   * @param blobName the blob name within the container.
+   * @param blobId the blob ID for the blob content in ambry storage.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param version the version of this named blob.
+   */
+  public NamedBlobRecord(String accountName, String containerName, String blobName, String blobId,
+      long expirationTimeMs, long version) {
     this.accountName = accountName;
     this.containerName = containerName;
     this.blobName = blobName;
     this.blobId = blobId;
     this.expirationTimeMs = expirationTimeMs;
+    this.version = version;
   }
 
   /**
@@ -73,6 +88,13 @@ public class NamedBlobRecord {
   }
 
   /**
+   * @return the version for the named blob map.
+   */
+  public long getVersion() {
+    return version;
+  }
+
+  /**
    * @return the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    */
   public long getExpirationTimeMs() {
@@ -91,5 +113,16 @@ public class NamedBlobRecord {
     return expirationTimeMs == record.expirationTimeMs && Objects.equals(accountName, record.accountName)
         && Objects.equals(containerName, record.containerName) && Objects.equals(blobName, record.blobName)
         && Objects.equals(blobId, record.blobId);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(blobId);
+  }
+
+  @Override
+  public String toString() {
+    return "NamedBlobRecord[accountName=" + accountName + ",containerName=" + containerName + ",blobName=" + blobName +
+        ",blobId=" + blobId + ",expirationTimeMs=" + expirationTimeMs + ",version=" + version + "]";
   }
 }

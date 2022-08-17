@@ -15,6 +15,7 @@
 
 package com.github.ambry.named;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
@@ -80,7 +81,7 @@ public class MySqlNamedBlobDbTest {
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
-        dataSourceFactory, localDatacenter);
+        dataSourceFactory, localDatacenter, new MetricRegistry());
     account = accountService.createAndAddRandomAccount();
     container = account.getAllContainers().iterator().next();
     MockClusterMap clusterMap = new MockClusterMap();
