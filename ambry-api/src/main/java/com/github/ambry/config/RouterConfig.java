@@ -205,7 +205,7 @@ public class RouterConfig {
    * The maximum number of parallel requests issued at a time by the put manager for a chunk.
    */
   @Config(ROUTER_PUT_REQUEST_PARALLELISM)
-  @Default("3")
+  @Default("1")
   public final int routerPutRequestParallelism;
 
   /**

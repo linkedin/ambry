@@ -47,8 +47,8 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
           BLOB_CHUNKS, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS, LAST_UPDATED_TS);
 
   private static final String GET_QUERY =
-      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s AND %s", CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS,
-          LAST_UPDATED_TS, BLOB_CHUNKS, PK_MATCH, ORDER_MATCH);
+      String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s", CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS,
+          LAST_UPDATED_TS, BLOB_CHUNKS, PK_MATCH, ORDER_MATCH, CHUNK_OFFSET);
 
   private static final String UPDATE_STATUS_QUERY = String.format("UPDATE %s SET %s = ? WHERE %s AND %s = (%s)",
       BLOB_CHUNKS, STATUS, PK_MATCH, CHUNK_OFFSET, FIND_MAX_OFFSET_RECORD);
@@ -179,7 +179,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
   @Override
   public BlobInfo getBlobInfo(String accountName, String containerName, String blobName) throws RestServiceException {
-    BlobInfo blobInfo = null;
+    BlobInfo blobInfo;
     try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
          PreparedStatement statement = connection.prepareStatement(GET_BLOB_INFO_QUERY)) {
 
@@ -188,14 +188,16 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
       statement.setString(3, blobName);
 
       try (ResultSet resultSet = statement.executeQuery()) {
-        while (resultSet.next()) {
-          long blobSize = resultSet.getLong(1);
-          String serviceId = resultSet.getString(2);
-          byte[] userMetadata = resultSet.getBytes(3);
-
-          BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, (short) -1, (short) -1, false);
-          blobInfo = new BlobInfo(blobProperties, userMetadata);
+        if (!resultSet.next()) {
+          throw buildException("GET: Blob Info not found", RestServiceErrorCode.NotFound, accountName, containerName,
+              blobName);
         }
+        long blobSize = resultSet.getLong(1);
+        String serviceId = resultSet.getString(2);
+        byte[] userMetadata = resultSet.getBytes(3);
+
+        BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, (short) -1, (short) -1, false);
+        blobInfo = new BlobInfo(blobProperties, userMetadata);
       }
     }
     catch (SQLException e) {

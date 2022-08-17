@@ -7,7 +7,7 @@
                 {
                     "disks": [
                         {
-                            "capacityInBytes": 21474836480,
+                            "capacityInBytes": 2147483648000,
                             "hardwareState": "AVAILABLE",
                             "mountPath": "/tmp"
                         }

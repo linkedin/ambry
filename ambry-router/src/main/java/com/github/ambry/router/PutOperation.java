@@ -1540,8 +1540,7 @@ class PutOperation {
     /**
      * Fetch {@link PutRequest}s to send for the current data chunk.
      */
-    private void
-    fetchRequests(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
+    private void fetchRequests(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
       Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
       while (replicaIterator.hasNext()) {
         ReplicaId replicaId = replicaIterator.next();
