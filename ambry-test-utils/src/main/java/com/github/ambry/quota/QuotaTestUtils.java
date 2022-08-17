@@ -16,6 +16,7 @@ package com.github.ambry.quota;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
@@ -54,6 +55,16 @@ public class QuotaTestUtils {
     properties.setProperty(QuotaConfig.REQUEST_QUOTA_ENFORCER_SOURCE_PAIR_INFO_JSON,
         new JSONObject().put(QuotaConfig.QUOTA_ENFORCER_SOURCE_PAIR_INFO_STR, jsonArray).toString());
     return new QuotaConfig(new VerifiableProperties(properties));
+  }
+
+  /**
+   * @return the default {@link RouterConfig} object.
+   */
+  public static RouterConfig getDefaultRouterConfig() {
+    Properties properties = new Properties();
+    properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
+    properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, "DEV");
+    return new RouterConfig(new VerifiableProperties(properties));
   }
 
   /**

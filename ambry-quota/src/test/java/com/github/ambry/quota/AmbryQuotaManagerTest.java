@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.quota.capacityunit.AmbryCUQuotaEnforcer;
 import com.github.ambry.rest.RestMethod;
@@ -49,6 +50,7 @@ public class AmbryQuotaManagerTest {
   private final boolean isRequestThrottlingEnabled;
   private final QuotaAction expectedDelayRecommendationQuotaExceed;
   private final QuotaAction expectedRejectRecommendationQuotaExceed;
+  private final RouterConfig routerConfig;
   private TestCUQuotaEnforcerFactory.TestAmbryCUQuotaEnforcer testAmbryCUQuotaEnforcer;
   private QuotaConfig quotaConfig;
 
@@ -69,6 +71,7 @@ public class AmbryQuotaManagerTest {
     properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, Boolean.toString(isRequestThrottlingEnabled));
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     testQuotaRecommendationMergePolicy = new TestCUQuotaEnforcerFactory.TestQuotaRecommendationMergePolicy(quotaConfig);
+    routerConfig = QuotaTestUtils.getDefaultRouterConfig();
   }
 
   /**
@@ -388,7 +391,7 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(110, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(11,
+    Assert.assertEquals(11 * routerConfig.routerGetRequestParallelism,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
 
     // 3. test that enforcers are called and usage is charged if usage is outside quota limits, but quota exceed is allowed.
@@ -401,7 +404,7 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(1110, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(111,
+    Assert.assertEquals(111 * routerConfig.routerGetRequestParallelism,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
 
     // 4. test that enforcers are called and usage is not charged if usage is outside quota limits and quota exceed is not allowed.
@@ -414,7 +417,8 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(isRequestThrottlingEnabled ? 0 : 1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(isRequestThrottlingEnabled ? 1110 : 2110, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(isRequestThrottlingEnabled ? 111 : 211,
+    Assert.assertEquals(isRequestThrottlingEnabled ? 111 * routerConfig.routerGetRequestParallelism
+            : 211 * routerConfig.routerGetRequestParallelism,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
 
     // 5. test that even if quota exceed allowed might have returned false, if a request is within its limits, the recommendation is allow
@@ -430,7 +434,8 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(1000, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(isRequestThrottlingEnabled ? 211 : 311,
+    Assert.assertEquals(isRequestThrottlingEnabled ? 211 * routerConfig.routerGetRequestParallelism
+            : 311 * routerConfig.routerGetRequestParallelism,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
   }
 
@@ -460,7 +465,7 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(110, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(11,
+    Assert.assertEquals(11 * routerConfig.routerGetRequestParallelism,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
 
     // 3. test that enforcers are called and usage is charged even if usage is outside quota limits.
@@ -473,7 +478,7 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(1110, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(111,
+    Assert.assertEquals(111 * routerConfig.routerGetRequestParallelism,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
 
     // 3. test that enforcers are called and usage is charged even if usage is outside quota limits and exceed is not allowed.
@@ -486,7 +491,7 @@ public class AmbryQuotaManagerTest {
     Assert.assertEquals(1, testAmbryCUQuotaEnforcer.chargeCallCount);
     Assert.assertEquals(2110, testAmbryCUQuotaEnforcer.getQuotaSource()
         .getUsage(QuotaResource.fromRestRequest(restRequest), QuotaName.READ_CAPACITY_UNIT), 0.0001);
-    Assert.assertEquals(211,
+    Assert.assertEquals(211 * routerConfig.routerGetRequestParallelism,
         testAmbryCUQuotaEnforcer.getQuotaSource().getSystemResourceUsage(QuotaName.READ_CAPACITY_UNIT), 0.0001);
   }
 
@@ -584,10 +589,10 @@ public class AmbryQuotaManagerTest {
       throws ReflectiveOperationException {
     if (isAtomic) {
       return new AtomicAmbryQuotaManager(quotaConfig, testQuotaRecommendationMergePolicy, ACCOUNT_SERVICE, null,
-          quotaMetrics);
+          quotaMetrics, routerConfig);
     } else {
-      return new AmbryQuotaManager(quotaConfig, testQuotaRecommendationMergePolicy, ACCOUNT_SERVICE, null,
-          quotaMetrics);
+      return new AmbryQuotaManager(quotaConfig, testQuotaRecommendationMergePolicy, ACCOUNT_SERVICE, null, quotaMetrics,
+          routerConfig);
     }
   }
 

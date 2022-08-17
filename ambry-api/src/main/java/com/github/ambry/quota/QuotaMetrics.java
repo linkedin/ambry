@@ -14,6 +14,7 @@
 package com.github.ambry.quota;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -26,7 +27,6 @@ import java.util.Map;
  * Metrics class to capture metrics for request quota enforcement.
  */
 public class QuotaMetrics {
-  private final MetricRegistry metricRegistry;
   public final Meter quotaExceedRecommendationRate;
   public final Timer quotaRecommendationTime;
   public final Meter quotaNotChargedRate;
@@ -44,6 +44,9 @@ public class QuotaMetrics {
   public final Meter recommendRate;
   public final Meter chargeAndRecommendRate;
   public final Counter accountUpdateNotificationCount;
+  private final MetricRegistry metricRegistry;
+  public Gauge<Integer> frontendUsageWriteAmplificationGauge;
+  public Gauge<Integer> frontendUsageReadAmplificationGauge;
   public Map<String, Counter> perQuotaResourceOutOfQuotaMap = new HashMap<>();
   public Map<String, Counter> perQuotaResourceWouldBeThrottledMap = new HashMap<>();
   public Map<String, Counter> perQuotaResourceDelayedRequestMap = new HashMap<>();
@@ -76,6 +79,23 @@ public class QuotaMetrics {
         metricRegistry.counter(MetricRegistry.name(QuotaManager.class, "AccountUpdateNotificationCount"));
     noChargeRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoChargeRate"));
     noRecommendationRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoRecommendationRate"));
+  }
+
+  /**
+   * Setup the {@link Gauge}s for read and write amplification factor.
+   * Frontend usage cost could get amplified because to serve one copy of data, frontend might need to simultaneously
+   * read or write the data over network to multiple storage nodes.
+   * @param frontendUsageReadAmplificationFactor read amplification factor.
+   * @param frontendUsageWriteAmplificationFactor write amplification factor.
+   */
+  public void setupFeUsageAmplificationFactorMetrics(final int frontendUsageReadAmplificationFactor,
+      final int frontendUsageWriteAmplificationFactor) {
+    frontendUsageReadAmplificationGauge =
+        metricRegistry.gauge(MetricRegistry.name(QuotaManager.class, "FrontendUsageReadAmplifcationFactor"),
+            () -> (Gauge<Integer>) () -> frontendUsageReadAmplificationFactor);
+    frontendUsageWriteAmplificationGauge =
+        metricRegistry.gauge(MetricRegistry.name(QuotaManager.class, "FrontendUsageWriteAmplifcationFactor"),
+            () -> (Gauge<Integer>) () -> frontendUsageWriteAmplificationFactor);
   }
 
   /**

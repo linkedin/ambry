@@ -299,7 +299,7 @@ public class AmbryCUQuotaEnforcerTest {
     private boolean throwException = false;
 
     public ExceptionQuotaSource(QuotaConfig config, AccountService accountService) throws IOException {
-      super(config, accountService, new QuotaMetrics(new MetricRegistry()));
+      super(config, accountService, new QuotaMetrics(new MetricRegistry()), QuotaTestUtils.getDefaultRouterConfig());
     }
 
     @Override
