@@ -461,6 +461,50 @@ public class OperationTrackerTest {
     }
   }
 
+  @Test
+  public void noReplicaStateTtlUpdateTest() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    // set up one node per data center for testing
+    MockDataNodeId origintingDcNode = new MockDataNodeId(portList, mountPaths, "dc-0");
+    MockDataNodeId remoteDcNode = new MockDataNodeId(portList, mountPaths, "dc-1");
+    datanodes = new ArrayList<>(Arrays.asList(origintingDcNode, remoteDcNode));
+    mockPartition = new MockPartitionId();
+    localDcName = datanodes.get(0).getDatacenterName();
+    originatingDcName = localDcName;
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    // One replica down, one with no-state, one is ok
+    populateReplicaList(3, ReplicaState.STANDBY, Collections.singletonList(origintingDcNode));
+    populateReplicaList(2, ReplicaState.OFFLINE, Collections.singletonList(origintingDcNode));
+    populateReplicaList(1, null, Collections.singletonList(origintingDcNode));
+
+    // test both delete and Ttl Update cases
+    for (RouterOperation operation : EnumSet.of(RouterOperation.DeleteOperation, RouterOperation.TtlUpdateOperation)) {
+      repetitionTracker.clear();
+      OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 2, operation, true);
+      // issue delete/ttlUpdate requests to 2 local replica and 1 remote replica
+      sendRequests(ot, 3, false);
+
+      for (int i = 0; i < 2; ++i) {
+        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+      }
+      // for replicaState enabled operation tracker, only 1 eligible replica left, so numRequestsExpected = 1
+      sendRequests(ot, replicasStateEnabled ? 0 : 2, false);
+      // make 1 requests fail and 1 request succeed then replicaState enabled operation tracker should fail
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
+      ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+      if (replicasStateEnabled) {
+        assertFalse("Operation should fail", ot.hasSucceeded());
+      } else {
+        // if replicasStateEnabled = false, operation tracker is able to succeed after 1 more request succeed
+        ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.SUCCESS);
+        assertTrue("Operation should succeed", ot.hasSucceeded());
+      }
+      assertTrue("Operation should be done", ot.isDone());
+    }
+  }
+
   /**
    * Test delete/ttlUpdate operation when replicasStateEnabled is enabled/disabled.
    * local dc: 2 STANDBY and 1 INACTIVE; remote dc: 2 STANDBY and 1 INACTIVE

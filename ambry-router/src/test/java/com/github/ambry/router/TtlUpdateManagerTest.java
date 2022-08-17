@@ -450,7 +450,8 @@ public class TtlUpdateManagerTest {
     for (int i = 0; i < successfulResponsesCount; i++) {
       serversInLocalDc.get(i).setServerErrorForAllRequests(errorCodeToReturn);
     }
-    executeOpAndVerify(blobIds, shouldSucceed ? null : RouterErrorCode.BlobDoesNotExist, false, true, true, false);
+    RouterErrorCode expectedErrorCode = (successfulResponsesCount > 0) ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.BlobDoesNotExist;
+    executeOpAndVerify(blobIds, shouldSucceed ? null : expectedErrorCode, false, true, true, false);
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
