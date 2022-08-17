@@ -99,8 +99,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String GET_QUERY =
       String.format("SELECT %s, %s, %s FROM %s WHERE %s", BLOB_ID, EXPIRES_TS, DELETED_TS, NAMED_BLOBS, PK_MATCH);
   private static final String GET_QUERY_V2 =
-      String.format("SELECT %s, %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION,
-          EXPIRES_TS, DELETED_TS, NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
+      String.format("SELECT %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION,
+          DELETED_TS, NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
   /**
    * Select records up to a specific limit where the blob name starts with a string prefix. The fourth parameter can
@@ -121,7 +121,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   // @formatter:off
   private static final String LIST_QUERY_V2 = String.format(""
-          + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.expires_ts, t1.deleted_ts "
+          + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
           + "FROM named_blobs_v2 t1 "
           + "INNER JOIN "
           + "(SELECT account_id, container_id, blob_name, max(version) as version "
@@ -137,18 +137,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private static final String INSERT_QUERY =
       String.format("INSERT INTO %s (%s, %s, %4$s, %5$s, %6$s) VALUES (?, ?, ?, ?, ?)", NAMED_BLOBS, ACCOUNT_ID,
-          CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS);
+          CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS);
 
   /**
    * If a record already exists for a named blob, attempt an update if the record in the DB represents an expired or
    * deleted blob.
    */
   private static final String UPDATE_IF_DELETED_OR_EXPIRED_QUERY =
-      String.format("UPDATE %s SET %s = ?, %s = ?, %s = null WHERE %s AND %s", NAMED_BLOBS, BLOB_ID, EXPIRES_TS,
-          DELETED_TS, PK_MATCH, IS_DELETED_OR_EXPIRED);
+      String.format("UPDATE %s SET %s = ?, %s = ? WHERE %s AND %s", NAMED_BLOBS, BLOB_ID, DELETED_TS,
+          PK_MATCH, IS_DELETED_OR_EXPIRED);
   private static final String INSERT_QUERY_V2 =
       String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS, VERSION, BLOB_STATE);
+          NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS, VERSION, BLOB_STATE);
 
   /**
    * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.
@@ -472,15 +472,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
         Timestamp expirationTime = resultSet.getTimestamp(2);
         Timestamp deletionTime = resultSet.getTimestamp(3);
+        if (expirationTime != null && expirationTime.before(deletionTime)) {
+          deletionTime = expirationTime;
+        }
         long currentTime = System.currentTimeMillis();
-        if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredOptions.contains(option)) {
-          throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
-              blobName);
-        } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOptions.contains(option)) {
-          throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
+        if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeExpiredOptions.contains(option) &&
+            !includeDeletedOptions.contains(option)) {
+          throw buildException("GET: Blob is not available", RestServiceErrorCode.Deleted, accountName, containerName,
               blobName);
         } else {
-          return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime));
+          return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime));
         }
       }
     }
@@ -499,17 +500,14 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         }
         String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
         long version = resultSet.getLong(2);
-        Timestamp expirationTime = resultSet.getTimestamp(3);
-        Timestamp deletionTime = resultSet.getTimestamp(4);
+        Timestamp deletionTime = resultSet.getTimestamp(3);
         long currentTime = System.currentTimeMillis();
-        if (compareTimestamp(expirationTime, currentTime) <= 0 && !includeExpiredOptions.contains(option)) {
-          throw buildException("GET: Blob expired", RestServiceErrorCode.Deleted, accountName, containerName,
-              blobName);
-        } else if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOptions.contains(option)) {
-          throw buildException("GET: Blob deleted", RestServiceErrorCode.Deleted, accountName, containerName,
+        if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeExpiredOptions.contains(option) &&
+            !includeDeletedOptions.contains(option)) {
+          throw buildException("GET: Blob is not available", RestServiceErrorCode.Deleted, accountName, containerName,
               blobName);
         } else {
-          return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime),
+          return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime),
               version);
         }
       }
@@ -538,16 +536,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
           Timestamp expirationTime = resultSet.getTimestamp(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
+          if (expirationTime != null && expirationTime.before(deletionTime)) {
+            deletionTime = expirationTime;
+          }
 
-          if (compareTimestamp(expirationTime, currentTime) <= 0) {
-            logger.trace("LIST: Blob expired, ignoring in list response; account='{}', container='{}', name='{}'",
-                accountName, containerName, blobName);
-          } else if (compareTimestamp(deletionTime, currentTime) <= 0) {
-            logger.trace("LIST: Blob deleted, ignoring in list response; account='{}', container='{}', name='{}'",
+          if (compareTimestamp(deletionTime, currentTime) <= 0) {
+            logger.trace("LIST: Blob is not available, ignoring in list response; account='{}', container='{}', name='{}'",
                 accountName, containerName, blobName);
           } else {
             entries.add(
-                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime)));
+                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime)));
           }
         }
         return new Page<>(entries, nextContinuationToken);
@@ -576,18 +574,14 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobName = resultSet.getString(1);
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
           long version = resultSet.getLong(3);
-          Timestamp expirationTime = resultSet.getTimestamp(4);
-          Timestamp deletionTime = resultSet.getTimestamp(5);
+          Timestamp deletionTime = resultSet.getTimestamp(4);
 
-          if (compareTimestamp(expirationTime, currentTime) <= 0) {
-            logger.trace("LIST: Blob expired, ignoring in list response; account='{}', container='{}', name='{}'",
-                accountName, containerName, blobName);
-          } else if (compareTimestamp(deletionTime, currentTime) <= 0) {
-            logger.trace("LIST: Blob deleted, ignoring in list response; account='{}', container='{}', name='{}'",
+          if (compareTimestamp(deletionTime, currentTime) <= 0) {
+            logger.trace("LIST: Blob is not available, ignoring in list response; account='{}', container='{}', name='{}'",
                 accountName, containerName, blobName);
           } else {
             entries.add(
-                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(expirationTime), version));
+                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version));
           }
         }
         return new Page<>(entries, nextContinuationToken);
