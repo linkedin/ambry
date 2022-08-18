@@ -88,10 +88,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String PK_MATCH_VERSION = String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID,
       CONTAINER_ID, BLOB_NAME, VERSION);
 
-  private static final Set<GetOption> includeDeletedOptions =
-      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs));
-  private static final Set<GetOption> includeExpiredOptions =
-      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Expired_Blobs));
+  private static final Set<GetOption> includeDeletedOrExpiredOptions =
+      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs, GetOption.Include_Expired_Blobs));
 
   /**
    * Select a record that matches a blob name (lookup by primary key).
@@ -472,16 +470,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
         Timestamp expirationTime = resultSet.getTimestamp(2);
         Timestamp deletionTime = resultSet.getTimestamp(3);
-        if (expirationTime != null && expirationTime.before(deletionTime)) {
-          deletionTime = expirationTime;
-        }
+        Timestamp finalTime = getMinTimestamp(expirationTime, deletionTime);
         long currentTime = System.currentTimeMillis();
-        if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeExpiredOptions.contains(option) &&
-            !includeDeletedOptions.contains(option)) {
-          throw buildException("GET: Blob is not available", RestServiceErrorCode.Deleted, accountName, containerName,
-              blobName);
+        if (compareTimestamp(finalTime, currentTime) <= 0 && !includeDeletedOrExpiredOptions.contains(option)) {
+          throw buildException("GET: Blob is not available due to it is deleted or expired",
+              RestServiceErrorCode.Deleted, accountName, containerName, blobName);
         } else {
-          return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime));
+          return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(finalTime));
         }
       }
     }
@@ -502,10 +497,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         long version = resultSet.getLong(2);
         Timestamp deletionTime = resultSet.getTimestamp(3);
         long currentTime = System.currentTimeMillis();
-        if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeExpiredOptions.contains(option) &&
-            !includeDeletedOptions.contains(option)) {
-          throw buildException("GET: Blob is not available", RestServiceErrorCode.Deleted, accountName, containerName,
-              blobName);
+        if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOrExpiredOptions.contains(option)) {
+          throw buildException("GET: Blob is not available due to it is deleted or expired",
+              RestServiceErrorCode.Deleted, accountName, containerName, blobName);
         } else {
           return new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime),
               version);
@@ -536,16 +530,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
           Timestamp expirationTime = resultSet.getTimestamp(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
-          if (expirationTime != null && expirationTime.before(deletionTime)) {
-            deletionTime = expirationTime;
-          }
-
-          if (compareTimestamp(deletionTime, currentTime) <= 0) {
-            logger.trace("LIST: Blob is not available, ignoring in list response; account='{}', container='{}', name='{}'",
+          Timestamp finalTime = getMinTimestamp(expirationTime, deletionTime);
+          if (compareTimestamp(finalTime, currentTime) <= 0) {
+            logger.trace("LIST: Blob is not available due to it is deleted or expired, ignoring in list response; account='{}', container='{}', name='{}'",
                 accountName, containerName, blobName);
           } else {
             entries.add(
-                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime)));
+                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(finalTime)));
           }
         }
         return new Page<>(entries, nextContinuationToken);
@@ -577,7 +568,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp deletionTime = resultSet.getTimestamp(4);
 
           if (compareTimestamp(deletionTime, currentTime) <= 0) {
-            logger.trace("LIST: Blob is not available, ignoring in list response; account='{}', container='{}', name='{}'",
+            logger.trace("LIST: Blob is not available due to it is deleted or expired, ignoring in list response; account='{}', container='{}', name='{}'",
                 accountName, containerName, blobName);
           } else {
             entries.add(
@@ -754,6 +745,21 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private static long timestampToMs(Timestamp timestamp) {
     return timestamp == null ? Utils.Infinite_Time : timestamp.getTime();
+  }
+
+  /**
+   * @param ts1 a {@link Timestamp}, can be null.
+   * @param ts2 a {@link Timestamp}, can be null.
+   * @return the min(ts1, ts2), treat the null case as largest possible case
+   */
+  private static Timestamp getMinTimestamp(Timestamp ts1, Timestamp ts2) {
+    if (ts1 == null) {
+      return ts2;
+    } else if (ts2 == null) {
+      return ts1;
+    } else {
+      return ts1.before(ts2) ? ts1 : ts2;
+    }
   }
 
   private static RestServiceException buildException(String message, RestServiceErrorCode errorCode, String accountName,

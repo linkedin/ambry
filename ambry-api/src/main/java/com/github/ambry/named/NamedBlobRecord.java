@@ -15,7 +15,6 @@
 
 package com.github.ambry.named;
 
-import com.github.ambry.utils.Utils;
 import java.util.Objects;
 
 
@@ -102,6 +101,8 @@ public class NamedBlobRecord {
     return expirationTimeMs;
   }
 
+  /** To handle the merge of expires_ts to deleted_ts properly, do not compare expirationTimeMs
+   */
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -111,8 +112,6 @@ public class NamedBlobRecord {
       return false;
     }
     NamedBlobRecord record = (NamedBlobRecord) o;
-    /** To handle the merge of expires_ts to deleted_ts properly, do not compare expirationTimeMs
-     */
     return Objects.equals(accountName, record.accountName)
         && Objects.equals(containerName, record.containerName) && Objects.equals(blobName, record.blobName)
         && Objects.equals(blobId, record.blobId);
