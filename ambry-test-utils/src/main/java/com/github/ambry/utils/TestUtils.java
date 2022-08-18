@@ -283,6 +283,8 @@ public class TestUtils {
     public ZkServerWrapper(String dataDir, String logDir, int port) {
       this.dataDir = new File(dataDir);
       this.dataLogDir = new File(logDir);
+      this.dataDir.delete();
+      this.dataLogDir.delete();
       this.dataDir.mkdirs();
       this.dataLogDir.mkdirs();
       this.port = port;

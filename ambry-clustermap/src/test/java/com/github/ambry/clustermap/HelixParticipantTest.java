@@ -78,7 +78,7 @@ public class HelixParticipantTest {
 
   @BeforeClass
   public static void initialize() throws IOException {
-    zkInfoList.add(new ZkInfo(null, dcName, (byte) 0, 2199, true));
+    zkInfoList.add(new ZkInfo("/tmp/zookeeper", dcName, (byte) 0, 2199, true));
     String tempDirPath = getTempDir("HelixParticipantTest-");
     System.out.println(tempDirPath);
     hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
