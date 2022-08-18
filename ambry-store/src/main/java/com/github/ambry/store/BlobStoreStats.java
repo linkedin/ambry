@@ -1270,7 +1270,11 @@ class BlobStoreStats implements StoreStats, Closeable {
           validDataSize.set(getValidSize(new TimeRange(System.currentTimeMillis(), getBucketSpanTimeInMs())));
         }
       } catch (StoreException e) {
-        logger.error("Failed to get invalidDataSize on store: {},", storeId, e);
+        if (e.getErrorCode().equals(StoreErrorCodes.Store_Shutting_Down)) {
+          logger.info("Store is currently shutting down on store: {}", storeId);
+          return;
+        }
+        logger.error("Failed to get validDataSize on store: {}", storeId, e);
       }
     }
 
