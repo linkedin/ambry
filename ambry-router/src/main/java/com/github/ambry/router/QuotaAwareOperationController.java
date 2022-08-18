@@ -196,8 +196,8 @@ public class QuotaAwareOperationController extends OperationController {
             break;
           case REJECT:
             quotaAvailable = false;
-            logger.warn(
-                "Rejecting request for quota resource {} because of reject recommendation.", quotaResource.toString());
+            logger.warn("Rejecting request for quota resource {} because of reject recommendation.",
+                quotaResource.toString());
             routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
             requestQueue.get(quotaResource).removeFirst();
@@ -221,6 +221,7 @@ public class QuotaAwareOperationController extends OperationController {
     Timer.Context timer = routerMetrics.pollExceedAllowedRequestTime.time();
     List<QuotaResource> quotaResources = new ArrayList<>(requestQueue.keySet());
     Collections.shuffle(quotaResources);
+    List<QuotaResource> quotaResourcesRemoved = new ArrayList<>();
     while (!requestQueue.isEmpty()) {
       for (QuotaResource quotaResource : quotaResources) {
         RequestInfo requestInfo = requestQueue.get(quotaResource).getFirst();
@@ -240,16 +241,21 @@ public class QuotaAwareOperationController extends OperationController {
         requestQueue.get(quotaResource).removeFirst();
         if (requestQueue.get(quotaResource).isEmpty()) {
           requestQueue.remove(quotaResource);
+          // This quotaResource has exhausted, we should remove it from next for loop
+          quotaResourcesRemoved.add(quotaResource);
         }
       }
+      quotaResources.removeAll(quotaResourcesRemoved);
+      quotaResourcesRemoved.clear();
     }
     timer.stop();
   }
 
   @Override
   protected List<ResponseInfo> getNonQuotaCompliantResponses() {
-    List<ResponseInfo> nonCompliantResponses = nonCompliantRequests.
-        stream().map(requestInfo -> new ResponseInfo(requestInfo, true)).collect(Collectors.toList());
+    List<ResponseInfo> nonCompliantResponses = nonCompliantRequests.stream()
+        .map(requestInfo -> new ResponseInfo(requestInfo, true))
+        .collect(Collectors.toList());
     nonCompliantRequests.clear();
     return nonCompliantResponses;
   }
