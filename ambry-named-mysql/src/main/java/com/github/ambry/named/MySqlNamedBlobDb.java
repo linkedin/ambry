@@ -156,6 +156,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         try (ResultSet resultSet = statement.executeQuery()) {
           if (!resultSet.next()) {
             if (Objects.equals(containsPartialReadSupportedHeader, "true")) {
+              // return a dummy named blob record to process partial read
               return new NamedBlobRecord(accountName, containerName, blobName, "AAYQAf____8AAQAAAAAAAAAAL4zAy7llR3ePC76iHweoUw", System.currentTimeMillis());
             }
             else {
@@ -229,9 +230,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     if (Objects.equals(containsPartialReadSupportedHeader, "true")) {
       MySqlPartiallyReadableBlobDb db = new MySqlPartiallyReadableBlobDb();
       try {
-        db.updateStatus(record.getAccountName(), record.getContainerName(), record.getBlobName());
         db.putBlobInfo(record.getAccountName(), record.getContainerName(), record.getBlobName(), restRequest.getBlobBytesReceived(),
             blobInfo.getBlobProperties().getServiceId(), blobInfo.getUserMetadata());
+        db.updateStatus(record.getAccountName(), record.getContainerName(), record.getBlobName());
       }
       catch (RestServiceException e) {
         logger.error(e.getMessage() + "; account='" + record.getAccountName() + "', container='" + record.getContainerName()

@@ -1846,7 +1846,6 @@ class PutOperation {
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
           // insert new row to MySql
           long lastUpdatedTs = System.currentTimeMillis();
-
           getPartiallyReadableBlobDb().put(
               new PartiallyReadableBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
                   namedBlobPath.getBlobName(), storeKey.getID(), chunkIndex, chunkSize, lastUpdatedTs,

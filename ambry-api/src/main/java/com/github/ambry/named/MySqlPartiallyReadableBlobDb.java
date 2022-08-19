@@ -42,20 +42,35 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
   private static final String FIND_MAX_OFFSET_RECORD = String.format("SELECT MAX(%s) FROM (SELECT * FROM %s) AS BLOB_CHUNKS WHERE %s",
       CHUNK_OFFSET, BLOB_CHUNKS, PK_MATCH);
 
-  private static final String INSERT_QUERY =
+  /**
+   * Insert a new chunk record into the database.
+   */
+  private static final String INSERT_CHUNK_QUERY =
       String.format("INSERT INTO %s (%s, %s, %s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           BLOB_CHUNKS, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS, LAST_UPDATED_TS);
 
-  private static final String GET_QUERY =
+  /**
+   * Get a list of chunks records that match the priority keys and has offset greater than or equal the parameter set.
+   */
+  private static final String GET_CHUNKS_QUERY =
       String.format("SELECT %s, %s, %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s", CHUNK_OFFSET, CHUNK_SIZE, CHUNK_ID, STATUS,
           LAST_UPDATED_TS, BLOB_CHUNKS, PK_MATCH, ORDER_MATCH, CHUNK_OFFSET);
 
+  /**
+   * Update the status of chunk with the highest offset in the composite blob.
+   */
   private static final String UPDATE_STATUS_QUERY = String.format("UPDATE %s SET %s = ? WHERE %s AND %s = (%s)",
       BLOB_CHUNKS, STATUS, PK_MATCH, CHUNK_OFFSET, FIND_MAX_OFFSET_RECORD);
 
+  /**
+   * Get the blob info from database that matches the priority keys.
+   */
   private static final String GET_BLOB_INFO_QUERY = String.format("SELECT %s, %s, %s FROM %s WHERE %s", BLOB_SIZE,
       SERVICE_ID, USER_METADATA, BLOB_INFO, PK_MATCH);
 
+  /**
+   * Insert a new blob info record into the database.
+   */
   private static final String INSERT_BLOB_INFO_QUERY = String.format("INSERT INTO %s (%s, %s, %s, %5$s, %6$s, %7$s) VALUES (?, ?, ?, ?, ?, ?)",
       BLOB_INFO, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, BLOB_SIZE, SERVICE_ID, USER_METADATA);
 
@@ -69,7 +84,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
     List<PartiallyReadableBlobRecord> chunksRecord = new ArrayList<>();
 
     try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
-         PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
+         PreparedStatement statement = connection.prepareStatement(GET_CHUNKS_QUERY)) {
 
         statement.setString(1, accountName);
         statement.setString(2, containerName);
@@ -108,7 +123,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
   @Override
   public void put(PartiallyReadableBlobRecord record) throws RestServiceException {
     try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
-         PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
+         PreparedStatement statement = connection.prepareStatement(INSERT_CHUNK_QUERY)) {
 
       statement.setString(1, record.getAccountName());
       statement.setString(2, record.getContainerName());

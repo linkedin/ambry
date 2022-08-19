@@ -401,6 +401,43 @@ class GetBlobOperation extends GetOperation {
     return partiallyReadableBlobDb;
   }
 
+  /**
+   * The method with only keep records that are in consecutive orders and the first record in the list also has to be
+   * consecutive to the maxValueSoFar. For example, the maxValueSoFar is 1, and list is [2,3,4,6,7] then it would return
+   * [2,3,4]. If the maxValueSoFar is 2 and the list is [4,5,6], it will return an empty list because 4 is not
+   * consecutive to 2.
+   * @param list a list of {@link PartiallyReadableBlobRecord}
+   * @param maxValueSoFar the max offset that has been read so far
+   * @return list of {@link PartiallyReadableBlobRecord} with consecutive chunk offset.
+   */
+  static List<PartiallyReadableBlobRecord> getConsecutive(List<PartiallyReadableBlobRecord> list, long maxValueSoFar) {
+    List<PartiallyReadableBlobRecord> result = new ArrayList<>();
+    long expectElement = maxValueSoFar + 1;
+    for(PartiallyReadableBlobRecord record : list) {
+      if(record.getChunkOffset() == expectElement) {
+        result.add(record);
+        expectElement++;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Get the {@link BlobInfo} associated with the blob name from MySQL and assign it to the blobInfo
+   */
+  void getAndAssignBlobInfo(String accountName, String containerName, String blobName) {
+    try {
+      BlobInfo partiallyReadableBlobInfo = getPartiallyReadableBlobDb().getBlobInfo(accountName, containerName, blobName);
+      blobInfo = partiallyReadableBlobInfo;
+    }
+    catch (RestServiceException e) {
+      if (e.getErrorCode().equals(RestServiceErrorCode.NotFound)) {
+        // dummy blob info for placeholder
+        blobInfo = new BlobInfo(new BlobProperties(1000000000, "CUrlUpload", (short) 1, (short) 1, false), new byte[0]);
+      }
+    }
+  }
+
   // ReadableStreamChannel implementation:
 
   /**
@@ -426,18 +463,6 @@ class GetBlobOperation extends GetOperation {
      * The GetChunk is complete.
      */
     Complete,
-  }
-
-  List<PartiallyReadableBlobRecord> getConsecutive(List<PartiallyReadableBlobRecord> list, long maxValue) {
-    List<PartiallyReadableBlobRecord> result = new ArrayList<>();
-    long expectElement = maxValue + 1;
-    for(PartiallyReadableBlobRecord record : list) {
-      if(record.getChunkOffset() == expectElement) {
-        result.add(record);
-        expectElement++;
-      }
-    }
-    return result;
   }
 
   /**
@@ -1331,102 +1356,37 @@ class GetBlobOperation extends GetOperation {
     FirstGetChunk() {
       super(-1, new CompositeBlobInfo.ChunkMetadata(blobId, 0L, -1L));
       if (isPartiallyReadableBlob) {
-        retrievePartiallyReadableChunks();
-        if (operationException.get() == null) {
-          initializeForPartiallyReadableBlob();
-        }
+        initializeForPartiallyReadableBlob();
       }
     }
 
     /**
-     * Pull the first set of chunk ids of a partially readable blob from MySQL and initialize chunkIdIterator.
-     */
-    void retrievePartiallyReadableChunks() {
-      try {
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        // get the chunk ids from mysql partial table
-        List<PartiallyReadableBlobRecord> records = getPartiallyReadableBlobDb()
-            .get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName(), 0);
-
-        if (records.size() == 0) {
-          operationException.set(new RouterException("GetOperation failed because of BlobNotFound",
-              RouterErrorCode.BlobDoesNotExist));
-          return;
-        }
-
-        records = getConsecutive(records, -1);
-
-        chunkMetadataList = new ArrayList<>();
-        long maxOffsetSoFar = -1;
-        long totalSizeSoFar = 0L;
-        for (PartiallyReadableBlobRecord record : records) {
-          try {
-            StoreKey blobId = new BlobId(record.getChunkId(), clusterMap);
-            long offset = record.getChunkOffset();
-            maxOffsetSoFar++;
-            if (maxOffsetSoFar != offset) {
-              throw new IllegalStateException("illegal state");
-            }
-            long size = record.getChunkSize();
-            chunkMetadataList.add(new CompositeBlobInfo.ChunkMetadata(blobId, offset, size));
-            totalSizeSoFar+=size;
-            if (Objects.equals(record.getStatus(), PartialPutStatus.SUCCESS.name())) {
-              fetchedAllChunks = true;
-            }
-          }
-          catch (IOException e) {
-            //handle exception for converting blobID
-          }
-        }
-        chunkIdIterator = new MySqlListItr(chunkMetadataList, namedBlobPath.getAccountName(),
-            namedBlobPath.getContainerName(), namedBlobPath.getBlobName(), maxOffsetSoFar);
-        totalSize = totalSizeSoFar;
-      }
-      catch (RestServiceException e) {
-        // handle error not supporting partially readable blob or due to error during GET (expire or ERROR status)
-      }
-    }
-
-    /**
-     * Initialize different fields that were originally handled inside handleResponse() function for FirstGetChunk of a
-     * metadata blob
+     * Initialize different fields that were originally handled inside handleResponse() function for FirstGetChunk in a
+     * regular GET. This function is only called for a partial read request.
      */
     void initializeForPartiallyReadableBlob() {
-      chunkIndexToBuf = new ConcurrentHashMap<>();
-      chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
-      numChunksTotal = chunkMetadataList.size();
-      decryptCallbackResultInfo = new DecryptCallBackResultInfo();
-      getAndAssignBlobInfo();
-      populateDataChunks();
-    }
-
-    /**
-     * Get the {@link BlobInfo} associated with the blob name from MySQL and assign it to the blobInfo
-     */
-    void getAndAssignBlobInfo() {
       try {
+        chunkMetadataList = new ArrayList<>();
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-        BlobInfo partiallyReadableBlobInfo = getPartiallyReadableBlobDb().getBlobInfo(namedBlobPath.getAccountName(),
-            namedBlobPath.getContainerName(), namedBlobPath.getBlobName());
-        blobInfo = partiallyReadableBlobInfo;
-      }
-      catch (RestServiceException e) {
-        if (e.getErrorCode().equals(RestServiceErrorCode.NotFound)) {
-          // dummy blob info
-          blobInfo = new BlobInfo(new BlobProperties(943718400, "CUrlUpload", (short) 1, (short) 1, false), new byte[1]);
+        chunkIdIterator = new MySqlListItr(chunkMetadataList, namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+            namedBlobPath.getBlobName(), -1);
+        getAndAssignBlobInfo(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(), namedBlobPath.getBlobName());
+        totalSize = 0L;
+        numChunksTotal = chunkMetadataList.size();
+        chunkIndexToBuf = new ConcurrentHashMap<>();
+        chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
+        decryptCallbackResultInfo = new DecryptCallBackResultInfo();
+        dataChunks = new GetChunk[routerConfig.routerMaxInMemGetChunks];
+        for (int i = 0; i < dataChunks.length; i++) {
+          if (chunkIdIterator.hasNext()) {
+            int idx = chunkIdIterator.nextIndex();
+            CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
+            dataChunks[i] = new GetChunk(idx, keyAndOffset);
+          }
         }
       }
-    }
+      catch (RestServiceException e) {
 
-    /**
-     * Initialize the dataChunks with next chunks from the chunkIdIterator
-     */
-    private void populateDataChunks() {
-      dataChunks = new GetChunk[Math.min(chunkMetadataList.size(), routerConfig.routerMaxInMemGetChunks)];
-      for (int i = 0; i < dataChunks.length; i++) {
-        int idx = chunkIdIterator.nextIndex();
-        CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
-        dataChunks[i] = new GetChunk(idx, keyAndOffset);
       }
     }
 
@@ -1720,7 +1680,12 @@ class GetBlobOperation extends GetOperation {
       } else {
         chunkIdIterator = chunkMetadataList.listIterator();
         numChunksTotal = chunkMetadataList.size();
-        populateDataChunks();
+        dataChunks = new GetChunk[Math.min(chunkMetadataList.size(), routerConfig.routerMaxInMemGetChunks)];
+        for (int i = 0; i < dataChunks.length; i++) {
+          int idx = chunkIdIterator.nextIndex();
+          CompositeBlobInfo.ChunkMetadata keyAndOffset = chunkIdIterator.next();
+          dataChunks[i] = new GetChunk(idx, keyAndOffset);
+        }
       }
     }
 
@@ -1800,9 +1765,10 @@ class GetBlobOperation extends GetOperation {
     private final String accountName;
     private final String containerName;
     private final String blobName;
+    // max chunk offset that has been read so far by the GET operation
     private long maxConsecutiveOffsetSoFar;
-    private long lastReadTimestamp;
-    private int cursor; // cursor points to the element index to be read next.
+    // cursor points to the element index to be read next
+    private int cursor;
 
     public MySqlListItr(List<CompositeBlobInfo.ChunkMetadata> parentList, String accountName,
         String containerName, String blobName, long maxConsecutiveOffsetSoFar) {
@@ -1839,7 +1805,8 @@ class GetBlobOperation extends GetOperation {
 
     @Override
     public boolean hasPrevious() {
-      return cursor > 1; // Since cursor point to the element to be read next, a value of 0 would mean first element hasn't been read yet.
+      // Since cursor point to the element to be read next, a value of 0 would mean first element hasn't been read yet
+      return cursor > 1;
     }
 
     @Override
@@ -1882,14 +1849,26 @@ class GetBlobOperation extends GetOperation {
       throw new UnsupportedOperationException();
     }
 
+    /**
+     * @return if the current parentList still hasNext()
+     */
     private boolean listHasNext() {
       return (parentList.size() > 0 && cursor < parentList.size());
     }
 
+    /**
+     * Fetch the list of chunks from MySql that have offset greater than or equal to the max offset so far
+     */
     private void fetchNextChunks() {
       try {
         List<PartiallyReadableBlobRecord> records =
             getPartiallyReadableBlobDb().get(accountName, containerName, blobName, maxConsecutiveOffsetSoFar + 1);
+        // if first time query there are no chunks in partial table then return not found to users
+        if (records.size() == 0 && maxConsecutiveOffsetSoFar == -1) {
+          operationException.set(new RouterException("GetOperation failed because of BlobNotFound",
+              RouterErrorCode.BlobDoesNotExist));
+          return;
+        }
         records = getConsecutive(records, maxConsecutiveOffsetSoFar);
         if (records.size() > 0) {
           long totalSizeSoFar = 0L;
@@ -1904,12 +1883,11 @@ class GetBlobOperation extends GetOperation {
               long size = record.getChunkSize();
               parentList.add(new CompositeBlobInfo.ChunkMetadata(blobId, offset, size));
               numChunksTotal++;
-              lastReadTimestamp = System.currentTimeMillis();
               // TODO have a partial read timeout in RouterConfig which can be compared with lastREadTimestamp to timeout failed operations.
               totalSizeSoFar+=size;
               if (Objects.equals(record.getStatus(), PartialPutStatus.SUCCESS.name())) {
                 // Only last chunk is marked as success during partial post. So we know that we have fetched all chunks.
-                fetchedAllChunks = true;
+                setFetchedAllChunksCompleted();
               }
             } catch (IOException e) {
               //handle exception
@@ -1919,14 +1897,19 @@ class GetBlobOperation extends GetOperation {
         } else {
           records = partiallyReadableBlobDb.get(accountName, containerName, blobName, maxConsecutiveOffsetSoFar);
           if (records.size() == 1 && Objects.equals(records.get(0).getStatus(), PartialPutStatus.SUCCESS.name())) {
-            // We have already read the chunk with offiset maxConsecutiveOffsetSoFar before, so we have nothing more to read.
-            fetchedAllChunks = true;
+            // We have already read the chunk with offset maxConsecutiveOffsetSoFar before, so we have nothing more to read
+            setFetchedAllChunksCompleted();
           }
         }
       } catch (RestServiceException e) {
         // error occurred due to status ERROR of a chunk or due to an expired chunk
-        System.out.println("error occured in fetch next chunks");
+        logger.error("Error occurred in fetch next chunks");
       }
+    }
+
+    private void setFetchedAllChunksCompleted() {
+      fetchedAllChunks = true;
+      getAndAssignBlobInfo(accountName, containerName, blobName);
     }
   }
 }
