@@ -35,7 +35,7 @@ public class AmbryCache {
   private static final Logger logger = LoggerFactory.getLogger(AmbryCache.class);
   private final String cacheId;
   private final boolean cacheEnabled;
-  private final int maxNumCacheEntries;
+  private final long maxNumCacheEntries;
 
   // Cache metrics
   public Meter getRequestRate;
@@ -89,7 +89,7 @@ public class AmbryCache {
   /**
    * @return Maximum number of entries this cache is allowed to hold
    */
-  public int getMaxNumCacheEntries() {
+  public long getMaxNumCacheEntries() {
     return maxNumCacheEntries;
   }
 
@@ -173,8 +173,9 @@ public class AmbryCache {
    */
   private void initializeAmbryCacheStats() {
 
-    if (!cacheEnabled) { return; }
-
+    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "Enabled"), (Gauge<Integer>) () ->
+        cacheEnabled ? 1 : 0);
+    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MaxNumCacheEntries"), (Gauge<Long>) () -> maxNumCacheEntries);
     getErrorCount = metricRegistry.counter(MetricRegistry.name(AmbryCache.class, cacheId + "GetErrorCount"));
     putErrorCount = metricRegistry.counter(MetricRegistry.name(AmbryCache.class, cacheId + "PutErrorCount"));
     deleteErrorCount = metricRegistry.counter(MetricRegistry.name(AmbryCache.class, cacheId + "DeleteErrorCount"));
@@ -186,7 +187,7 @@ public class AmbryCache {
     deleteRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryCache.class, cacheId + "DeleteRequestRate"));
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "NumEntries"), (Gauge<Long>) () -> ambryCache.estimatedSize());
+    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "NumCacheEntries"), (Gauge<Long>) ambryCache::estimatedSize);
     logger.info("[{}] Initialized metrics for cache", cacheId);
   }
 }
