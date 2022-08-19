@@ -135,7 +135,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   private static final String INSERT_QUERY =
       String.format("INSERT INTO %s (%s, %s, %4$s, %5$s, %6$s) VALUES (?, ?, ?, ?, ?)", NAMED_BLOBS, ACCOUNT_ID,
-          CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS);
+          CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS);
 
   /**
    * If a record already exists for a named blob, attempt an update if the record in the DB represents an expired or
