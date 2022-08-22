@@ -37,6 +37,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getUserMetadataMetricsGroup;
   public final RestRequestMetricsGroup getPeersMetricsGroup;
   public final RestRequestMetricsGroup getReplicasMetricsGroup;
+  public final RestRequestMetricsGroup getBlobChunkIdsMetricsGroup;
   public final RestRequestMetricsGroup getSignedUrlMetricsGroup;
   public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
   public final RestRequestMetricsGroup getAccountsMetricsGroup;
@@ -256,6 +257,9 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(GetPeersHandler.class, "GetPeers", false, metricRegistry, frontendConfig);
     getReplicasMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetReplicas", false, metricRegistry,
+            frontendConfig);
+    getBlobChunkIdsMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "GetBlobChunkIds", false, metricRegistry,
             frontendConfig);
     getSignedUrlMetricsGroup =
         new RestRequestMetricsGroup(GetSignedUrlHandler.class, "GetSignedUrl", false, metricRegistry, frontendConfig);

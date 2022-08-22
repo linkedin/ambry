@@ -58,6 +58,7 @@ class NonBlockingRouter implements Router {
   private final BackgroundDeleter backgroundDeleter;
   private final int ocCount;
   // Shared with the operation managers.
+  private final RouterConfig routerConfig;
   private final NonBlockingRouterMetrics routerMetrics;
   private final KeyManagementService kms;
   private final CryptoJobHandler cryptoJobHandler;
@@ -68,6 +69,7 @@ class NonBlockingRouter implements Router {
   // Cache to store blob IDs which were not found in servers recently.
   private final Cache<String, Boolean> notFoundCache;
   private final AmbryCache blobMetadataCache;
+
 
   /**
    * Constructs a NonBlockingRouter.
@@ -93,6 +95,7 @@ class NonBlockingRouter implements Router {
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
       AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
       throws IOException, ReflectiveOperationException {
+    this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     this.kms = kms;
@@ -235,7 +238,9 @@ class NonBlockingRouter implements Router {
     }
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    GetBlobOptionsInternal internalOptions =
+        new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
+            routerMetrics.ageAtGet);
     routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {

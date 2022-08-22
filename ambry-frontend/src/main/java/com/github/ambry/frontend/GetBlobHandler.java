@@ -28,6 +28,7 @@ import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -162,7 +163,7 @@ public class GetBlobHandler {
           RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
           restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
         }
-        if (subResource == null) {
+        if (subResource == null || subResource == SubResource.BlobChunkIds) {
           router.getBlob(blobId.getID(), options, routerCallback(),
               QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         } else {

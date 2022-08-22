@@ -86,7 +86,7 @@ public class MockRouter implements Router {
       }
       // Discard the options and only return the BlobAll.
       ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob.getData()));
-      GetBlobResult result = new GetBlobResult(blob.getBlobInfo(), channel);
+      GetBlobResult result = new GetBlobResult(blob.getBlobInfo(), channel, null);
       future.done(result, null);
       if (callback != null) {
         callback.onCompletion(result, null);

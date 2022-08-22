@@ -126,6 +126,9 @@ class FrontendUtils {
         case Replicas:
           group = frontendMetrics.getReplicasMetricsGroup;
           break;
+        case BlobChunkIds:
+          group = frontendMetrics.getBlobChunkIdsMetricsGroup;
+          break;
       }
     }
     return group;

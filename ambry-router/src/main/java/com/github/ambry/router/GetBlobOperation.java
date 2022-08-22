@@ -312,7 +312,9 @@ class GetBlobOperation extends GetOperation {
           // GetManager remove this operation.
           setOperationCompleted();
           List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
-          operationResult = new GetBlobResultInternal(null, chunkIds);
+          operationResult = new GetBlobResultInternal(
+              options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds
+                  ? new GetBlobResult(blobInfo, null, chunkIds) : null, chunkIds);
         } else {
           // Complete the operation from the caller's perspective, so that the caller can start reading from the
           // channel if there is no exception. The operation will not be marked as complete internally as subsequent
@@ -337,7 +339,7 @@ class GetBlobOperation extends GetOperation {
             } else {
               setOperationCompleted();
             }
-            operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
+            operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel, null), null);
           } else {
             blobDataChannel = null;
             operationResult = null;
