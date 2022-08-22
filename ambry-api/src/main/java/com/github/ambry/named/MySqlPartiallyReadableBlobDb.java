@@ -1,9 +1,13 @@
 package com.github.ambry.named;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -11,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -193,8 +198,11 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
   }
 
   @Override
-  public BlobInfo getBlobInfo(String accountName, String containerName, String blobName) throws RestServiceException {
-    BlobInfo blobInfo;
+  public BlobInfo getBlobInfo(String accountName, String containerName, String blobName, RestRequest restRequest)
+      throws RestServiceException {
+    Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
+    Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
+
     try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
          PreparedStatement statement = connection.prepareStatement(GET_BLOB_INFO_QUERY)) {
 
@@ -204,22 +212,23 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
       try (ResultSet resultSet = statement.executeQuery()) {
         if (!resultSet.next()) {
-          throw buildException("GET: Blob Info not found", RestServiceErrorCode.NotFound, accountName, containerName,
-              blobName);
+          // the blob is still being uploaded thus the blobSize and userMetadata should not be completed and matter at
+          // this time
+          return new BlobInfo(new BlobProperties(1000000, "CUrlUpload", account.getId(), container.getId(),
+              container.isEncrypted()), new byte[0]);
         }
         long blobSize = resultSet.getLong(1);
-        String serviceId = resultSet.getString(2);
+        String serviceIdFromMySql = resultSet.getString(2);
         byte[] userMetadata = resultSet.getBytes(3);
-
-        BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, (short) -1, (short) -1, false);
-        blobInfo = new BlobInfo(blobProperties, userMetadata);
+        BlobProperties blobProperties = new BlobProperties(blobSize, serviceIdFromMySql, account.getId(), container.getId(),
+            container.isEncrypted());
+        return new BlobInfo(blobProperties, userMetadata);
       }
     }
     catch (SQLException e) {
-      throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError,
-          accountName, containerName, blobName);
+      throw buildException("MySQL error: " + e.getMessage(), RestServiceErrorCode.InternalServerError, accountName,
+          containerName, blobName);
     }
-    return blobInfo;
   }
 
   @Override

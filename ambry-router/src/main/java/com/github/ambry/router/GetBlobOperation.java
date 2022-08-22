@@ -427,14 +427,12 @@ class GetBlobOperation extends GetOperation {
    */
   void getAndAssignBlobInfo(String accountName, String containerName, String blobName) {
     try {
-      BlobInfo partiallyReadableBlobInfo = getPartiallyReadableBlobDb().getBlobInfo(accountName, containerName, blobName);
+      BlobInfo partiallyReadableBlobInfo = getPartiallyReadableBlobDb().getBlobInfo(accountName, containerName, blobName,
+          restRequest);
       blobInfo = partiallyReadableBlobInfo;
     }
     catch (RestServiceException e) {
-      if (e.getErrorCode().equals(RestServiceErrorCode.NotFound)) {
-        // dummy blob info for placeholder
-        blobInfo = new BlobInfo(new BlobProperties(1000000000, "CUrlUpload", (short) 1, (short) 1, false), new byte[0]);
-      }
+      logger.error("Exception in getAndAssignBlobInfo(): " + e.getMessage());
     }
   }
 
@@ -1386,7 +1384,7 @@ class GetBlobOperation extends GetOperation {
         }
       }
       catch (RestServiceException e) {
-
+        logger.error("Exception in initializeForPartiallyReadableBlob(): " + e.getMessage());
       }
     }
 
@@ -1902,8 +1900,7 @@ class GetBlobOperation extends GetOperation {
           }
         }
       } catch (RestServiceException e) {
-        // error occurred due to status ERROR of a chunk or due to an expired chunk
-        logger.error("Error occurred in fetch next chunks");
+        logger.error("Exception in fetchNextChunks(): " + e.getMessage());
       }
     }
 

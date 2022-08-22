@@ -1852,7 +1852,7 @@ class PutOperation {
                   PartialPutStatus.PENDING.name()));
         }
         catch (RestServiceException e) {
-          // handle error not supporting named blob/partially readable blob
+          logger.error("Exception in addChunkId() while inserting intermediate chunks: " + e.getMessage());
         }
       }
     }
