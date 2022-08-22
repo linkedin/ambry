@@ -33,6 +33,4 @@ ext {
     jimFsVersion = "1.1"
     mysqlConnectorVersion = "8.0.21"
     hikariVersion = "3.4.5"
-    snappyVersion = "1.1.8.4"
-    zookeeperVersion = "3.6.3"
 }

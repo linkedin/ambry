@@ -16,7 +16,7 @@ package com.github.ambry.quota.capacityunit;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.ambry.quota.QuotaName;
 import java.util.concurrent.atomic.AtomicLong;
-import org.codehaus.jackson.annotate.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 
 /**

@@ -89,6 +89,11 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
   }
 
   @Override
+  public boolean create(String path, T record, int options, long ttl) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public boolean set(String path, T record, int options) {
     if (shouldFailSetOperation) {
       return false;
@@ -135,6 +140,11 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
 
   @Override
   public boolean[] createChildren(List<String> paths, List<T> records, int options) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public boolean[] createChildren(List<String> paths, List<T> records, int options, long ttl) {
     throw new IllegalStateException("Not implemented");
   }
 

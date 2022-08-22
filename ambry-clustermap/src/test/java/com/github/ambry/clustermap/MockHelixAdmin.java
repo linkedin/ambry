@@ -34,6 +34,11 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.MaintenanceSignal;
 import org.apache.helix.model.ResourceConfig;
 import org.apache.helix.model.StateModelDefinition;
+import org.apache.helix.model.CustomizedView;
+import org.apache.helix.api.topology.ClusterTopology;
+import org.apache.helix.api.status.ClusterManagementModeRequest;
+import org.apache.helix.constants.InstanceConstants;
+import org.apache.helix.api.status.ClusterManagementMode;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
@@ -57,6 +62,34 @@ public class MockHelixAdmin implements HelixAdmin {
   private Map<String, String> partitionToLeaderReplica = new HashMap<>();
   private long totalDiskCapacity;
   private int setInstanceConfigCallCount = 0;
+
+  @Override
+  public CustomizedView getResourceCustomizedView(String clusterName, String resourceName, String customizedStateType) {
+    return null;
+  }
+
+  @Override
+  public ClusterTopology getClusterTopology(String clusterName) {
+    return null;
+  }
+
+  @Override
+  public void setClusterManagementMode(ClusterManagementModeRequest request) {
+  }
+
+  @Override
+  public ClusterManagementMode getClusterManagementMode(String clusterName) {
+    return null;
+  }
+
+  @Override
+  public void enableInstance(String clusterName, String instanceName, boolean enabled,
+      InstanceConstants.InstanceDisabledType disabledType, String reason) {
+  }
+
+  @Override
+  public void purgeOfflineInstances(String clusterName, long offlineDuration) {
+  }
 
   /**
    * Get the instances that have replicas for the given partition.
