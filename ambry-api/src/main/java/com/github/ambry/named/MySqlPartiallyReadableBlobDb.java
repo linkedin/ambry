@@ -218,9 +218,9 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
               container.isEncrypted()), new byte[0]);
         }
         long blobSize = resultSet.getLong(1);
-        String serviceIdFromMySql = resultSet.getString(2);
+        String serviceId = resultSet.getString(2);
         byte[] userMetadata = resultSet.getBytes(3);
-        BlobProperties blobProperties = new BlobProperties(blobSize, serviceIdFromMySql, account.getId(), container.getId(),
+        BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, account.getId(), container.getId(),
             container.isEncrypted());
         return new BlobInfo(blobProperties, userMetadata);
       }
