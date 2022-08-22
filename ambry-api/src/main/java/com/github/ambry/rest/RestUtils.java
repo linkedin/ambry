@@ -421,7 +421,12 @@ public class RestUtils {
      * where NON-NEGATIVE_INTEGER is a non-negative integer that represents the index
      * of a segment one wants to GET
      */
-    Segment
+    Segment,
+
+    /**
+     * Return all chunk IDs of a composite blob ID.
+     */
+    BlobChunkIds
   }
 
   public static final class MultipartPost {
@@ -644,9 +649,7 @@ public class RestUtils {
           RestServiceErrorCode.InvalidArgs);
     }
     boolean resolveRangeOnEmptyBlob = getBooleanHeader(args, Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, false);
-    return new GetBlobOptionsBuilder().operationType(
-        subResource == null || subResource == SubResource.Segment ? GetBlobOptions.OperationType.All
-            : GetBlobOptions.OperationType.BlobInfo)
+    return new GetBlobOptionsBuilder().operationType(getBlobOptionsOperationType(subResource))
         .getOption(getOption)
         .blobSegment(blobSegmentIdx)
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
@@ -1191,6 +1194,25 @@ public class RestUtils {
     sb.append(", Container: " + ((container == null) ? "null" : container.toString()));
     sb.append("]");
     return sb.toString();
+  }
+
+  /**
+   * Get Operation type based on {@link SubResource}.
+   * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
+   * @return Operation type based on {@link SubResource}.
+   */
+  private static GetBlobOptions.OperationType getBlobOptionsOperationType(SubResource subResource) {
+    if (subResource == null) {
+      return GetBlobOptions.OperationType.All;
+    }
+    switch (subResource) {
+      case Segment:
+        return GetBlobOptions.OperationType.All;
+      case BlobChunkIds:
+        return GetBlobOptions.OperationType.BlobChunkIds;
+      default:
+        return GetBlobOptions.OperationType.BlobInfo;
+    }
   }
 
   /**

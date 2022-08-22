@@ -1747,6 +1747,7 @@ public class GetBlobOperationTest {
                   blobInfo.getBlobProperties().getBlobSize());
               Assert.assertNull("Unexpected blob data in operation result", result.getBlobResult.getBlobDataChannel());
               Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
+              break;
           }
         } catch (Throwable e) {
           readCompleteThrowable.set(e);

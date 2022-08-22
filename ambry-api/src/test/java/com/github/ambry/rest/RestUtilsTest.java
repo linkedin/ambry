@@ -1210,6 +1210,9 @@ public class RestUtilsTest {
         if (subResource.equals(RestUtils.SubResource.Segment)) {
           doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, OperationType.All,
               expectedResolveRangeOnEmptyBlob, shouldSucceedWithSegment);
+        } else if (subResource.equals(RestUtils.SubResource.BlobChunkIds)) {
+          doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, OperationType.BlobChunkIds,
+              expectedResolveRangeOnEmptyBlob, shouldSucceedWithNonSegmentSubResource);
         } else {
           doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange,
               GetBlobOptions.OperationType.BlobInfo, expectedResolveRangeOnEmptyBlob,
