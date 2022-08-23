@@ -34,6 +34,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -135,10 +136,10 @@ public class MySqlNamedBlobDbIntegrationTest {
       NamedBlobRecord recordFromStore =
           namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
               GetOption.Include_Deleted_Blobs).get();
-      assertEquals("Record does not match expectations.", record, recordFromStore);
+      assertTrue("Record does not match expectations.", checkRecordsEqual(record, recordFromStore));
       recordFromStore = namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
           GetOption.Include_All).get();
-      assertEquals("Record does not match expectations.", record, recordFromStore);
+      assertTrue("Record does not match expectations.", checkRecordsEqual(record, recordFromStore));
     }
 
     // deletes should be idempotent and additional delete calls should succeed
@@ -243,5 +244,12 @@ public class MySqlNamedBlobDbIntegrationTest {
         }
       }
     }
+  }
+
+  private boolean checkRecordsEqual(NamedBlobRecord record1, NamedBlobRecord record2) {
+    return Objects.equals(record1.getAccountName(), record2.getAccountName())
+        && Objects.equals(record1.getContainerName(), record2.getContainerName())
+        && Objects.equals(record1.getBlobName(), record2.getBlobName())
+        && Objects.equals(record1.getBlobId(), record2.getBlobId());
   }
 }

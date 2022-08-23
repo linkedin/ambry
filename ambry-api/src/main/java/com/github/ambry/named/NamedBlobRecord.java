@@ -112,7 +112,7 @@ public class NamedBlobRecord {
       return false;
     }
     NamedBlobRecord record = (NamedBlobRecord) o;
-    return Objects.equals(accountName, record.accountName)
+    return expirationTimeMs == record.expirationTimeMs && Objects.equals(accountName, record.accountName)
         && Objects.equals(containerName, record.containerName) && Objects.equals(blobName, record.blobName)
         && Objects.equals(blobId, record.blobId);
   }
