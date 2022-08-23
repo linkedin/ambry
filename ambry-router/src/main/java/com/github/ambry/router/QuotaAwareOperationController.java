@@ -196,8 +196,8 @@ public class QuotaAwareOperationController extends OperationController {
             break;
           case REJECT:
             quotaAvailable = false;
-            logger.warn("Rejecting request for quota resource {} because of reject recommendation.",
-                quotaResource.toString());
+            logger.warn(
+                "Rejecting request for quota resource {} because of reject recommendation.", quotaResource.toString());
             routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
             requestQueue.get(quotaResource).removeFirst();
@@ -253,9 +253,8 @@ public class QuotaAwareOperationController extends OperationController {
 
   @Override
   protected List<ResponseInfo> getNonQuotaCompliantResponses() {
-    List<ResponseInfo> nonCompliantResponses = nonCompliantRequests.stream()
-        .map(requestInfo -> new ResponseInfo(requestInfo, true))
-        .collect(Collectors.toList());
+    List<ResponseInfo> nonCompliantResponses = nonCompliantRequests.
+        stream().map(requestInfo -> new ResponseInfo(requestInfo, true)).collect(Collectors.toList());
     nonCompliantRequests.clear();
     return nonCompliantResponses;
   }
