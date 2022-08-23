@@ -188,6 +188,10 @@ public class AmbryCache {
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
     metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "NumCacheEntries"), (Gauge<Long>) ambryCache::estimatedSize);
+    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "EvictionCount"), (Gauge<Long>) () -> ambryCache.stats().evictionCount());
+    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "HitCount"), (Gauge<Long>) () -> ambryCache.stats().hitCount());
+    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MissCount"), (Gauge<Long>) () -> ambryCache.stats().missCount());
+    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "RequestCount"), (Gauge<Long>) () -> ambryCache.stats().requestCount());
     logger.info("[{}] Initialized metrics for cache", cacheId);
   }
 }
