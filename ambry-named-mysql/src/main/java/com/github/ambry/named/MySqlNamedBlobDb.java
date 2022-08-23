@@ -137,6 +137,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String.format("INSERT INTO %s (%s, %s, %4$s, %5$s, %6$s) VALUES (?, ?, ?, ?, ?)", NAMED_BLOBS, ACCOUNT_ID,
           CONTAINER_ID, BLOB_NAME, BLOB_ID, EXPIRES_TS);
 
+  private static final String INSERT_QUERY_V2 =
+      String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS, VERSION, BLOB_STATE);
+
   /**
    * If a record already exists for a named blob, attempt an update if the record in the DB represents an expired or
    * deleted blob.
@@ -144,9 +148,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String UPDATE_IF_DELETED_OR_EXPIRED_QUERY =
       String.format("UPDATE %s SET %s = ?, %s = ?, %s = null WHERE %s AND %s", NAMED_BLOBS, BLOB_ID, EXPIRES_TS,
           DELETED_TS, PK_MATCH, IS_DELETED_OR_EXPIRED);
-  private static final String INSERT_QUERY_V2 =
-      String.format("INSERT INTO %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          NAMED_BLOBS_V2, ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, BLOB_ID, DELETED_TS, VERSION, BLOB_STATE);
 
   /**
    * Find if there is currently a record present for a blob and acquire an exclusive lock in preparation for a delete.

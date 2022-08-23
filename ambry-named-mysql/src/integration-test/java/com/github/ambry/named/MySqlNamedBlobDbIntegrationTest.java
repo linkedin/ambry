@@ -136,10 +136,10 @@ public class MySqlNamedBlobDbIntegrationTest {
       NamedBlobRecord recordFromStore =
           namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
               GetOption.Include_Deleted_Blobs).get();
-      assertTrue("Record does not match expectations.", checkRecordsEqual(record, recordFromStore));
+      checkRecordsEqual(record, recordFromStore);
       recordFromStore = namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
           GetOption.Include_All).get();
-      assertTrue("Record does not match expectations.", checkRecordsEqual(record, recordFromStore));
+      checkRecordsEqual(record, recordFromStore);
     }
 
     // deletes should be idempotent and additional delete calls should succeed
@@ -246,10 +246,10 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
   }
 
-  private boolean checkRecordsEqual(NamedBlobRecord record1, NamedBlobRecord record2) {
-    return Objects.equals(record1.getAccountName(), record2.getAccountName())
-        && Objects.equals(record1.getContainerName(), record2.getContainerName())
-        && Objects.equals(record1.getBlobName(), record2.getBlobName())
-        && Objects.equals(record1.getBlobId(), record2.getBlobId());
+  private void checkRecordsEqual(NamedBlobRecord record1, NamedBlobRecord record2) {
+    assertEquals("AccountName mismatch", record1.getAccountName(), record2.getAccountName());
+    assertEquals("ContainerName mismatch", record1.getContainerName(), record2.getContainerName());
+    assertEquals("BlobName mismatch", record1.getBlobName(), record2.getBlobName());
+    assertEquals("BlobId mismatch", record1.getBlobId(), record2.getBlobId());
   }
 }
