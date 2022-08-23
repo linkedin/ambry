@@ -1803,7 +1803,7 @@ class GetBlobOperation extends GetOperation {
 
     @Override
     public boolean hasPrevious() {
-      // Since cursor point to the element to be read next, a value of 0 would mean first element hasn't been read yet
+      // Since cursor point to the element to be read next, a value of 0 would mean first element has not been read yet
       return cursor > 1;
     }
 
@@ -1884,11 +1884,11 @@ class GetBlobOperation extends GetOperation {
               // TODO have a partial read timeout in RouterConfig which can be compared with lastREadTimestamp to timeout failed operations.
               totalSizeSoFar+=size;
               if (Objects.equals(record.getStatus(), PartialPutStatus.SUCCESS.name())) {
-                // Only last chunk is marked as success during partial post. So we know that we have fetched all chunks.
+                // Only last chunk is marked as SUCCESS during partial post. Thus, we know that we have fetched all chunks.
                 setFetchedAllChunksCompleted();
               }
             } catch (IOException e) {
-              //handle exception
+              logger.error("Exception while converting blobId in fetchNextChunks(): " + e.getMessage());
             }
           }
           totalSize += totalSizeSoFar;
@@ -1906,6 +1906,8 @@ class GetBlobOperation extends GetOperation {
 
     private void setFetchedAllChunksCompleted() {
       fetchedAllChunks = true;
+      // After all chunks have been uploaded successfully, the blob info record is inserted in the db. Thus, when we
+      // can mark the partial read as completed, we query the blobInfo from MySql and assign it to the blobInfo field.
       getAndAssignBlobInfo(accountName, containerName, blobName);
     }
   }
