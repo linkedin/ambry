@@ -101,7 +101,7 @@ public class UndeleteManagerTest {
     NotificationSystem notificationSystem = new LoggingNotificationSystem();
     router =
         new NonBlockingRouter(routerConfig, metrics, networkClientFactory, notificationSystem, clusterMap, null, null,
-            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, null, vProps);
   }
 
   @Before

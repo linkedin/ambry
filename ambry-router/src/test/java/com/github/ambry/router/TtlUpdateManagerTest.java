@@ -104,7 +104,7 @@ public class TtlUpdateManagerTest {
             CHECKOUT_TIMEOUT_MS, serverLayout, time);
     router =
         new NonBlockingRouter(routerConfig, metrics, networkClientFactory, notificationSystem, clusterMap, null, null,
-            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+            null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, null, vProps);
     for (int i = 0; i < BLOBS_COUNT; i++) {
       ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(PUT_CONTENT));
       BlobProperties putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,

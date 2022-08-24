@@ -576,7 +576,7 @@ public class GetManagerTest {
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
         cryptoService, cryptoJobHandler, new InMemAccountService(false, true), mockTime,
-        MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+        MockClusterMap.DEFAULT_PARTITION_CLASS, null, vProps);
     resetEncryptionObjects();
     return router;
   }

@@ -59,6 +59,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
   private final String defaultPartitionClass;
+  private final VerifiableProperties verifiableProperties;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -113,6 +114,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     cryptoService = cryptoServiceFactory.getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
     defaultPartitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
+    this.verifiableProperties = verifiableProperties;
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 
@@ -131,7 +133,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
           blobMetadataCache.getCacheId(),
           routerConfig.routerSmallestBlobForMetadataCache);
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache);
+          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache,
+          verifiableProperties);
     } catch (IOException | ReflectiveOperationException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

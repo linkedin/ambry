@@ -153,7 +153,8 @@ public class GetBlobInfoOperationTest {
     }
     router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
-        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        null, vprops);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     blobProperties =
