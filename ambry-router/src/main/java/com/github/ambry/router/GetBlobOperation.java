@@ -32,6 +32,9 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.messageformat.MetadataContentSerDe;
+import com.github.ambry.named.PartialPutStatus;
+import com.github.ambry.named.PartiallyReadableBlobDb;
+import com.github.ambry.named.PartiallyReadableBlobRecord;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -42,6 +45,7 @@ import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
@@ -56,12 +60,15 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -126,6 +133,11 @@ class GetBlobOperation extends GetOperation {
   private CompositeBlobInfo compositeBlobInfo;
   // A cache for blob metadata of composite blobs
   private AmbryCache blobMetadataCache;
+  private RestRequest restRequest;
+  private PartiallyReadableBlobDb partiallyReadableBlobDb;
+  private boolean isPartiallyReadableBlob = false;
+  // whether all chunks have been fetched in MySQL in partial read case
+  private boolean fetchedAllChunks;
 
   /**
    * Construct a GetBlobOperation
@@ -158,6 +170,31 @@ class GetBlobOperation extends GetOperation {
     this.blobMetadataCache = blobMetadataCache;
     BlobMetadata blobMetadata =
         shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
+    firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
+  }
+
+  /**
+   * Construct a GetBlobOperation for a partially readable blob
+   * @param partiallyReadableBlobDb the database instance to insert and retrieve the intermediate chunks of the blob.
+   */
+  GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
+      Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache,
+      PartiallyReadableBlobDb partiallyReadableBlobDb) {
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
+        cryptoJobHandler, time, isEncrypted);
+    this.routerCallback = routerCallback;
+    this.blobIdFactory = blobIdFactory;
+    this.quotaChargeCallback = quotaChargeCallback;
+    this.blobMetadataCache = blobMetadataCache;
+    BlobMetadata blobMetadata =
+        shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
+    this.isPartiallyReadableBlob = true;
+    this.partiallyReadableBlobDb = partiallyReadableBlobDb;
+    this.restRequest = options.getBlobOptions.getRestRequest();
+    // create the firstGetChunk instance last after all fields have been initialized
     firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
   }
 
@@ -451,6 +488,48 @@ class GetBlobOperation extends GetOperation {
 
   MessageFormatFlags getFirstChunkOperationFlag() {
     return firstChunk.getOperationFlag();
+  }
+
+  private PartiallyReadableBlobDb getPartiallyReadableBlobDb() throws RestServiceException {
+    if (partiallyReadableBlobDb == null) {
+      throw new RestServiceException("Partially readable blob support not enabled", RestServiceErrorCode.BadRequest);
+    }
+    return partiallyReadableBlobDb;
+  }
+
+  /**
+   * The method with only keep records that are in consecutive orders and the first record in the list also has to be
+   * consecutive to the maxValueSoFar. For example, the maxValueSoFar is 1, and list is [2,3,4,6,7] then it would return
+   * [2,3,4]. If the maxValueSoFar is 2 and the list is [4,5,6], it will return an empty list because 4 is not
+   * consecutive to 2.
+   * @param list a list of {@link PartiallyReadableBlobRecord}
+   * @param maxValueSoFar the max offset that has been read so far
+   * @return list of {@link PartiallyReadableBlobRecord} with consecutive chunk offset.
+   */
+  static List<PartiallyReadableBlobRecord> getConsecutive(List<PartiallyReadableBlobRecord> list, long maxValueSoFar) {
+    List<PartiallyReadableBlobRecord> result = new ArrayList<>();
+    long expectElement = maxValueSoFar + 1;
+    for(PartiallyReadableBlobRecord record : list) {
+      if(record.getChunkOffset() == expectElement) {
+        result.add(record);
+        expectElement++;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Get the {@link BlobInfo} associated with the blob name from MySQL and assign it to the blobInfo
+   */
+  void getAndAssignBlobInfo(String accountName, String containerName, String blobName) {
+    try {
+      BlobInfo partiallyReadableBlobInfo = getPartiallyReadableBlobDb().getBlobInfo(accountName, containerName, blobName,
+          restRequest);
+      blobInfo = partiallyReadableBlobInfo;
+    }
+    catch (RestServiceException e) {
+      logger.error("Exception in getAndAssignBlobInfo(): " + e.getMessage());
+    }
   }
 
   // ReadableStreamChannel implementation:
@@ -1908,6 +1987,160 @@ class GetBlobOperation extends GetOperation {
             resolvedByteRange.getEndOffset());
         initializeDataChunks();
       }
+    }
+  }
+
+  class MySqlListItr implements ListIterator<CompositeBlobInfo.ChunkMetadata> {
+    private final List<CompositeBlobInfo.ChunkMetadata> parentList;
+    private final String accountName;
+    private final String containerName;
+    private final String blobName;
+    // max chunk offset that has been read so far by the GET operation
+    private long maxConsecutiveOffsetSoFar;
+    // cursor points to the element index to be read next
+    private int cursor;
+
+    public MySqlListItr(List<CompositeBlobInfo.ChunkMetadata> parentList, String accountName,
+        String containerName, String blobName, long maxConsecutiveOffsetSoFar) {
+      this.parentList = parentList;
+      this.accountName = accountName;
+      this.containerName = containerName;
+      this.blobName = blobName;
+      this.maxConsecutiveOffsetSoFar = maxConsecutiveOffsetSoFar;
+      this.cursor = 0;
+    }
+
+    @Override
+    public boolean hasNext() {
+      if (listHasNext()) {
+        return true;
+      } else {
+        if (!fetchedAllChunks) {
+          fetchNextChunks();
+        }
+        return listHasNext();
+      }
+    }
+
+    @Override
+    public CompositeBlobInfo.ChunkMetadata next() {
+      if (!listHasNext()) {
+        // Returning exception because the expectation is to not call next() without getting true from hasNext()
+        throw new NoSuchElementException();
+      }
+      CompositeBlobInfo.ChunkMetadata nextChunkInfo = parentList.get(cursor);
+      cursor++;
+      return nextChunkInfo;
+    }
+
+    @Override
+    public boolean hasPrevious() {
+      // Since cursor point to the element to be read next, a value of 0 would mean first element has not been read yet
+      return cursor > 1;
+    }
+
+    @Override
+    public CompositeBlobInfo.ChunkMetadata previous() {
+      if (cursor <= 1) {
+        throw new NoSuchElementException();
+      }
+      return parentList.get(cursor-1);
+    }
+
+    @Override
+    public int nextIndex() {
+      if (!listHasNext()) {
+        // Returning exception because the expectation is to not call nextIndex() without getting true from hasNext()
+        throw new NoSuchElementException();
+      }
+      return cursor;
+    }
+
+    @Override
+    public int previousIndex() {
+      if (cursor <= 1) {
+        throw new NoSuchElementException();
+      }
+      return cursor - 1;
+    }
+
+    @Override
+    public void remove() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void set(CompositeBlobInfo.ChunkMetadata e) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void add(CompositeBlobInfo.ChunkMetadata e) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * @return if the current parentList still hasNext()
+     */
+    private boolean listHasNext() {
+      return (parentList.size() > 0 && cursor < parentList.size());
+    }
+
+    /**
+     * Fetch the list of chunks from MySql that have offset greater than or equal to the max offset so far
+     */
+    private void fetchNextChunks() {
+      try {
+        List<PartiallyReadableBlobRecord> records =
+            getPartiallyReadableBlobDb().get(accountName, containerName, blobName, maxConsecutiveOffsetSoFar + 1);
+        // if first time query there are no chunks in partial table then return not found to users
+        if (records.size() == 0 && maxConsecutiveOffsetSoFar == -1) {
+          operationException.set(new RouterException("GetOperation failed because of BlobNotFound",
+              RouterErrorCode.BlobDoesNotExist));
+          return;
+        }
+        records = getConsecutive(records, maxConsecutiveOffsetSoFar);
+        if (records.size() > 0) {
+          long totalSizeSoFar = 0L;
+          for (PartiallyReadableBlobRecord record : records) {
+            try {
+              StoreKey blobId = new BlobId(record.getChunkId(), clusterMap);
+              long offset = record.getChunkOffset();
+              maxConsecutiveOffsetSoFar++;
+              if (maxConsecutiveOffsetSoFar != offset) {
+                throw new IllegalStateException("illegal state");
+              }
+              long size = record.getChunkSize();
+              parentList.add(new CompositeBlobInfo.ChunkMetadata(blobId, offset, size));
+              numChunksTotal++;
+              // TODO have a partial read timeout in RouterConfig which can be compared with lastREadTimestamp to timeout failed operations.
+              totalSizeSoFar+=size;
+              if (Objects.equals(record.getStatus(), PartialPutStatus.SUCCESS.name())) {
+                // Only last chunk is marked as SUCCESS during partial post. Thus, we know that we have fetched all chunks.
+                setFetchedAllChunksCompleted();
+              }
+            } catch (IOException e) {
+              logger.error("Exception while converting blobId in fetchNextChunks(): " + e.getMessage());
+            }
+          }
+          totalSize += totalSizeSoFar;
+        } else {
+          records = getPartiallyReadableBlobDb().get(accountName, containerName, blobName, maxConsecutiveOffsetSoFar);
+          if (records.size() == 1 && Objects.equals(records.get(0).getStatus(), PartialPutStatus.SUCCESS.name())) {
+            // We have already read the chunk with offset maxConsecutiveOffsetSoFar before, so we have nothing more to read
+            setFetchedAllChunksCompleted();
+          }
+        }
+      } catch (RestServiceException e) {
+        logger.error("Exception in fetchNextChunks(): " + e.getMessage());
+      }
+    }
+
+    private void setFetchedAllChunksCompleted() {
+      fetchedAllChunks = true;
+      // After all chunks have been uploaded successfully, the blob info record is inserted in the db. Thus, when we
+      // can mark the partial read as completed, we query the blobInfo from MySql and assign it to the blobInfo field.
+      getAndAssignBlobInfo(accountName, containerName, blobName);
     }
   }
 }
