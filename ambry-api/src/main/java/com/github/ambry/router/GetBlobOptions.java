@@ -34,6 +34,8 @@ public class GetBlobOptions {
   private final boolean rawMode;
   private final int blobSegmentIdx;
   private final RestRequest restRequest;
+  // Indicating whether the request is for a partially readable blob
+  private final boolean isPartiallyReadableBlob;
   public static final int NO_BLOB_SEGMENT_IDX_SPECIFIED = -1;
 
   /**
@@ -50,7 +52,7 @@ public class GetBlobOptions {
    * @param restRequest the {@link RestRequest} that triggered this get operation.
    */
   GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean resolveRangeOnEmptyBlob,
-      boolean rawMode, int blobSegmentIdx, RestRequest restRequest) {
+      boolean rawMode, int blobSegmentIdx, RestRequest restRequest, boolean isPartiallyReadableBlob) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }
@@ -67,6 +69,7 @@ public class GetBlobOptions {
     this.rawMode = rawMode;
     this.blobSegmentIdx = blobSegmentIdx;
     this.restRequest = restRequest;
+    this.isPartiallyReadableBlob = isPartiallyReadableBlob;
   }
 
   /**
@@ -126,6 +129,13 @@ public class GetBlobOptions {
     return restRequest;
   }
 
+  /**
+   * @return whether the request is for a partially readable blob
+   */
+  public boolean isPartiallyReadableBlob() {
+    return isPartiallyReadableBlob;
+  }
+
   @Override
   public String toString() {
     return "GetBlobOptions{operationType=" + operationType + ", getOption=" + getOption + ", range=" + range
@@ -143,12 +153,14 @@ public class GetBlobOptions {
     GetBlobOptions that = (GetBlobOptions) o;
     return resolveRangeOnEmptyBlob == that.resolveRangeOnEmptyBlob && rawMode == that.rawMode
         && blobSegmentIdx == that.blobSegmentIdx && operationType == that.operationType && getOption == that.getOption
+        && isPartiallyReadableBlob == that.isPartiallyReadableBlob
         && Objects.equals(range, that.range) && Objects.equals(restRequest, that.restRequest);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx, restRequest);
+    return Objects.hash(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx, restRequest,
+         isPartiallyReadableBlob);
   }
 
   /**

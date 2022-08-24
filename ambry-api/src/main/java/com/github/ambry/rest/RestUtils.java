@@ -272,6 +272,11 @@ public class RestUtils {
      * Request header to carry {@link StatsReportType} for GetStatsReport request.
      */
     public final static String GET_STATS_REPORT_TYPE = "x-ambry-stats-type";
+
+    /**
+     * Request header to indicate whether the blob is partially readable by other clients.
+     */
+    public final static String IS_PARTIALLY_READABLE = "x-ambry-partial-read-supported";
   }
 
   public static final class TrackingHeaders {
@@ -639,6 +644,14 @@ public class RestUtils {
   public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource,
       GetOption getOption, RestRequest restRequest, int blobSegmentIdx) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
+    boolean isPartiallyReadableBlob = false;
+    String containsPartialReadSupportedHeader = getHeader(args, Headers.IS_PARTIALLY_READABLE, false);
+    boolean isNamedBlobRequest = restRequest.getRestMethod() == RestMethod.GET && RestUtils.getRequestPath(restRequest)
+        .matchesOperation(Operations.NAMED_BLOB);
+
+    if (Objects.equals(containsPartialReadSupportedHeader, "true") && isNamedBlobRequest) {
+      isPartiallyReadableBlob = true;
+    }
     if (subResource != null && !subResource.equals(SubResource.Segment) && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.",
           RestServiceErrorCode.InvalidArgs);
@@ -652,6 +665,7 @@ public class RestUtils {
         .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
         .resolveRangeOnEmptyBlob(resolveRangeOnEmptyBlob)
         .restRequest(restRequest)
+        .isPartiallyReadableBlob(isPartiallyReadableBlob)
         .build();
   }
 
