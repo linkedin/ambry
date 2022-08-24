@@ -27,6 +27,7 @@ public class PutBlobOptions {
   private final boolean chunkUpload;
   private final long maxUploadSize;
   private final RestRequest restRequest;
+  private boolean isPartiallyReadableBlob;
 
   /**
    * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
@@ -34,10 +35,11 @@ public class PutBlobOptions {
    * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
    * @param restRequest The {@link RestRequest} that triggered this put operation.
    */
-  public PutBlobOptions(boolean chunkUpload, long maxUploadSize, RestRequest restRequest) {
+  public PutBlobOptions(boolean chunkUpload, long maxUploadSize, RestRequest restRequest, boolean isPartiallyReadableBlob) {
     this.chunkUpload = chunkUpload;
     this.maxUploadSize = maxUploadSize;
     this.restRequest = restRequest;
+    this.isPartiallyReadableBlob = isPartiallyReadableBlob;
   }
 
   /**
@@ -60,6 +62,10 @@ public class PutBlobOptions {
    */
   public RestRequest getRestRequest() {
     return restRequest;
+  }
+
+  public boolean isPartiallyReadableBlob() {
+    return isPartiallyReadableBlob;
   }
 
   @Override

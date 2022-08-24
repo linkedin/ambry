@@ -32,6 +32,7 @@ public class GetBlobOptionsBuilder {
   private boolean rawMode = false;
   private RestRequest restRequest = null;
   private int blobSegmentIdx = NO_BLOB_SEGMENT_IDX_SPECIFIED;
+  private boolean isPartiallyReadableBlob = false;
 
   /**
    * @param operationType the {@link GetBlobOptions.OperationType} for this request.
@@ -100,11 +101,16 @@ public class GetBlobOptionsBuilder {
     return this;
   }
 
+  public GetBlobOptionsBuilder isPartiallyReadableBlob(boolean isPartiallyReadableBlob) {
+    this.isPartiallyReadableBlob = isPartiallyReadableBlob;
+    return this;
+  }
+
   /**
    * @return the {@link GetBlobOptions} built.
    */
   public GetBlobOptions build() {
     return new GetBlobOptions(operationType, getOption, range, resolveRangeOnEmptyBlob, rawMode, blobSegmentIdx,
-        restRequest);
+        restRequest, isPartiallyReadableBlob);
   }
 }
