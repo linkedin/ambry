@@ -101,8 +101,6 @@ public class NamedBlobRecord {
     return expirationTimeMs;
   }
 
-  /** To handle the merge of expires_ts to deleted_ts properly, do not compare expirationTimeMs
-   */
   @Override
   public boolean equals(Object o) {
     if (this == o) {
