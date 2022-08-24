@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.replication.FindToken;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -104,6 +105,10 @@ public interface Store {
    * @throws StoreException
    */
   MessageInfo findKey(StoreKey key) throws StoreException;
+
+  default List<MessageInfo> findAllMessageInfoForKey(StoreKey key) throws StoreException {
+    return Collections.singletonList(findKey(key));
+  }
 
   /**
    * Get the corresponding {@link StoreStats} instance for this store.

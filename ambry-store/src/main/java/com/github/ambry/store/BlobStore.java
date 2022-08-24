@@ -47,6 +47,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -958,6 +959,30 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public List<MessageInfo> findAllMessageInfoForKey(StoreKey key) throws StoreException {
+    checkStarted();
+    final Timer.Context context = metrics.findKeyResponse.time();
+    try {
+      List<IndexValue> values = index.findAllIndexValuesForKey(key, null);
+      if (values == null) {
+        return Collections.emptyList();
+      }
+      return values.stream()
+          .map(value -> new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
+              value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
+              value.getLifeVersion()))
+          .collect(Collectors.toList());
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Override
   public StoreStats getStoreStats() {
     return blobStoreStats;
   }
@@ -976,6 +1001,10 @@ public class BlobStore implements Store {
     } finally {
       context.stop();
     }
+  }
+
+  public PersistentIndex getIndex() {
+    return index;
   }
 
   @Override

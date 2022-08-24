@@ -47,7 +47,7 @@ import static com.github.ambry.account.Container.*;
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  */
-class IndexValue implements Comparable<IndexValue> {
+public class IndexValue implements Comparable<IndexValue> {
 
   enum Flags {
     Delete_Index, Ttl_Update_Index, Undelete_Index
@@ -141,7 +141,7 @@ class IndexValue implements Comparable<IndexValue> {
         offset = new Offset(logSegmentName, value.getLong());
         flags = value.get();
         expiresAt = value.getInt();
-        expiresAtMs = expiresAt != Utils.Infinite_Time && expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
+        expiresAtMs = expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
             : Utils.Infinite_Time;
         originalMessageOffset = value.getLong();
         operationTimeInSecs = value.getInt();
