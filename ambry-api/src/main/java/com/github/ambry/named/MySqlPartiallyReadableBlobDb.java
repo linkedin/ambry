@@ -123,7 +123,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
           long lastUpdatedTs = resultSet.getLong(5);
 
           if (status.equals(PartialPutStatus.ERROR.name())) {
-            throw buildException("Error occurred during the POST process", RestServiceErrorCode.InternalServerError,
+            throw buildException("Error occurred during the PUT process", RestServiceErrorCode.InternalServerError,
                 accountName, containerName, blobName);
           }
           chunksRecord.add(new PartiallyReadableBlobRecord(accountName, containerName, blobName, chunkId, chunkOffset,
