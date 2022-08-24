@@ -19,9 +19,13 @@ import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.MySqlPartiallyReadableBlobDbConfig;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.MySqlPartiallyReadableBlobDb;
+import com.github.ambry.named.PartiallyReadableBlobDb;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
@@ -69,6 +73,9 @@ class NonBlockingRouter implements Router {
   private final Cache<String, Boolean> notFoundCache;
   private final AmbryCache blobMetadataCache;
 
+  // DB for uploading partially readable blob
+  private final PartiallyReadableBlobDb partiallyReadableBlobDb;
+
   /**
    * Constructs a NonBlockingRouter.
    * @param routerConfig the configs for the router.
@@ -91,7 +98,8 @@ class NonBlockingRouter implements Router {
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
+      AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache,
+      VerifiableProperties verifiableProperties)
       throws IOException, ReflectiveOperationException {
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
@@ -127,6 +135,8 @@ class NonBlockingRouter implements Router {
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
     routerMetrics.initializeQuotaOCMetrics(ocList);
+    MySqlPartiallyReadableBlobDbConfig dbConfig = new MySqlPartiallyReadableBlobDbConfig(verifiableProperties);
+    this.partiallyReadableBlobDb = new MySqlPartiallyReadableBlobDb(dbConfig);
   }
 
   /**

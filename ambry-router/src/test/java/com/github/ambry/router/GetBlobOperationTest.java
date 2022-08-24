@@ -260,7 +260,7 @@ public class GetBlobOperationTest {
             routerConfig.routerMaxNumMetadataCacheEntries, routerMetrics.getMetricRegistry());
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
-        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, blobMetadataCache);
+        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, blobMetadataCache, vprops);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
     routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>());
   }

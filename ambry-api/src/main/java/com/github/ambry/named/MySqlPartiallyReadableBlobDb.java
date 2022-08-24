@@ -2,6 +2,7 @@ package com.github.ambry.named;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.config.MySqlPartiallyReadableBlobDbConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.RestRequest;
@@ -21,9 +22,6 @@ import org.slf4j.LoggerFactory;
 public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
   private static final Logger logger = LoggerFactory.getLogger(MySqlPartiallyReadableBlobDb.class);
 
-  private static final String USERNAME = "root";
-  private static final String PASSWORD = "L!nhX!nh1803";
-  private static final String JDBC_URL = "jdbc:mysql://localhost:3306/partial?useSSL=false&serverTimezone=UTC";
   // table names
   private static final String BLOB_CHUNKS = "blob_chunks";
   private static final String BLOB_INFO = "blob_info";
@@ -78,14 +76,22 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
   private static final String INSERT_BLOB_INFO_QUERY = String.format("INSERT INTO %s (%s, %s, %s, %5$s, %6$s, %7$s) VALUES (?, ?, ?, ?, ?, ?)",
       BLOB_INFO, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME, BLOB_SIZE, SERVICE_ID, USER_METADATA);
 
-  public MySqlPartiallyReadableBlobDb() {}
+  private final String URL;
+  private final String USERNAME;
+  private final String PASSWORD;
+
+  public MySqlPartiallyReadableBlobDb(MySqlPartiallyReadableBlobDbConfig config) {
+    this.URL = config.url;
+    this.USERNAME = config.username;
+    this.PASSWORD = config.password;
+  }
 
   @Override
   public List<PartiallyReadableBlobRecord> get(String accountName, String containerName, String blobName,
       long startingChunkOffset) throws RestServiceException {
     List<PartiallyReadableBlobRecord> chunksRecord = new ArrayList<>();
 
-    try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
+    try (Connection connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
         PreparedStatement statement = connection.prepareStatement(GET_CHUNKS_QUERY)) {
 
       statement.setString(1, accountName);
@@ -119,7 +125,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
   @Override
   public void put(PartiallyReadableBlobRecord record) throws RestServiceException {
-    try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
+    try (Connection connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
         PreparedStatement statement = connection.prepareStatement(INSERT_CHUNK_QUERY)) {
 
       statement.setString(1, record.getAccountName());
@@ -156,7 +162,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
 
   @Override
   public void updateStatus(String accountName, String containerName, String blobName) throws RestServiceException{
-    try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
+    try (Connection connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
         PreparedStatement statement = connection.prepareStatement(UPDATE_STATUS_QUERY)) {
 
       statement.setString(1, PartialPutStatus.SUCCESS.name());
@@ -195,7 +201,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
     Account account = RestUtils.getAccountFromArgs(restRequest.getArgs());
     Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
 
-    try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
+    try (Connection connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
         PreparedStatement statement = connection.prepareStatement(GET_BLOB_INFO_QUERY)) {
 
       statement.setString(1, accountName);
@@ -226,7 +232,7 @@ public class MySqlPartiallyReadableBlobDb implements PartiallyReadableBlobDb {
   @Override
   public void putBlobInfo(String accountName, String containerName, String blobName, long blobSize, String serviceId,
       byte[] userMetadata) throws RestServiceException {
-    try (Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
+    try (Connection connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
         PreparedStatement statement = connection.prepareStatement(INSERT_BLOB_INFO_QUERY)) {
 
       statement.setString(1, accountName);
