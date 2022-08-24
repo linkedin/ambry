@@ -256,7 +256,7 @@ public class BlobStore implements Store {
                   metrics);
         }
         metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
-            config.storeEnableCurrentInvalidSizeMetric);
+            config.storeEnableCurrentInvalidSizeMetric, config.storeEnableIndexDirectMemoryUsageMetric);
         checkCapacityAndUpdateReplicaStatusDelegate();
         logger.trace("The store {} is successfully started", storeId);
         onSuccess("START");

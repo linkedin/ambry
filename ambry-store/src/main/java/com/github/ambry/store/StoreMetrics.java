@@ -20,6 +20,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -110,6 +111,8 @@ public class StoreMetrics {
   public final Timer statsRecentEntryQueueProcessTimeMs;
   public final Histogram statsRecentEntryQueueSize;
   public final Histogram statsForwardScanEntryCount;
+
+  private final ConcurrentHashMap<String, PersistentIndex> indexes = new ConcurrentHashMap<>();
 
   private final MetricRegistry registry;
 
@@ -246,7 +249,8 @@ public class StoreMetrics {
   }
 
   void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes,
-      BlobStoreStats blobStoreStats, boolean enableStoreCurrentInvalidSize) {
+      BlobStoreStats blobStoreStats, boolean enableStoreCurrentInvalidSize,
+      boolean enableStoreIndexDirectMemoryUsageMetric) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> currentCapacityUsed = index::getLogUsedCapacity;
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"), currentCapacityUsed);
@@ -258,6 +262,13 @@ public class StoreMetrics {
       Gauge<Long> currentInvalidDataSize =
           () -> index.getLogUsedCapacity() - blobStoreStats.getCachedValidSize().getSecond();
       registry.register(MetricRegistry.name(Log.class, prefix + "CurrentInvalidDataSize"), currentInvalidDataSize);
+    }
+    if (enableStoreIndexDirectMemoryUsageMetric) {
+      indexes.putIfAbsent(storeId, index);
+      Gauge<Long> indexDirectMemoryUsage =
+          () -> indexes.values().stream().mapToLong(PersistentIndex::getDirectMemoryUsage).sum();
+      registry.gauge(MetricRegistry.name(BlobStore.class, prefix + "IndexDirectMemoryUsage"),
+          () -> indexDirectMemoryUsage);
     }
   }
 
