@@ -317,7 +317,7 @@ class NonBlockingRouter implements Router {
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, options, futureResult, callback,
-          quotaChargeCallback);
+          quotaChargeCallback, partiallyReadableBlobDb);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);

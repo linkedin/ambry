@@ -20,6 +20,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.PartiallyReadableBlobDb;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
@@ -179,12 +180,12 @@ public class OperationController implements Runnable {
    */
   protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     if (!putManager.isOpen()) {
       handlePutManagerClosed(blobProperties, false, futureResult, callback);
     } else {
       putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, options, futureResult, callback,
-          quotaChargeCallback);
+          quotaChargeCallback, partiallyReadableBlobDb);
       routerCallback.onPollReady();
     }
   }
@@ -601,7 +602,7 @@ class BackgroundDeleter extends OperationController {
   @Override
   protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     RouterException routerException = new RouterException("Illegal attempt to put blob through BackgroundDeleter",
         RouterErrorCode.UnexpectedInternalError);
     routerMetrics.operationDequeuingRate.mark();

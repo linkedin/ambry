@@ -22,6 +22,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.PartiallyReadableBlobDb;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
@@ -144,12 +145,22 @@ class PutManager {
    */
   void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
       PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, PartiallyReadableBlobDb partiallyReadableBlobDb) {
     String partitionClass = getPartitionClass(blobProperties);
-    PutOperation putOperation =
-        PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
-            userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
-            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+    PutOperation putOperation;
+
+    // if this is a partially readable blob put request
+    if (options.isPartiallyReadableBlob()) {
+      putOperation =
+          PutOperation.forPartialUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
+              userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
+              cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback,
+              partiallyReadableBlobDb);
+    } else {
+      putOperation = PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
+          userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
+          cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+    }
     // TODO: netty send this request
     putOperations.add(putOperation);
     putOperation.startOperation();
