@@ -269,7 +269,7 @@ class NonBlockingRouter implements Router {
                 if (callback != null) {
                   callback.onCompletion(getBlobResult, exception);
                 }
-              }), quotaChargeCallback);
+              }), quotaChargeCallback, partiallyReadableBlobDb);
         }
       } else {
         boolean isEncrypted = false;
@@ -536,7 +536,7 @@ class NonBlockingRouter implements Router {
         .getOption(GetOption.Include_All)
         .build();
     GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, routerMetrics.ageAtDelete);
-    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback, quotaChargeCallback);
+    backgroundDeleter.getBlob(blobIdStr, optionsInternal, callback, quotaChargeCallback, partiallyReadableBlobDb);
   }
 
   /**

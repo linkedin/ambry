@@ -659,7 +659,7 @@ public class NonBlockingRouterTestBase {
           final FutureResult<GetBlobResultInternal> getFutureResult = new FutureResult<>();
           getManager.submitGetBlobOperation(blobId.getID(), new GetBlobOptionsInternal(
               new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
-              routerMetrics.ageAtGet), getFutureResult::done, null);
+              routerMetrics.ageAtGet), getFutureResult::done, null, null);
           futureResult = getFutureResult;
           break;
         case DELETE:

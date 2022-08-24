@@ -164,8 +164,9 @@ public class OperationController implements Runnable {
    * @param callback The callback which will be invoked on the completion of the request.
    */
   protected void getBlob(String blobIdStr, GetBlobOptionsInternal options,
-      final Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
-    getManager.submitGetBlobOperation(blobIdStr, options, callback, quotaChargeCallback);
+      final Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback,
+      PartiallyReadableBlobDb partiallyReadableBlobDb) throws RouterException {
+    getManager.submitGetBlobOperation(blobIdStr, options, callback, quotaChargeCallback, partiallyReadableBlobDb);
     routerCallback.onPollReady();
   }
 
@@ -326,7 +327,7 @@ public class OperationController implements Runnable {
           .build();
       GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, helper.getMetrics());
       try {
-        getBlob(blobIdStr, optionsInternal, internalCallback, quotaChargeCallback);
+        getBlob(blobIdStr, optionsInternal, internalCallback, quotaChargeCallback, null);
       } catch (RouterException e) {
         helper.getCompleteOperationAtException().accept(e);
       }
