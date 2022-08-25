@@ -85,6 +85,7 @@ public class IndexTest {
   private final CuratedLogIndexState state;
   private final CuratedLogIndexState stateForTokenTest;
   private final short persistentIndexVersion;
+  private final boolean addUndeletes;
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private static final Logger logger = LoggerFactory.getLogger(IndexTest.class);
@@ -97,8 +98,10 @@ public class IndexTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, PersistentIndex.VERSION_2}, {true, PersistentIndex.VERSION_2},
-        {true, PersistentIndex.VERSION_3}, {true, PersistentIndex.VERSION_4}});
+    return Arrays.asList(
+        new Object[][]{{false, PersistentIndex.VERSION_2, false}, {true, PersistentIndex.VERSION_2, false},
+            {true, PersistentIndex.VERSION_3, true}, {true, PersistentIndex.VERSION_3, false},
+            {true, PersistentIndex.VERSION_4, true}, {true, PersistentIndex.VERSION_4, false}});
   }
 
   /**
@@ -106,13 +109,18 @@ public class IndexTest {
    * @throws IOException
    * @throws StoreException
    */
-  public IndexTest(boolean isLogSegmented, short persistentIndexVersion) throws IOException, StoreException {
+  public IndexTest(boolean isLogSegmented, short persistentIndexVersion, boolean addUndeletes)
+      throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("indexDir-" + TestUtils.getRandomString(10));
     tokenTestDir = StoreTestUtils.createTempDirectory("tokenTestDir-" + TestUtils.getRandomString(10));
     this.persistentIndexVersion = persistentIndexVersion;
     PersistentIndex.CURRENT_VERSION = persistentIndexVersion;
-    boolean addUndeletes = PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3;
+    this.addUndeletes = addUndeletes;
+    if (addUndeletes) {
+      Assert.assertTrue("Undelete records require persistent index version to be 3 and above",
+          PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3);
+    }
     state = new CuratedLogIndexState(isLogSegmented, tempDir, true, addUndeletes);
     stateForTokenTest = new CuratedLogIndexState(true, tokenTestDir, true, addUndeletes, true);
   }
@@ -457,8 +465,7 @@ public class IndexTest {
    */
   @Test
   public void undeleteBasicTest() throws StoreException {
-    assumeTrue(isLogSegmented);
-    assumeTrue(PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3);
+    assumeTrue(isLogSegmented && addUndeletes);
     // Get deleted key that hasn't been TTLUpdated
     StoreKey targetKey = null;
     for (StoreKey key : state.deletedKeys) {
@@ -495,7 +502,7 @@ public class IndexTest {
    */
   @Test
   public void markAsUndeleteLifeVersion() throws Exception {
-    assumeTrue(isLogSegmented && PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3);
+    assumeTrue(isLogSegmented && addUndeletes);
     short lifeVersion = 2;
     IndexEntry entry = state.addPutEntries(1, PUT_RECORD_SIZE, 0, lifeVersion).get(0);
     MockId id = (MockId) entry.getKey();
@@ -579,7 +586,7 @@ public class IndexTest {
    */
   @Test
   public void markAsUndeletedBadInputTest() throws StoreException {
-    assumeTrue(isLogSegmented && PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3);
+    assumeTrue(isLogSegmented && addUndeletes);
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     try {
@@ -2740,7 +2747,7 @@ public class IndexTest {
     infos.add(new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, id.getAccountId(),
         id.getContainerId(), state.time.milliseconds()));
 
-    if (PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3) {
+    if (addUndeletes) {
       // There are 5 UNDELETE  2 DELETE  2 TTL_UPDATE  1 PUT
       state.appendToLog(
           5 * UNDELETE_RECORD_SIZE + 2 * DELETE_RECORD_SIZE + 2 * TTL_UPDATE_RECORD_SIZE + PUT_RECORD_SIZE);
