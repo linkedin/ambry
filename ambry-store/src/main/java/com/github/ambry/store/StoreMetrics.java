@@ -265,8 +265,15 @@ public class StoreMetrics {
     }
     if (enableStoreIndexDirectMemoryUsageMetric) {
       indexes.putIfAbsent(storeId, index);
-      Gauge<Long> indexDirectMemoryUsage =
-          () -> indexes.values().stream().mapToLong(PersistentIndex::getDirectMemoryUsage).sum();
+      Gauge<Long> indexDirectMemoryUsage = () -> {
+        long start = System.nanoTime();
+        long usage = indexes.values().stream().mapToLong(PersistentIndex::getDirectMemoryUsage).sum();
+        if (logger.isTraceEnabled()) {
+          logger.trace("Time to get direct memory usage from persistent index is: {} nano seconds",
+              System.nanoTime() - start);
+        }
+        return usage;
+      };
       registry.gauge(MetricRegistry.name(BlobStore.class, prefix + "IndexDirectMemoryUsage"),
           () -> indexDirectMemoryUsage);
     }
