@@ -53,7 +53,7 @@ public class BlobIndexAdminRequest extends AdminRequest {
     super(AdminRequestOrResponseType.BlobIndex, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.blobId = blobId;
-    this.sizeInBytes = super.sizeInBytes() + BLOB_ID_LENGTH + blobId.length();
+    this.sizeInBytes = super.sizeInBytes() + Short.BYTES + BLOB_ID_LENGTH + blobId.length();
   }
 
   /**
@@ -70,8 +70,8 @@ public class BlobIndexAdminRequest extends AdminRequest {
 
   @Override
   public String toString() {
-    return "BlobIndexAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
-        + ", BlobId=" + blobId + "]";
+    return "BlobIndexAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId + ", BlobId=" + blobId
+        + "]";
   }
 
   @Override
