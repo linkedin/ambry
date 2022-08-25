@@ -227,8 +227,8 @@ class PersistentIndex {
     this.incarnationId = incarnationId;
     this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
     this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
-    if (config.storeCompactionFilter
-        == BlobStoreCompactor.IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName()) {
+    if (config.storeCompactionFilter.equals(
+        BlobStoreCompactor.IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName())) {
       logger.info("Undelete is not enabled, DELETE is considered as the final state of a blob");
       isDeleteFinalStateOfBlob = true;
     } else {
