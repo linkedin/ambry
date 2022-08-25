@@ -126,6 +126,8 @@ class PersistentIndex {
   private static final Logger logger = LoggerFactory.getLogger(PersistentIndex.class);
   private final IndexPersistor persistor = new IndexPersistor();
   private final ScheduledFuture<?> persistorTask;
+  // When undelete is enabled, DELETE is not the final state of the blob, since a DELETEd blob can be UNDELTEd.
+  private final boolean isDeleteFinalStateOfBlob;
 
   // ReadWriteLock to make sure index values are always pointing to valid log segments.
   // In compaction's final steps, persistent index and log will update their internal maps to reflect the result of
@@ -225,6 +227,13 @@ class PersistentIndex {
     this.incarnationId = incarnationId;
     this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
     this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
+    if (config.storeCompactionFilter
+        == BlobStoreCompactor.IndexSegmentValidEntryFilterWithoutUndelete.class.getSimpleName()) {
+      logger.info("Undelete is not enabled, DELETE is considered as the final state of a blob");
+      isDeleteFinalStateOfBlob = true;
+    } else {
+      isDeleteFinalStateOfBlob = false;
+    }
 
     List<File> indexFiles = getAllIndexSegmentFiles();
     try {
@@ -1443,8 +1452,8 @@ class PersistentIndex {
     UUID remoteIncarnationId = storeToken.getIncarnationId();
     // if incarnationId is null, for backwards compatibility purposes, the token is considered as good.
     /// if not null, we check for a match
-    if (!storeToken.getType().equals(FindTokenType.Uninitialized) && remoteIncarnationId != null && !remoteIncarnationId
-        .equals(incarnationId)) {
+    if (!storeToken.getType().equals(FindTokenType.Uninitialized) && remoteIncarnationId != null
+        && !remoteIncarnationId.equals(incarnationId)) {
       // incarnationId mismatch, hence resetting the token to beginning
       logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
           + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
@@ -1947,8 +1956,11 @@ class PersistentIndex {
     ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator();
     while (messageEntriesIterator.hasNext()) {
       MessageInfo messageInfo = messageEntriesIterator.next();
-      // for all the message info, we use most recent ref even for delete. since a deleted entry can be undeleted.
-      // ok to use most recent ref
+      // If the message is already deleted and DELETE is the final state of the blob, then we don't have
+      // to update the state for this message.
+      if (isDeleteFinalStateOfBlob && messageInfo.isDeleted()) {
+        continue;
+      }
       IndexValue indexValue = findKey(messageInfo.getStoreKey(), null,
           EnumSet.of(IndexEntryType.TTL_UPDATE, IndexEntryType.DELETE, IndexEntryType.UNDELETE));
       if (indexValue != null) {
@@ -2310,10 +2322,12 @@ class PersistentIndex {
         // If not segmented, log name is log_current
         // index name has the format of <offset>_index, for example 0_index, 265_index
         // In this case, input parameter logSegmentName == ""
-        if (logSegmentName.toString().isEmpty())
+        if (logSegmentName.toString().isEmpty()) {
           return name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
-        else
-          return name.startsWith(logSegmentName.toString()+BlobStore.SEPARATOR) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+        } else {
+          return name.startsWith(logSegmentName.toString() + BlobStore.SEPARATOR) && name.endsWith(
+              IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+        }
       }
     });
   }
@@ -2329,11 +2343,14 @@ class PersistentIndex {
     File[] filesToCleanup = new File(dataDir).listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
-        if (logSegmentName.toString().isEmpty())
-          return (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
-        else
-          return name.startsWith(logSegmentName.toString()+BlobStore.SEPARATOR) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
-              || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        if (logSegmentName.toString().isEmpty()) {
+          return (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
+              IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        } else {
+          return name.startsWith(logSegmentName.toString() + BlobStore.SEPARATOR) && (
+              name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
+                  IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        }
       }
     });
     if (filesToCleanup == null) {
