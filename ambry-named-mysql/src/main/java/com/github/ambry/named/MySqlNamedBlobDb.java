@@ -25,10 +25,14 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetryExecutor;
 import com.github.ambry.commons.RetryPolicies;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
+import com.github.ambry.config.MySqlPartiallyReadableBlobDbConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
@@ -252,7 +256,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
-      GetOption option) {
+      GetOption option, boolean isPartiallyReadableBlob) {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
@@ -269,7 +273,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         } catch (Exception e) {
           if (e instanceof RestServiceException &&
               ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
-            metricsRecoder.namedDataNotFoundGetCount.inc();
+            if (isPartiallyReadableBlob) {
+              // return a dummy named blob record to process partial read
+              return new NamedBlobRecord(accountName, containerName, blobName, "AAYQAf____8AAQAAAAAAAAAAL4zAy7llR3ePC76iHweoUw", System.currentTimeMillis());
+            }
+            else {
+              metricsRecoder.namedDataNotFoundGetCount.inc();
+            }
           } else {
             logger.error("NAMED GET: Data Error: old table succeed while new table failed: ", e);
             metricsRecoder.namedDataErrorGetCount.inc();
@@ -304,7 +314,20 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, RestRequest restRequest, BlobInfo blobInfo,
+      VerifiableProperties verifiableProperties, boolean isPartiallyReadableBlob) {
+    if (isPartiallyReadableBlob) {
+      PartiallyReadableBlobDb db = new MySqlPartiallyReadableBlobDb(new MySqlPartiallyReadableBlobDbConfig(verifiableProperties));
+      try {
+        db.putBlobInfo(record.getAccountName(), record.getContainerName(), record.getBlobName(), restRequest.getBlobBytesReceived(),
+            blobInfo.getBlobProperties().getServiceId(), blobInfo.getUserMetadata());
+        db.updateStatus(record.getAccountName(), record.getContainerName(), record.getBlobName());
+      }
+      catch (RestServiceException e) {
+        logger.error(e.getMessage() + "; account='" + record.getAccountName() + "', container='" + record.getContainerName()
+            + "', name='" + record.getBlobName() + "'");
+      }
+    }
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();

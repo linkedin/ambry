@@ -134,10 +134,10 @@ public class MySqlNamedBlobDbIntegrationTest {
           RestServiceErrorCode.Deleted);
       NamedBlobRecord recordFromStore =
           namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-              GetOption.Include_Deleted_Blobs).get();
+              GetOption.Include_Deleted_Blobs, false).get();
       assertEquals("Record does not match expectations.", record, recordFromStore);
       recordFromStore = namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-          GetOption.Include_All).get();
+          GetOption.Include_All, false).get();
       assertEquals("Record does not match expectations.", record, recordFromStore);
     }
 
@@ -195,10 +195,10 @@ public class MySqlNamedBlobDbIntegrationTest {
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
         RestServiceErrorCode.Deleted);
     NamedBlobRecord recordFromStore =
-        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_All).get();
+        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_All, false).get();
     assertEquals("Record does not match expectations.", record, recordFromStore);
     recordFromStore =
-        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_Expired_Blobs).get();
+        namedBlobDb.get(account.getName(), container.getName(), blobName, GetOption.Include_Expired_Blobs, false).get();
     assertEquals("Record does not match expectations.", record, recordFromStore);
 
     // replacement should succeed

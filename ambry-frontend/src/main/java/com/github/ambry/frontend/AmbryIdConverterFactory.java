@@ -47,17 +47,19 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
   private final IdSigningService idSigningService;
   private final NamedBlobDb namedBlobDb;
   private final FrontendMetrics frontendMetrics;
+  private final VerifiableProperties verifiableProperties;
 
   public AmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       IdSigningService idSigningService, NamedBlobDb namedBlobDb) {
     this.idSigningService = idSigningService;
     this.namedBlobDb = namedBlobDb;
     frontendMetrics = new FrontendMetrics(metricRegistry, new FrontendConfig(verifiableProperties));
+    this.verifiableProperties = verifiableProperties;
   }
 
   @Override
   public IdConverter getIdConverter() {
-    return new AmbryIdConverter(idSigningService, namedBlobDb, frontendMetrics);
+    return new AmbryIdConverter(idSigningService, namedBlobDb, frontendMetrics, verifiableProperties);
   }
 
   private static class AmbryIdConverter implements IdConverter {
@@ -65,11 +67,14 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private final IdSigningService idSigningService;
     private final NamedBlobDb namedBlobDb;
     private final FrontendMetrics frontendMetrics;
+    private final VerifiableProperties verifiableProperties;
 
-    AmbryIdConverter(IdSigningService idSigningService, NamedBlobDb namedBlobDb, FrontendMetrics frontendMetrics) {
+    AmbryIdConverter(IdSigningService idSigningService, NamedBlobDb namedBlobDb, FrontendMetrics frontendMetrics,
+        VerifiableProperties verifiableProperties) {
       this.idSigningService = idSigningService;
       this.namedBlobDb = namedBlobDb;
       this.frontendMetrics = frontendMetrics;
+      this.verifiableProperties = verifiableProperties;
     }
 
     @Override
@@ -154,6 +159,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private CompletionStage<String> convertId(String input, RestRequest restRequest, BlobInfo blobInfo)
         throws RestServiceException {
       CompletionStage<String> conversionFuture;
+      String containsPartialReadSupportedHeader = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.IS_PARTIALLY_READABLE, false);
+      boolean isPartiallyReadableBlob = Objects.equals(containsPartialReadSupportedHeader, "true");
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
@@ -163,7 +170,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
         } else {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);
+              namedBlobPath.getBlobName(), getOption, isPartiallyReadableBlob).thenApply(NamedBlobRecord::getBlobId);
         }
       } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB)) {
@@ -175,7 +182,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
-        conversionFuture = getNamedBlobDb().put(record).thenApply(result -> result.getInsertedRecord().getBlobId());
+        conversionFuture = getNamedBlobDb().put(record, restRequest, blobInfo, verifiableProperties, isPartiallyReadableBlob).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);

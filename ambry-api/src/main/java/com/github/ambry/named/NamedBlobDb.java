@@ -14,8 +14,11 @@
  */
 package com.github.ambry.named;
 
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.RestRequest;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -33,7 +36,8 @@ public interface NamedBlobDb {
    * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
    *         blob or an exception if an error occurred.
    */
-  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option);
+  CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option,
+      boolean isPartiallyReadableBlob);
 
   /**
    * Look up a {@link NamedBlobRecord} by name.
@@ -44,7 +48,7 @@ public interface NamedBlobDb {
    *         blob or an exception if an error occurred.
    */
   default CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
-    return get(accountName, containerName, blobName, GetOption.None);
+    return get(accountName, containerName, blobName, GetOption.None, false);
   }
 
   /**
@@ -68,7 +72,18 @@ public interface NamedBlobDb {
    * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
    *         occurred.
    */
-  CompletableFuture<PutResult> put(NamedBlobRecord record);
+  CompletableFuture<PutResult> put(NamedBlobRecord record, RestRequest restRequest, BlobInfo blobInfo, VerifiableProperties verifiableProperties,
+      boolean isPartiallyReadableBlob);
+
+  /**
+   * Persist a {@link NamedBlobRecord} in the database.
+   * @param record the {@link NamedBlobRecord}
+   * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
+   *         occurred.
+   */
+  default CompletableFuture<PutResult> put(NamedBlobRecord record) {
+    return put(record, null, null, null, false);
+  };
 
   /**
    * Delete a record for a blob in the database.

@@ -14,11 +14,14 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.commons.FutureUtils;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Pair;
@@ -52,7 +55,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName,
-      GetOption option) {
+      GetOption option, boolean isPartiallyReadableBlob) {
     CompletableFuture<NamedBlobRecord> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
@@ -121,7 +124,8 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, RestRequest restRequest, BlobInfo blobInfo,
+      VerifiableProperties verifiableProperties, boolean isPartiallyReadableBlob) {
     CompletableFuture<PutResult> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
