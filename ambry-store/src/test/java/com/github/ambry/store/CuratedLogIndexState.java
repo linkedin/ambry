@@ -208,6 +208,11 @@ class CuratedLogIndexState {
     properties.put("store.deleted.message.retention.hours", Integer.toString(CuratedLogIndexState.deleteRetentionHour));
     properties.put("store.rebuild.token.based.on.reset.key", Boolean.toString(enableResetKey));
     properties.put("store.auto.close.last.log.segment.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
+    if (addUndeletes) {
+      // If we have undelete, than we need undelete filter
+      properties.put("store.compaction.filter",
+          BlobStoreCompactor.IndexSegmentValidEntryFilterWithUndelete.class.getSimpleName());
+    }
     // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
     time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
     initIndex(null);
