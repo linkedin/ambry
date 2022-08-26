@@ -78,8 +78,8 @@ public class HelixParticipantTest {
 
   @BeforeClass
   public static void initialize() throws IOException {
-    zkInfoList.add(new ZkInfo(null, dcName, (byte) 0, 2199, true));
     String tempDirPath = getTempDir("HelixParticipantTest-");
+    zkInfoList.add(new ZkInfo("/tmp/" + tempDirPath, dcName, (byte) 0, 2199, true));
     System.out.println(tempDirPath);
     hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";

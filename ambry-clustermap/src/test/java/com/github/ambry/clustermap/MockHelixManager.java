@@ -19,6 +19,7 @@ import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -196,8 +197,11 @@ class MockHelixManager implements HelixManager {
    */
   void triggerLiveInstanceNotification(boolean init) {
     List<LiveInstance> liveInstances = new ArrayList<>();
-    for (String instance : mockAdmin.getUpInstances()) {
-      liveInstances.add(new LiveInstance(instance));
+    ListIterator<String> it = mockAdmin.getUpInstances().listIterator();
+    while (it.hasNext()) {
+      ZNRecord znRecord = new ZNRecord(it.next());
+      znRecord.setEphemeralOwner(it.nextIndex()+1);
+      liveInstances.add(new LiveInstance(znRecord));
     }
     NotificationContext notificationContext = new NotificationContext(this);
     if (init) {
