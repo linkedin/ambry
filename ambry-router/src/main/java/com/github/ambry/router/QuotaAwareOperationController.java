@@ -221,9 +221,10 @@ public class QuotaAwareOperationController extends OperationController {
     Timer.Context timer = routerMetrics.pollExceedAllowedRequestTime.time();
     List<QuotaResource> quotaResources = new ArrayList<>(requestQueue.keySet());
     Collections.shuffle(quotaResources);
-    List<QuotaResource> quotaResourcesRemoved = new ArrayList<>();
     while (!requestQueue.isEmpty()) {
-      for (QuotaResource quotaResource : quotaResources) {
+      Iterator<QuotaResource> iter = quotaResources.listIterator();
+      while(iter.hasNext()) {
+        QuotaResource quotaResource = iter.next();
         RequestInfo requestInfo = requestQueue.get(quotaResource).getFirst();
         QuotaAction quotaAction = requestInfo.getChargeable().checkAndCharge(true);
         switch (quotaAction) {
@@ -241,12 +242,9 @@ public class QuotaAwareOperationController extends OperationController {
         requestQueue.get(quotaResource).removeFirst();
         if (requestQueue.get(quotaResource).isEmpty()) {
           requestQueue.remove(quotaResource);
-          // This quotaResource has exhausted, we should remove it from next for loop
-          quotaResourcesRemoved.add(quotaResource);
+          iter.remove();
         }
       }
-      quotaResources.removeAll(quotaResourcesRemoved);
-      quotaResourcesRemoved.clear();
     }
     timer.stop();
   }
