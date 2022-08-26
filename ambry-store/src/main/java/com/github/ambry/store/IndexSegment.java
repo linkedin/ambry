@@ -351,6 +351,22 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
+   * @return The direct memory usage for this Index Segment in bytes.
+   */
+  long getDirectMemoryUsage() {
+    rwLock.readLock().lock();
+    try {
+      if (sealed.get() && config.storeIndexMemState == IndexMemState.IN_DIRECT_MEM) {
+        return serEntries.capacity();
+      } else {
+        return 0;
+      }
+    } finally {
+      rwLock.readLock().unlock();
+    }
+  }
+
+  /**
    * @return life version of reset key.
    */
   short getResetKeyLifeVersion() throws StoreException {

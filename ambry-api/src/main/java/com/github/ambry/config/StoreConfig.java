@@ -429,6 +429,12 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeEnableCurrentInvalidSizeMetric;
 
+  @Config(storeEnableIndexDirectMemoryUsageMetricName)
+  @Default("false")
+  public final boolean storeEnableIndexDirectMemoryUsageMetric;
+  public static final String storeEnableIndexDirectMemoryUsageMetricName =
+      "store.enable.index.direct.memory.usage.metric";
+
   @Config(storeAlwaysEnableTargetIndexDuplicateCheckingName)
   @Default("false")
   public final boolean storeAlwaysEnableTargetIndexDuplicateChecking;
@@ -541,8 +547,10 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.io.error.count.to.trigger.shutdown", Integer.MAX_VALUE, 1,
             Integer.MAX_VALUE);
     storeSetFilePermissionEnabled = verifiableProperties.getBoolean("store.set.file.permission.enabled", false);
-    storeAutoCloseLastLogSegmentEnabled = verifiableProperties.getBoolean(storeAutoCloseLastLogSegmentEnabledName, false);
-    storeUnsealReplicaMinimumLagBytes = verifiableProperties.getLongInRange(storeUnsealReplicaMinimumLagBytesName, 0, 0, Long.MAX_VALUE);
+    storeAutoCloseLastLogSegmentEnabled =
+        verifiableProperties.getBoolean(storeAutoCloseLastLogSegmentEnabledName, false);
+    storeUnsealReplicaMinimumLagBytes =
+        verifiableProperties.getLongInRange(storeUnsealReplicaMinimumLagBytesName, 0, 0, Long.MAX_VALUE);
     String storeDataFilePermissionStr = verifiableProperties.getString("store.data.file.permission", "rw-rw----");
     storeDataFilePermission = PosixFilePermissions.fromString(storeDataFilePermissionStr);
     String storeOperationFilePermissionStr =
@@ -560,6 +568,8 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.enable.bucket.for.log.segment.reports", false);
     storeEnableCurrentInvalidSizeMetric =
         verifiableProperties.getBoolean("store.enable.current.invalid.size.metric", false);
+    storeEnableIndexDirectMemoryUsageMetric =
+        verifiableProperties.getBoolean(storeEnableIndexDirectMemoryUsageMetricName, false);
     storeAlwaysEnableTargetIndexDuplicateChecking =
         verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
     storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);

@@ -1531,6 +1531,13 @@ class PersistentIndex {
   }
 
   /**
+   * @return The direct memory usage for this persistent index in bytes.
+   */
+  long getDirectMemoryUsage() {
+    return validIndexSegments.values().stream().mapToLong(IndexSegment::getDirectMemoryUsage).sum();
+  }
+
+  /**
    * @return absolute end position (in bytes) of latest PUT record when this method is invoked. If no PUT is found in
    *         current store, -1 will be returned.
    * @throws StoreException
