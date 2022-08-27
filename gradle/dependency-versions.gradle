@@ -33,4 +33,6 @@ ext {
     jimFsVersion = "1.1"
     mysqlConnectorVersion = "8.0.21"
     hikariVersion = "3.4.5"
+    lz4Version = "1.8.0"
+    zstdVersion = "1.5.2-3"
 }

@@ -14,10 +14,10 @@
 package com.github.ambry.utils;
 
 import com.github.ambry.clustermap.HelixVcrUtil;
-import com.github.ambry.server.StatsReportType;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -31,9 +31,12 @@ import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.zookeeper.zkclient.ZkServer;
@@ -502,5 +505,60 @@ public class TestUtils {
       }
     }
     return true;
+  }
+
+  /**
+   * Call a method by name using reflection, such as private method, and return the exception thrown.
+   * @param instance The private method instance.
+   * @param methodName Name of the method to call, such as the private method name.
+   * @param parameters The parameters.
+   * @return The exception thrown by the method.  Null if call did not throw exception.
+   * @throws ExecutionException if failed to invoke the method.  The method is not expected to throw this exception.
+   */
+  public static Throwable invokeAndGetException(Object instance, String methodName, Object... parameters)
+      throws ExecutionException {
+    try {
+      MethodUtils.invokeMethod(instance, true, methodName, parameters);
+      return null;
+    }
+    catch (InvocationTargetException ex) {
+      // Return the exception that was thrown.
+      return ex.getCause();
+    }
+    catch (Exception ex) {
+      throw new ExecutionException("Error invoking the method.", ex);
+    }
+  }
+
+  /**
+   * Invoke a lambda function and return the exception thrown by the function.
+   * Returns null if no exception is thrown.
+   * @param function The lambda function to run.
+   * @return The exception thrown.
+   */
+  public static Exception invokeAndGetException(Runnable function) {
+    try {
+      function.run();
+      return null;
+    }
+    catch (Exception ex) {
+      return ex;
+    }
+  }
+
+  /**
+   * Invoke a supplier function and return the exception thrown by the function.
+   * Returns null if no exception is thrown.
+   * @param function The supplier function to run.
+   * @return The exception thrown.
+   */
+  public static <T> Exception invokeAndGetException(Supplier<T> function) {
+    try {
+      function.get();
+      return null;
+    }
+    catch (Exception ex) {
+      return ex;
+    }
   }
 }

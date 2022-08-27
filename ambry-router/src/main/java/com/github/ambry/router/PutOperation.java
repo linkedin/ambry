@@ -1335,6 +1335,7 @@ class PutOperation {
       if (updateMetric) {
         routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
       }
+
       if (!passedInBlobProperties.isEncrypted()) {
         prepareForSending();
         chunkReadyAtMs = time.milliseconds();
