@@ -534,7 +534,7 @@ public class AmbryServerRequests extends AmbryRequests {
     try {
       String blobIdStr = blobIndexAdminRequest.getBlobId();
       blobId = new BlobId(blobIdStr, clusterMap);
-    } catch (IOException e) {
+    } catch (Exception e) {
       logger.error("Failed to convert {} to a BlobId", blobIndexAdminRequest.getBlobId(), e);
       return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Bad_Request, null);
     }

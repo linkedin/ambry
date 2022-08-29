@@ -449,7 +449,7 @@ final class ServerTestUtil {
       });
       assertEquals(0, messages.size());
 
-      // Do this test for a partition which is not present this host
+      // Do this test for a fake partit
       MockPartitionId fakePartition = new MockPartitionId(123456, "FAKE");
       BlobId fakeBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           properties.getAccountId(), properties.getContainerId(), fakePartition, false, BlobId.BlobDataType.DATACHUNK);
@@ -458,7 +458,7 @@ final class ServerTestUtil {
       stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
       adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
-      assertEquals(ServerErrorCode.Partition_Not_Here, adminResponseWithContent.getError());
+      assertEquals(ServerErrorCode.Bad_Request, adminResponseWithContent.getError());
 
       // Do this test for a mal-formatted blobid
       blobIndexAdminRequest = new BlobIndexAdminRequest("Mal-formattedId",
@@ -467,6 +467,23 @@ final class ServerTestUtil {
       adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.Bad_Request, adminResponseWithContent.getError());
+
+      // Do this test for a partition that doesn't exist in the datanode
+      List<ReplicaId> replicaIdsOnGeneralDataNode = clusterMap.getReplicaIds(cluster.getGeneralDataNode());
+      Set<PartitionId> partitionIdsOnGeneralDataNode =
+          replicaIdsOnGeneralDataNode.stream().map(ReplicaId::getPartitionId).collect(Collectors.toSet());
+      List<PartitionId> allPartitionIds = clusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+      PartitionId targetPartitionId =
+          allPartitionIds.stream().filter(pid -> !partitionIdsOnGeneralDataNode.contains(pid)).findFirst().get();
+      fakeBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), targetPartitionId, false,
+          BlobId.BlobDataType.DATACHUNK);
+      blobIndexAdminRequest = new BlobIndexAdminRequest(fakeBlobId.getID(),
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, targetPartitionId, 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Partition_Not_Here, adminResponseWithContent.getError());
 
       // fetch blob that does not exist
       // get blob properties
