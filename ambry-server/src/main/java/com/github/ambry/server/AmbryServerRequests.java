@@ -547,7 +547,7 @@ public class AmbryServerRequests extends AmbryRequests {
       Collections.sort(messages, (m1, m2) -> (int) (m1.getOperationTimeMs() - m2.getOperationTimeMs()));
       // Serialize with JSON
       ObjectMapper objectMapper = new ObjectMapper();
-      String json = objectMapper.writeValueAsString(messages);
+      String json = objectMapper.writeValueAsString("Something bood");
       return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, json.getBytes());
     } catch (StoreException e) {
       logger.error("Failed to find all message infos for given key {}", blobId, e);
