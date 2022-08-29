@@ -13,6 +13,9 @@
  */
 package com.github.ambry.store;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.github.ambry.utils.Utils;
 import java.util.Objects;
 
@@ -20,6 +23,7 @@ import java.util.Objects;
 /**
  * A message info class that contains basic info about a message
  */
+@JsonDeserialize(builder=MessageInfo.Builder.class)
 public class MessageInfo {
 
   // The life version when the operation is triggered by the requests from frontend.
@@ -307,6 +311,8 @@ public class MessageInfo {
   /**
    * A builder class for {@link MessageInfo}.
    */
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  @JsonPOJOBuilder(withPrefix = "")
   public static class Builder {
     private StoreKey key;
     private short accountId;
@@ -320,6 +326,12 @@ public class MessageInfo {
     private boolean isUndeleted = false;
     private Long crc = null;
     private short lifeVersion = 0;
+
+    /**
+     * Empty constructor for jackson library
+     */
+    public Builder() {
+    }
 
     /**
      * Constructor to create a builder.

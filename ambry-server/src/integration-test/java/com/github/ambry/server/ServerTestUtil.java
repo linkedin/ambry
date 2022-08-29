@@ -104,6 +104,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
@@ -421,6 +422,7 @@ final class ServerTestUtil {
           adminResponseWithContent.getError());
       byte[] jsonBytes = adminResponseWithContent.getContent();
       ObjectMapper objectMapper = new ObjectMapper();
+      StoreKeyJacksonConfig.setupObjeckMapper(objectMapper, new BlobIdFactory(clusterMap));
       List<MessageInfo> messages = objectMapper.readValue(jsonBytes, new TypeReference<List<MessageInfo>>() {
       });
       // We should have two message info
