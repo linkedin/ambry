@@ -150,7 +150,7 @@ subprojects {
         // Allow for retrying flaky integration tests.
         retry {
             // The maximum number of times to retry an individual test
-            maxRetries = 3
+            maxRetries = 0
             // The maximum number of test failures that are allowed (per module) before retrying is disabled. The count applies to
             // each round of test execution. For example, if maxFailures is 5 and 4 tests initially fail and then 3
             // again on retry, this will not be considered too many failures and retrying will continue (if maxRetries {@literal >} 1).

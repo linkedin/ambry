@@ -14,6 +14,8 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -70,6 +72,8 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.DeleteRequest;
@@ -114,6 +118,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -406,26 +412,26 @@ final class ServerTestUtil {
       checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId2, data, true, Utils.Infinite_Time);
 
       // Now get the blob index values
-      //BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId2.getID(),
-      //    new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
-      //stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
-      //AdminResponseWithContent adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
-      //releaseNettyBufUnderneathStream(stream);
-      //byte[] jsonBytes = adminResponseWithContent.getContent();
-      //ObjectMapper objectMapper = new ObjectMapper();
-      //List<MessageInfo> messages = objectMapper.readValue(jsonBytes, new TypeReference<List<MessageInfo>>() {
-      //});
-      //// We should have two message info
-      //// first one is the creation of the blob id2 and second one if the ttl update for the blob id2
-      //assertEquals(2, messages.size());
-      //// First one should be PUT
-      //assertEquals(false, messages.get(0).isDeleted());
-      //assertEquals(false, messages.get(0).isTtlUpdated());
-      //assertEquals(false, messages.get(0).isUndeleted());
-      //// Second one should be ttlupdate
-      //assertEquals(false, messages.get(1).isDeleted());
-      //assertEquals(true, messages.get(1).isTtlUpdated());
-      //assertEquals(false, messages.get(1).isUndeleted());
+      BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId2.getID(),
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      AdminResponseWithContent adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      byte[] jsonBytes = adminResponseWithContent.getContent();
+      ObjectMapper objectMapper = new ObjectMapper();
+      List<MessageInfo> messages = objectMapper.readValue(jsonBytes, new TypeReference<List<MessageInfo>>() {
+      });
+      // We should have two message info
+      // first one is the creation of the blob id2 and second one if the ttl update for the blob id2
+      assertEquals(2, messages.size());
+      // First one should be PUT
+      assertEquals(false, messages.get(0).isDeleted());
+      assertEquals(false, messages.get(0).isTtlUpdated());
+      assertEquals(false, messages.get(0).isUndeleted());
+      // Second one should be ttlupdate
+      assertEquals(false, messages.get(1).isDeleted());
+      assertEquals(true, messages.get(1).isTtlUpdated());
+      assertEquals(false, messages.get(1).isUndeleted());
 
       //// Do this test for blob id 5, which is not uploaded yet. we should be getting empty list, without error
       //blobIndexAdminRequest = new BlobIndexAdminRequest(blobId5.getID(),
@@ -620,8 +626,10 @@ final class ServerTestUtil {
       releaseNettyBufUnderneathStream(stream);
       channel.disconnect();
     } catch (Exception e) {
-      e.printStackTrace();
-      assertNull(e);
+      StringWriter sw = new StringWriter();
+      PrintWriter pw = new PrintWriter(sw);
+      e.printStackTrace(pw);
+      assertNull(e.getMessage() + "\n" + sw.toString(), e);
     } finally {
       List<? extends ReplicaId> replicaIds = cluster.getClusterMap()
           .getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
