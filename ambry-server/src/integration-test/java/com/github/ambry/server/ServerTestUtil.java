@@ -422,7 +422,7 @@ final class ServerTestUtil {
           adminResponseWithContent.getError());
       byte[] jsonBytes = adminResponseWithContent.getContent();
       ObjectMapper objectMapper = new ObjectMapper();
-      StoreKeyJacksonConfig.setupObjeckMapper(objectMapper, new BlobIdFactory(clusterMap));
+      StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
       List<MessageInfo> messages = objectMapper.readValue(jsonBytes, new TypeReference<List<MessageInfo>>() {
       });
       // We should have two message info
@@ -434,7 +434,7 @@ final class ServerTestUtil {
       assertEquals(false, messages.get(0).isUndeleted());
       // Second one should be ttlupdate
       assertEquals(false, messages.get(1).isDeleted());
-      assertEquals(true, messages.get(1).isTtlUpdated());
+      assertEquals(new String(jsonBytes), true, messages.get(1).isTtlUpdated());
       assertEquals(false, messages.get(1).isUndeleted());
 
       // Do this test for blob id 5, which is not uploaded yet. we should be getting empty list, without error

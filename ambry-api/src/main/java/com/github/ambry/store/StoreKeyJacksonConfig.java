@@ -81,7 +81,7 @@ public class StoreKeyJacksonConfig {
    * @param objectMapper The {@link ObjectMapper}.
    * @param storeKeyFactory The {@link StoreKeyFactory}.
    */
-  public static void setupObjeckMapper(ObjectMapper objectMapper, StoreKeyFactory storeKeyFactory) {
+  public static void setupObjectMapper(ObjectMapper objectMapper, StoreKeyFactory storeKeyFactory) {
     SimpleModule module = new SimpleModule();
     module.addDeserializer(StoreKey.class, new StoreKeyDeserializer(storeKeyFactory));
     module.addSerializer(StoreKey.class, new StoreKeySerializer());

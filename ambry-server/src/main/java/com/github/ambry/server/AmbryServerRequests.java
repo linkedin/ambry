@@ -116,7 +116,7 @@ public class AmbryServerRequests extends AmbryRequests {
         RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
-    StoreKeyJacksonConfig.setupObjeckMapper(objectMapper, new BlobIdFactory(clusterMap));
+    StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
   }
 
   /**

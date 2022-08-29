@@ -172,7 +172,7 @@ public class MessageInfoTest {
   @Test
   public void testJsonSerialization() throws Exception {
     ObjectMapper objectMapper = new ObjectMapper();
-    StoreKeyJacksonConfig.setupObjeckMapper(objectMapper, new MockIdFactory());
+    StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new MockIdFactory());
     short accountId = 100, containerId = 1000;
     StoreKey key = new MockId(TestUtils.getRandomString(10), accountId, containerId);
     long size = 12345;
