@@ -417,7 +417,8 @@ final class ServerTestUtil {
       stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
       AdminResponseWithContent adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
-      assertEquals(ServerErrorCode.No_Error, adminResponseWithContent.getError());
+      assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.No_Error,
+          adminResponseWithContent.getError());
       byte[] jsonBytes = adminResponseWithContent.getContent();
       ObjectMapper objectMapper = new ObjectMapper();
       List<MessageInfo> messages = objectMapper.readValue(jsonBytes, new TypeReference<List<MessageInfo>>() {

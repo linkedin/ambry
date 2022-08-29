@@ -518,6 +518,7 @@ public class AmbryServerRequests extends AmbryRequests {
     final int correlationId = adminRequest.getCorrelationId();
     final String clientId = adminRequest.getClientId();
     BlobIndexAdminRequest blobIndexAdminRequest = null;
+    String errorMessage = null;
     try {
       blobIndexAdminRequest = BlobIndexAdminRequest.readFrom(requestStream, adminRequest);
     } catch (IOException e) {
@@ -550,10 +551,12 @@ public class AmbryServerRequests extends AmbryRequests {
       return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, json.getBytes());
     } catch (StoreException e) {
       logger.error("Failed to find all message infos for given key {}", blobId, e);
+      errorMessage = e.getMessage();
     } catch (IOException e) {
       logger.error("Failed to serialize to json string", e);
+      errorMessage = e.getMessage();
     }
-    return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Unknown_Error, null);
+    return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Unknown_Error, errorMessage.getBytes());
   }
 
   /**
