@@ -437,36 +437,36 @@ final class ServerTestUtil {
       assertEquals(true, messages.get(1).isTtlUpdated());
       assertEquals(false, messages.get(1).isUndeleted());
 
-      //// Do this test for blob id 5, which is not uploaded yet. we should be getting empty list, without error
-      //blobIndexAdminRequest = new BlobIndexAdminRequest(blobId5.getID(),
-      //    new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
-      //stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
-      //adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
-      //releaseNettyBufUnderneathStream(stream);
-      //jsonBytes = adminResponseWithContent.getContent();
-      //objectMapper = new ObjectMapper();
-      //messages = objectMapper.readValue(jsonBytes, new TypeReference<List<MessageInfo>>() {
-      //});
-      //assertEquals(0, messages.size());
+      // Do this test for blob id 5, which is not uploaded yet. we should be getting empty list, without error
+      blobIndexAdminRequest = new BlobIndexAdminRequest(blobId5.getID(),
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      jsonBytes = adminResponseWithContent.getContent();
+      objectMapper = new ObjectMapper();
+      messages = objectMapper.readValue(jsonBytes, new TypeReference<List<MessageInfo>>() {
+      });
+      assertEquals(0, messages.size());
 
-      //// Do this test for a partition which is not present this host
-      //MockPartitionId fakePartition = new MockPartitionId(123456, "FAKE");
-      //BlobId fakeBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-      //    properties.getAccountId(), properties.getContainerId(), fakePartition, false, BlobId.BlobDataType.DATACHUNK);
-      //blobIndexAdminRequest = new BlobIndexAdminRequest(fakeBlobId.getID(),
-      //    new AdminRequest(AdminRequestOrResponseType.BlobIndex, fakePartition, 1, "clientid2"));
-      //stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
-      //adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
-      //releaseNettyBufUnderneathStream(stream);
-      //assertEquals(ServerErrorCode.Partition_Not_Here, adminResponseWithContent.getError());
+      // Do this test for a partition which is not present this host
+      MockPartitionId fakePartition = new MockPartitionId(123456, "FAKE");
+      BlobId fakeBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), fakePartition, false, BlobId.BlobDataType.DATACHUNK);
+      blobIndexAdminRequest = new BlobIndexAdminRequest(fakeBlobId.getID(),
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, fakePartition, 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Partition_Not_Here, adminResponseWithContent.getError());
 
-      //// Do this test for a mal-formatted blobid
-      //blobIndexAdminRequest = new BlobIndexAdminRequest("Mal-formattedId",
-      //    new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
-      //stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
-      //adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
-      //releaseNettyBufUnderneathStream(stream);
-      //assertEquals(ServerErrorCode.Bad_Request, adminResponseWithContent.getError());
+      // Do this test for a mal-formatted blobid
+      blobIndexAdminRequest = new BlobIndexAdminRequest("Mal-formattedId",
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Bad_Request, adminResponseWithContent.getError());
 
       // fetch blob that does not exist
       // get blob properties
@@ -526,12 +526,12 @@ final class ServerTestUtil {
       assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Replica_Unavailable,
           deleteResponse.getError());
       // get the blobIndex from a stopped
-      //blobIndexAdminRequest = new BlobIndexAdminRequest(blobId2.getID(),
-      //    new AdminRequest(AdminRequestOrResponseType.BlobIndex, blobId2.getPartition(), 1, "clientid2"));
-      //stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
-      //adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
-      //releaseNettyBufUnderneathStream(stream);
-      //assertEquals(ServerErrorCode.Unknown_Error, adminResponseWithContent.getError());
+      blobIndexAdminRequest = new BlobIndexAdminRequest(blobId2.getID(),
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, blobId2.getPartition(), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Unknown_Error, adminResponseWithContent.getError());
 
       // start the store via AdminRequest
       System.out.println("Begin to restart the BlobStore");

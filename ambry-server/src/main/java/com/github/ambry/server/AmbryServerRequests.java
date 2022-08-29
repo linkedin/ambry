@@ -27,6 +27,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ServerConfig;
@@ -57,6 +58,7 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -95,6 +97,7 @@ public class AmbryServerRequests extends AmbryRequests {
   private final ClusterParticipant clusterParticipant;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
   AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
@@ -113,6 +116,7 @@ public class AmbryServerRequests extends AmbryRequests {
         RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
+    StoreKeyJacksonConfig.setupObjeckMapper(objectMapper, new BlobIdFactory(clusterMap));
   }
 
   /**
@@ -546,7 +550,6 @@ public class AmbryServerRequests extends AmbryRequests {
       List<MessageInfo> messages = store.findAllMessageInfoForKey(blobId);
       Collections.sort(messages, (m1, m2) -> (int) (m1.getOperationTimeMs() - m2.getOperationTimeMs()));
       // Serialize with JSON
-      ObjectMapper objectMapper = new ObjectMapper();
       String json = objectMapper.writeValueAsString(messages);
       return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, json.getBytes());
     } catch (StoreException e) {
