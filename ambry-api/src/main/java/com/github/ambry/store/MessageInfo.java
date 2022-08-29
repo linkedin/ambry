@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.github.ambry.utils.Utils;
@@ -441,6 +442,7 @@ public class MessageInfo {
      * @param isDeleted the isDeleted to set.
      * @return This builder.
      */
+    @JsonProperty("deleted")
     public Builder isDeleted(boolean isDeleted) {
       this.isDeleted = isDeleted;
       return this;
@@ -451,6 +453,7 @@ public class MessageInfo {
      * @param isTtlUpdated the isTtlUpdated to set.
      * @return This builder.
      */
+    @JsonProperty("ttlUpdated")
     public Builder isTtlUpdated(boolean isTtlUpdated) {
       this.isTtlUpdated = isTtlUpdated;
       return this;
@@ -461,6 +464,7 @@ public class MessageInfo {
      * @param isUndeleted the isUndeleted to set.
      * @return This builder.
      */
+    @JsonProperty("undeleted")
     public Builder isUndeleted(boolean isUndeleted) {
       this.isUndeleted = isUndeleted;
       return this;

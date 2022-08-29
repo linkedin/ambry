@@ -185,8 +185,17 @@ public class MessageInfoTest {
             lifeVersion);
 
     String jsonString = objectMapper.writeValueAsString(origin);
-    System.out.println(jsonString);
     MessageInfo deserialized = objectMapper.readValue(jsonString, MessageInfo.class);
+
+    checkGetters(deserialized, origin.getStoreKey(), origin.getSize(), origin.isDeleted(), origin.isTtlUpdated(),
+        origin.isUndeleted(), origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(),
+        origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    origin = new MessageInfo(key, size, true, true, true, expirationTime, crc, accountId, containerId, operationTime,
+        lifeVersion);
+
+    jsonString = objectMapper.writeValueAsString(origin);
+    deserialized = objectMapper.readValue(jsonString, MessageInfo.class);
 
     checkGetters(deserialized, origin.getStoreKey(), origin.getSize(), origin.isDeleted(), origin.isTtlUpdated(),
         origin.isUndeleted(), origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(),
