@@ -57,7 +57,7 @@ import org.slf4j.LoggerFactory;
  * recovering an index from the log and commit and recover index to disk . This class
  * is not thread safe and expects the caller to do appropriate synchronization.
  **/
-public class PersistentIndex {
+class PersistentIndex {
 
   /**
    * Represents the different types of index entries.
@@ -792,7 +792,7 @@ public class PersistentIndex {
    * @return The list of the {@link IndexValue}s for {@code key} conforming to one of the types {@code types}.
    * @throws StoreException any error.
    */
-  public List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan) throws StoreException {
+  List<IndexValue> findAllIndexValuesForKey(StoreKey key, FileSpan fileSpan) throws StoreException {
     return findAllIndexValuesForKey(key, fileSpan, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
   }
 

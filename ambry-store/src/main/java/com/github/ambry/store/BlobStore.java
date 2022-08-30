@@ -1003,10 +1003,6 @@ public class BlobStore implements Store {
     }
   }
 
-  public PersistentIndex getIndex() {
-    return index;
-  }
-
   @Override
   public long getSizeInBytes() {
     return index.getLogUsedCapacity();

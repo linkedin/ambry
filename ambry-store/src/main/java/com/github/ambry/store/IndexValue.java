@@ -47,7 +47,7 @@ import static com.github.ambry.account.Container.*;
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  */
-public class IndexValue implements Comparable<IndexValue> {
+class IndexValue implements Comparable<IndexValue> {
 
   enum Flags {
     Delete_Index, Ttl_Update_Index, Undelete_Index
