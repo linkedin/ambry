@@ -429,9 +429,10 @@ class SimpleOperationTracker implements OperationTracker {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
               + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-              + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {} {}",
+              + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {} {} "
+              + "replicasByState = {}",
           routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-          replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, getBlobIdLog());
+          replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, getBlobIdLog(), allDcReplicasByState);
       routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
       return true;
     }
@@ -460,9 +461,9 @@ class SimpleOperationTracker implements OperationTracker {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found. CrossColoEnabled: {}, DiskDownCount: {},"
               + "TotalNotFoundCount: {}, TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {},"
-              + "allReplicaCount: {} {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
+              + "allReplicaCount: {} {} replicasByState = {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
           totalNotFoundCount, totalReplicaCount, replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount,
-          getBlobIdLog());
+          getBlobIdLog(), allDcReplicasByState);
       routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
     }
