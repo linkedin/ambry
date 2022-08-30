@@ -543,8 +543,8 @@ public class AmbryServerRequests extends AmbryRequests {
       PartitionId partitionId = blobId.getPartition();
       Store store = storeManager.getStore(partitionId);
       if (store == null) {
-        logger.error("BlobId {}'s partition[{}] doesn't exist in this host", blobId, partitionId.getId());
-        return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Partition_Not_Here, null);
+        logger.error("BlobId {}'s partition[{}] doesn't exist or stopped in this host", blobId, partitionId.getId());
+        return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Replica_Unavailable, null);
       }
 
       List<MessageInfo> messages = store.findAllMessageInfoForKey(blobId);
@@ -559,7 +559,8 @@ public class AmbryServerRequests extends AmbryRequests {
       logger.error("Failed to serialize to json string", e);
       errorMessage = e.getMessage();
     }
-    return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Unknown_Error, errorMessage.getBytes());
+    return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Unknown_Error,
+        errorMessage.getBytes());
   }
 
   /**

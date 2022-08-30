@@ -531,7 +531,7 @@ final class ServerTestUtil {
       stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
       adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
-      assertEquals(ServerErrorCode.Unknown_Error, adminResponseWithContent.getError());
+      assertEquals(ServerErrorCode.Replica_Unavailable, adminResponseWithContent.getError());
 
       // start the store via AdminRequest
       System.out.println("Begin to restart the BlobStore");

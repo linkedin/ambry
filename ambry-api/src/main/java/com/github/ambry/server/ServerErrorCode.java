@@ -41,6 +41,5 @@ public enum ServerErrorCode {
   Blob_Life_Version_Conflict,
   Blob_Not_Deleted,
   Blob_Already_Undeleted,
-  Blob_Deleted_Permanently,
-  Partition_Not_Here
+  Blob_Deleted_Permanently
 }
