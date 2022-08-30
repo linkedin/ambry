@@ -56,3 +56,4 @@ public class ZstdCompressionTest {
     LZ4CompressionTest.runCompressionAndDecompressionTest(compression, "Test maximum compression using maximum level.");
   }
 }
+

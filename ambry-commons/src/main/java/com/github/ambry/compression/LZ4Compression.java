@@ -14,6 +14,7 @@
 package com.github.ambry.compression;
 
 import net.jpountz.lz4.LZ4Compressor;
+import net.jpountz.lz4.LZ4Decompressor;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
 
@@ -80,6 +81,14 @@ public class LZ4Compression extends BaseCompressionWithLevel {
   }
 
   /**
+   * Get the decompressor based on the compressor level.  For LZ4, the fast decompressor works for all levels.
+   * @return The decompressor.
+   */
+  private LZ4FastDecompressor getDecompressor() {
+    return LZ4_FACTORY.fastDecompressor();
+  }
+
+  /**
    * Given the source data size, what is the maximum or worst-case scenario compressed data size?
    * This is an estimate calculation.  The result is usually slightly larger than the sourceDataSize.
    *
@@ -122,8 +131,8 @@ public class LZ4Compression extends BaseCompressionWithLevel {
   protected void decompress(byte[] compressedBuffer, int compressedBufferOffset, byte[] sourceDataBuffer) {
     // This decompressor supports all compressors, LZ4 and LZ4 HC.
     try {
-      LZ4FastDecompressor decompressor = LZ4_FACTORY.fastDecompressor();
-      decompressor.decompress(compressedBuffer, compressedBufferOffset, sourceDataBuffer, 0, sourceDataBuffer.length);
+      getDecompressor().decompress(compressedBuffer, compressedBufferOffset,
+          sourceDataBuffer, 0, sourceDataBuffer.length);
     }
     catch (Exception ex) {
       throw new CompressionException("LZ4 decompression failed.", ex);

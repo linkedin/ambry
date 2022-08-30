@@ -14,6 +14,7 @@
 package com.github.ambry.compression;
 
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.TestUtils;
 import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
 import org.junit.Test;
@@ -55,14 +56,18 @@ public class CompressionFactoryTest {
     factory.register(lz4);
     factory.register(zstd);
 
-    // Compress the string using LZ4 and decompress using factory.
+    // Test: Invalid argument
+    Exception ex = TestUtils.invokeAndGetException(() -> factory.getDecompressor(new byte[0]));
+    Assert.assertTrue(ex instanceof IllegalArgumentException);
+
+    // Test: Compress the string using LZ4 and decompress using factory.
     String testMessage = "Ambry rocks.  Ambry is fast.  Ambry is the way to go.";
     byte[] testMessageBinary = testMessage.getBytes(StandardCharsets.UTF_8);
     Pair<Integer, byte[]> compressionResult = lz4.compress(testMessageBinary);
     byte[] decompressedData = decompressUsingFactory(factory, compressionResult);
     Assert.assertEquals(testMessage, new String(decompressedData, StandardCharsets.UTF_8));
 
-    // Compress the string using ZStd and decompress using factory.
+    // Test: Compress the string using ZStd and decompress using factory.
     compressionResult = zstd.compress(testMessageBinary);
     decompressedData = decompressUsingFactory(factory, compressionResult);
     Assert.assertEquals(testMessage, new String(decompressedData, StandardCharsets.UTF_8));
