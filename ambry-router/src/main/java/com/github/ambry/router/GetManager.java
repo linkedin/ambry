@@ -110,7 +110,7 @@ class GetManager {
    * @throws RouterException if the blobIdStr is invalid.
    */
   void submitGetBlobOperation(String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
+      Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
     GetOperation getOperation;
     BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     boolean isEncrypted = false;
@@ -290,20 +290,5 @@ class GetBlobOptionsInternal {
     this.getBlobOptions = getBlobOptions;
     this.getChunkIdsOnly = getChunkIdsOnly;
     this.ageAtAccessTracker = ageAtAccessTracker;
-  }
-}
-
-class GetBlobResultInternal {
-  GetBlobResult getBlobResult;
-  List<StoreKey> storeKeys;
-
-  /**
-   * Construct a GetBlobResultInternal instance.
-   * @param getBlobResult The {@link GetBlobResult} associated with this instance, if there is one..
-   * @param storeKeys The store keys associated with this instance, if there are any.
-   */
-  public GetBlobResultInternal(GetBlobResult getBlobResult, List<StoreKey> storeKeys) {
-    this.getBlobResult = getBlobResult;
-    this.storeKeys = storeKeys;
   }
 }

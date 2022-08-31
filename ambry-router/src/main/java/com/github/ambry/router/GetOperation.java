@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
@@ -45,7 +44,7 @@ abstract class GetOperation {
   protected final NonBlockingRouterMetrics routerMetrics;
   protected final ClusterMap clusterMap;
   protected final ResponseHandler responseHandler;
-  protected final Callback<GetBlobResultInternal> getOperationCallback;
+  protected final Callback<GetBlobResult> getOperationCallback;
   protected final BlobId blobId;
   protected final GetBlobOptionsInternal options;
   protected final KeyManagementService kms;
@@ -54,7 +53,7 @@ abstract class GetOperation {
   protected final Time time;
   protected volatile boolean operationCompleted = false;
   protected final AtomicReference<Exception> operationException = new AtomicReference<>();
-  protected GetBlobResultInternal operationResult;
+  protected GetBlobResult operationResult;
   protected final long submissionTimeMs;
   protected final boolean isEncrypted;
 
@@ -77,7 +76,7 @@ abstract class GetOperation {
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> getOperationCallback, KeyManagementService kms, CryptoService cryptoService,
+      Callback<GetBlobResult> getOperationCallback, KeyManagementService kms, CryptoService cryptoService,
       CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -99,7 +98,7 @@ abstract class GetOperation {
    * Return the {@link Callback} associated with this operation.
    * @return the {@link Callback} associated with this operation.
    */
-  Callback<GetBlobResultInternal> getCallback() {
+  Callback<GetBlobResult> getCallback() {
     return getOperationCallback;
   }
 
@@ -115,7 +114,7 @@ abstract class GetOperation {
    * Return the result of the operation.
    * @return the operation result.
    */
-  GetBlobResultInternal getOperationResult() {
+  GetBlobResult getOperationResult() {
     return operationResult;
   }
 

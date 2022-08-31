@@ -338,9 +338,9 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testInstantiation() {
-    Callback<GetBlobResultInternal> getRouterCallback = new Callback<GetBlobResultInternal>() {
+    Callback<GetBlobResult> getRouterCallback = new Callback<GetBlobResult>() {
       @Override
-      public void onCompletion(GetBlobResultInternal result, Exception exception) {
+      public void onCompletion(GetBlobResult result, Exception exception) {
         // no op.
       }
     };
@@ -1446,15 +1446,15 @@ public class GetBlobOperationTest {
     final AtomicReference<Exception> callbackException = new AtomicReference<>();
     final AtomicReference<Future<Long>> readIntoFuture = new AtomicReference<>();
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
-    Callback<GetBlobResultInternal> callback = new Callback<GetBlobResultInternal>() {
+    Callback<GetBlobResult> callback = new Callback<GetBlobResult>() {
       @Override
-      public void onCompletion(final GetBlobResultInternal result, Exception exception) {
+      public void onCompletion(final GetBlobResult result, Exception exception) {
         if (exception != null) {
           callbackException.set(exception);
           readCompleteLatch.countDown();
         } else {
           final ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
-          readIntoFuture.set(result.getBlobResult.getBlobDataChannel().readInto(writableChannel, null));
+          readIntoFuture.set(result.getBlobDataChannel().readInto(writableChannel, null));
           Utils.newThread(new Runnable() {
             @Override
             public void run() {
@@ -1465,7 +1465,7 @@ public class GetBlobOperationTest {
                   writableChannel.resolveOldestChunk(null);
                   chunksLeftToRead--;
                 }
-                result.getBlobResult.getBlobDataChannel().close();
+                result.getBlobDataChannel().close();
                 while (writableChannel.getNextChunk(100) != null) {
                   writableChannel.resolveOldestChunk(null);
                 }
@@ -1624,9 +1624,9 @@ public class GetBlobOperationTest {
         expectedErrorCode, new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
-            Callback<GetBlobResultInternal> callback = new Callback<GetBlobResultInternal>() {
+            Callback<GetBlobResult> callback = new Callback<GetBlobResult>() {
               @Override
-              public void onCompletion(final GetBlobResultInternal result, final Exception exception) {
+              public void onCompletion(final GetBlobResult result, final Exception exception) {
                 if (exception != null) {
                   asyncWritableChannel.close();
                   readCompleteLatch.countDown();
@@ -1635,7 +1635,7 @@ public class GetBlobOperationTest {
                     @Override
                     public void run() {
                       try {
-                        result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, new Callback<Long>() {
+                        result.getBlobDataChannel().readInto(asyncWritableChannel, new Callback<Long>() {
                           @Override
                           public void onCompletion(Long result, Exception exception) {
                             asyncWritableChannel.close();
@@ -1702,23 +1702,23 @@ public class GetBlobOperationTest {
     final AtomicReference<Exception> operationException = new AtomicReference<>(null);
     final int numChunks = ((blobSize + maxChunkSize - 1) / maxChunkSize) + (blobSize > maxChunkSize ? 1 : 0);
     mockNetworkClient.resetProcessedResponseCount();
-    Callback<GetBlobResultInternal> callback = (result, exception) -> {
+    Callback<GetBlobResult> callback = (result, exception) -> {
       if (exception != null) {
         operationException.set(exception);
         readCompleteLatch.countDown();
       } else {
         try {
           if (options.getChunkIdsOnly) {
-            Assert.assertNull("Unexpected blob result when getChunkIdsOnly", result.getBlobResult);
+            Assert.assertNull("Unexpected blob result when getChunkIdsOnly", result.getBlobDataChannel());
             if (blobSize > maxChunkSize) {
               // CompositeBlob
               Assert.assertNotNull("CompositeBlob should return a list of blob ids when getting chunk ids",
-                  result.storeKeys);
-              Assert.assertEquals(result.storeKeys.size(), (blobSize + maxChunkSize - 1) / maxChunkSize);
+                  result.getBlobChunkIds());
+              Assert.assertEquals(result.getBlobChunkIds().size(), (blobSize + maxChunkSize - 1) / maxChunkSize);
             } else {
               // SimpleBlob
               Assert.assertNull("Unexpected list of blob id when getChunkIdsOnly is true on a simple blob",
-                  result.storeKeys);
+                  result.getBlobChunkIds());
             }
             readCompleteLatch.countDown();
             return;
@@ -1727,7 +1727,7 @@ public class GetBlobOperationTest {
           switch (options.getBlobOptions.getOperationType()) {
             case All:
               if (!options.getBlobOptions.isRawMode()) {
-                blobInfo = result.getBlobResult.getBlobInfo();
+                blobInfo = result.getBlobInfo();
                 Assert.assertTrue("Blob properties must be the same",
                     RouterTestHelpers.arePersistedFieldsEquivalent(blobProperties, blobInfo.getBlobProperties()));
                 Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
@@ -1737,17 +1737,16 @@ public class GetBlobOperationTest {
               }
               break;
             case Data:
-              Assert.assertNull("Unexpected blob info in operation result", result.getBlobResult.getBlobInfo());
+              Assert.assertNull("Unexpected blob info in operation result", result.getBlobInfo());
               break;
             case BlobInfo:
-              blobInfo = result.getBlobResult.getBlobInfo();
+              blobInfo = result.getBlobInfo();
               Assert.assertTrue("Blob properties must be the same",
                   RouterTestHelpers.arePersistedFieldsEquivalent(blobProperties, blobInfo.getBlobProperties()));
               Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", blobSize,
                   blobInfo.getBlobProperties().getBlobSize());
-              Assert.assertNull("Unexpected blob data in operation result", result.getBlobResult.getBlobDataChannel());
+              Assert.assertNull("Unexpected blob data in operation result", result.getBlobDataChannel());
               Assert.assertEquals("LifeVersion mismatch", expectedLifeVersion, blobInfo.getLifeVersion());
-              break;
           }
         } catch (Throwable e) {
           readCompleteThrowable.set(e);
@@ -1756,7 +1755,7 @@ public class GetBlobOperationTest {
         if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
           final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
           final Future<Long> preSetReadIntoFuture =
-              initiateReadBeforeChunkGet ? result.getBlobResult.getBlobDataChannel()
+              initiateReadBeforeChunkGet ? result.getBlobDataChannel()
                   .readInto(asyncWritableChannel, null) : null;
           Utils.newThread(() -> {
             if (getChunksBeforeRead) {
@@ -1767,9 +1766,9 @@ public class GetBlobOperationTest {
               }
             }
             Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
-                : result.getBlobResult.getBlobDataChannel().readInto(asyncWritableChannel, null);
+                : result.getBlobDataChannel().readInto(asyncWritableChannel, null);
             assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
-                result.getBlobResult.getBlobDataChannel(), readCompleteLatch, readCompleteResult,
+                result.getBlobDataChannel(), readCompleteLatch, readCompleteResult,
                 readCompleteThrowable);
           }, false).start();
         } else {
@@ -1810,7 +1809,7 @@ public class GetBlobOperationTest {
    * @return the operation
    * @throws Exception
    */
-  private GetBlobOperation createOperationAndComplete(Callback<GetBlobResultInternal> callback) throws Exception {
+  private GetBlobOperation createOperationAndComplete(Callback<GetBlobResult> callback) throws Exception {
     GetBlobOperation op = createOperation(routerConfig, callback);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
@@ -1831,7 +1830,7 @@ public class GetBlobOperationTest {
    * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
    * @return the operation
    */
-  private GetBlobOperation createOperation(RouterConfig routerConfig, Callback<GetBlobResultInternal> callback) {
+  private GetBlobOperation createOperation(RouterConfig routerConfig, Callback<GetBlobResult> callback) {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
