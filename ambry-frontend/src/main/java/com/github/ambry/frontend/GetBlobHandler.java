@@ -163,21 +163,11 @@ public class GetBlobHandler {
           RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
           restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
         }
-        if (subResource == null || subResource == SubResource.BlobChunkIds) {
+        if (subResource == SubResource.Replicas) {
+          finalCallback.onCompletion(getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel), null);
+        } else {
           router.getBlob(blobId.getID(), options, routerCallback(),
               QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
-        } else {
-          switch (subResource) {
-            case BlobInfo:
-            case UserMetadata:
-            case Segment:
-              router.getBlob(blobId.getID(), options, routerCallback(),
-                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
-              break;
-            case Replicas:
-              finalCallback.onCompletion(getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel), null);
-              break;
-          }
         }
       }, restRequest.getUri(), LOGGER, finalCallback);
     }

@@ -147,7 +147,7 @@ class GetBlobOperation extends GetOperation {
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
+      Callback<GetBlobResult> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
       boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
@@ -312,9 +312,8 @@ class GetBlobOperation extends GetOperation {
           // GetManager remove this operation.
           setOperationCompleted();
           List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
-          operationResult = new GetBlobResultInternal(
-              options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds
-                  ? new GetBlobResult(blobInfo, null, chunkIds) : null, chunkIds);
+          operationResult = options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds
+              ? new GetBlobResult(blobInfo, null, chunkIds) : null;
         } else {
           // Complete the operation from the caller's perspective, so that the caller can start reading from the
           // channel if there is no exception. The operation will not be marked as complete internally as subsequent
@@ -339,7 +338,7 @@ class GetBlobOperation extends GetOperation {
             } else {
               setOperationCompleted();
             }
-            operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel, null), null);
+            operationResult = new GetBlobResult(blobInfo, blobDataChannel, null);
           } else {
             blobDataChannel = null;
             operationResult = null;

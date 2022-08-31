@@ -29,6 +29,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -163,7 +164,7 @@ public class OperationController implements Runnable {
    * @param callback The callback which will be invoked on the completion of the request.
    */
   protected void getBlob(String blobIdStr, GetBlobOptionsInternal options,
-      final Callback<GetBlobResultInternal> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
+      final Callback<GetBlobResult> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
     getManager.submitGetBlobOperation(blobIdStr, options, callback, quotaChargeCallback);
     routerCallback.onPollReady();
   }
@@ -301,10 +302,10 @@ public class OperationController implements Runnable {
       Callback<Void> callback, CompositeBlobOperationHelper helper, QuotaChargeCallback quotaChargeCallback) {
     // Can skip GET if we can determine this is not a metadata blob
     if (NonBlockingRouter.isMaybeMetadataBlob(blobIdStr)) {
-      Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
+      Callback<GetBlobResult> internalCallback = (GetBlobResult result, Exception exception) -> {
         if (exception != null) {
           NonBlockingRouter.completeOperation(futureResult, callback, null, exception, false);
-        } else if (result.getBlobResult != null) {
+        } else if (result == null || result.getBlobDataChannel() != null) {
           exception = new RouterException(
               String.format("GET blob call returned the blob instead of just the store keys (before {} )",
                   helper.getOpName()), RouterErrorCode.UnexpectedInternalError);
@@ -312,8 +313,9 @@ public class OperationController implements Runnable {
         } else {
           List<String> blobIdStrs = new ArrayList<>();
           blobIdStrs.add(blobIdStr);
-          if (result.storeKeys != null) {
-            result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));
+          List<StoreKey> blobChunkIds = result.getBlobChunkIds();
+          if (blobChunkIds != null) {
+            blobChunkIds.forEach(key -> blobIdStrs.add(key.getID()));
           }
           nonBlockingRouter.incrementOperationsCount(blobIdStrs.size());
           helper.getDoOperation().accept(blobIdStrs);
