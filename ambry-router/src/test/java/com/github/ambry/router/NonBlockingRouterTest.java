@@ -38,13 +38,19 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1815,6 +1821,20 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.close();
       }
     }
+  }
+
+  @Test
+  public void testGetBlobChunkIds() throws Exception {
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+    int numberOfChunks = 4;
+    setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
+    String blobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
+        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    assertEquals("Number of blob chunk Ids mismatch", numberOfChunks, result.getBlobChunkIds().size());
   }
 
   private RestRequest createRestRequestForPutOperation() throws Exception {

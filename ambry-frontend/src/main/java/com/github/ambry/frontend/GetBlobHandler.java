@@ -28,12 +28,15 @@ import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.GetBlobOptions;
-import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.store.StoreKey;
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +51,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 public class GetBlobHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(GetBlobHandler.class);
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+  static final String BLOB_CHUNK_IDS_KEY = "blobChunkIds";
 
   private final FrontendConfig frontendConfig;
   private final Router router;
@@ -201,27 +205,76 @@ public class GetBlobHandler {
     private Callback<Void> securityProcessResponseCallback(GetBlobResult result) {
       return buildCallback(metrics.getBlobSecurityProcessResponseMetrics, securityCheckResult -> {
             ReadableStreamChannel response = result.getBlobDataChannel();
-            if (subResource != null && !subResource.equals(SubResource.Segment)) {
-              BlobInfo blobInfo = result.getBlobInfo();
-              if (restRequest.getArgs().containsKey(SEND_USER_METADATA_AS_RESPONSE_BODY) && (boolean) restRequest.getArgs()
-                  .get(SEND_USER_METADATA_AS_RESPONSE_BODY)) {
-                restResponseChannel.setHeader(Headers.CONTENT_TYPE, "application/octet-stream");
-                restResponseChannel.setHeader(Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
-                response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
-              } else {
-                restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
-                response = new ByteBufferReadableStreamChannel(EMPTY_BUFFER);
+            if (subResource == null) {
+              response = closeChannelIfNotModified(result);
+            } else {
+              switch (subResource) {
+                case BlobInfo:
+                case UserMetadata:
+                  response = setMetadataInResponseChannel(result);
+                  break;
+                case Segment:
+                  response = closeChannelIfNotModified(result);
+                  break;
+                case BlobChunkIds:
+                  response = setChunkBlobIdsInResponseChannel(result);
+                  break;
+                default:
+                  LOGGER.error("Unexpected subResource {} when handle response", subResource);
               }
-            } else if (restResponseChannel.getStatus() == ResponseStatus.NotModified) {
-              response = null;
-              // If the blob was not modified, we need to close the channel, as it will not be submitted to
-              // the RestResponseHandler
-              result.getBlobDataChannel().close();
             }
             finalCallback.onCompletion(response, null);
           }, restRequest.getUri(), LOGGER,
           // Still pass result.getBlobDataChannel() to finalCallback since we already have it.
           (r, e) -> finalCallback.onCompletion(result != null ? result.getBlobDataChannel() : null, e));
+    }
+
+    /**
+     * Close the channel if the blob was not modified, as it will not be submitted to the RestResponseHandler.
+     * @param result The result of the request i.e a {@link GetBlobResult} object with the properties of the blob.
+     * @return a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
+     * @throws IOException if there's any error during channel close.
+     */
+    private ReadableStreamChannel closeChannelIfNotModified(GetBlobResult result) throws IOException {
+      if (restResponseChannel.getStatus() == ResponseStatus.NotModified) {
+        result.getBlobDataChannel().close();
+        return null;
+      }
+      return result.getBlobDataChannel();
+    }
+
+    /**
+     * Set metadata in response channel.
+     * @param result result The result of the request i.e a {@link GetBlobResult} object with the properties of the blob.
+     * @return a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
+     */
+    private ReadableStreamChannel setMetadataInResponseChannel(GetBlobResult result) {
+      BlobInfo blobInfo = result.getBlobInfo();
+      if (restRequest.getArgs().containsKey(SEND_USER_METADATA_AS_RESPONSE_BODY) && (boolean) restRequest.getArgs()
+          .get(SEND_USER_METADATA_AS_RESPONSE_BODY)) {
+        restResponseChannel.setHeader(Headers.CONTENT_TYPE, "application/octet-stream");
+        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+        return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
+      } else {
+        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
+        return new ByteBufferReadableStreamChannel(EMPTY_BUFFER);
+      }
+    }
+
+    /**
+     * set chunk blob Ids for composite blob in response channel.
+     * @param result The result of the request i.e a {@link GetBlobResult} object with the properties of the blob.
+     * @return a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
+     * @throws RestServiceException if there's any error during serialization.
+     */
+    private ReadableStreamChannel setChunkBlobIdsInResponseChannel(GetBlobResult result)
+        throws RestServiceException {
+      List<StoreKey> blobChunkIds = result.getBlobChunkIds();
+      JSONObject jsonObject = new JSONObject();
+      for (StoreKey blobChunkId : blobChunkIds) {
+        jsonObject.append(BLOB_CHUNK_IDS_KEY, blobChunkId.getID());
+      }
+      return FrontendUtils.serializeJsonToChannel(jsonObject);
     }
   }
 }
