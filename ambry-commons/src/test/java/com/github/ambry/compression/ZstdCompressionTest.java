@@ -41,19 +41,19 @@ public class ZstdCompressionTest {
   @Test
   public void testCompressAndDecompress_DefaultLevel() {
     compression.setCompressionLevel(compression.getDefaultCompressionLevel());
-    LZ4CompressionTest.runCompressionAndDecompressionTest(compression, "Test default compression using default level.");
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test default compression using default level.");
   }
 
   @Test
   public void testCompressAndDecompress_MinimumLevel() {
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
-    LZ4CompressionTest.runCompressionAndDecompressionTest(compression, "Test minimum compression using minimum level.");
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test minimum compression using minimum level.");
   }
 
   @Test
   public void testCompressAndDecompress_MaximumLevel() {
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
-    LZ4CompressionTest.runCompressionAndDecompressionTest(compression, "Test maximum compression using maximum level.");
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test maximum compression using maximum level.");
   }
 }
 

@@ -112,13 +112,13 @@ public class CompressionFactory {
    * @return The decompressor that can decompress this compressed buffer.  Null if no decompressor found.
    */
   public Compression getDecompressor(byte[] compressedBuffer) {
-    // Compressed buffer contains at least the algorith name size (1 byte) and original data size (4 bytes).
-    if (compressedBuffer == null || compressedBuffer.length < 5) {
-      throw new IllegalArgumentException("compressedBuffer must be at least 5 bytes long.");
+    // Compressed buffer contains at least version (1 byte), algorithm name size (1 byte) and original size (4 bytes).
+    if (compressedBuffer == null || compressedBuffer.length < 6) {
+      throw new IllegalArgumentException("compressedBuffer must be at least 6 bytes long.");
     }
 
-    int algorithNameLength = compressedBuffer[0];
-    String algorithmName = new String(compressedBuffer, 1, algorithNameLength, StandardCharsets.UTF_8);
+    int algorithmNameLength = compressedBuffer[1];
+    String algorithmName = new String(compressedBuffer, 2, algorithmNameLength, StandardCharsets.UTF_8);
     return registeredCompressionMap.get(algorithmName);
   }
 }

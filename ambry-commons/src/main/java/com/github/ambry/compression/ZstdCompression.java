@@ -77,45 +77,62 @@ public class ZstdCompression extends BaseCompressionWithLevel {
 
   /**
    * Invoke the Zstd compression algorithm given the source data, the compressed destination buffer and its offset.
+   * The compression output is stored in the compressed buffer at the specific offset.
+   * All parameters have been verified before calling so implementation can skip verification.
    *
-   * @param sourceData The source data.  It has already null and empty verified.
+   * @param sourceData The source uncompressed data.  It has already been null and empty verified.
+   * @param sourceDataOffset Offset in sourceData to start reading.
+   * @param sourceDataSize Number of bytes in sourceData to compress.
    * @param compressedBuffer  The buffer to hold the compressed data.
-   * @param compressedBufferOffset The offset in compressedBuffer where the compressed data should write.
+   * @param compressedBufferOffset The offset in compressedBuffer where the compression output should write.
+   * @param compressedBufferSize Size of the buffer where compression can write to.  This size should be same as
+   *                             estimateMaxCompressedDataSize().
    * @return The size of the compressed data in bytes.
    */
   @Override
-  protected int compress(byte[] sourceData, byte[] compressedBuffer, int compressedBufferOffset) {
+  protected int compressData(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
+      byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
+
     long compressedSize = Zstd.compressByteArray(compressedBuffer, compressedBufferOffset,
         compressedBuffer.length - compressedBufferOffset, sourceData, 0, sourceData.length,
         getCompressionLevel());
 
     if (Zstd.isError(compressedSize)) {
-      throw new CompressionException("ZStd compression failed with error code " + compressedSize + ", name: "
-          + Zstd.getErrorName(compressedSize));
+      throw new CompressionException(String.format("Zstd compression failed with error code: %d, name: %s. "
+              + "sourceData.length=%d, sourceDataOffset=%d, sourceDataSize=%d, "
+              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
+          compressedSize, Zstd.getErrorName(compressedSize),
+          sourceData.length, sourceDataOffset, sourceDataSize,
+          compressedBuffer.length, compressedBufferOffset, compressedBufferSize));
     }
     return (int) compressedSize;
   }
 
   /**
-   * Invoke the ZStd decompression algorithm given the compressedBuffer and its offset.
-   * The sourceDataBuffer has the exact same size as the original data source.
+   * Invoke the ZStd decompression algorithm given the compressedBuffer and its offset and size.
+   * The original data is written to the sourceDataBuffer at the specified offset and size.
+   * The size of sourceDataBuffer must be at least the original data size.
    *
    * @param compressedBuffer The compressed buffer.
    * @param compressedBufferOffset The offset in compressedBuffer where the decompression should start reading.
-   * @param sourceDataBuffer The buffer to hold the original source data.
+   * @param compressedBufferSize Size of the compressed buffer returned from compressData().
+   * @param sourceDataBuffer The buffer to store decompression output (the original source data).
+   * @param sourceDataOffset Offset where to write the decompressed data.
+   * @param sourceDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
    */
   @Override
-  protected void decompress(byte[] compressedBuffer, int compressedBufferOffset, byte[] sourceDataBuffer) {
+  protected void decompressData(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
+      byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) {
     long decompressedSize = Zstd.decompressByteArray(sourceDataBuffer, 0, sourceDataBuffer.length,
         compressedBuffer, compressedBufferOffset,compressedBuffer.length - compressedBufferOffset);
 
     if (Zstd.isError(decompressedSize)) {
-      throw new CompressionException("ZStd decompression failed with error code " + decompressedSize + ", name: "
-          + Zstd.getErrorName(decompressedSize));
-    }
-
-    if (decompressedSize != sourceDataBuffer.length) {
-      throw new CompressionException("ZStd decompression completed but the decompressed size and original size mismatch.");
+      throw new CompressionException(String.format("Zstd decompression failed with error code: %d, name: %s. "
+              + "sourceDataBuffer.length=%d, sourceDataOffset=%d, sourceDataSize=%d, "
+              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
+          compressedBufferSize, Zstd.getErrorName(compressedBufferSize),
+          sourceDataBuffer.length, sourceDataOffset, sourceDataSize,
+          compressedBuffer.length, compressedBufferOffset, compressedBufferSize));
     }
   }
 }

@@ -16,6 +16,7 @@ package com.github.ambry.compression;
 import org.junit.Assert;
 import org.junit.Test;
 
+
 public class CompressionExceptionTest {
 
   @Test

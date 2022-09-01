@@ -52,17 +52,17 @@ public class LZ4CompressionTest {
   @Test
   public void testCompressAndDecompress_MinimumLevel() {
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
-    runCompressionAndDecompressionTest(compression, "Test my minimum compression message using minimum level.");
+    compressDataAndDecompressDataTest(compression, "Test my minimum compression message using minimum level.");
   }
 
   @Test
   public void testCompressAndDecompress_MaximumLevel() {
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
-    runCompressionAndDecompressionTest(compression, "Test my maximum compression message using maximum level.");
+    compressDataAndDecompressDataTest(compression, "Test my maximum compression message using maximum level.");
   }
 
   @Test
-  public void testCompressFailed() throws Exception {
+  public void testCompressDataFailed() throws Exception {
     // Create a compressor that throws when calling
     // compress(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen)
     LZ4Compressor throwCompressor = Mockito.mock(LZ4Compressor.class, Mockito.CALLS_REAL_METHODS);
@@ -74,13 +74,14 @@ public class LZ4CompressionTest {
     LZ4Compression lz4 = PowerMockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     PowerMockito.when(lz4, "getCompressor").thenReturn(throwCompressor);
     Exception ex = TestUtils.invokeAndGetException(() ->
-        lz4.compress("ABC".getBytes(StandardCharsets.UTF_8), new byte[10], 0));
+        lz4.compressData("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
+            new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
     Assert.assertEquals(theException, ex.getCause());
   }
 
   @Test
-  public void testDecompressFailed() throws Exception {
+  public void testDecompressDataFailed() throws Exception {
 
     // Create a compressor that throws when calling
     // decompress(byte[] src, int srcOff, byte[] dest, int destOff, int destLen)
@@ -93,23 +94,25 @@ public class LZ4CompressionTest {
     LZ4Compression lz4 = PowerMockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     PowerMockito.when(lz4, "getDecompressor").thenReturn(throwDecompressor);
     Exception ex = TestUtils.invokeAndGetException(() ->
-        lz4.decompress(new byte[10], 0, new byte[10]));
+        lz4.decompressData(new byte[10], 0, 10, new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
     Assert.assertEquals(theException, ex.getCause());
   }
 
-  public static void runCompressionAndDecompressionTest(BaseCompression compression, String testMessage) {
+  public static void compressDataAndDecompressDataTest(BaseCompression compression, String testMessage) {
     // Apply compression to testMessage.
     byte[] sourceBuffer = testMessage.getBytes(StandardCharsets.UTF_8);
     byte[] oversizeCompressedBuffer = new byte[compression.estimateMaxCompressedDataSize(sourceBuffer.length)];
-    int usage = compression.compress(sourceBuffer, oversizeCompressedBuffer, 0);
+    int usage = compression.compressData(sourceBuffer, 0, sourceBuffer.length,
+        oversizeCompressedBuffer, 0, oversizeCompressedBuffer.length);
     Assert.assertTrue(usage > 0);
 
     // Apply decompression.
     byte[] compressedBuffer = new byte[usage];
     System.arraycopy(oversizeCompressedBuffer, 0, compressedBuffer, 0, usage);
     byte[] decompressedBuffer = new byte[sourceBuffer.length];
-    compression.decompress(compressedBuffer, 0, decompressedBuffer);
+    compression.decompressData(compressedBuffer, 0, compressedBuffer.length,
+        decompressedBuffer, 0, decompressedBuffer.length);
     String decompressedMessage = new String(decompressedBuffer, StandardCharsets.UTF_8);
     Assert.assertEquals(testMessage, decompressedMessage);
   }
