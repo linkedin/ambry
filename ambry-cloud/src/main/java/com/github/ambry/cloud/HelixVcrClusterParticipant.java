@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.account.AccountService;
+import com.github.ambry.cloud.azure.VcrInstanceConfig;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
@@ -195,18 +196,15 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
     helixAdmin = manager.getClusterManagmentTool();
 
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(vcrClusterName, vcrInstanceName);
-    if (!instanceConfig.getRecord().getBooleanField(VCR_HELIX_CONFIG_READY, false)) {
-      if (cloudConfig.vcrSslPort != null) {
-        instanceConfig.getRecord().setSimpleField(SSL_PORT_STR, Integer.toString(cloudConfig.vcrSslPort));
-      }
-      if (cloudConfig.vcrHttp2Port != null) {
-        instanceConfig.getRecord().setSimpleField(HTTP2_PORT_STR, Integer.toString(cloudConfig.vcrHttp2Port));
-      }
-      // Set HELIX_ENABLED to be true. Listeners take action only when this value is True.
-      instanceConfig.getRecord().setBooleanField(VCR_HELIX_CONFIG_READY, true);
-      logger.info("Set VCR_HELIX_CONFIG_READY to true.");
+    VcrInstanceConfig helixInstanceConfig = VcrInstanceConfig.toVcrInstanceConfig(instanceConfig);
+    VcrInstanceConfig newInstanceConfig = new VcrInstanceConfig(cloudConfig.vcrSslPort, cloudConfig.vcrHttp2Port, true);
+    if (!helixInstanceConfig.equals(newInstanceConfig))  {
+      // Set VCR_HELIX_CONFIG_READY to be true. Listeners take action only when this value is True.
+      newInstanceConfig.updateInstanceConfig(instanceConfig);
+
+      logger.info("Update VCR InstanceConfig and set VCR_HELIX_CONFIG_READY to true.");
     } else {
-      logger.info("VCR_HELIX_CONFIG_READY is true.");
+      logger.info("VCR InstanceConfig is the same and VCR_HELIX_CONFIG_READY is true.");
     }
     helixAdmin.setInstanceConfig(vcrClusterName, vcrInstanceName, instanceConfig);
     logger.info("Participated in HelixVcrCluster successfully.");
