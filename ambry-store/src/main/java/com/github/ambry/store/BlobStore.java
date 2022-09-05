@@ -922,7 +922,8 @@ public class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.findMissingKeysResponse.time();
     try {
-      Set<StoreKey> missingKeys = index.findMissingKeys(keys);
+      Set<StoreKey> missingKeys = config.storeEnableFindMissingKeysInBatchMode ? index.findMissingKeysInBatch(keys)
+          : index.findMissingKeys(keys);
       return missingKeys;
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
