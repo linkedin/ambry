@@ -32,6 +32,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.IdealState;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.slf4j.Logger;
@@ -45,7 +46,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * runtime. It is also able to absorb replica location changes in cluster.
  */
 public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
-  private final String dcName;
+  private final String dcOrClusterName;
   private final Object notificationLock = new Object();
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final AtomicLong sealedStateChangeCounter;
@@ -75,7 +76,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   /**
    * Constructor for {@link DynamicClusterChangeHandler}
    * @param clusterMapConfig the {@link ClusterMapConfig} used to define some behavior of cluster change handler.
-   * @param dcName the name of data center this handler is associated with.
+   * @param dcOrClusterName the name of data center this handler is associated with.
    * @param selfInstanceName instance name of current node.
    * @param partitionOverrideInfoMap a map that records partitions and states they should be overridden to.
    * @param helixClusterManagerCallback a call back used to query cluster-wide info.
@@ -84,14 +85,14 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
    * @param onInitializationFailure callback to be called if initialization fails in a listener call.
    * @param sealedStateChangeCounter a counter indicating if sealed state of any partition has changed.
    */
-  DynamicClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcName, String selfInstanceName,
+  DynamicClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcOrClusterName, String selfInstanceName,
       Map<String, Map<String, String>> partitionOverrideInfoMap,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
       HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback,
       HelixClusterManagerMetrics helixClusterManagerMetrics, Consumer<Exception> onInitializationFailure,
       AtomicLong sealedStateChangeCounter) {
     this.clusterMapConfig = clusterMapConfig;
-    this.dcName = dcName;
+    this.dcOrClusterName = dcOrClusterName;
     this.selfInstanceName = selfInstanceName;
     this.partitionOverrideInfoMap = partitionOverrideInfoMap;
     this.helixClusterManagerCallback = helixClusterManagerCallback;
@@ -115,21 +116,21 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
     try {
       synchronized (notificationLock) {
         if (!instanceConfigInitialized) {
-          logger.info("Received initial notification for instance config change from {}", dcName);
+          logger.info("Received initial notification for instance config change from {}", dcOrClusterName);
         } else {
-          logger.info("Instance config change triggered from {}", dcName);
+          logger.info("Instance config change triggered from {}", dcOrClusterName);
         }
         if (logger.isDebugEnabled()) {
-          configs.forEach(config -> logger.debug("Detailed data node config in {} is: {}", dcName, config));
+          configs.forEach(config -> logger.debug("Detailed data node config in {} is: {}", dcOrClusterName, config));
         }
         try {
           addOrUpdateInstanceInfos(configs);
         } catch (Exception e) {
           if (!instanceConfigInitialized) {
-            logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
+            logger.error("Exception occurred when initializing instances in {}: ", dcOrClusterName, e);
             onInitializationFailure.accept(e);
           } else {
-            logger.error("Exception occurred at runtime when handling instance config changes in {}: ", dcName, e);
+            logger.error("Exception occurred at runtime when handling instance config changes in {}: ", dcOrClusterName, e);
             helixClusterManagerMetrics.instanceConfigChangeErrorCount.inc();
           }
         } finally {
@@ -153,12 +154,12 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   @Override
   public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext) {
     if (!idealStateInitialized) {
-      logger.info("Received initial notification for IdealState change from {}", dcName);
+      logger.info("Received initial notification for IdealState change from {}", dcOrClusterName);
       idealStateInitialized = true;
     } else {
-      logger.info("IdealState change triggered from {}", dcName);
+      logger.info("IdealState change triggered from {}", dcOrClusterName);
     }
-    logger.debug("Detailed ideal states in {} are: {}", dcName, idealState);
+    logger.debug("Detailed ideal states in {} are: {}", dcOrClusterName, idealState);
     // rebuild the entire partition-to-resource map in current dc
     ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
     for (IdealState state : idealState) {
@@ -178,12 +179,12 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
     try {
       if (!liveStateInitialized) {
-        logger.info("Received initial notification for live instance change from {}", dcName);
+        logger.info("Received initial notification for live instance change from {}", dcOrClusterName);
         liveStateInitialized = true;
       } else {
-        logger.info("Live instance change triggered from {}", dcName);
+        logger.info("Live instance change triggered from {}", dcOrClusterName);
       }
-      logger.debug("Detailed live instances in {} are: {}", dcName, liveInstances);
+      logger.debug("Detailed live instances in {} are: {}", dcOrClusterName, liveInstances);
       synchronized (notificationLock) {
         updateInstanceLiveness(liveInstances);
         helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
@@ -204,10 +205,14 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   public void onRoutingTableChange(RoutingTableSnapshot routingTableSnapshot, Object context) {
     routingTableSnapshotRef.getAndSet(routingTableSnapshot);
     if (routingTableInitLatch.getCount() == 1) {
-      logger.info("Received initial notification for routing table change from {}", dcName);
+      logger.info("Received initial notification for routing table change from {}", dcOrClusterName);
       routingTableInitLatch.countDown();
     } else {
-      logger.info("Routing table change triggered from {}", dcName);
+      logger.info("Routing table change triggered from {}", dcOrClusterName);
+    }
+
+    for(InstanceConfig instanceConfig : routingTableSnapshot.getInstanceConfigs()){
+      logger.info("Instance name : {}", instanceConfig.getInstanceName());
     }
 
     //we should notify routing table change indication to different cluster map change listeners (i.e replication manager, partition selection helper, etc). However, only replication manager handles this callback now.
@@ -273,7 +278,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
   public void waitForInitNotification() throws InterruptedException {
     // wait slightly more than 5 mins to ensure routerUpdater refreshes the snapshot.
     if (!routingTableInitLatch.await(320, TimeUnit.SECONDS)) {
-      throw new IllegalStateException("Initial routing table change from " + dcName + " didn't come within 5 mins");
+      throw new IllegalStateException("Initial routing table change from " + dcOrClusterName + " didn't come within 5 mins");
     }
   }
 
@@ -302,8 +307,9 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
     }
     // if this is not initial InstanceConfig change and any replicas are added or removed, we should invoke callbacks
     // for different clustermap change listeners (i.e replication manager, partition selection helper)
-    logger.info("In total, {} replicas are being added and {} replicas are being removed. instanceConfigInitialized: {}", totalAddedReplicas.size(),
-        totalRemovedReplicas.size(), instanceConfigInitialized);
+    logger.info(
+        "In total, {} replicas are being added and {} replicas are being removed. instanceConfigInitialized: {}",
+        totalAddedReplicas.size(), totalRemovedReplicas.size(), instanceConfigInitialized);
     if (instanceConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
       for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
         listener.onReplicaAddedOrRemoved(totalAddedReplicas, totalRemovedReplicas);
@@ -362,7 +368,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
           updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, stoppedReplicas);
         } else {
           // if this is a new replica and doesn't exist on node
-          logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcName);
+          logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcOrClusterName);
           // this can be a brand new partition that is added to an existing node
           AmbryPartition mappedPartition =
               new AmbryPartition(Long.parseLong(partitionName), replicaConfig.getPartitionClass(),
@@ -449,7 +455,7 @@ public class DynamicClusterChangeHandler implements HelixClusterChangeHandler {
    */
   private List<ReplicaId> createNewInstance(DataNodeConfig dataNodeConfig) throws Exception {
     String instanceName = dataNodeConfig.getInstanceName();
-    logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcName);
+    logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcOrClusterName);
     AmbryDataNode datanode =
         new AmbryServerDataNode(dataNodeConfig.getDatacenterName(), clusterMapConfig, dataNodeConfig.getHostName(),
             dataNodeConfig.getPort(), dataNodeConfig.getRackId(), dataNodeConfig.getSslPort(),

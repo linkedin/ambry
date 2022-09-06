@@ -23,7 +23,9 @@ import java.util.stream.Stream;
 
 /**
  * General handler that handles any resource or state changes in cluster. It exposes API(s) for cluster manager to
- * access up-to-date cluster info for a data center. Each data center has its own {@link ClusterChangeHandler}.
+ * access up-to-date cluster info for a data center. By default, each data center has its own
+ * {@link ClusterChangeHandler}. When {@link com.github.ambry.config.ClusterMapConfig#clusterMapUseAggregatedView} is
+ * enabled, we would use a single {@link ClusterChangeHandler} for all data centers.
  */
 public interface ClusterChangeHandler {
   /**

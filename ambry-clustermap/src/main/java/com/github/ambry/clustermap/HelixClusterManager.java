@@ -80,6 +80,9 @@ public class HelixClusterManager implements ClusterMap {
   // reflects the current value.
   private final AtomicLong currentXid;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
+  private ClusterInfo clusterInfo = null;
+  private final boolean clusterMapUseAggregatedView = false;
+  Map<String, DcZkInfo> dataCenterToZkAddress = null;
 
   /**
    * Instantiate a HelixClusterManager.
@@ -100,7 +103,6 @@ public class HelixClusterManager implements ClusterMap {
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     clusterChangeHandlerCallback = new ClusterChangeHandlerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
-    Map<String, DcZkInfo> dataCenterToZkAddress = null;
     HelixManager localManager = null;
     Map<String, Exception> initializationFailureMap = new HashMap<>();
     try {
@@ -112,39 +114,53 @@ public class HelixClusterManager implements ClusterMap {
       initializationFailureMap.putIfAbsent(clusterMapConfig.clusterMapDatacenterName, e);
     }
     if (initializationFailureMap.get(clusterMapConfig.clusterMapDatacenterName) == null) {
-      List<DatacenterInitializer> initializers = new ArrayList<>();
       DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics = new DataNodeConfigSourceMetrics(metricRegistry);
-      for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
-        // Initialize from every remote datacenter in a separate thread to speed things up.
-        DatacenterInitializer initializer =
-            new DatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
-                partitionOverrideInfoMap, clusterChangeHandlerCallback, helixClusterManagerCallback,
-                helixClusterManagerMetrics, dataNodeConfigSourceMetrics, sealedStateChangeCounter, partitionMap,
-                partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas);
-        initializer.start();
-        initializers.add(initializer);
-      }
-      for (DatacenterInitializer initializer : initializers) {
+      if (clusterMapConfig.clusterMapUseAggregatedView) {
         try {
-          DcInfo dcInfo = initializer.join();
-          dcToDcInfo.put(dcInfo.dcName, dcInfo);
-          dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcInfo.dcName);
+          ClusterInitializer clusterInitializer =
+              new ClusterInitializer(clusterMapConfig, dataCenterToZkAddress, helixFactory, selfInstanceName,
+                  partitionOverrideInfoMap, new ClusterChangeHandlerCallback(), helixClusterManagerCallback,
+                  helixClusterManagerMetrics, dataNodeConfigSourceMetrics, sealedStateChangeCounter, partitionMap,
+                  partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas);
+          clusterInitializer.start();
+          clusterInfo = clusterInitializer.join();
         } catch (Exception e) {
-          initializationFailureMap.putIfAbsent(initializer.getDcName(), e);
+          initializationFailureMap.putIfAbsent(clusterMapConfig.clusterMapDatacenterName, e);
         }
-      }
-
-      for (DcInfo dcInfo : dcToDcInfo.values()) {
-        if (dcInfo.clusterChangeHandler instanceof ClusterMapChangeListener) {
-          ClusterMapChangeListener listener = (ClusterMapChangeListener) dcInfo.clusterChangeHandler;
-          registerClusterMapListener(listener);
-          // WARNING: currently this code is tailored to the CloudServiceClusterChangeHandler, which only needs to be
-          // provided one replica per partition. If this assumption is no longer valid, modify this logic.
-          List<ReplicaId> oneReplicaPerPartition = new ArrayList<>(ambryPartitionToAmbryReplicas.size());
-          for (Set<AmbryReplica> replicas : ambryPartitionToAmbryReplicas.values()) {
-            replicas.stream().findFirst().ifPresent(oneReplicaPerPartition::add);
+      } else {
+        List<DatacenterInitializer> initializers = new ArrayList<>();
+        for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
+          // Initialize from every remote datacenter in a separate thread to speed things up.
+          DatacenterInitializer initializer =
+              new DatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
+                  partitionOverrideInfoMap, new ClusterChangeHandlerCallback(), helixClusterManagerCallback,
+                  helixClusterManagerMetrics, dataNodeConfigSourceMetrics, sealedStateChangeCounter, partitionMap,
+                  partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas);
+          initializer.start();
+          initializers.add(initializer);
+        }
+        for (DatacenterInitializer initializer : initializers) {
+          try {
+            DcInfo dcInfo = initializer.join();
+            dcToDcInfo.put(dcInfo.dcName, dcInfo);
+            dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcInfo.dcName);
+          } catch (Exception e) {
+            initializationFailureMap.putIfAbsent(initializer.getDcName(), e);
           }
-          listener.onReplicaAddedOrRemoved(oneReplicaPerPartition, Collections.emptyList());
+        }
+
+        for (DcInfo dcInfo : dcToDcInfo.values()) {
+          if (dcInfo.clusterChangeHandler instanceof ClusterMapChangeListener) {
+            ClusterMapChangeListener listener = (ClusterMapChangeListener) dcInfo.clusterChangeHandler;
+            registerClusterMapListener(listener);
+            // WARNING: currently this code is tailored to the CloudServiceClusterChangeHandler, which only needs to be
+            // provided one replica per partition. If this assumption is no longer valid, modify this logic.
+            List<ReplicaId> oneReplicaPerPartition = new ArrayList<>(ambryPartitionToAmbryReplicas.size());
+            for (Set<AmbryReplica> replicas : ambryPartitionToAmbryReplicas.values()) {
+              replicas.stream().findFirst().ifPresent(oneReplicaPerPartition::add);
+            }
+            listener.onReplicaAddedOrRemoved(oneReplicaPerPartition, Collections.emptyList());
+          }
         }
       }
     }
@@ -175,7 +191,7 @@ public class HelixClusterManager implements ClusterMap {
       helixClusterManagerMetrics.initializePartitionMetrics();
       helixClusterManagerMetrics.initializeCapacityMetrics();
     }
-    localDatacenterId = dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
+    localDatacenterId = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName).getDcId();
     partitionSelectionHelper =
         new PartitionSelectionHelper(helixClusterManagerCallback, clusterMapConfig.clusterMapDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
@@ -240,11 +256,20 @@ public class HelixClusterManager implements ClusterMap {
    * Initialize capacity statistics.
    */
   private void initializeCapacityStats() {
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = dcInfo.clusterChangeHandler.getDataNodeToDisksMap();
+    if (clusterMapUseAggregatedView) {
+      Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = clusterInfo.clusterChangeHandler.getDataNodeToDisksMap();
       for (Set<AmbryDisk> disks : dataNodeToDisks.values()) {
         for (AmbryDisk disk : disks) {
           clusterWideRawCapacityBytes.getAndAdd(disk.getRawCapacityInBytes());
+        }
+      }
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = dcInfo.clusterChangeHandler.getDataNodeToDisksMap();
+        for (Set<AmbryDisk> disks : dataNodeToDisks.values()) {
+          for (AmbryDisk disk : disks) {
+            clusterWideRawCapacityBytes.getAndAdd(disk.getRawCapacityInBytes());
+          }
         }
       }
     }
@@ -257,6 +282,11 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public boolean hasDatacenter(String datacenterName) {
+    if (clusterMapUseAggregatedView) {
+      //TODO: This is a static check since it could happen that a data center is not reachable and is missing in
+      // aggregated view information coming from helix.
+      return dataCenterToZkAddress.containsKey(datacenterName);
+    }
     return dcToDcInfo.containsKey(datacenterName);
   }
 
@@ -273,6 +303,11 @@ public class HelixClusterManager implements ClusterMap {
   @Override
   public AmbryDataNode getDataNodeId(String hostname, int port) {
     String instanceName = getInstanceName(hostname, port);
+
+    if (clusterMapUseAggregatedView) {
+      return clusterInfo.clusterChangeHandler.getDataNode(instanceName);
+    }
+
     AmbryDataNode dataNode = null;
     for (DcInfo dcInfo : dcToDcInfo.values()) {
       dataNode = dcInfo.clusterChangeHandler.getDataNode(instanceName);
@@ -280,6 +315,7 @@ public class HelixClusterManager implements ClusterMap {
         break;
       }
     }
+
     return dataNode;
   }
 
@@ -289,14 +325,22 @@ public class HelixClusterManager implements ClusterMap {
       throw new IllegalArgumentException("Incompatible type passed in");
     }
     AmbryDataNode dataNode = (AmbryDataNode) dataNodeId;
-    return dcToDcInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getReplicaIds(dataNode);
+    if (clusterMapUseAggregatedView) {
+      return clusterInfo.clusterChangeHandler.getReplicaIds(dataNode);
+    } else {
+      return dcToDcInfo.get(dataNode.getDatacenterName()).clusterChangeHandler.getReplicaIds(dataNode);
+    }
   }
 
   @Override
   public List<AmbryDataNode> getDataNodeIds() {
     List<AmbryDataNode> dataNodeList = new ArrayList<>();
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      dataNodeList.addAll(dcInfo.clusterChangeHandler.getAllDataNodes());
+    if (clusterMapUseAggregatedView) {
+      dataNodeList.addAll(clusterInfo.clusterChangeHandler.getAllDataNodes());
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        dataNodeList.addAll(dcInfo.clusterChangeHandler.getAllDataNodes());
+      }
     }
     return dataNodeList;
   }
@@ -446,14 +490,19 @@ public class HelixClusterManager implements ClusterMap {
       currentPartition = mappedPartition;
     }
     // Check if data node or disk is in current cluster map, if not, set bootstrapReplica to null.
-    ClusterChangeHandler localClusterChangeHandler =
-        dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).clusterChangeHandler;
-    AmbryDataNode dataNode = localClusterChangeHandler.getDataNode(instanceName);
+    ClusterChangeHandler clusterChangeHandler;
+    if (clusterMapUseAggregatedView) {
+      clusterChangeHandler = clusterInfo.clusterChangeHandler;
+    } else {
+      clusterChangeHandler = dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).clusterChangeHandler;
+    }
+
+    AmbryDataNode dataNode = clusterChangeHandler.getDataNode(instanceName);
     String mountPathAndDiskCapacityFromHelix = replicaInfos.get(instanceName);
     String[] segments = mountPathAndDiskCapacityFromHelix.split(DISK_CAPACITY_DELIM_STR);
     String mountPath = segments[0];
     String diskCapacityStr = segments.length >= 2 ? segments[1] : null;
-    Set<AmbryDisk> disks = dataNode != null ? localClusterChangeHandler.getDisks(dataNode) : null;
+    Set<AmbryDisk> disks = dataNode != null ? clusterChangeHandler.getDisks(dataNode) : null;
     Optional<AmbryDisk> potentialDisk =
         disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPath)).findAny() : Optional.empty();
     if (potentialDisk.isPresent()) {
@@ -488,8 +537,12 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      dcInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+    if (clusterMapUseAggregatedView) {
+      clusterInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        dcInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+      }
     }
   }
 
@@ -498,10 +551,14 @@ public class HelixClusterManager implements ClusterMap {
    */
   @Override
   public void close() {
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      dcInfo.close();
+    if (clusterMapUseAggregatedView) {
+      clusterInfo.close();
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        dcInfo.close();
+      }
+      dcToDcInfo.clear();
     }
-    dcToDcInfo.clear();
   }
 
   /**
@@ -513,8 +570,12 @@ public class HelixClusterManager implements ClusterMap {
   AmbryReplica getReplicaForPartitionOnNode(DataNodeId dataNodeId, String partitionString) {
     // Note: partitionString here is now from partitionId.toPathString()
     AmbryDataNode ambryDataNode = getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
-    return dcToDcInfo.get(dataNodeId.getDatacenterName()).clusterChangeHandler.getReplicaId(ambryDataNode,
-        partitionString);
+    if (clusterMapUseAggregatedView) {
+      return clusterInfo.clusterChangeHandler.getReplicaId(ambryDataNode, partitionString);
+    } else {
+      return dcToDcInfo.get(dataNodeId.getDatacenterName()).clusterChangeHandler.getReplicaId(ambryDataNode,
+          partitionString);
+    }
   }
 
   /**
@@ -522,8 +583,12 @@ public class HelixClusterManager implements ClusterMap {
    */
   long getErrorCount() {
     long totalErrorCnt = 0;
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      totalErrorCnt += dcInfo.clusterChangeHandler.getErrorCount();
+    if (clusterMapUseAggregatedView) {
+      totalErrorCnt = clusterInfo.clusterChangeHandler.getErrorCount();
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        totalErrorCnt += dcInfo.clusterChangeHandler.getErrorCount();
+      }
     }
     return totalErrorCnt;
   }
@@ -541,8 +606,14 @@ public class HelixClusterManager implements ClusterMap {
    */
   Map<String, Map<String, String>> getPartitionToResourceMap() {
     Map<String, Map<String, String>> partitionToResourceNameByDc = new HashMap<>();
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      partitionToResourceNameByDc.put(dcInfo.dcName, dcInfo.clusterChangeHandler.getPartitionToResourceMap());
+    if (clusterMapUseAggregatedView) {
+      //TODO: check if all data centers needs to be populated
+      partitionToResourceNameByDc.put(clusterMapConfig.clusterMapDatacenterName,
+          clusterInfo.clusterChangeHandler.getPartitionToResourceMap());
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        partitionToResourceNameByDc.put(dcInfo.dcName, dcInfo.clusterChangeHandler.getPartitionToResourceMap());
+      }
     }
     return partitionToResourceNameByDc;
   }
@@ -553,8 +624,14 @@ public class HelixClusterManager implements ClusterMap {
    */
   Map<String, Set<AmbryDataNode>> getDcToDataNodesMap() {
     Map<String, Set<AmbryDataNode>> dcToNodes = new HashMap<>();
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      dcToNodes.put(dcInfo.dcName, new HashSet<>(dcInfo.clusterChangeHandler.getAllDataNodes()));
+    if (clusterMapUseAggregatedView) {
+      clusterInfo.clusterChangeHandler.getAllDataNodes()
+          .forEach(ambryDataNode -> dcToNodes.computeIfAbsent(ambryDataNode.getDatacenterName(), k -> new HashSet<>())
+              .add(ambryDataNode));
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        dcToNodes.put(dcInfo.dcName, new HashSet<>(dcInfo.clusterChangeHandler.getAllDataNodes()));
+      }
     }
     return Collections.unmodifiableMap(dcToNodes);
   }
@@ -565,10 +642,14 @@ public class HelixClusterManager implements ClusterMap {
    */
   Map<String, RoutingTableSnapshot> getRoutingTableSnapshots() {
     Map<String, RoutingTableSnapshot> dcToRoutingTableSnapshot = new HashMap<>();
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      ClusterChangeHandler handler = dcInfo.clusterChangeHandler;
-      if (handler instanceof HelixClusterChangeHandler) {
-        dcToRoutingTableSnapshot.put(dcInfo.dcName, ((HelixClusterChangeHandler) handler).getRoutingTableSnapshot());
+    if (clusterMapUseAggregatedView) {
+      // TODO
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        ClusterChangeHandler handler = dcInfo.clusterChangeHandler;
+        if (handler instanceof HelixClusterChangeHandler) {
+          dcToRoutingTableSnapshot.put(dcInfo.dcName, ((HelixClusterChangeHandler) handler).getRoutingTableSnapshot());
+        }
       }
     }
     return Collections.unmodifiableMap(dcToRoutingTableSnapshot);
@@ -593,6 +674,7 @@ public class HelixClusterManager implements ClusterMap {
    * @return localDC's zk connect string.
    */
   public String getLocalDcZkConnectString() {
+    // TODO
     return dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getZkConnectStrs().get(0);
   }
 
@@ -692,6 +774,9 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public String getResourceNameForPartition(AmbryPartition partition) {
       String result = null;
+      if (clusterMapConfig.clusterMapUseAggregatedView) {
+        return clusterInfo.clusterChangeHandler.getPartitionToResourceMap().get(partition.toPathString());
+      }
       // go through all datacenters in case that partition resides in one datacenter only
       for (DcInfo dcInfo : dcToDcInfo.values()) {
         String resourceName = dcInfo.clusterChangeHandler.getPartitionToResourceMap().get(partition.toPathString());
@@ -711,10 +796,18 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
       List<AmbryReplica> replicas = new ArrayList<>();
-      for (DcInfo dcInfo : dcToDcInfo.values()) {
-        String dc = dcInfo.dcName;
-        if (dcName == null || dcName.equals(dc)) {
-          dcInfo.clusterChangeHandler.getReplicaIdsByState(partition, state).forEach(replicas::add);
+      if (clusterMapConfig.clusterMapUseAggregatedView) {
+        clusterInfo.clusterChangeHandler.getReplicaIdsByState(partition, state).forEach(ambryReplica -> {
+          if (dcName == null || ambryReplica.getDataNodeId().getDatacenterName().equals(dcName)) {
+            replicas.add(ambryReplica);
+          }
+        });
+      } else {
+        for (DcInfo dcInfo : dcToDcInfo.values()) {
+          String dc = dcInfo.dcName;
+          if (dcName == null || dcName.equals(dc)) {
+            dcInfo.clusterChangeHandler.getReplicaIdsByState(partition, state).forEach(replicas::add);
+          }
         }
       }
       return replicas;
@@ -723,10 +816,15 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, AmbryPartition partition,
         Set<ReplicaState> states, String dcName) {
-      for (DcInfo dcInfo : dcToDcInfo.values()) {
-        String dc = dcInfo.dcName;
-        if (dcName == null || dcName.equals(dc)) {
-          dcInfo.clusterChangeHandler.getReplicaIdsByStates(replicasByState, states, partition);
+      if (clusterMapConfig.clusterMapUseAggregatedView) {
+        clusterInfo.clusterChangeHandler.getReplicaIdsByStates(replicasByState, states, partition);
+
+      } else {
+        for (DcInfo dcInfo : dcToDcInfo.values()) {
+          String dc = dcInfo.dcName;
+          if (dcName == null || dcName.equals(dc)) {
+            dcInfo.clusterChangeHandler.getReplicaIdsByStates(replicasByState, states, partition);
+          }
         }
       }
     }

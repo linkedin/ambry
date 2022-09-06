@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * datacenter. This class is also responsible for handling events received.
  */
 public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
-  private final String dcName;
+  private final String dcOrClusterName;
   private final Object notificationLock = new Object();
   private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
   private final AtomicBoolean liveStateInitialized = new AtomicBoolean(false);
@@ -74,7 +74,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   /**
    * Initialize a ClusterChangeHandler in the given datacenter.
    * @param clusterMapConfig {@link ClusterMapConfig} to help some admin operations
-   * @param dcName the name of dc this {@link HelixClusterChangeHandler} associates with
+   * @param dcOrClusterName the name of dc this {@link HelixClusterChangeHandler} associates with
    * @param selfInstanceName the name of instance on which {@link HelixClusterManager} resides.
    * @param partitionOverrideInfoMap a map specifying partitions whose state should be overridden.
    * @param partitionMap a map from serialized bytes to corresponding partition.
@@ -85,7 +85,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
    * @param onInitializationFailure callback to be called if initialization fails in a listener call.
    * @param sealedStateChangeCounter a counter that records event when replica is sealed or unsealed
    */
-  SimpleClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcName, String selfInstanceName,
+  SimpleClusterChangeHandler(ClusterMapConfig clusterMapConfig, String dcOrClusterName, String selfInstanceName,
       Map<String, Map<String, String>> partitionOverrideInfoMap,
       ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap,
       ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition,
@@ -94,7 +94,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
       HelixClusterManagerMetrics helixClusterManagerMetrics, Consumer<Exception> onInitializationFailure,
       AtomicLong sealedStateChangeCounter) {
     this.clusterMapConfig = clusterMapConfig;
-    this.dcName = dcName;
+    this.dcOrClusterName = dcOrClusterName;
     this.selfInstanceName = selfInstanceName;
     this.partitionOverrideInfoMap = partitionOverrideInfoMap;
     this.partitionMap = partitionMap;
@@ -110,14 +110,14 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   @Override
   public void onDataNodeConfigChange(Iterable<DataNodeConfig> configs) {
     try {
-      logger.debug("InstanceConfig change triggered in {} with: {}", dcName, configs);
+      logger.debug("InstanceConfig change triggered in {} with: {}", dcOrClusterName, configs);
       synchronized (notificationLock) {
         if (!instanceConfigInitialized.get()) {
-          logger.info("Received initial notification for instance config change from {}", dcName);
+          logger.info("Received initial notification for instance config change from {}", dcOrClusterName);
           try {
             initializeInstances(configs);
           } catch (Exception e) {
-            logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
+            logger.error("Exception occurred when initializing instances in {}: ", dcOrClusterName, e);
             onInitializationFailure.accept(e);
           }
           instanceConfigInitialized.set(true);
@@ -144,10 +144,10 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext)
       throws InterruptedException {
     if (!idealStateInitialized.get()) {
-      logger.info("Received initial notification for IdealState change from {}", dcName);
+      logger.info("Received initial notification for IdealState change from {}", dcOrClusterName);
       idealStateInitialized.set(true);
     } else {
-      logger.info("IdealState change triggered from {}", dcName);
+      logger.info("IdealState change triggered from {}", dcOrClusterName);
     }
     // rebuild the entire partition-to-resource map in current dc
     ConcurrentHashMap<String, String> newPartitionToResourceMap = new ConcurrentHashMap<>();
@@ -169,10 +169,10 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   @Override
   public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
     try {
-      logger.debug("Live instance change triggered from {} with: {}", dcName, liveInstances);
+      logger.debug("Live instance change triggered from {} with: {}", dcOrClusterName, liveInstances);
       updateInstanceLiveness(liveInstances);
       if (!liveStateInitialized.get()) {
-        logger.info("Received initial notification for live instance change from {}", dcName);
+        logger.info("Received initial notification for live instance change from {}", dcOrClusterName);
         liveStateInitialized.set(true);
       }
       helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
@@ -191,11 +191,11 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   @Override
   public void onRoutingTableChange(RoutingTableSnapshot routingTableSnapshot, Object context) {
     if (routingTableInitLatch.getCount() == 1) {
-      logger.info("Received initial notification for routing table change from {}", dcName);
+      logger.info("Received initial notification for routing table change from {}", dcOrClusterName);
       routingTableSnapshotRef.getAndSet(routingTableSnapshot);
       routingTableInitLatch.countDown();
     } else {
-      logger.info("Routing table change triggered from {}", dcName);
+      logger.info("Routing table change triggered from {}", dcOrClusterName);
       routingTableSnapshotRef.getAndSet(routingTableSnapshot);
     }
     helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
@@ -255,7 +255,8 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
   public void waitForInitNotification() throws InterruptedException {
     // wait slightly more than 5 mins to ensure routerUpdater refreshes the snapshot.
     if (!routingTableInitLatch.await(320, TimeUnit.SECONDS)) {
-      throw new IllegalStateException("Initial routing table change from " + dcName + " didn't come within 5 mins");
+      throw new IllegalStateException(
+          "Initial routing table change from " + dcOrClusterName + " didn't come within 5 mins");
     }
   }
 
@@ -272,7 +273,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
    * @throws Exception if creation of {@link AmbryDataNode}s or {@link AmbryDisk}s throw an Exception.
    */
   private void initializeInstances(Iterable<DataNodeConfig> dataNodeConfigs) throws Exception {
-    logger.info("Initializing cluster information from {}", dcName);
+    logger.info("Initializing cluster information from {}", dcOrClusterName);
     for (DataNodeConfig dataNodeConfig : dataNodeConfigs) {
       String instanceName = dataNodeConfig.getInstanceName();
       long instanceXid = dataNodeConfig.getXid();
@@ -291,7 +292,7 @@ public class SimpleClusterChangeHandler implements HelixClusterChangeHandler {
         helixClusterManagerMetrics.ignoredUpdatesCount.inc();
       }
     }
-    logger.info("Initialized cluster information from {}", dcName);
+    logger.info("Initialized cluster information from {}", dcOrClusterName);
   }
 
   /**

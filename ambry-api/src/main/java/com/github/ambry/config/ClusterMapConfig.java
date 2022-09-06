@@ -23,6 +23,8 @@ import org.json.JSONObject;
 public class ClusterMapConfig {
 
   public static final String CLUSTERMAP_CLUSTER_NAME = "clustermap.cluster.name";
+  public static final String CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME = "clustermap.aggregated.view.cluster.name";
+  public static final String CLUSTERMAP_USE_AGGREGATED_VIEW = "clustermap.use.aggregated.view";
   public static final String CLUSTERMAP_DATACENTER_NAME = "clustermap.datacenter.name";
   public static final String CLUSTERMAP_HOST_NAME = "clustermap.host.name";
   public static final String CLUSTERMAP_PORT = "clustermap.port";
@@ -160,6 +162,20 @@ public class ClusterMapConfig {
    */
   @Config(CLUSTERMAP_CLUSTER_NAME)
   public final String clusterMapClusterName;
+
+  /**
+   * The name of the associated aggregated view cluster for this node.
+   */
+  @Config(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME)
+  @Default("")
+  public final String clusterMapAggregatedViewClusterName;
+
+  /**
+   * To indicate if we should use helix aggregated cluster view.
+   */
+  @Config(CLUSTERMAP_USE_AGGREGATED_VIEW)
+  @Default("false")
+  public final boolean clusterMapUseAggregatedView;
 
   /**
    * The name of the associated datacenter for this node.
@@ -359,6 +375,8 @@ public class ClusterMapConfig {
             DataNodeConfigSourceType.INSTANCE_CONFIG);
     clusterMapDcsZkConnectStrings = verifiableProperties.getString("clustermap.dcs.zk.connect.strings", "");
     clusterMapClusterName = verifiableProperties.getString(CLUSTERMAP_CLUSTER_NAME);
+    clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
+    clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
     clusterMapDatacenterName = verifiableProperties.getString(CLUSTERMAP_DATACENTER_NAME);
     clusterMapHostName = verifiableProperties.getString(CLUSTERMAP_HOST_NAME);
     clusterMapPort = verifiableProperties.getInteger(CLUSTERMAP_PORT, null);
