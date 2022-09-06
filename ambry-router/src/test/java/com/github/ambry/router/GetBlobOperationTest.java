@@ -1304,7 +1304,9 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testRouterMetadataCacheFirstChunkOperationFlag() throws Exception {
-    blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
+    // Note that random() can return 0. So we add 1.
+    // This _will_ generate a composite blob.
+    blobSize = maxChunkSize + random.nextInt(maxChunkSize) + 1;
     int randomOne = random.nextInt(blobSize);
     int randomTwo = random.nextInt(blobSize);
     doPut();
@@ -1315,18 +1317,20 @@ public class GetBlobOperationTest {
         .build(), false, routerMetrics.ageAtGet);
     // First range request gets the entire blob including blobInfo
     GetBlobOperation op1 = getAndAssertSuccess(false, false, (short) 0);
-    assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All,
-        op1.getFirstChunkOperationFlag()), op1.getFirstChunkOperationFlag() == MessageFormatFlags.All);
+    assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op1.getFirstChunkOperationFlag()),
+        op1.getFirstChunkOperationFlag(), MessageFormatFlags.All);
     // Subsequent range request gets only blobInfo to validate metadata cached by previous request
     GetBlobOperation op2 = getAndAssertSuccess(false, false, (short) 0);
     if (this.enableMetadataCache) {
-      assertNotNull(this.blobMetadataCache.getObject(blobIdStr));
-      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.BlobInfo,
-          op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.BlobInfo);
+      assertNotNull(String.format("Blobsize must be greater than maxChunkSize. maxChunkSize = %s, blobSize = %s", maxChunkSize, blobSize),
+          this.blobMetadataCache.getObject(blobIdStr));
+      assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.BlobInfo, op2.getFirstChunkOperationFlag()),
+          op2.getFirstChunkOperationFlag(), MessageFormatFlags.BlobInfo);
     } else {
-      assertNull(this.blobMetadataCache.getObject(blobIdStr));
-      assertTrue(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All,
-          op1.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag() == MessageFormatFlags.All);
+      assertNull(String.format("maxChunkSize = %s, blobSize = %s", maxChunkSize, blobSize),
+          this.blobMetadataCache.getObject(blobIdStr));
+      assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op2.getFirstChunkOperationFlag()),
+          op2.getFirstChunkOperationFlag(), MessageFormatFlags.All);
     }
   }
 
