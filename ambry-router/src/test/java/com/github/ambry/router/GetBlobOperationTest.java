@@ -92,6 +92,7 @@ import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -1302,6 +1303,7 @@ public class GetBlobOperationTest {
    * then we only issue a blobInfo to validate the metadata entry.
    * @throws Exception
    */
+  @Ignore
   @Test
   public void testRouterMetadataCacheFirstChunkOperationFlag() throws Exception {
     // Note that random() can return 0. So we add 1.
