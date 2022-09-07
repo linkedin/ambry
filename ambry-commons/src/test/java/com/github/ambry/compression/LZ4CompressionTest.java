@@ -28,16 +28,17 @@ import org.powermock.modules.junit4.PowerMockRunner;
 @RunWith(PowerMockRunner.class)
 @PrepareForTest(LZ4Compression.class)
 public class LZ4CompressionTest {
-  LZ4Compression compression = new LZ4Compression();
 
   @Test
   public void testGetAlgorithmName() {
+    LZ4Compression compression = new LZ4Compression();
     Assert.assertTrue(compression.getAlgorithmName().length() > 0);
     Assert.assertTrue(compression.getAlgorithmName().length() < BaseCompression.MAX_ALGORITHM_NAME_LENGTH);
   }
 
   @Test
   public void testCompressionLevel() {
+    LZ4Compression compression = new LZ4Compression();
     Assert.assertEquals(0, compression.getMinimumCompressionLevel());
     Assert.assertTrue(compression.getMaximumCompressionLevel() > 0);
     Assert.assertTrue(compression.getDefaultCompressionLevel() >= 0);
@@ -45,20 +46,31 @@ public class LZ4CompressionTest {
 
   @Test
   public void testEstimateMaxCompressedDataSize() {
+    LZ4Compression compression = new LZ4Compression();
     Assert.assertTrue(compression.estimateMaxCompressedDataSize(1) > 1);
     Assert.assertTrue(compression.estimateMaxCompressedDataSize(100) > 100);
   }
 
   @Test
   public void testCompressAndDecompress_MinimumLevel() {
+    LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
-    compressDataAndDecompressDataTest(compression, "Test my minimum compression message using minimum level.");
+    // Test dedicated buffer (without extra bytes on left or right of buffer).
+    compressDataAndDecompressDataTest(compression, "Test my minimum compression message using minimum level.", 0 , 0);
+
+    // Test mid-buffer (with extra bytes on left and right of buffer.)
+    compressDataAndDecompressDataTest(compression, "Test my minimum compression message using minimum level.", 2 , 3);
   }
 
   @Test
   public void testCompressAndDecompress_MaximumLevel() {
+    LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
-    compressDataAndDecompressDataTest(compression, "Test my maximum compression message using maximum level.");
+    // Test dedicated buffer (without extra bytes on left or right of buffer).
+    compressDataAndDecompressDataTest(compression, "Test my maximum compression message using maximum level.", 0, 0);
+
+    // Test mid-buffer (with extra bytes on left and right of buffer.)
+    compressDataAndDecompressDataTest(compression, "Test my maximum compression message using maximum level.", 2, 1);
   }
 
   @Test
@@ -99,21 +111,30 @@ public class LZ4CompressionTest {
     Assert.assertEquals(theException, ex.getCause());
   }
 
-  public static void compressDataAndDecompressDataTest(BaseCompression compression, String testMessage) {
+  public static void compressDataAndDecompressDataTest(BaseCompression compression, String testMessage,
+      int bufferLeftPadSize, int bufferRightPadSize) {
     // Apply compression to testMessage.
+    // oversizeCompressedBuffer consists of bytes[bufferLeftPadSize] + bytes[actualCompressedSize]
+    // + bytes[compressUnusedSpace] + bytes[bufferRightPadSize]
     byte[] sourceBuffer = testMessage.getBytes(StandardCharsets.UTF_8);
-    byte[] oversizeCompressedBuffer = new byte[compression.estimateMaxCompressedDataSize(sourceBuffer.length)];
-    int usage = compression.compressData(sourceBuffer, 0, sourceBuffer.length,
-        oversizeCompressedBuffer, 0, oversizeCompressedBuffer.length);
-    Assert.assertTrue(usage > 0);
+    int estimatedCompressedSize = compression.estimateMaxCompressedDataSize(sourceBuffer.length);
+    byte[] oversizeCompressedBuffer = new byte[bufferLeftPadSize + estimatedCompressedSize + bufferRightPadSize];
+    int actualCompressedSize = compression.compressData(sourceBuffer, 0, sourceBuffer.length,
+        oversizeCompressedBuffer, bufferLeftPadSize, estimatedCompressedSize);
+    Assert.assertTrue(actualCompressedSize > 0);
 
     // Apply decompression.
-    byte[] compressedBuffer = new byte[usage];
-    System.arraycopy(oversizeCompressedBuffer, 0, compressedBuffer, 0, usage);
-    byte[] decompressedBuffer = new byte[sourceBuffer.length];
-    compression.decompressData(compressedBuffer, 0, compressedBuffer.length,
-        decompressedBuffer, 0, decompressedBuffer.length);
-    String decompressedMessage = new String(decompressedBuffer, StandardCharsets.UTF_8);
+    // compressedBuffer has bytes[bufferLeftPadSize] + bytes[actualCompressedSize] + bytes[bufferRightPadSize]
+    // decompressedBuffer contains bytes[bufferLeftPadSize] + bytes[sourceBufferSize] + bytes[bufferRightPadSize]
+    byte[] compressedBuffer = new byte[bufferLeftPadSize + actualCompressedSize + bufferRightPadSize];
+    System.arraycopy(oversizeCompressedBuffer, bufferLeftPadSize, compressedBuffer, bufferLeftPadSize,
+        actualCompressedSize);
+    byte[] decompressedBuffer = new byte[bufferLeftPadSize + sourceBuffer.length + bufferRightPadSize];
+    compression.decompressData(compressedBuffer, bufferLeftPadSize, actualCompressedSize,
+        decompressedBuffer, bufferLeftPadSize, sourceBuffer.length);
+
+    String decompressedMessage = new String(decompressedBuffer, bufferLeftPadSize, sourceBuffer.length,
+        StandardCharsets.UTF_8);
     Assert.assertEquals(testMessage, decompressedMessage);
   }
 }

@@ -17,16 +17,16 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class ZstdCompressionTest {
-  ZstdCompression compression = new ZstdCompression();
-
   @Test
   public void testGetAlgorithmName() {
+    ZstdCompression compression = new ZstdCompression();
     Assert.assertTrue(compression.getAlgorithmName().length() > 0);
     Assert.assertTrue(compression.getAlgorithmName().length() < BaseCompression.MAX_ALGORITHM_NAME_LENGTH);
   }
 
   @Test
   public void testCompressionLevel() {
+    ZstdCompression compression = new ZstdCompression();
     Assert.assertTrue(compression.getMinimumCompressionLevel() < 0);
     Assert.assertTrue(compression.getMaximumCompressionLevel() > 0);
     Assert.assertTrue(compression.getDefaultCompressionLevel() >= 0);
@@ -34,26 +34,42 @@ public class ZstdCompressionTest {
 
   @Test
   public void testEstimateMaxCompressedDataSize() {
+    ZstdCompression compression = new ZstdCompression();
     Assert.assertTrue(compression.estimateMaxCompressedDataSize(1) > 1);
     Assert.assertTrue(compression.estimateMaxCompressedDataSize(100) > 100);
   }
 
   @Test
   public void testCompressAndDecompress_DefaultLevel() {
+    ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getDefaultCompressionLevel());
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test default compression using default level.");
+    // Test dedicated buffer (without extra bytes on left or right of buffer).
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test default compression using default level.", 0, 0);
+
+    // Test mid-buffer (with extra bytes on left and right of buffer.)
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test default compression using default level.", 1, 2);
   }
 
   @Test
   public void testCompressAndDecompress_MinimumLevel() {
+    ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test minimum compression using minimum level.");
+    // Test dedicated buffer (without extra bytes on left or right of buffer).
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test minimum compression using minimum level.", 0, 0);
+
+    // Test mid-buffer (with extra bytes on left and right of buffer.)
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test minimum compression using minimum level.", 2, 2);
   }
 
   @Test
   public void testCompressAndDecompress_MaximumLevel() {
+    ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test maximum compression using maximum level.");
+    // Test dedicated buffer (without extra bytes on left or right of buffer).
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test maximum compression using maximum level.", 0, 0);
+
+    // Test mid-buffer (with extra bytes on left and right of buffer.)
+    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test maximum compression using maximum level.", 3, 0);
   }
 }
 

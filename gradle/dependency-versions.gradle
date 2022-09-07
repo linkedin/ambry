@@ -35,4 +35,6 @@ ext {
     hikariVersion = "3.4.5"
     lz4Version = "1.8.0"
     zstdVersion = "1.5.2-3"
+    mockitoVersion = "2.+"
+    powermockVersion = "2.+"
 }

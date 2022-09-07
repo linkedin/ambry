@@ -94,16 +94,15 @@ public class ZstdCompression extends BaseCompressionWithLevel {
       byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
 
     long compressedSize = Zstd.compressByteArray(compressedBuffer, compressedBufferOffset,
-        compressedBuffer.length - compressedBufferOffset, sourceData, 0, sourceData.length,
-        getCompressionLevel());
+        compressedBufferSize, sourceData, sourceDataOffset, sourceDataSize, getCompressionLevel());
 
     if (Zstd.isError(compressedSize)) {
       throw new CompressionException(String.format("Zstd compression failed with error code: %d, name: %s. "
               + "sourceData.length=%d, sourceDataOffset=%d, sourceDataSize=%d, "
-              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
+              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d, compressionLevel=%d",
           compressedSize, Zstd.getErrorName(compressedSize),
           sourceData.length, sourceDataOffset, sourceDataSize,
-          compressedBuffer.length, compressedBufferOffset, compressedBufferSize));
+          compressedBuffer.length, compressedBufferOffset, compressedBufferSize, getCompressionLevel()));
     }
     return (int) compressedSize;
   }
@@ -123,8 +122,8 @@ public class ZstdCompression extends BaseCompressionWithLevel {
   @Override
   protected void decompressData(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
       byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) {
-    long decompressedSize = Zstd.decompressByteArray(sourceDataBuffer, 0, sourceDataBuffer.length,
-        compressedBuffer, compressedBufferOffset,compressedBuffer.length - compressedBufferOffset);
+    long decompressedSize = Zstd.decompressByteArray(sourceDataBuffer, sourceDataOffset, sourceDataSize,
+        compressedBuffer, compressedBufferOffset, compressedBufferSize);
 
     if (Zstd.isError(decompressedSize)) {
       throw new CompressionException(String.format("Zstd decompression failed with error code: %d, name: %s. "

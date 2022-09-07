@@ -42,6 +42,12 @@ public class CompressionFactoryTest {
     Compression lz4 = new LZ4Compression();
     Assert.assertNull(factory.getDefaultCompressor());
 
+    // Test: set default compressor fails due because it's not registerd.
+    Exception ex = TestUtils.invokeAndGetException(() -> factory.setDefaultCompressor(lz4));
+    Assert.assertTrue(ex instanceof IllegalArgumentException);
+
+    // Test: register compression then set default.
+    factory.register(lz4);
     factory.setDefaultCompressor(lz4);
     Compression compression = factory.getDefaultCompressor();
     Assert.assertEquals(lz4, compression);
@@ -57,7 +63,7 @@ public class CompressionFactoryTest {
     factory.register(zstd);
 
     // Test: Invalid argument
-    Exception ex = TestUtils.invokeAndGetException(() -> factory.getDecompressor(new byte[0]));
+    Exception ex = TestUtils.invokeAndGetException(() -> factory.getCompressionFromCompressedData(new byte[0]));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     // Test: Compress the string using LZ4 and decompress using factory.
@@ -78,7 +84,7 @@ public class CompressionFactoryTest {
     byte[] compressedBuffer = new byte[bufferSize];
     System.arraycopy(compressionResult.getSecond(), 0, compressedBuffer, 0, compressedBuffer.length);
 
-    Compression decompressor = factory.getDecompressor(compressedBuffer);
+    Compression decompressor = factory.getCompressionFromCompressedData(compressedBuffer);
     return decompressor.decompress(compressedBuffer);
   }
 }
