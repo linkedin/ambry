@@ -268,6 +268,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         } catch (Exception e) {
           if (e instanceof RestServiceException &&
               ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
+            logger.warn("NAMED GET: Data NotFound in new table. accountId='{}', containerId='{}', blobName='{}'.",
+                accountId, containerId, blobName);
             metricsRecoder.namedDataNotFoundGetCount.inc();
           } else {
             logger.error("NAMED GET: Data Error: old table succeed while new table failed: ", e);
@@ -294,6 +296,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           logger.error("NAMED LIST: Data Error: old table succeed while new table failed: ", e);
         }
         if (!Objects.equals(recordPage.getEntries(), recordPageV2.getEntries())) {
+          logger.warn(
+              "NAMED LIST: Data Inconsistent. accountId='{}', containerId='{}', blobNamePrefix='{}', pageToken='{}'.",
+              accountId, containerId, blobNamePrefix, pageToken);
           metricsRecoder.namedDataInconsistentListCount.inc();
         }
       }
