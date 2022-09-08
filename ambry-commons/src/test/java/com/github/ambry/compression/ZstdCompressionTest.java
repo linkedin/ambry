@@ -44,10 +44,10 @@ public class ZstdCompressionTest {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getDefaultCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test default compression using default level.", 0, 0);
+    LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test default compression using default level.", 0, 0);
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test default compression using default level.", 1, 2);
+    LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test default compression using default level.", 1, 2);
   }
 
   @Test
@@ -55,10 +55,10 @@ public class ZstdCompressionTest {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test minimum compression using minimum level.", 0, 0);
+    LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test minimum compression using minimum level.", 0, 0);
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test minimum compression using minimum level.", 2, 2);
+    LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test minimum compression using minimum level.", 2, 2);
   }
 
   @Test
@@ -66,10 +66,10 @@ public class ZstdCompressionTest {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test maximum compression using maximum level.", 0, 0);
+    LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test maximum compression using maximum level.", 0, 0);
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
-    LZ4CompressionTest.compressDataAndDecompressDataTest(compression, "Test maximum compression using maximum level.", 3, 0);
+    LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test maximum compression using maximum level.", 3, 0);
   }
 }
 

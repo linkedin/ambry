@@ -32,7 +32,7 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    * @return Name of this algorithm.
    */
   @Override
-  public String getAlgorithmName() {
+  public final String getAlgorithmName() {
     return "ZSTD";
   }
 
@@ -90,7 +90,7 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    * @return The size of the compressed data in bytes.
    */
   @Override
-  protected int compressData(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
+  protected int compressNative(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
       byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
 
     long compressedSize = Zstd.compressByteArray(compressedBuffer, compressedBufferOffset,
@@ -114,13 +114,13 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    *
    * @param compressedBuffer The compressed buffer.
    * @param compressedBufferOffset The offset in compressedBuffer where the decompression should start reading.
-   * @param compressedBufferSize Size of the compressed buffer returned from compressData().
+   * @param compressedBufferSize Size of the compressed buffer returned from compressNative().
    * @param sourceDataBuffer The buffer to store decompression output (the original source data).
    * @param sourceDataOffset Offset where to write the decompressed data.
    * @param sourceDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
    */
   @Override
-  protected void decompressData(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
+  protected void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
       byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) {
     long decompressedSize = Zstd.decompressByteArray(sourceDataBuffer, sourceDataOffset, sourceDataSize,
         compressedBuffer, compressedBufferOffset, compressedBufferSize);

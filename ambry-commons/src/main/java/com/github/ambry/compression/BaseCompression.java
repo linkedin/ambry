@@ -41,7 +41,7 @@ public abstract class BaseCompression implements Compression {
   protected abstract int estimateMaxCompressedDataSize(int sourceDataSize);
 
   /**
-   * Invoke the compression algorithm given the source data.  The compression output is stored in the
+   * Invoke the native compression algorithm given the source data.  The compression output is stored in the
    * compressed buffer at the specific offset.
    * The compression implementation is algorithm specific.
    * All parameters have been verified before calling so implementation can skip verification.
@@ -55,22 +55,22 @@ public abstract class BaseCompression implements Compression {
    *                             estimateMaxCompressedDataSize().
    * @return The size of the compressed data in bytes.
    */
-  protected abstract int compressData(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
+  protected abstract int compressNative(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
       byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize);
 
   /**
-   * Invoke the decompression algorithm given the compressedBuffer and the offset of the compression output.
+   * Invoke the native decompression algorithm given the compressedBuffer and the offset of the compression output.
    * The size of sourceDataBuffer must be at least the original data source size.
    * The decompression implementation is algorithm specific.
    *
    * @param compressedBuffer The compressed buffer.
    * @param compressedBufferOffset The offset in compressedBuffer where the decompression should start reading.
-   * @param compressedBufferSize Size of the compressed buffer returned from compressData().
+   * @param compressedBufferSize Size of the compressed buffer returned from compressNative().
    * @param sourceDataBuffer The buffer to store decompression output (the original source data).
    * @param sourceDataOffset Offset where to write the decompressed data.
    * @param sourceDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
    */
-  protected abstract void decompressData(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
+  protected abstract void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
       byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize);
 
   /**
@@ -217,7 +217,7 @@ public abstract class BaseCompression implements Compression {
 
     // Apply compression and store the output in the remaining buffer.
     // Note: compress() uses less than the remaining buffer and that's why it returns the actual compressed size.
-    int compressedDataLength = compressData(sourceData, sourceDataOffset, sourceDataSize,
+    int compressedDataLength = compressNative(sourceData, sourceDataOffset, sourceDataSize,
         compressedBuffer, offset, compressedBufferSize - overheadSize);
 
     return (overheadSize + compressedDataLength);
@@ -283,7 +283,7 @@ public abstract class BaseCompression implements Compression {
 
     // Calculate overhead size = 1 (version) + 1 (name size) + name length + 4 (original size);
     int overheadSize = compressedBufferOffset + 6 + compressedBuffer[compressedBufferOffset + 1];
-    decompressData(compressedBuffer, compressedBufferOffset + overheadSize,
+    decompressNative(compressedBuffer, compressedBufferOffset + overheadSize,
         compressedBufferSize - overheadSize, sourceData, sourceDataOffset, originalSize);
     return originalSize;
   }

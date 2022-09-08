@@ -28,7 +28,7 @@ import org.powermock.modules.junit4.PowerMockRunner;
 @PrepareForTest(Zstd.class)
 public class ZstdCompressionFailedTests {
   @Test
-  public void testCompressDataFailed() {
+  public void testCompressNativeFailed() {
     // When Zstd.compressByteArray() is called, return error code.
     PowerMockito.mockStatic(Zstd.class);
     PowerMockito.when(Zstd.compressByteArray(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(),
@@ -37,13 +37,13 @@ public class ZstdCompressionFailedTests {
 
     ZstdCompression zstd = new ZstdCompression();
     Exception ex = TestUtils.invokeAndGetException(() ->
-        zstd.compressData("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
+        zstd.compressNative("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
             new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
   }
 
   @Test
-  public void testDecompressDataFailed() {
+  public void testDecompressNativeFailed() {
     // When Zstd.compressByteArray() is called, return error code.
     // Zstd.decompressByteArray(byte[] dst, int dstOffset, int dstSize, byte[] src, int srcOffset, int srcSize)
     PowerMockito.mockStatic(Zstd.class);
@@ -53,7 +53,7 @@ public class ZstdCompressionFailedTests {
 
     ZstdCompression zstd = new ZstdCompression();
     Exception ex = TestUtils.invokeAndGetException(() ->
-        zstd.decompressData(new byte[10], 0, 10, new byte[10], 0, 10));
+        zstd.decompressNative(new byte[10], 0, 10, new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
   }
 }

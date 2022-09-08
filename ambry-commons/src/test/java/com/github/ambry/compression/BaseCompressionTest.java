@@ -118,7 +118,7 @@ public class BaseCompressionTest {
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     // Test: Valid case - compressed data is simply a prefix plus the source data.
-    Mockito.when(compressor.compressData(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(),
+    Mockito.when(compressor.compressNative(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(),
             Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt()))
         .thenAnswer(invocation -> {
           byte[] sourceBuffer = invocation.getArgument(0);
@@ -207,7 +207,7 @@ public class BaseCompressionTest {
       System.arraycopy(compressedData, compressedDataOffset,
           sourceBuffer, sourceBufferOffset, compressedDataSize);
       return null;
-    }).when(decompressor).decompressData(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(),
+    }).when(decompressor).decompressNative(Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt(),
         Mockito.any(byte[].class), Mockito.anyInt(), Mockito.anyInt());
 
     byte[] originalData = decompressor.decompress(compressedBuffer);

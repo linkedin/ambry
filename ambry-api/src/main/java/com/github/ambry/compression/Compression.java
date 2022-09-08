@@ -147,8 +147,8 @@ public interface Compression {
    * @return Pair that contains the compressed buffer and the buffer usage size in bytes.
    */
   default Pair<Integer, byte[]> compress(byte[] sourceData) {
-    if (sourceData == null) {
-      throw new IllegalArgumentException("sourceData cannot be null.");
+    if (sourceData == null || sourceData.length == 0) {
+      throw new IllegalArgumentException("sourceData cannot be null or empty.");
     }
     return compress(sourceData, 0, sourceData.length);
   }
@@ -164,6 +164,9 @@ public interface Compression {
    * @return Pair that contains the compressed buffer and the buffer usage size in bytes.
    */
   default Pair<Integer, byte[]> compress(byte[] sourceData, int offset, int size) {
+    if (sourceData == null || sourceData.length == 0) {
+      throw new IllegalArgumentException("sourceData cannot be null or empty.");
+    }
     int compressedBufferSize = getCompressBufferSize(size);
     byte[] compressedBuffer = new byte[compressedBufferSize];
     int compressedSize = compress(sourceData, offset, size, compressedBuffer, 0, compressedBuffer.length);
@@ -194,8 +197,8 @@ public interface Compression {
    * @return The original/decompressed data.
    */
   default byte[] decompress(byte[] compressedBuffer) {
-    if (compressedBuffer == null) {
-      throw new IllegalArgumentException("compressedBuffer cannot be null.");
+    if (compressedBuffer == null || compressedBuffer.length == 0) {
+      throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
     }
     return decompress(compressedBuffer, 0, compressedBuffer.length);
   }
@@ -211,10 +214,12 @@ public interface Compression {
    * @return The original/decompressed data.
    */
   default byte[] decompress(byte[] compressedBuffer, int offset, int size) {
+    if (compressedBuffer == null || compressedBuffer.length == 0) {
+      throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
+    }
     int originalDataSize = getDecompressBufferSize(compressedBuffer, offset, size);
     byte[] sourceData = new byte[originalDataSize];
     decompress(compressedBuffer, offset, size, sourceData, 0, sourceData.length);
     return sourceData;
   }
-
 }

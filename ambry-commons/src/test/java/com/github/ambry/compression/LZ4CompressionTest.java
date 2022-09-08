@@ -56,10 +56,10 @@ public class LZ4CompressionTest {
     LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
-    compressDataAndDecompressDataTest(compression, "Test my minimum compression message using minimum level.", 0 , 0);
+    compressAndDecompressNativeTest(compression, "Test my minimum compression message using minimum level.", 0 , 0);
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
-    compressDataAndDecompressDataTest(compression, "Test my minimum compression message using minimum level.", 2 , 3);
+    compressAndDecompressNativeTest(compression, "Test my minimum compression message using minimum level.", 2 , 3);
   }
 
   @Test
@@ -67,14 +67,14 @@ public class LZ4CompressionTest {
     LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
-    compressDataAndDecompressDataTest(compression, "Test my maximum compression message using maximum level.", 0, 0);
+    compressAndDecompressNativeTest(compression, "Test my maximum compression message using maximum level.", 0, 0);
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
-    compressDataAndDecompressDataTest(compression, "Test my maximum compression message using maximum level.", 2, 1);
+    compressAndDecompressNativeTest(compression, "Test my maximum compression message using maximum level.", 2, 1);
   }
 
   @Test
-  public void testCompressDataFailed() throws Exception {
+  public void testCompressNativeFailed() throws Exception {
     // Create a compressor that throws when calling
     // compress(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen)
     LZ4Compressor throwCompressor = Mockito.mock(LZ4Compressor.class, Mockito.CALLS_REAL_METHODS);
@@ -86,14 +86,14 @@ public class LZ4CompressionTest {
     LZ4Compression lz4 = PowerMockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     PowerMockito.when(lz4, "getCompressor").thenReturn(throwCompressor);
     Exception ex = TestUtils.invokeAndGetException(() ->
-        lz4.compressData("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
+        lz4.compressNative("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
             new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
     Assert.assertEquals(theException, ex.getCause());
   }
 
   @Test
-  public void testDecompressDataFailed() throws Exception {
+  public void testDecompressNativeFailed() throws Exception {
 
     // Create a compressor that throws when calling
     // decompress(byte[] src, int srcOff, byte[] dest, int destOff, int destLen)
@@ -106,12 +106,12 @@ public class LZ4CompressionTest {
     LZ4Compression lz4 = PowerMockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     PowerMockito.when(lz4, "getDecompressor").thenReturn(throwDecompressor);
     Exception ex = TestUtils.invokeAndGetException(() ->
-        lz4.decompressData(new byte[10], 0, 10, new byte[10], 0, 10));
+        lz4.decompressNative(new byte[10], 0, 10, new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
     Assert.assertEquals(theException, ex.getCause());
   }
 
-  public static void compressDataAndDecompressDataTest(BaseCompression compression, String testMessage,
+  public static void compressAndDecompressNativeTest(BaseCompression compression, String testMessage,
       int bufferLeftPadSize, int bufferRightPadSize) {
     // Apply compression to testMessage.
     // oversizeCompressedBuffer consists of bytes[bufferLeftPadSize] + bytes[actualCompressedSize]
@@ -119,7 +119,7 @@ public class LZ4CompressionTest {
     byte[] sourceBuffer = testMessage.getBytes(StandardCharsets.UTF_8);
     int estimatedCompressedSize = compression.estimateMaxCompressedDataSize(sourceBuffer.length);
     byte[] oversizeCompressedBuffer = new byte[bufferLeftPadSize + estimatedCompressedSize + bufferRightPadSize];
-    int actualCompressedSize = compression.compressData(sourceBuffer, 0, sourceBuffer.length,
+    int actualCompressedSize = compression.compressNative(sourceBuffer, 0, sourceBuffer.length,
         oversizeCompressedBuffer, bufferLeftPadSize, estimatedCompressedSize);
     Assert.assertTrue(actualCompressedSize > 0);
 
@@ -130,7 +130,7 @@ public class LZ4CompressionTest {
     System.arraycopy(oversizeCompressedBuffer, bufferLeftPadSize, compressedBuffer, bufferLeftPadSize,
         actualCompressedSize);
     byte[] decompressedBuffer = new byte[bufferLeftPadSize + sourceBuffer.length + bufferRightPadSize];
-    compression.decompressData(compressedBuffer, bufferLeftPadSize, actualCompressedSize,
+    compression.decompressNative(compressedBuffer, bufferLeftPadSize, actualCompressedSize,
         decompressedBuffer, bufferLeftPadSize, sourceBuffer.length);
 
     String decompressedMessage = new String(decompressedBuffer, bufferLeftPadSize, sourceBuffer.length,
