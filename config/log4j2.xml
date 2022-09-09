@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="consoleAppender" target="SYSTEM_OUT">
+            <PatternLayout pattern="[%d] %p %m (%c)%n"/>
+        </Console>
+        <File name="publicAccessAppender" fileName="logs/publicAccessLog.out" append="true">
+            <PatternLayout>
+                <Pattern>%m%n</Pattern>
+            </PatternLayout>
+        </File>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="consoleAppender"/>
+        </Root>
+
+        <Logger name="com.github.ambry.rest.PublicAccessLogger" level="info" additivity="false">
+            <AppenderRef ref="publicAccessAppender"/>
+        </Logger>
+
+        <Logger name="org.apache.helix" level="trace" />
+        <Logger name="org.apache.zookeeper" level="trace" />
+    </Loggers>
+</Configuration>
