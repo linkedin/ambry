@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -107,13 +108,15 @@ public class OperationController implements Runnable {
     this.responseHandler = responseHandler;
     this.nonBlockingRouter = nonBlockingRouter;
     // Warm up connections to dataNodes in local and remote DCs.
-    List<ResponseInfo> responseInfos = Collections.synchronizedList(new ArrayList<>());
     String localDatacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     Map<Boolean, List<DataNodeId>> localAndRemoteNodes = clusterMap.getDataNodeIds()
         .stream()
         // ignore any in-process "data nodes" without TCP ports
         .filter(dataNodeId -> dataNodeId.getPort() != DataNodeId.UNKNOWN_PORT)
         .collect(Collectors.partitioningBy(dataNodeId -> localDatacenter.equals(dataNodeId.getDatacenterName())));
+    // 'responseInfos' list needs to be thread safe since it it possible that the list can be modified as we are reading
+    // it for scenario where we returned from networkClient.warmUpConnections() due to time out.
+    List<ResponseInfo> responseInfos = new CopyOnWriteArrayList<>();
     logger.info("Warming up local datacenter connections to {} nodes. Connections warmup percentage: {}%.",
         localAndRemoteNodes.get(true).size(), routerConfig.routerConnectionsLocalDcWarmUpPercentage);
     networkClient.warmUpConnections(localAndRemoteNodes.get(true),
