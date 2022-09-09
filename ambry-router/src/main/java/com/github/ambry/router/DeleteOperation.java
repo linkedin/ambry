@@ -361,8 +361,15 @@ class DeleteOperation {
             new RouterException("DeleteOperation failed possibly because some replicas are unavailable",
                 RouterErrorCode.AmbryUnavailable));
       } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(
-            new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+        if (operationTracker.getSuccessCount() > 0) {
+          routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
+          operationException.set(
+              new RouterException("DeleteOperation failed possibly because of unavailable replicas",
+                  RouterErrorCode.AmbryUnavailable));
+        } else {
+          operationException.set(
+              new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+        }
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
