@@ -276,7 +276,7 @@ public class GetBlobHandler {
     }
 
     /**
-     * set chunk blob Ids for composite blob in response channel.
+     * Set chunk blob Ids for composite blob in response channel.
      * @param result The result of the request i.e a {@link GetBlobResult} object with the properties of the blob.
      * @return a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
      * @throws RestServiceException if there's any error during serialization.

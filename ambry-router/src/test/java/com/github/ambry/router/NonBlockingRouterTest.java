@@ -38,19 +38,13 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.rest.RestServiceErrorCode;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1824,11 +1818,34 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test get blob chunk Ids for simple blob.
+   * @throws Exception
+   */
+  @Test
+  public void testGetBlobChunkIdsForSimpleBlob() throws Exception {
+    try {
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      int numberOfChunks = 1;
+      setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      GetBlobResult result = router.getBlob(blobId,
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertNull("Blob chunk Ids should be null for simple blob", result.getBlobChunkIds());
+    } finally {
+      router.close();
+    }
+  }
+
+  /**
    * Test get blob chunk Ids for composite blob.
    * @throws Exception
    */
   @Test
-  public void testGetBlobChunkIds() throws Exception {
+  public void testGetBlobChunkIdsForCompositeBlob() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
       setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
@@ -1837,7 +1854,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
+      GetBlobResult result = router.getBlob(blobId,
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertEquals("Number of blob chunk Ids mismatch", numberOfChunks, result.getBlobChunkIds().size());
     } finally {

@@ -313,9 +313,8 @@ public class OperationController implements Runnable {
         } else {
           List<String> blobIdStrs = new ArrayList<>();
           blobIdStrs.add(blobIdStr);
-          List<StoreKey> blobChunkIds = result == null ? new ArrayList<>() : result.getBlobChunkIds();
-          if (blobChunkIds != null) {
-            blobChunkIds.forEach(key -> blobIdStrs.add(key.getID()));
+          if (result != null && result.getBlobChunkIds() != null) {
+            result.getBlobChunkIds().forEach(key -> blobIdStrs.add(key.getID()));
           }
           nonBlockingRouter.incrementOperationsCount(blobIdStrs.size());
           helper.getDoOperation().accept(blobIdStrs);

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.frontend;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -34,7 +33,6 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
