@@ -34,6 +34,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.store.StoreKey;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONObject;
@@ -167,11 +168,24 @@ public class GetBlobHandler {
           RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true);
           restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
         }
-        if (subResource == SubResource.Replicas) {
-          finalCallback.onCompletion(getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel), null);
-        } else {
+        if (subResource == null) {
           router.getBlob(blobId.getID(), options, routerCallback(),
               QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+        } else {
+          switch (subResource) {
+            case BlobInfo:
+            case UserMetadata:
+            case BlobChunkIds:
+            case Segment:
+              router.getBlob(blobId.getID(), options, routerCallback(),
+                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              break;
+            case Replicas:
+              finalCallback.onCompletion(getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel), null);
+              break;
+            default:
+              LOGGER.error("Unexpected subResource {} when post process request", subResource);
+          }
         }
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -269,10 +283,14 @@ public class GetBlobHandler {
      */
     private ReadableStreamChannel setChunkBlobIdsInResponseChannel(GetBlobResult result)
         throws RestServiceException {
-      List<StoreKey> blobChunkIds = result.getBlobChunkIds();
       JSONObject jsonObject = new JSONObject();
-      for (StoreKey blobChunkId : blobChunkIds) {
-        jsonObject.append(BLOB_CHUNK_IDS_KEY, blobChunkId.getID());
+      List<StoreKey> blobChunkIds = result.getBlobChunkIds();
+      if (blobChunkIds == null || blobChunkIds.isEmpty()) {
+        jsonObject.put(BLOB_CHUNK_IDS_KEY, new ArrayList<>());
+      } else {
+        for (StoreKey blobChunkId : blobChunkIds) {
+          jsonObject.append(BLOB_CHUNK_IDS_KEY, blobChunkId.getID());
+        }
       }
       return FrontendUtils.serializeJsonToChannel(jsonObject);
     }

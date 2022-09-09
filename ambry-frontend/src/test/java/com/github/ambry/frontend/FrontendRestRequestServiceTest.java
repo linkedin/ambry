@@ -924,6 +924,10 @@ public class FrontendRestRequestServiceTest {
     }
   }
 
+  /**
+   * Test get chunk blob Ids for composite blob.
+   * @throws Exception
+   */
   @Test
   public void getChunkBlobIdsTest() throws Exception {
     BlobProperties blobProperties =

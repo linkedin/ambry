@@ -1303,7 +1303,6 @@ public class GetBlobOperationTest {
    * then we only issue a blobInfo to validate the metadata entry.
    * @throws Exception
    */
-  @Ignore
   @Test
   public void testRouterMetadataCacheFirstChunkOperationFlag() throws Exception {
     // Note that random() can return 0. So we add 1.
