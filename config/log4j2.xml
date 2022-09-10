@@ -15,11 +15,11 @@
             <AppenderRef ref="consoleAppender"/>
         </Root>
 
-        <Logger name="com.github.ambry.rest.PublicAccessLogger" level="info" additivity="false">
+        <Logger name="PublicAccessLogger" level="info" additivity="false">
             <AppenderRef ref="publicAccessAppender"/>
         </Logger>
 
-        <Logger name="org.apache.helix" level="trace" />
-        <Logger name="org.apache.zookeeper" level="trace" />
+        <Logger name="org.apache.helix" level="warn" />
+        <Logger name="org.apache.zookeeper" level="warn" />
     </Loggers>
 </Configuration>
