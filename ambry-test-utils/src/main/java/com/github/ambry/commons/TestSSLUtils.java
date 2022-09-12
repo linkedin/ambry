@@ -93,20 +93,21 @@ public class TestSSLUtils {
       throws CertificateException {
     try {
       Security.addProvider(new BouncyCastleProvider());
-      AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find(algorithm);
-      AlgorithmIdentifier digAlgId = new DefaultDigestAlgorithmIdentifierFinder().find(sigAlgId);
-      AsymmetricKeyParameter privateKeyAsymKeyParam = PrivateKeyFactory.createKey(pair.getPrivate().getEncoded());
+
       SubjectPublicKeyInfo subPubKeyInfo = SubjectPublicKeyInfo.getInstance(pair.getPublic().getEncoded());
-      ContentSigner sigGen = new BcRSAContentSignerBuilder(sigAlgId, digAlgId).build(privateKeyAsymKeyParam);
       X500Name name = new X500Name(dn);
       Date from = new Date();
       Date to = new Date(from.getTime() + days * 86400000L);
       BigInteger sn = new BigInteger(64, new SecureRandom());
-
       X509v3CertificateBuilder v3CertGen = new X509v3CertificateBuilder(name, sn, from, to, name, subPubKeyInfo);
       if (subjectAltNames.isPresent()) {
         v3CertGen.addExtension(Extension.subjectAlternativeName, true, subjectAltNames.get());
       }
+
+      AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find(algorithm);
+      AlgorithmIdentifier digAlgId = new DefaultDigestAlgorithmIdentifierFinder().find(sigAlgId);
+      AsymmetricKeyParameter privateKeyAsymKeyParam = PrivateKeyFactory.createKey(pair.getPrivate().getEncoded());
+      ContentSigner sigGen = new BcRSAContentSignerBuilder(sigAlgId, digAlgId).build(privateKeyAsymKeyParam);
       X509CertificateHolder certificateHolder = v3CertGen.build(sigGen);
 
       return new JcaX509CertificateConverter().setProvider("BC").getCertificate(certificateHolder);

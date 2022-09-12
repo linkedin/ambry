@@ -99,7 +99,12 @@ subprojects {
         testCompile "org.apache.logging.log4j:log4j-api:$log4jVersion"
         testCompile "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
         testCompile "junit:junit:$junitVersion"
-        testCompile "org.mockito:mockito-core:2.+"
+        testCompile "org.mockito:mockito-core:$mockitoVersion"
+        // Add PowerMock to support more unit test scenarios.
+        // See https://github.com/powermock/powermock/wiki/Mockito for detail about PowerMock.
+        testCompile "org.powermock:powermock-api-mockito2:$powermockVersion"
+        testCompile "org.powermock:powermock-core:$powermockVersion"
+        testCompile "org.powermock:powermock-module-junit4:$powermockVersion"
         testRuntime project(':log4j-test-config')
     }
 
@@ -229,6 +234,16 @@ project(':ambry-commons') {
         compile project(':ambry-api'),
                 project(':ambry-messageformat'),
                 project(':ambry-utils')
+
+        // See https://github.com/facebook/zstd/releases for Zstd releases.  On Jan 2022, latest release is 1.5.2
+        // See https://repo.maven.apache.org/maven2/com/github/luben/zstd-jni/ for library versions.
+        compile "com.github.luben:zstd-jni:$zstdVersion"
+
+        // See https://github.com/lz4/lz4/releases for LZ4 releases.
+        // There are JNI and Pure Java LZ4 provided at https://repo.maven.apache.org/maven2/org/lz4
+        // The latest LZ4 library is 1.8.0 on 06/2021.
+        compile "org.lz4:lz4-java:$lz4Version"
+
         compile "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcnativeVersion"
