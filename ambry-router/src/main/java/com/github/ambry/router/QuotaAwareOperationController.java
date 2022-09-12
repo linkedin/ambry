@@ -222,7 +222,9 @@ public class QuotaAwareOperationController extends OperationController {
     List<QuotaResource> quotaResources = new ArrayList<>(requestQueue.keySet());
     Collections.shuffle(quotaResources);
     while (!requestQueue.isEmpty()) {
-      for (QuotaResource quotaResource : quotaResources) {
+      Iterator<QuotaResource> iter = quotaResources.listIterator();
+      while(iter.hasNext()) {
+        QuotaResource quotaResource = iter.next();
         RequestInfo requestInfo = requestQueue.get(quotaResource).getFirst();
         QuotaAction quotaAction = requestInfo.getChargeable().checkAndCharge(true);
         switch (quotaAction) {
@@ -240,6 +242,7 @@ public class QuotaAwareOperationController extends OperationController {
         requestQueue.get(quotaResource).removeFirst();
         if (requestQueue.get(quotaResource).isEmpty()) {
           requestQueue.remove(quotaResource);
+          iter.remove();
         }
       }
     }
