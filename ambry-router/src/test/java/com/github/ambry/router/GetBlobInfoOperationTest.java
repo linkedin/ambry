@@ -215,7 +215,7 @@ public class GetBlobInfoOperationTest {
             Utils.getRandomShort(random), Utils.getRandomShort(random),
             mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
             BlobId.BlobDataType.DATACHUNK);
-    Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
+    Callback<GetBlobResult> getOperationCallback = (result, exception) -> {
       // no op.
     };
 
@@ -927,9 +927,9 @@ public class GetBlobInfoOperationTest {
    */
   private void assertSuccess(GetBlobInfoOperation op, short expectedLifeVersion) {
     Assert.assertNull("Null expected", op.getOperationException());
-    BlobInfo blobInfo = op.getOperationResult().getBlobResult.getBlobInfo();
+    BlobInfo blobInfo = op.getOperationResult().getBlobInfo();
     Assert.assertNull("Unexpected blob data channel in operation result",
-        op.getOperationResult().getBlobResult.getBlobDataChannel());
+        op.getOperationResult().getBlobDataChannel());
     Assert.assertTrue("Blob properties must be the same",
         RouterTestHelpers.arePersistedFieldsEquivalent(blobProperties, blobInfo.getBlobProperties()));
     Assert.assertEquals("Blob size should in received blobProperties should be the same as actual", BLOB_SIZE,

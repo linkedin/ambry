@@ -25,10 +25,13 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -45,6 +48,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.github.ambry.utils.Utils.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -66,6 +70,7 @@ public class InMemoryRouter implements Router {
   private final NotificationSystem notificationSystem;
   private final ClusterMap clusterMap;
   private VerifiableProperties verifiableProperties;
+  private List<StoreKey> mockedBlobChunkIds;
 
   /**
    * Changes the {@link VerifiableProperties} instance with the router so that the behaviour can be changed on the fly.
@@ -73,6 +78,14 @@ public class InMemoryRouter implements Router {
    */
   public void setVerifiableProperties(VerifiableProperties verifiableProperties) {
     this.verifiableProperties = verifiableProperties;
+  }
+
+  /**
+   * Add the list of mock blob chunk Ids for get chunk BlobId test.
+   * @param mockedBlobChunkIds List of {@link StoreKey}s.
+   */
+  public void addMockedBlobChunkIds(List<StoreKey> mockedBlobChunkIds) {
+    this.mockedBlobChunkIds = mockedBlobChunkIds;
   }
 
   /**
@@ -198,6 +211,7 @@ public class InMemoryRouter implements Router {
     }
     ReadableStreamChannel blobDataChannel = null;
     BlobInfo blobInfo = null;
+    List<StoreKey> blobChunkIds = new ArrayList<>();
     Exception exception = null;
     try {
       checkBlobId(blobId);
@@ -218,6 +232,10 @@ public class InMemoryRouter implements Router {
             case BlobInfo:
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
+            case BlobChunkIds:
+              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+              blobChunkIds = new ArrayList<>(mockedBlobChunkIds);
+              break;
             case All:
               blobDataChannel = new ByteBufferRSC(blob.getBlob(options));
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
@@ -232,7 +250,7 @@ public class InMemoryRouter implements Router {
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
-      GetBlobResult operationResult = exception == null ? new GetBlobResult(blobInfo, blobDataChannel) : null;
+      GetBlobResult operationResult = exception == null ? new GetBlobResult(blobInfo, blobDataChannel, blobChunkIds) : null;
       completeOperation(futureResult, callback, operationResult, exception);
     }
     return futureResult;

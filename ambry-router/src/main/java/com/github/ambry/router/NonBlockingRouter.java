@@ -58,6 +58,7 @@ class NonBlockingRouter implements Router {
   private final BackgroundDeleter backgroundDeleter;
   private final int ocCount;
   // Shared with the operation managers.
+  private final RouterConfig routerConfig;
   private final NonBlockingRouterMetrics routerMetrics;
   private final KeyManagementService kms;
   private final CryptoJobHandler cryptoJobHandler;
@@ -93,6 +94,7 @@ class NonBlockingRouter implements Router {
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
       AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
       throws IOException, ReflectiveOperationException {
+    this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     this.kms = kms;
@@ -235,7 +237,9 @@ class NonBlockingRouter implements Router {
     }
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    GetBlobOptionsInternal internalOptions =
+        new GetBlobOptionsInternal(options, options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds,
+            routerMetrics.ageAtGet);
     routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {
@@ -253,8 +257,7 @@ class NonBlockingRouter implements Router {
           completeOperation(futureResult, callback, null, routerException);
         } else {
           getOperationController().getBlob(blobIdStr, internalOptions,
-              new BlobOperationCallbackWrapper<>(blobIdStr, (internalResult, exception) -> {
-                GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+              new BlobOperationCallbackWrapper<>(blobIdStr, (getBlobResult, exception) -> {
                 futureResult.done(getBlobResult, exception);
                 if (callback != null) {
                   callback.onCompletion(getBlobResult, exception);
@@ -495,18 +498,19 @@ class NonBlockingRouter implements Router {
    */
   void initiateChunkDeletesIfAny(final String blobIdStr, final String serviceId,
       final QuotaChargeCallback quotaChargeCallback) throws RouterException {
-    Callback<GetBlobResultInternal> callback = (GetBlobResultInternal result, Exception exception) -> {
+    Callback<GetBlobResult> callback = (GetBlobResult result, Exception exception) -> {
       if (exception != null) {
         // It is expected that these requests will not always succeed. For example, this may have been triggered by a
         // duplicate delete and the blob could have already been hard deleted, so the deserialization can fail, or the
         // blob could have been garbage collected and not found at all and so on.
         logger.trace("Encountered exception when attempting to get chunks of a possibly composite deleted blob {} ",
             blobIdStr, exception);
-      } else if (result.getBlobResult != null) {
+      } else if (result.getBlobDataChannel() != null) {
         logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
-      } else if (result.storeKeys != null) {
-        List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
-        for (StoreKey storeKey : result.storeKeys) {
+      } else if (result.getBlobChunkIds() != null) {
+        List<StoreKey> blobChunkIds = result.getBlobChunkIds();
+        List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(blobChunkIds.size());
+        for (StoreKey storeKey : blobChunkIds) {
           logger.trace("Initiating delete of chunk blob: {}", storeKey);
           deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId, quotaChargeCallback));
         }

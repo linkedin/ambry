@@ -1817,6 +1817,52 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
   }
 
+  /**
+   * Test get blob chunk Ids for simple blob.
+   * @throws Exception
+   */
+  @Test
+  public void testGetBlobChunkIdsForSimpleBlob() throws Exception {
+    try {
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      int numberOfChunks = 1;
+      setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      GetBlobResult result = router.getBlob(blobId,
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertNull("Blob chunk Ids should be null for simple blob", result.getBlobChunkIds());
+    } finally {
+      router.close();
+    }
+  }
+
+  /**
+   * Test get blob chunk Ids for composite blob.
+   * @throws Exception
+   */
+  @Test
+  public void testGetBlobChunkIdsForCompositeBlob() throws Exception {
+    try {
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      int numberOfChunks = 4;
+      setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      GetBlobResult result = router.getBlob(blobId,
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertEquals("Number of blob chunk Ids mismatch", numberOfChunks, result.getBlobChunkIds().size());
+    } finally {
+      router.close();
+    }
+  }
+
   private RestRequest createRestRequestForPutOperation() throws Exception {
     JSONObject header = new JSONObject();
     header.put(MockRestRequest.REST_METHOD_KEY, RestMethod.POST.name());

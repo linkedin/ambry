@@ -27,6 +27,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -266,6 +267,9 @@ public class GetManagerTest {
     // Test GetBlobInfoOperation, regardless of options passed in.
     this.options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
     getBlobAndCompareContent(blobId, -1);
+    // Test GetBlobChunkIds
+    this.options = new GetBlobOptionsBuilder().operationType(OperationType.BlobChunkIds).build();
+    getBlobAndCompareContent(blobId, -1);
     router.close();
   }
 
@@ -491,12 +495,19 @@ public class GetManagerTest {
       case All:
         compareBlobInfo(result.getBlobInfo(), segmentSize);
         compareContent(result.getBlobDataChannel());
+        Assert.assertNull("Unexpected blob Ids in result", result.getBlobChunkIds());
         break;
       case Data:
         compareContent(result.getBlobDataChannel());
+        Assert.assertNull("Unexpected blob Ids in result", result.getBlobChunkIds());
         break;
       case BlobInfo:
         compareBlobInfo(result.getBlobInfo(), segmentSize);
+        Assert.assertNull("Unexpected blob data channel in result", result.getBlobDataChannel());
+        Assert.assertNull("Unexpected blob Ids in result", result.getBlobChunkIds());
+        break;
+      case BlobChunkIds:
+        compareChunkBlobIds(blobSize, result.getBlobChunkIds());
         Assert.assertNull("Unexpected blob data channel in result", result.getBlobDataChannel());
         break;
     }
@@ -532,6 +543,18 @@ public class GetManagerTest {
     Assert.assertEquals("Blob size in received blobProperties should be the same as actual",
         (segmentSize == -1) ? blobSize : segmentSize, blobInfo.getBlobProperties().getBlobSize());
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
+  }
+
+  /**
+   * Compare the size of chunk BlobId list with the expected chunk size + metadata chunk.
+   * @param chunkBlobIds List of chunk blob Ids for the composite blob.
+   */
+  private void compareChunkBlobIds(long blobSize, List<StoreKey> chunkBlobIds) {
+    if (blobSize <= CHUNK_SIZE) {
+      Assert.assertNull("chunkBlobIds should be null for simple blob", chunkBlobIds);
+    } else {
+      Assert.assertEquals("the size of chunk BlobId list should match", blobSize / CHUNK_SIZE + 1, chunkBlobIds.size());
+    }
   }
 
   /**

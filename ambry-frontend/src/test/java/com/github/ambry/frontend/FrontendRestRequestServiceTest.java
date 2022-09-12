@@ -79,6 +79,7 @@ import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.StorageStatsUtilTest;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -921,6 +922,32 @@ public class FrontendRestRequestServiceTest {
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
           originalReplicaStr, returnedReplicasStr);
     }
+  }
+
+  /**
+   * Test get chunk blob Ids for composite blob.
+   * @throws Exception
+   */
+  @Test
+  public void getChunkBlobIdsTest() throws Exception {
+    BlobProperties blobProperties =
+        new BlobProperties(0, refAccount.getName(), "owner", "image/gif", false, Utils.Infinite_Time,
+            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false, null, null, null);
+    ReadableStreamChannel content = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
+    String blobId = router.putBlobWithIdVersion(blobProperties, new byte[0], content, BlobId.BLOB_ID_V6).get();
+    StoreKey storeKey1 = mock((StoreKey.class));
+    when(storeKey1.getID()).thenReturn(TestUtils.getRandomString(10));
+    StoreKey storeKey2 = mock((StoreKey.class));
+    when(storeKey2.getID()).thenReturn(TestUtils.getRandomString(10));
+    List<StoreKey> mockChunkIds = Arrays.asList(storeKey1, storeKey2);
+    router.addMockedBlobChunkIds(mockChunkIds);
+    RestRequest restRequest =
+        createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobChunkIds, null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    JSONObject response = new JSONObject(new String(restResponseChannel.getResponseBody()));
+    String chunkId = response.get(GetBlobHandler.BLOB_CHUNK_IDS_KEY).toString();
+    assertEquals("Blob chunk Id count mismatch", mockChunkIds.size(), chunkId.split(",").length);
   }
 
   /**
@@ -3155,15 +3182,15 @@ class FrontendTestRouter implements Router {
       case BlobInfo:
         result = new GetBlobResult(new BlobInfo(
             new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-                false), new byte[0]), null);
+                false), new byte[0]), null, null);
         break;
       case Data:
-        result = new GetBlobResult(null, new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
+        result = new GetBlobResult(null, new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), null);
         break;
       default:
         result = new GetBlobResult(new BlobInfo(
             new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-                false), new byte[0]), new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
+                false), new byte[0]), new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), null);
         break;
     }
     return completeOperation(result, callback, OpType.GetBlob);
