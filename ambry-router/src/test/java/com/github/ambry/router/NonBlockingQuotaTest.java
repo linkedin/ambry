@@ -267,7 +267,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       assertEquals(expectedChargeCallbackCount += (quotaAccountingSize * numChunks), listenerCalledCount.get());
 
       router.deleteBlob(stitchedBlobId, null, null, quotaChargeCallback).get();
-      assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
+      assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
     } finally {
       router.close();
       assertExpectedThreadCounts(0, 0);

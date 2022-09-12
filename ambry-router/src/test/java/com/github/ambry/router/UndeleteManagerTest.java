@@ -338,10 +338,10 @@ public class UndeleteManagerTest {
    */
   @Test
   public void duplicateBlobIdsTest() throws RouterException {
-    blobIds.add(blobIds.get(0));
+    blobIds.add(blobIds.get(1));
     try {
-      undeleteManager.submitUndeleteOperation(blobIds, UNDELETE_SERVICE_ID, new FutureResult<>(), null,
-          quotaChargeCallback);
+      undeleteManager.submitUndeleteOperation(blobIds.get(0), blobIds.subList(1, blobIds.size()), UNDELETE_SERVICE_ID,
+          new FutureResult<>(), null, quotaChargeCallback);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -413,8 +413,10 @@ public class UndeleteManagerTest {
   private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime)
       throws Exception {
     FutureResult<Void> future = new FutureResult<>();
-    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
-    undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done, quotaChargeCallback);
+    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
+    List<String> chunkIds = new ArrayList<>(ids);
+    undeleteManager.submitUndeleteOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UNDELETE_SERVICE_ID,
+        future, future::done, quotaChargeCallback);
     sendRequestsGetResponse(future, undeleteManager, advanceTime, false);
     if (expectedErrorCode == null) {
       // Should return no error
@@ -437,7 +439,9 @@ public class UndeleteManagerTest {
       throws Exception {
     FutureResult<Void> future = new FutureResult<>();
     NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
-    undeleteManager.submitUndeleteOperation(ids, UNDELETE_SERVICE_ID, future, future::done, quotaChargeCallback);
+    List<String> chunkIds = new ArrayList<>(ids);
+    undeleteManager.submitUndeleteOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UNDELETE_SERVICE_ID,
+        future, future::done, quotaChargeCallback);
     sendRequestsGetResponse(future, undeleteManager, false, true);
     try {
       future.get(1, TimeUnit.MILLISECONDS);

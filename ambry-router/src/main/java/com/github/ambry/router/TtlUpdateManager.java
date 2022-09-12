@@ -81,7 +81,8 @@ class TtlUpdateManager {
 
   /**
    * Submits {@link TtlUpdateOperation}(s) to this {@link TtlUpdateManager}.
-   * @param blobIdStrs The original blobId strings
+   * @param blobIdStr The blobId of the simple blob or the metadata blob in case of composite blob.
+   * @param chunkIdStrs The blob ids of the metadata blob's chunks.
    * @param serviceId The service ID of the service updating the ttl of the blob(s). This can be null if unknown.
    * @param expiresAtMs The new expiry time (in ms) of the blob.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
@@ -89,34 +90,54 @@ class TtlUpdateManager {
    * @param quotaChargeCallback {@link QuotaChargeCallback} object to account for quota.
    * @throws RouterException if the blobIdStr is invalid.
    */
-  void submitTtlUpdateOperation(Collection<String> blobIdStrs, String serviceId, long expiresAtMs,
+  void submitTtlUpdateOperation(String blobIdStr, Collection<String> chunkIdStrs, String serviceId, long expiresAtMs,
       FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback)
       throws RouterException {
-    List<BlobId> blobIds = new ArrayList<>();
-    for (String blobIdStr : blobIdStrs) {
-      BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-      if (blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
-          && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+    BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+    if (RouterUtils.isOriginatingDcRemote(blobId, clusterMap)) {
+      routerMetrics.ttlUpdateBlobNotOriginateLocalOperationRate.mark();
+    }
+
+    List<BlobId> chunkIds = new ArrayList<>();
+    for (String chunkIdStr : chunkIdStrs) {
+      if (chunkIdStr.equals(blobIdStr)) {
+        // ChunkId list should not contain the metadata blobId itself.
+        LOGGER.warn("metadata chunk id {} was filtered out from data chunk id list.", blobIdStr);
+        continue;
+      }
+      BlobId chunkId = RouterUtils.getBlobIdFromString(chunkIdStr, clusterMap);
+      if (RouterUtils.isOriginatingDcRemote(chunkId, clusterMap)) {
         routerMetrics.ttlUpdateBlobNotOriginateLocalOperationRate.mark();
       }
-      blobIds.add(blobId);
+      chunkIds.add(chunkId);
     }
-    if (blobIds.size() == 1) {
+
+    if (chunkIds.isEmpty()) {
+      // If there are no chunkIds, then its a simple blob, and we have to update only blob's ttl.
       TtlUpdateOperation ttlUpdateOperation =
-          new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, expiresAtMs,
+          new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs,
               time.milliseconds(), callback, time, futureResult, quotaChargeCallback);
       ttlUpdateOperations.add(ttlUpdateOperation);
-    } else {
-      BatchOperationCallbackTracker tracker =
-          new BatchOperationCallbackTracker(blobIds, futureResult, callback, quotaChargeCallback);
-      long operationTimeMs = time.milliseconds();
-      for (BlobId blobId : blobIds) {
-        TtlUpdateOperation ttlUpdateOperation =
-            new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs,
-                operationTimeMs, tracker.getCallback(blobId), time, BatchOperationCallbackTracker.DUMMY_FUTURE,
-                quotaChargeCallback);
-        ttlUpdateOperations.add(ttlUpdateOperation);
-      }
+      return;
+    }
+
+    // If we are here, that means the blob is a composite blob. So we will do a batch operation.
+    BatchOperationCallbackTracker tracker =
+        new BatchOperationCallbackTracker(chunkIds, blobId, futureResult, callback, quotaChargeCallback,
+            (finalBlobId, callBack) -> {
+              TtlUpdateOperation ttlUpdateOperation =
+                  new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, finalBlobId, serviceId, expiresAtMs,
+                      time.milliseconds(), callBack, time, BatchOperationCallbackTracker.DUMMY_FUTURE,
+                      quotaChargeCallback);
+              ttlUpdateOperations.add(ttlUpdateOperation);
+            });
+    long operationTimeMs = time.milliseconds();
+    for (BlobId chunkId : chunkIds) {
+      TtlUpdateOperation ttlUpdateOperation =
+          new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, chunkId, serviceId, expiresAtMs,
+              operationTimeMs, tracker.getCallback(chunkId), time, BatchOperationCallbackTracker.DUMMY_FUTURE,
+              quotaChargeCallback);
+      ttlUpdateOperations.add(ttlUpdateOperation);
     }
   }
 

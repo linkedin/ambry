@@ -170,6 +170,19 @@ public class TtlUpdateManagerTest {
   }
 
   /**
+   * Test to ensure that the metadata chunk gets updated last.
+   * @throws Exception
+   */
+  @Test
+  public void metadataChunkUpdatedLastTest() throws Exception {
+    // configure failure for the metadata chunk
+    serverLayout.getMockServers()
+        .forEach(mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(0), ServerErrorCode.Unknown_Error));
+    executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false,
+        blobIds.subList(1, blobIds.size()));
+  }
+
+  /**
    * Test where TTL update is done for multiple blobs at the same time
    * @throws Exception
    */
@@ -187,6 +200,7 @@ public class TtlUpdateManagerTest {
    */
   @Test
   public void singleFailureInBatchTtlUpdateTest() throws Exception {
+    assertTtl(router, blobIds, TTL_SECS);
     // configure failure for one of the blobs
     serverLayout.getMockServers()
         .forEach(
@@ -299,9 +313,9 @@ public class TtlUpdateManagerTest {
    */
   @Test
   public void duplicateBlobIdsTest() throws RouterException {
-    blobIds.add(blobIds.get(0));
+    blobIds.add(blobIds.get(1));
     try {
-      ttlUpdateManager.submitTtlUpdateOperation(blobIds, UPDATE_SERVICE_ID, Utils.Infinite_Time, new FutureResult<>(),
+      ttlUpdateManager.submitTtlUpdateOperation(blobIds.get(0), blobIds.subList(1, blobIds.size()), UPDATE_SERVICE_ID, Utils.Infinite_Time, new FutureResult<>(),
           new TestCallback<>(), quotaChargeCallback);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
@@ -326,10 +340,11 @@ public class TtlUpdateManagerTest {
       throws Exception {
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
-    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
     notificationSystem.reset();
-    ttlUpdateManager.submitTtlUpdateOperation(ids, UPDATE_SERVICE_ID, Utils.Infinite_Time, future, callback,
-        quotaChargeCallback);
+    List<String> chunkIds = new ArrayList<>(ids);
+    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
+    ttlUpdateManager.submitTtlUpdateOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UPDATE_SERVICE_ID,
+        Utils.Infinite_Time, future, callback, quotaChargeCallback);
     sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests);
     long expectedTtlSecs = TTL_SECS;
     if (expectedErrorCode == null) {
@@ -350,8 +365,28 @@ public class TtlUpdateManagerTest {
       }
     }
     if (verifyTtlAfterUpdate) {
-      assertTtl(router, ids, expectedTtlSecs);
+      assertTtl(router, chunkIds, expectedTtlSecs);
     }
+  }
+
+  /**
+   * Executes a ttl update operations and verifies results
+   * @param ids the collection of ids to ttl update
+   * @param expectedErrorCode the expected {@link RouterErrorCode} if failure is expected. {@code null} if expected to
+   *                          succeed
+   * @param advanceTime if {@code true}, advances time after each poll and handleResponse iteration
+   * @param ignoreUnrecognizedRequests if {@code true}, doesn't throw an exception if a response is received for a
+   *                                   request not sent in this execution of the function
+   * @param verifyNoNotificationsOnFailure if {@code true}, verifies that there are no notifications on failure.
+   * @param verifyTtlUpdatedList the collection of chunk ids for which ttl should be verified to have been applied.
+   * @throws Exception
+   */
+  private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime,
+      boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure,
+      Collection<String> verifyTtlUpdatedList) throws Exception {
+    executeOpAndVerify(
+        ids, expectedErrorCode, advanceTime, ignoreUnrecognizedRequests, verifyNoNotificationsOnFailure, false);
+      assertTtl(router, verifyTtlUpdatedList, Utils.Infinite_Time);
   }
 
   // helpers

@@ -308,6 +308,16 @@ public class RouterUtils {
   }
 
   /**
+   * @param blobId {@link BlobId} to check.
+   * @param clusterMap {@link ClusterMap} object.
+   * @return {@code true} if it can be determined that the blobid's originating dc is remote. {@code false} otherwise.
+   */
+  public static boolean isOriginatingDcRemote(BlobId blobId, ClusterMap clusterMap) {
+    return blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
+        && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId();
+  }
+
+  /**
    * {@link Enum} All the reasons for router request expiry.
    */
   public enum RouterRequestExpiryReason {

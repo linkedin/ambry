@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
@@ -29,7 +30,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -40,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -265,9 +264,8 @@ public class OperationController implements Runnable {
       final Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     doOperationTowardsMaybeCompositeBlob(blobIdStr, futureResult, callback,
         new CompositeBlobOperationHelper("UNDELETE", GetOption.Include_Deleted_Blobs, routerMetrics.ageAtUndelete,
-            (blobIds) -> {
-              doUndeleteOperation(blobIds, serviceId, futureResult, callback, quotaChargeCallback);
-            }, (exception) -> {
+            (blobId, chunkIds) -> doUndeleteOperation(blobId, chunkIds, serviceId, futureResult, callback,
+                quotaChargeCallback), blobInfo -> false, (exception) -> {
           nonBlockingRouter.completeUndeleteBlobOperation(exception, futureResult, callback);
         }), quotaChargeCallback);
   }
@@ -286,9 +284,11 @@ public class OperationController implements Runnable {
   protected void updateBlobTtl(final String blobIdStr, final String serviceId, long expiresAtMs,
       FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     doOperationTowardsMaybeCompositeBlob(blobIdStr, futureResult, callback,
-        new CompositeBlobOperationHelper("TTL UPDATE", GetOption.None, routerMetrics.ageAtTtlUpdate, (blobIds) -> {
-          doUpdateTtlOperation(blobIds, serviceId, expiresAtMs, futureResult, callback, quotaChargeCallback);
-        }, (exception) -> {
+        new CompositeBlobOperationHelper("TTL UPDATE", GetOption.None, routerMetrics.ageAtTtlUpdate,
+            (blobId, chunkIds) -> {
+              doUpdateTtlOperation(blobId, chunkIds, serviceId, expiresAtMs, futureResult, callback,
+                  quotaChargeCallback);
+            }, (blobInfo -> isBlobTtlUpdated(blobInfo)), (exception) -> {
           nonBlockingRouter.completeUpdateBlobTtlOperation(exception, futureResult, callback);
         }), quotaChargeCallback);
   }
@@ -314,14 +314,20 @@ public class OperationController implements Runnable {
               String.format("GET blob call returned the blob instead of just the store keys (before {} )",
                   helper.getOpName()), RouterErrorCode.UnexpectedInternalError);
           NonBlockingRouter.completeOperation(futureResult, callback, null, exception, false);
+        } else if (result.getBlobInfo() != null && helper.getAlreadyUpdated().apply(result.getBlobInfo())
+            && canRelyOnMetadataForUpdate(result.getBlobInfo())) {
+          // If we are here then we can rely that the metadata chunk was updated only after all data chunks were updated.
+          // So this means we are sure that all data chunks are successfully updated.
+          // Send an update for metadata chunk only to ensure that metadata chunk's update meets quorum.
+          helper.getDoOperation().accept(blobIdStr, Collections.emptyList());
+          routerMetrics.updateOptimizedCount.inc();
         } else {
           List<String> blobIdStrs = new ArrayList<>();
-          blobIdStrs.add(blobIdStr);
           if (result != null && result.getBlobChunkIds() != null) {
             result.getBlobChunkIds().forEach(key -> blobIdStrs.add(key.getID()));
           }
           nonBlockingRouter.incrementOperationsCount(blobIdStrs.size());
-          helper.getDoOperation().accept(blobIdStrs);
+          helper.getDoOperation().accept(blobIdStr, blobIdStrs);
         }
       };
 
@@ -337,7 +343,7 @@ public class OperationController implements Runnable {
     } else {
       // do update directly on single blobId
       routerMetrics.skippedGetBlobCount.inc();
-      helper.getDoOperation().accept(Collections.singletonList(blobIdStr));
+      helper.getDoOperation().accept(blobIdStr, Collections.emptyList());
     }
   }
 
@@ -356,42 +362,63 @@ public class OperationController implements Runnable {
   }
 
   /**
+   * Check if ttl operation can rely on metadata blob to determine if all the chunks of the blob have been ttl updated.
+   * Currently this behavior relies on the value of the config {@link RouterConfig#routerUpdateOpMetadataRelianceTimestampInMs}.
+   * For more details please check the comments on the config.
+   * @param blobInfo {@link BlobInfo} object.
+   * @return {@code true} if ttl update has been optimized. {@code false} otherwise.
+   */
+  private boolean canRelyOnMetadataForUpdate(BlobInfo blobInfo) {
+    return blobInfo.getBlobProperties().getCreationTimeInMs() > routerConfig.routerUpdateOpMetadataRelianceTimestampInMs;
+  }
+
+  /**
+   * @param blobInfo {@link BlobInfo} object.
+   * @return {@code true} if the blob is already ttl updated. {@code false} otherwise.
+   */
+  private boolean isBlobTtlUpdated(BlobInfo blobInfo) {
+    return blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time;
+  }
+
+  /**
    * Helper method that submits the TTL update operation and handles exceptions.
-   * @param blobIdStrs The original blobId strings
+   * @param blobIdStr The blobId of the simple blob or the metadata blob in case of composite blob.
+   * @param chunkIdStrs The blob ids of the metadata blob's chunks.
    * @param serviceId The service ID of the service updating the ttl of the blob(s). This can be null if unknown.
    * @param expiresAtMs The new expiry time (in ms) of the blob.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
    * @param quotaChargeCallback {@link QuotaChargeCallback} for quota charging events.
    */
-  private void doUpdateTtlOperation(List<String> blobIdStrs, final String serviceId, long expiresAtMs,
+  private void doUpdateTtlOperation(String blobIdStr, List<String> chunkIdStrs, final String serviceId, long expiresAtMs,
       FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     try {
-      logger.trace("Updatettl for blob {} with chunkids {}", blobIdStrs.get(0), blobIdStrs);
-      ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback,
+      logger.trace("Updatettl for blob {} with chunkids {}", blobIdStr, chunkIdStrs);
+      ttlUpdateManager.submitTtlUpdateOperation(blobIdStr, chunkIdStrs, serviceId, expiresAtMs, futureResult, callback,
           quotaChargeCallback);
       routerCallback.onPollReady();
     } catch (RouterException e) {
-      nonBlockingRouter.incrementOperationsCount(1 - blobIdStrs.size());
+      nonBlockingRouter.incrementOperationsCount(1 - chunkIdStrs.size());
       nonBlockingRouter.completeUpdateBlobTtlOperation(e, futureResult, callback);
     }
   }
 
   /**
    * Helper method that submits the undelete operation and handles exceptions.
-   * @param blobIdStrs The original blobId strings
+   * @param blobIdStr The blobId of the simple blob or the metadata blob in case of composite blob.
+   * @param chunkIdStrs The blob ids of the metadata blob's chunks.
    * @param serviceId The service ID of the service undeleting the blob(s). This can be null if unknown.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
    * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    */
-  private void doUndeleteOperation(List<String> blobIdStrs, final String serviceId, FutureResult<Void> futureResult,
+  private void doUndeleteOperation(String blobIdStr, List<String> chunkIdStrs, final String serviceId, FutureResult<Void> futureResult,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
     try {
-      undeleteManager.submitUndeleteOperation(blobIdStrs, serviceId, futureResult, callback, quotaChargeCallback);
+      undeleteManager.submitUndeleteOperation(blobIdStr, chunkIdStrs, serviceId, futureResult, callback, quotaChargeCallback);
       routerCallback.onPollReady();
     } catch (RouterException e) {
-      nonBlockingRouter.incrementOperationsCount(1 - blobIdStrs.size());
+      nonBlockingRouter.incrementOperationsCount(1 - chunkIdStrs.size());
       nonBlockingRouter.completeUndeleteBlobOperation(e, futureResult, callback);
     }
   }
