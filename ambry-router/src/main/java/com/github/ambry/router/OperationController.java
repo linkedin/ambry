@@ -108,15 +108,13 @@ public class OperationController implements Runnable {
     this.responseHandler = responseHandler;
     this.nonBlockingRouter = nonBlockingRouter;
     // Warm up connections to dataNodes in local and remote DCs.
+    List<ResponseInfo> responseInfos = Collections.synchronizedList(new ArrayList<>());
     String localDatacenter = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     Map<Boolean, List<DataNodeId>> localAndRemoteNodes = clusterMap.getDataNodeIds()
         .stream()
         // ignore any in-process "data nodes" without TCP ports
         .filter(dataNodeId -> dataNodeId.getPort() != DataNodeId.UNKNOWN_PORT)
         .collect(Collectors.partitioningBy(dataNodeId -> localDatacenter.equals(dataNodeId.getDatacenterName())));
-    // 'responseInfos' list needs to be thread safe since it it possible that the list can be modified as we are reading
-    // it for scenario where we returned from networkClient.warmUpConnections() due to time out.
-    List<ResponseInfo> responseInfos = new CopyOnWriteArrayList<>();
     logger.info("Warming up local datacenter connections to {} nodes. Connections warmup percentage: {}%.",
         localAndRemoteNodes.get(true).size(), routerConfig.routerConnectionsLocalDcWarmUpPercentage);
     networkClient.warmUpConnections(localAndRemoteNodes.get(true),
@@ -128,11 +126,14 @@ public class OperationController implements Runnable {
         routerConfig.routerConnectionsRemoteDcWarmUpPercentage, routerConfig.routerConnectionsWarmUpTimeoutMs,
         responseInfos);
     // Update ResponseHandler immediately if connections lost to certain nodes.
-    for (ResponseInfo responseInfo : responseInfos) {
+    // Note: If we return from networkClient.warmUpConnections() due to time out, 'responseInfo' list can be modified in
+    // parallel by Netty threads. To avoid ConcurrentModificationException, use forEach to go over the list instead of
+    // for-each loop since latter uses an iterator which is not protected by mutex of Collections.synchronisedList().
+    responseInfos.forEach(responseInfo -> {
       if (responseInfo.getRequestInfo() == null) {
         responseHandler.onConnectionTimeout(responseInfo.getDataNode());
       }
-    }
+    });
     routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
     putManager =
         new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
