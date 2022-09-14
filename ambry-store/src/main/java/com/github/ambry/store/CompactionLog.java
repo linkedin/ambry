@@ -29,6 +29,10 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +43,8 @@ import org.slf4j.LoggerFactory;
 class CompactionLog implements Closeable {
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
-  static final short CURRENT_VERSION = VERSION_1;
+  static final short VERSION_2 = 2;
+  static final short CURRENT_VERSION = VERSION_2;
   static final String COMPACTION_LOG_SUFFIX = "_compactionLog";
 
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
@@ -58,6 +63,8 @@ class CompactionLog implements Closeable {
   final List<CycleLog> cycleLogs;
   private final File file;
   private final Time time;
+  private final TreeMap<Offset, Offset> beforeAndAfterIndexSegmentOffsets = new TreeMap<>();
+  private final short version;
 
   private int currentIdx = 0;
   private Offset startOffsetOfLastIndexSegmentForDeleteCheck = null;
@@ -72,6 +79,32 @@ class CompactionLog implements Closeable {
     return new File(dir, storeId + COMPACTION_LOG_SUFFIX).exists();
   }
 
+  @FunctionalInterface
+  static interface CompactionLogProcessor {
+    boolean process(CompactionLog log);
+  }
+
+  static void processCompactionHistory(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time,
+      StoreConfig config, CompactionLogProcessor processor) throws IOException {
+    // Ignore current in process compaction
+    File storeDir = new File(dir);
+    File[] files = storeDir.listFiles((fileDir, name) -> {
+      return name.startsWith(storeId + COMPACTION_LOG_SUFFIX + BlobStore.SEPARATOR);
+    });
+    List<File> sortedFiles = Stream.of(files)
+        .sorted((file1, file2) -> (int) (getStartTimeFromFile(file2) - getStartTimeFromFile(file1)))
+        .collect(Collectors.toList());
+    for (File file : sortedFiles) {
+      if (!processor.process(new CompactionLog(file, storeKeyFactory, time, config))) {
+        break;
+      }
+    }
+  }
+
+  static long getStartTimeFromFile(File file) {
+    return Long.valueOf(file.getName().split(BlobStore.SEPARATOR)[2]);
+  }
+
   /**
    * Creates a new compaction log.
    * @param dir the directory at which the compaction log must be created.
@@ -83,6 +116,7 @@ class CompactionLog implements Closeable {
   CompactionLog(String dir, String storeId, Time time, CompactionDetails compactionDetails, StoreConfig config)
       throws IOException {
     this.time = time;
+    this.version = CURRENT_VERSION;
     file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (!file.createNewFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " already exists");
@@ -128,7 +162,7 @@ class CompactionLog implements Closeable {
     try (FileInputStream fileInputStream = new FileInputStream(file)) {
       CrcInputStream crcInputStream = new CrcInputStream(fileInputStream);
       DataInputStream stream = new DataInputStream(crcInputStream);
-      short version = stream.readShort();
+      this.version = stream.readShort();
       switch (version) {
         case VERSION_0:
           startTime = stream.readLong();
@@ -144,6 +178,7 @@ class CompactionLog implements Closeable {
           }
           break;
         case VERSION_1:
+        case VERSION_2:
           startTime = stream.readLong();
           if (stream.readByte() == (byte) 1) {
             startOffsetOfLastIndexSegmentForDeleteCheck = Offset.fromBytes(stream);
@@ -153,6 +188,14 @@ class CompactionLog implements Closeable {
           cycleLogs = new ArrayList<>(cycleLogsSize);
           while (cycleLogs.size() < cycleLogsSize) {
             cycleLogs.add(CycleLog.fromBytes(stream, storeKeyFactory));
+          }
+          if (version == VERSION_2) {
+            int mapSize = stream.readInt();
+            for (int i = 0; i < mapSize; i++) {
+              Offset before = Offset.fromBytes(stream);
+              Offset after = Offset.fromBytes(stream);
+              beforeAndAfterIndexSegmentOffsets.put(before, after);
+            }
           }
           crc = crcInputStream.getValue();
           if (crc != stream.readLong()) {
@@ -167,6 +210,10 @@ class CompactionLog implements Closeable {
       }
       logger.trace("Loaded compaction log: {}", file);
     }
+  }
+
+  long getStartTime() {
+    return startTime;
   }
 
   /**
@@ -211,6 +258,30 @@ class CompactionLog implements Closeable {
     flush();
     logger.trace("{}: Set safe token to {} during compaction of {}", file, cycleLog.safeToken,
         cycleLog.compactionDetails);
+  }
+
+  void addIndexSegmentOffsetPair(Offset before, Offset after) {
+    if (!isIndexSegmentOffsetRecordingSupported()) {
+      return;
+    }
+    // If the before offset already exists, it means the index segment has already been copied, or half way through
+    // copying. Either way, we should keep the original after offset, since the after offset should reference to the
+    // first index segment that has data from before index segment.
+    if (beforeAndAfterIndexSegmentOffsets.containsKey(before)) {
+      logger.trace("{}: Offset already exist in the map", file, before);
+      return;
+    }
+    beforeAndAfterIndexSegmentOffsets.put(before, after);
+    logger.trace("{}: Add offsets pair to {}: {}", file, before, after);
+    flush();
+  }
+
+  TreeMap<Offset, Offset> getIndexSegmentOffsets() {
+    return beforeAndAfterIndexSegmentOffsets;
+  }
+
+  boolean isIndexSegmentOffsetRecordingSupported() {
+    return version >= VERSION_2;
   }
 
   /**
@@ -268,8 +339,8 @@ class CompactionLog implements Closeable {
         newList.add(segmentUnderCompaction);
       }
     }
-    getCurrentCycleLog().compactionDetails = new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList,
-        null);
+    getCurrentCycleLog().compactionDetails =
+        new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList, null);
     cycleLogs.add(new CycleLog(new CompactionDetails(currentDetails.getReferenceTimeMs(), newList, null)));
     flush();
     logger.trace("{}: Split current cycle into two lists: {} and {}", file, updatedList, newList);
@@ -365,13 +436,27 @@ class CompactionLog implements Closeable {
           cycleLog1 (see CycleLog#toBytes())
           cycleLog2
           ...
+         Version 2:
+          version
+          startTime
+          byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
+          startOffsetOfLastIndexSegmentForDeleteCheck if not null
+          index of current cycle's log
+          size of cycle log list
+          cycleLog1 (see CycleLog#toBytes())
+          cycleLog2
+          ...
+          size of beforeAndAfterIndexSegmentOffsetsMap
+          beforeOffset1, afterOffset1
+          beforeOffset2, afterOffset2
+          ...
           crc
        */
     File tempFile = new File(file.getAbsolutePath() + ".tmp");
     try (FileOutputStream fileOutputStream = new FileOutputStream(tempFile)) {
       CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
       DataOutputStream stream = new DataOutputStream(crcOutputStream);
-      stream.writeShort(CURRENT_VERSION);
+      stream.writeShort(version); // If we read this log from file, then keep this the same version.
       stream.writeLong(startTime);
       if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
         stream.writeByte(0);
@@ -383,6 +468,14 @@ class CompactionLog implements Closeable {
       stream.writeInt(cycleLogs.size());
       for (CycleLog cycleLog : cycleLogs) {
         stream.write(cycleLog.toBytes());
+      }
+      if (version >= VERSION_2) {
+        stream.writeInt(beforeAndAfterIndexSegmentOffsets.size());
+        // BeforeAndAfterIndexSegmentOffsets is a tree map that would return offset in order
+        for (Map.Entry<Offset, Offset> entry : beforeAndAfterIndexSegmentOffsets.entrySet()) {
+          stream.write(entry.getKey().toBytes());
+          stream.write(entry.getValue().toBytes());
+        }
       }
       stream.writeLong(crcOutputStream.getValue());
       fileOutputStream.getChannel().force(true);

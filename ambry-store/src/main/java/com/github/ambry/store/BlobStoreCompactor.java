@@ -427,7 +427,7 @@ class BlobStoreCompactor {
         compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
-      // only records in the the very first log segment in the cycle could have been copied in a previous cycle
+      // only records in the very first log segment in the cycle could have been copied in a previous cycle
       logger.info("Continue compaction at cycle {} with {}", compactionLog.getCurrentIdx(), storeId);
       LogSegment firstLogSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
       LogSegment prevSegment = srcLog.getPrevSegment(firstLogSegment);
@@ -569,7 +569,16 @@ class BlobStoreCompactor {
    * @return {@code true} if copying is required. {@code false} otherwise.
    */
   private boolean needsCopying(Offset offset) {
-    return recoveryStartToken == null || recoveryStartToken.getOffset().compareTo(offset) < 0;
+    if (!compactionLog.isIndexSegmentOffsetRecordingSupported()) {
+      // If index segment offsets before and after compaction is not saved within compaction log, then
+      // just use recovery start token to decide if we should copy this index segment.
+      return recoveryStartToken == null || recoveryStartToken.getOffset().compareTo(offset) < 0;
+    }
+    // We have index segment offsets before and after compaction, every index segment whose offset exists
+    // in the compaction log already has its content copied, with the last index segment as exception.
+    TreeMap<Offset, Offset> indexSegmentOffsets = compactionLog.getIndexSegmentOffsets();
+    Offset underCompactionIndexSegmentOffset = indexSegmentOffsets.lastKey();
+    return underCompactionIndexSegmentOffset.compareTo(offset) < 0;
   }
 
   /**
@@ -578,7 +587,13 @@ class BlobStoreCompactor {
    * @return {@code True} if the index segment is under copy to the target persistent index.
    */
   private boolean isIndexSegmentUnderCopy(Offset indexSegmentStartOffset) {
-    return recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentStartOffset);
+    if (!compactionLog.isIndexSegmentOffsetRecordingSupported()) {
+      // If index segment offsets before and after compaction is not saved within compaction log, then
+      // just use recovery start token to decide if we should copy this index segment.
+      return recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentStartOffset);
+    }
+    TreeMap<Offset, Offset> indexSegmentOffsets = compactionLog.getIndexSegmentOffsets();
+    return indexSegmentOffsets.lastKey().equals(indexSegmentStartOffset);
   }
 
   /**
@@ -626,6 +641,8 @@ class BlobStoreCompactor {
   private boolean copyDataByIndexSegment(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
       FileSpan duplicateSearchSpan) throws IOException, StoreException {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
+    compactionLog.addIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),
+        tgtIndex.getActiveIndexSegmentOffset());
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
     boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
@@ -1089,6 +1106,13 @@ class BlobStoreCompactor {
     }
     logger.debug("Adding {} to the application index and removing {} from the application index in {}",
         indexSegmentFilesToAdd, indexSegmentsToRemove, storeId);
+
+    if (compactionLog.isIndexSegmentOffsetRecordingSupported()) {
+      srcIndex.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
+          compactionLog.getIndexSegmentOffsets());
+    }
+    // Update the index segments, this would remove some index segments and add others. We have to update the before and
+    // after compaction index segment offsets before this method.
     srcIndex.changeIndexSegments(indexSegmentFilesToAdd, indexSegmentsToRemove);
   }
 
@@ -1216,11 +1240,10 @@ class BlobStoreCompactor {
         PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir.getAbsolutePath(), logSegmentName);
     for (File indexSegmentFile : indexSegmentFiles) {
       Offset indexOffset = IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName());
-      // Only add index offset that has same log segment name with the given log segment name.
-      // This is because we have to deal with filename filter issue in getIndexSegmentFilesForLogSegment.
-      // If we have log segment 0_1 and 0_10, and we are only looking for index segment files for 0_1, the above method
-      // would return the index segment files for 0_10 as well, since they start with the same string and ends with the
-      // same string in filename.
+      // We don't have to check if the IndexSegment's log segment name is the same as the input log segment name
+      // since now getIndexSegmentFilesForLogSegment would match exactly the log segment name we provided so that
+      // when given 0_1, 0_10's index segment files will never get matched.
+      // But leave this here for sanity check.
       if (indexOffset.getName().equals(logSegmentName)) {
         indexSegmentStartOffsetToFile.put(indexOffset, indexSegmentFile);
       }

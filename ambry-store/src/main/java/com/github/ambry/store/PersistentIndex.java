@@ -25,6 +25,7 @@ import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -37,6 +38,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Random;
 import java.util.Set;
@@ -160,6 +162,9 @@ class PersistentIndex {
   // the result of the compaction already, it will not point to any old log segment.
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private Runnable getBlobReadInfoTestCallback = null;
+  private final NavigableMap<Offset, Offset> beforeAndAfterCompactionIndexSegmentOffsets =
+      new ConcurrentSkipListMap<>();
+  private final TreeMap<Long, Set<Offset>> compactionTimestampToIndexSegmentOffsets = new TreeMap<>();
 
   private ConcurrentHashMap<String, LinkedList<Pair<Offset, Set<StoreKey>>>> cachedKeys = new ConcurrentHashMap<>();
 
@@ -549,6 +554,26 @@ class PersistentIndex {
     }
   }
 
+  void updateBeforeAndAfterCompactionIndexSegmentOffsets(long compactionStartTime, Map<Offset, Offset> offsets) {
+    compactionTimestampToIndexSegmentOffsets.computeIfAbsent(compactionStartTime, k -> new HashSet<>())
+        .addAll(offsets.keySet());
+    beforeAndAfterCompactionIndexSegmentOffsets.putAll(offsets);
+    long now = time.milliseconds();
+    long cutoffTime = now - Duration.ofDays(config.storeCompactionHistoryInDay).toMillis();
+    // Any compaction history before this cutoff timestamp would be removed
+    // compactionTimestampToIndexSegmentOffsets is a tree map order by time
+    Iterator<Map.Entry<Long, Set<Offset>>> iterator = compactionTimestampToIndexSegmentOffsets.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<Long, Set<Offset>> entry = iterator.next();
+      if (entry.getKey() > cutoffTime) {
+        break;
+      }
+      Set<Offset> offsetsToRemove = entry.getValue();
+      beforeAndAfterCompactionIndexSegmentOffsets.keySet().removeAll(offsetsToRemove);
+      iterator.remove();
+    }
+  }
+
   /**
    * Adds a new entry to the index. For recovery, only the index segments belongs to last log segment should be put into
    * journal, other wise it won't be compacted and we will facing the issue when last log segment is empty but journal size
@@ -587,6 +612,14 @@ class PersistentIndex {
       Offset startOffset = entry.getValue().getOffset();
       Offset endOffset = new Offset(startOffset.getName(), startOffset.getOffset() + entry.getValue().getSize());
       addToIndex(entry, new FileSpan(startOffset, endOffset));
+    }
+  }
+
+  Offset getActiveIndexSegmentOffset() {
+    if (validIndexSegments.size() > 0) {
+      return validIndexSegments.lastKey();
+    } else {
+      return log.getEndOffset();
     }
   }
 
@@ -2503,31 +2536,39 @@ class PersistentIndex {
         break;
       case JournalBased:
         // A journal based token, but the previous index segment doesn't belong to the same log segment, might be caused
-        // by compaction, or blob stored added to many records so that the offset in the token is now pointing to the
+        // by compaction, or blob store added to many records so that the offset in the token is now pointing to the
         // previous log segment.
         Offset floorOffset = indexSegments.floorKey(offset);
         if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
-          if (ignoreResetKey || token.getResetKey() == null) {
-            revalidatedToken = new StoreFindToken();
+          if (config.storeEnableOffsetBasedTokenReset) {
+            revalidatedToken = generateTokenBasedOnIndexSegmentOffset(token, indexSegments);
           } else {
-            // reset key is present in the token, we attempt to generate the new token based on reset key
-            revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
+            if (ignoreResetKey || token.getResetKey() == null) {
+              revalidatedToken = new StoreFindToken();
+            } else {
+              // reset key is present in the token, we attempt to generate the new token based on reset key
+              revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
+            }
           }
           metrics.journalBasedTokenResetCount.inc();
-          logger.info("Revalidated token {} because it is invalid for the index segment map", token);
+          logger.info("Index {}: Revalidated token {} because it is invalid for the index segment map", dataDir, token);
         }
         break;
       case IndexBased:
         // An index based token, but the offset is not in the segments, might be caused by the compaction
         if (!indexSegments.containsKey(offset)) {
-          if (ignoreResetKey || token.getResetKey() == null) {
-            revalidatedToken = new StoreFindToken();
+          if (config.storeEnableOffsetBasedTokenReset) {
+            revalidatedToken = generateTokenBasedOnIndexSegmentOffset(token, indexSegments);
           } else {
-            // reset key is present in the token
-            revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
+            if (!ignoreResetKey && token.getResetKey() != null) {
+              // reset key is present in the token
+              revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
+            } else {
+              revalidatedToken = new StoreFindToken();
+            }
           }
           metrics.indexBasedTokenResetCount.inc();
-          logger.info("Revalidated token {} because it is invalid for the index segment map", token);
+          logger.info("Index {}: Revalidated token {} because it is invalid for the index segment map", dataDir, token);
         }
         break;
       default:
@@ -2560,7 +2601,8 @@ class PersistentIndex {
     StoreFindToken newToken = new StoreFindToken();
     if (resetKeyIndexValue == null) {
       // reset key is not found in current valid index segments, reset it to very beginning
-      logger.info("Reset key {} is not found in current index, token is reset to the beginning of whole log", resetKey);
+      logger.info("Index {}: Reset key {} is not found in current index, token is reset to the beginning of whole log",
+          dataDir, resetKey);
     } else {
       if (config.storeRebuildTokenBasedOnResetKey) {
         IndexSegment targetIndexSegment = indexSegments.floorEntry(resetKeyIndexValue.getOffset()).getValue();
@@ -2574,6 +2616,73 @@ class PersistentIndex {
       metrics.resetKeyFoundInCurrentIndex.inc();
     }
     return newToken;
+  }
+
+  /**
+   * Generate new {@link StoreFindToken} based on the index segment offset information before and after compaction.
+   * If the input token is an index based token, then this method would try to find the offset of after compaction index
+   * segment for its offset. It will return the index segment after compaction (referenced by offset) as the StoreFindToken
+   * if this method finds it, otherwise, it would return an uninitialized token.
+   * If the input token is a journal based token, which means its offset doesn't show up in the offset information before
+   * and after compaction. Then first this method will do is to find the offset of the before-compaction index segment
+   * this journal token belongs to. If it can find the offset, it will then do the same thing as the index based token.
+   * Otherwise it will return an uninitialized token.
+   * @param token The token whose offset is now missing from the index segment map.
+   * @param indexSegments The current index segment map.
+   * @return A new {@link StoreFindToken} that is guaranteed to be safe for replication.
+   * @throws StoreException
+   */
+  StoreFindToken generateTokenBasedOnIndexSegmentOffset(StoreFindToken token,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
+    if (token.getType() == FindTokenType.Uninitialized) {
+      throw new IllegalArgumentException("Index" + dataDir + ": Invalid token: " + token);
+    }
+    if (indexSegments.get(token.getOffset()) != null) {
+      throw new IllegalArgumentException(
+          "Index " + dataDir + ": Token's offset already exist in the index segment map: " + token);
+    }
+    boolean isIndexSegmentOffset = token.getType().equals(FindTokenType.IndexBased);
+    Offset offset = token.getOffset();
+    IndexSegment segment;
+    while (true) {
+      Offset afterOffset;
+      if (isIndexSegmentOffset) {
+        afterOffset = beforeAndAfterCompactionIndexSegmentOffsets.get(offset);
+      } else {
+        Offset start = new Offset(offset.getName(), 0);
+        Offset end = new Offset(offset.getName(), config.storeSegmentSizeInBytes + 1);
+        afterOffset =
+            beforeAndAfterCompactionIndexSegmentOffsets.headMap(end, false).tailMap(start, false).floorKey(offset);
+        // First, use this map fo find the floor key for the given offset. Offset in journal token is the same as the
+        // index entry's offset. And the index entry's offset should always be greater than or equal to the start offset
+        // of the index segment, which this index entry belongs to.
+        if (afterOffset == null || !afterOffset.getName().equals(offset.getName())) {
+          // LogSegmentName check is for sanity, we already have a start and end offset to limit the range for offset.
+          logger.info("Index {}: Non-IndexSegment Offset {} can't find its index segment offset before compaction: {}",
+              offset, afterOffset);
+          return new StoreFindToken();
+        }
+        isIndexSegmentOffset = true;
+      }
+      if (afterOffset == null) {
+        logger.info(
+            "Index {}: Offset {} is not found in compaction index segment offset maps, token is reset to the beginning of whole log",
+            dataDir, offset);
+        return new StoreFindToken();
+      }
+      segment = indexSegments.get(afterOffset);
+      if (segment != null) {
+        logger.trace("Index {}: Offset {} maps to {} after compaction, reset token to this index segment", dataDir,
+            offset, afterOffset);
+        return new StoreFindToken(FindTokenType.IndexBased, segment.getStartOffset(),
+            segment.getFirstKeyInSealedSegment(), sessionId, incarnationId, true, StoreFindToken.CURRENT_VERSION,
+            segment.getResetKey(), segment.getResetKeyType(), segment.getResetKeyLifeVersion());
+      } else {
+        logger.trace("Index {}: Offset {} maps to {} after compaction, but it doesn't exist in index", dataDir, offset,
+            afterOffset);
+      }
+      offset = afterOffset;
+    }
   }
 
   /**

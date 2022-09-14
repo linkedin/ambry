@@ -490,6 +490,16 @@ public class StoreConfig {
   public static final String storeNumOfCacheMissForFindMissingKeysInBatchModeName =
       "store.num.of.cache.miss.for.find.missing.keys.in.batch.mode";
 
+  @Config(storeCompactionHistoryInDayName)
+  @Default("7")
+  public final int storeCompactionHistoryInDay;
+  public static final String storeCompactionHistoryInDayName = "store.compaction.history.in.day";
+
+  @Config(storeEnableOffsetBasedTokenResetName)
+  @Default("false")
+  public final boolean storeEnableOffsetBasedTokenReset;
+  public static final String storeEnableOffsetBasedTokenResetName = "store.enable.offset.based.tokne.reset";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -609,5 +619,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeCacheSizeForFindMissingKeysInBatchModeName, 3, 1, 100);
     storeNumOfCacheMissForFindMissingKeysInBatchMode =
         verifiableProperties.getIntInRange(storeNumOfCacheMissForFindMissingKeysInBatchModeName, 5, 3, 100);
+    storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 7, 1, 30);
+    storeEnableOffsetBasedTokenReset = verifiableProperties.getBoolean(storeEnableOffsetBasedTokenResetName, false);
   }
 }

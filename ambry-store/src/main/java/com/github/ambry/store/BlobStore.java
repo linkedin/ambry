@@ -34,6 +34,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -251,6 +252,7 @@ public class BlobStore implements Store {
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
+        buildCompactionHistory();
         if (blobStoreStats == null) {
           blobStoreStats =
               new BlobStoreStats(storeId, index, config, time, longLivedTaskScheduler, taskScheduler, diskIOScheduler,
@@ -1302,6 +1304,21 @@ public class BlobStore implements Store {
       // and router relies on failure detector to track liveness of replicas(stores).
       currentState = ReplicaState.STANDBY;
     }
+  }
+
+  private void buildCompactionHistory() throws IOException {
+    long now = time.milliseconds();
+    long cutoffTime = now - Duration.ofDays(config.storeCompactionHistoryInDay).toMillis();
+    CompactionLog.processCompactionHistory(dataDir, storeId, factory, time, config, compactionLog -> {
+      if (compactionLog.getStartTime() > cutoffTime) {
+        if (compactionLog.isIndexSegmentOffsetRecordingSupported()) {
+          index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
+              compactionLog.getIndexSegmentOffsets());
+        }
+        return true;
+      }
+      return false;
+    });
   }
 
   @Override
