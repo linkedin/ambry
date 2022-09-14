@@ -12,8 +12,9 @@ subprojects {
 
     license {
         header rootProject.file('HEADER')
-        exclude '**/bulkDelete.js'
         // Skip Twitter bootstrap JS and CSS.
+        exclude '**/bulkDelete.js'
+        exclude '**/log4j2.xml'
         skipExistingHeaders = true
     }
 }
