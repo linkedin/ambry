@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -125,11 +126,14 @@ public class OperationController implements Runnable {
         routerConfig.routerConnectionsRemoteDcWarmUpPercentage, routerConfig.routerConnectionsWarmUpTimeoutMs,
         responseInfos);
     // Update ResponseHandler immediately if connections lost to certain nodes.
-    for (ResponseInfo responseInfo : responseInfos) {
+    // Note: If we return from networkClient.warmUpConnections() due to time out, 'responseInfo' list can be modified in
+    // parallel by Netty threads. To avoid ConcurrentModificationException, use forEach to go over the list instead of
+    // for-each loop since latter uses an iterator which is not protected by mutex of Collections.synchronisedList().
+    responseInfos.forEach(responseInfo -> {
       if (responseInfo.getRequestInfo() == null) {
         responseHandler.onConnectionTimeout(responseInfo.getDataNode());
       }
-    }
+    });
     routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
     putManager =
         new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
