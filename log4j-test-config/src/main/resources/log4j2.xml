@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="consoleAppender" target="SYSTEM_OUT">
+            <PatternLayout pattern="[%d] %p %m (%c)%n"/>
+        </Console>
+        <File name="publicAccessAppender" fileName="logs/publicAccessLog.out" append="true">
+            <PatternLayout>
+                <Pattern>%m%n</Pattern>
+            </PatternLayout>
+        </File>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="consoleAppender"/>
+        </Root>
+
+        <Logger name="PublicAccessLogger" level="info" additivity="false">
+            <AppenderRef ref="publicAccessAppender"/>
+        </Logger>
+
+        <Logger name="org.apache.helix" level="warn" />
+        <Logger name="org.apache.zookeeper" level="warn" />
+
+
+        <!-- these three are disabled because MockClusterMap does not currently mark nodes offline
+        when requests fail, which happens a lot in the cases that our end to end tests cover. -->
+        <Logger name="com.github.ambry.network.BlockingChannelConnectionPool" level="off" />
+        <Logger name="com.github.ambry.network.BlockingChannelInfo" level="off" />
+        <Logger name="com.github.ambry.replication.ReplicThread" level="off" />
+    </Loggers>
+</Configuration>
