@@ -1366,8 +1366,12 @@ class PersistentIndex {
           }
 
           // Missing keys from cache
+          logger.trace("Index {}: In findMissingKeysInBatch, can't find key {} in cache. Size of Cache: {}", dataDir,
+              key, cachedKeys.size());
           continuousMissingKeyFromCacheCount++;
           if (continuousMissingKeyFromCacheCount >= config.storeNumOfCacheMissForFindMissingKeysInBatchMode) {
+            logger.trace("Index {}: In findMissingKeysInBatch, cache miss is more than the threshold. stop using cache",
+                dataDir);
             shouldUseCachedKeys = false;
             cachedKeys.clear();
             // Retry this key
@@ -1381,7 +1385,7 @@ class PersistentIndex {
           }
 
           if (!shouldUseCachedKeys) {
-            logger.trace("Index {}: In findMisingKeyInBatch, stop using cache after {}th key", dataDir, i);
+            logger.trace("Index {}: In findMisingKeyInBatch, stop using cache after {}th key {}", dataDir, i, key);
             cachedKeys.clear();
           }
         }
@@ -1406,8 +1410,16 @@ class PersistentIndex {
     if (value != null) {
       // Find the index segment for this value
       Map.Entry<Offset, IndexSegment> entry = validIndexSegments.floorEntry(value.getOffset());
-      IndexSegment segment = entry != null ? entry.getValue() : null;
-      if (segment != null && segment.isSealed()) {
+      if (entry == null) {
+        // This could happen. Between calling findKey and floorEntry, we have a compaction just finished that removes
+        // the index segment for this value. If this is the case, don't cache and just return.
+        // This is not an error.
+        logger.info("Index {}: In findMissingKeysInBatch, can't find the index segment that contains the value {}",
+            dataDir, value);
+        return true;
+      }
+      IndexSegment segment = entry.getValue();
+      if (segment.isSealed()) {
         Set<StoreKey> allStoreKeys = segment.getAllStoreKeys();
         // Adding this index segment to the front of the list
         logger.trace("Index {}: In findMissingKeysInbBatch, adding new segment : {}", dataDir,
@@ -1452,11 +1464,15 @@ class PersistentIndex {
     } else {
       if (cachedKeys.stream().map(Pair::getFirst).anyMatch(offset -> offset.equals(entryAfter.getKey()))) {
         // if next index segment already in the cache, don't bother to search key in next index segment
+        logger.trace("Index {}: In findMissingKeysInBatch, next segment {} already in the cache, skip searching",
+            dataDir, entryAfter.getKey());
         return findKeyAndAddIndexSegmentToCache(key, missingKeys);
       }
       IndexSegment nextSegment = entryAfter.getValue();
       NavigableSet<IndexValue> values = nextSegment.find(key);
       if (values == null || values.isEmpty()) {
+        logger.trace("Index {}: In findMissingKeysInBatch, cant' find key {} in next segment {}", dataDir, key,
+            nextSegment.getStartOffset());
         shouldUseCachedKeys = findKeyAndAddIndexSegmentToCache(key, missingKeys);
       } else {
         if (nextSegment.isSealed()) {
