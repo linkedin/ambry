@@ -25,6 +25,8 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -39,6 +41,10 @@ public class BatchOperationCallbackTrackerTest {
   private final List<BlobId> chunkIds;
   private final BlobId finalBlobId;
   private final Callback<Void> callback;
+  private final AtomicBoolean finalOperationCalled = new AtomicBoolean(false);
+  private final BiConsumer<BlobId, Callback> finalOperation = (b, c) -> {
+    finalOperationCalled.set(true);
+  };
 
   /**
    * Constructor for {@link BatchOperationCallbackTracker}.
@@ -69,24 +75,25 @@ public class BatchOperationCallbackTrackerTest {
     // test if final blob is the first blob to be completed.
     BatchOperationCallbackTracker tracker =
         new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-            (b, c) -> {
-            });
+            finalOperation);
     tracker.getCallback(finalBlobId).onCompletion(null, null);
     Assert.assertTrue(trackerException instanceof RouterException);
     Assert.assertTrue(tracker.isCompleted());
+    Assert.assertFalse(finalOperationCalled.get());
 
     // test if final blob completion arrives after some blobs (but not all blobs) are completed.
     for (int i = 0; i < NUM_CHUNKS - 1; i++) {
       tracker =
           new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-              (b, c) -> {
-              });
+              finalOperation);
       for (int j = 0; j <= i; j++) {
         tracker.getCallback(chunkIds.get(j)).onCompletion(null, null);
+        Assert.assertFalse(finalOperationCalled.get());
       }
       tracker.getCallback(finalBlobId).onCompletion(null, null);
       Assert.assertTrue(trackerException instanceof RouterException);
       Assert.assertTrue(tracker.isCompleted());
+      Assert.assertFalse(finalOperationCalled.get());
     }
   }
 
@@ -97,8 +104,7 @@ public class BatchOperationCallbackTrackerTest {
   public void testOperationCompleteAfterFinalBlob() {
     BatchOperationCallbackTracker tracker =
         new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-            (b, c) -> {
-            });
+            finalOperation);
 
     // update all data chunks and ensure that tracker isn't marked as complete.
     for (int i = 0; i < NUM_CHUNKS; i++) {
@@ -110,6 +116,7 @@ public class BatchOperationCallbackTrackerTest {
     tracker.getCallback(finalBlobId).onCompletion(null, null);
     Assert.assertTrue(trackerException == null);
     Assert.assertTrue(tracker.isCompleted());
+    Assert.assertTrue(finalOperationCalled.get());
   }
 
   /**
@@ -119,13 +126,30 @@ public class BatchOperationCallbackTrackerTest {
   public void testDuplicateAcks() {
     BatchOperationCallbackTracker tracker =
         new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-            (b, c) -> {
-            });
+            finalOperation);
     tracker.getCallback(chunkIds.get(0)).onCompletion(null, null);
     Assert.assertFalse(tracker.isCompleted());
+    Assert.assertFalse(finalOperationCalled.get());
 
     tracker.getCallback(chunkIds.get(0)).onCompletion(null, null);
     Assert.assertTrue(tracker.isCompleted());
     Assert.assertTrue(trackerException instanceof RouterException);
+    Assert.assertFalse(finalOperationCalled.get());
+  }
+
+  /**
+   * Test that if a data chunk has exception, the operation is completed and finalOperation is never attempted.
+   */
+  @Test
+  public void testChunkException() {
+    BatchOperationCallbackTracker tracker =
+        new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
+            finalOperation);
+    tracker.getCallback(chunkIds.get(0))
+        .onCompletion(null, new RouterException("test", RouterErrorCode.UnexpectedInternalError));
+    Assert.assertTrue(tracker.isCompleted());
+    Assert.assertTrue(trackerException instanceof RouterException);
+    Assert.assertFalse(finalOperationCalled.get());
+    Assert.assertEquals(RouterErrorCode.UnexpectedInternalError, ((RouterException) trackerException).getErrorCode());
   }
 }

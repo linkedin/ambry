@@ -319,9 +319,13 @@ public class OperationController implements Runnable {
           // If we are here then we can rely that the metadata chunk was updated only after all data chunks were updated.
           // So this means we are sure that all data chunks are successfully updated.
           // Send an update for metadata chunk only to ensure that metadata chunk's update meets quorum.
+          nonBlockingRouter.incrementOperationsCount(1);
           helper.getDoOperation().accept(blobIdStr, Collections.emptyList());
           routerMetrics.updateOptimizedCount.inc();
         } else {
+          if (result.getBlobInfo() != null && helper.getAlreadyUpdated().apply(result.getBlobInfo())) {
+            routerMetrics.updateUnOptimizedCount.inc();
+          }
           List<String> blobIdStrs = new ArrayList<>();
           if (result != null && result.getBlobChunkIds() != null) {
             result.getBlobChunkIds().forEach(key -> blobIdStrs.add(key.getID()));

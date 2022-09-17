@@ -186,6 +186,7 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobSizeMismatchCount;
   public final Counter unknownPartitionClassCount;
   public final Counter updateOptimizedCount;
+  public final Counter updateUnOptimizedCount;
   // Number of unnecessary blob gets avoided via use of BlobDataType
   public final Counter skippedGetBlobCount;
   public Gauge<Long> chunkFillerThreadRunning;
@@ -481,7 +482,9 @@ public class NonBlockingRouterMetrics {
     unknownPartitionClassCount =
         metricRegistry.counter(MetricRegistry.name(PutOperation.class, "UnknownPartitionClassCount"));
     updateOptimizedCount =
-        metricRegistry.counter(MetricRegistry.name(OperationController.class, "updateOptimizedCount"));
+        metricRegistry.counter(MetricRegistry.name(OperationController.class, "UpdateOptimizedCount"));
+    updateUnOptimizedCount =
+        metricRegistry.counter(MetricRegistry.name(OperationController.class, "UpdateUnOptimizedCount"));
 
     // metrics to track blob sizes and chunking.
     putBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobSizeBytes"));
