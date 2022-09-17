@@ -13,9 +13,12 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.protocol.GetOption;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 
 /**
@@ -25,7 +28,8 @@ public class CompositeBlobOperationHelper {
   private final String opName;
   private final GetOption getOption;
   private final NonBlockingRouterMetrics.AgeAtAccessMetrics metrics;
-  private final Consumer<List<String>> doOperation;
+  private final BiConsumer<String, List<String>> doOperation;
+  private final Function<BlobInfo, Boolean> alreadyUpdated;
   private final Consumer<RouterException> completeOperationAtException;
 
   /**
@@ -34,16 +38,19 @@ public class CompositeBlobOperationHelper {
    * @param getOption The {@link GetOption} while fetching the blob ids of a composite blob.
    * @param metrics The {@link NonBlockingRouterMetrics.AgeAtAccessMetrics} to use while fetching blob ids of a composite
    *                blob with {@link GetManager}.
-   * @param doOperation The function to call to submit a list of blob ids in String to corresponding manager after fetching
-   *                    blob ids.
+   * @param doOperation The function to call to submit the metadata blob id and a list of chunk ids in String to
+   *                    corresponding manager after fetching blob ids.
+   * @param alreadyUpdated The function to call to check if the operation is already done.
    * @param completeOperationAtException The function to call when there is exception when calling {@link  OperationController#getBlob}.
    */
   CompositeBlobOperationHelper(String opName, GetOption getOption, NonBlockingRouterMetrics.AgeAtAccessMetrics metrics,
-      Consumer<List<String>> doOperation, Consumer<RouterException> completeOperationAtException) {
+      BiConsumer<String, List<String>> doOperation, Function<BlobInfo, Boolean> alreadyUpdated,
+      Consumer<RouterException> completeOperationAtException) {
     this.opName = opName;
     this.getOption = getOption;
     this.metrics = metrics;
     this.doOperation = doOperation;
+    this.alreadyUpdated = alreadyUpdated;
     this.completeOperationAtException = completeOperationAtException;
   }
 
@@ -59,8 +66,12 @@ public class CompositeBlobOperationHelper {
     return metrics;
   }
 
-  public Consumer<List<String>> getDoOperation() {
+  public BiConsumer<String, List<String>> getDoOperation() {
     return doOperation;
+  }
+
+  public Function<BlobInfo, Boolean> getAlreadyUpdated() {
+    return alreadyUpdated;
   }
 
   public Consumer<RouterException> getCompleteOperationAtException() {

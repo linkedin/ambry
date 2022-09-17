@@ -82,43 +82,65 @@ public class UndeleteManager {
 
   /**
    * Submits {@link UndeleteOperation}(s) to this {@link UndeleteManager}.
-   * @param blobIdStrs The original blobId strings
+   * @param blobIdStr The blobId of the simple blob or the metadata blob in case of composite blob.
+   * @param chunkIdStrs The blob ids of the metadata blob's chunks.
    * @param serviceId The service ID of the service undeleting the blob(s). This can be null if unknown.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
    * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    * @throws RouterException if the blobIdStr is invalid.
    */
-  void submitUndeleteOperation(Collection<String> blobIdStrs, String serviceId, FutureResult<Void> futureResult,
-      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
+  void submitUndeleteOperation(String blobIdStr, Collection<String> chunkIdStrs, String serviceId,
+      FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback)
+      throws RouterException {
     if (!isOpen()) {
       throw new IllegalStateException("UndeleteManager is closed");
     }
-    List<BlobId> blobIds = new ArrayList<>();
-    for (String blobIdStr : blobIdStrs) {
-      BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-      if (blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
-          && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
-        routerMetrics.undeleteBlobNotOriginateLocalOperationRate.mark();
-      }
-      blobIds.add(blobId);
+
+    BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+    if (blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
+        && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+      routerMetrics.undeleteBlobNotOriginateLocalOperationRate.mark();
     }
 
-    if (blobIds.size() == 1) {
+    List<BlobId> chunkIds = new ArrayList<>();
+    for (String chunkIdStr : chunkIdStrs) {
+      if (chunkIdStr.equals(blobIdStr)) {
+        // ChunkId list should not contain the metadata blobId itself.
+        LOGGER.warn("metadata chunk id {} was filtered out from data chunk id list.", blobIdStr);
+        continue;
+      }
+      BlobId chunkId = RouterUtils.getBlobIdFromString(chunkIdStr, clusterMap);
+      if (RouterUtils.isOriginatingDcRemote(chunkId, clusterMap)) {
+        routerMetrics.undeleteBlobNotOriginateLocalOperationRate.mark();
+      }
+      chunkIds.add(chunkId);
+    }
+
+    if (chunkIds.isEmpty()) {
+      // If there are no chunkIds, then its a simple blob, and we have to undelete only blob.
       UndeleteOperation undeleteOperation =
-          new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobIds.get(0), serviceId, time.milliseconds(),
+          new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, time.milliseconds(),
               callback, time, futureResult, quotaChargeCallback);
       undeleteOperations.add(undeleteOperation);
-    } else {
-      BatchOperationCallbackTracker tracker = new BatchOperationCallbackTracker(blobIds, futureResult, callback,
-          quotaChargeCallback);
-      long operationTimeMs = time.milliseconds();
-      for (BlobId blobId : blobIds) {
-        UndeleteOperation undeleteOperation =
-            new UndeleteOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, operationTimeMs,
-                tracker.getCallback(blobId), time, BatchOperationCallbackTracker.DUMMY_FUTURE, quotaChargeCallback);
-        undeleteOperations.add(undeleteOperation);
-      }
+      return;
+    }
+
+    // If we are here, that means the blob is a composite blob. So we will do a batch operation.
+    BatchOperationCallbackTracker tracker =
+        new BatchOperationCallbackTracker(chunkIds, blobId, futureResult, callback, quotaChargeCallback,
+            (bId, callBack) -> {
+              UndeleteOperation undeleteOperation =
+                  new UndeleteOperation(clusterMap, routerConfig, routerMetrics, bId, serviceId, time.milliseconds(),
+                      callBack, time, futureResult, quotaChargeCallback);
+              undeleteOperations.add(undeleteOperation);
+            });
+    long operationTimeMs = time.milliseconds();
+    for (BlobId chunkId : chunkIds) {
+      UndeleteOperation undeleteOperation =
+          new UndeleteOperation(clusterMap, routerConfig, routerMetrics, chunkId, serviceId, operationTimeMs,
+              tracker.getCallback(chunkId), time, BatchOperationCallbackTracker.DUMMY_FUTURE, quotaChargeCallback);
+      undeleteOperations.add(undeleteOperation);
     }
   }
 

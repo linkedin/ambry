@@ -34,6 +34,7 @@ public class RouterConfig {
   public static final long DEFAULT_OPERATION_TRACKER_HISTOGRAM_CACHE_TIMEOUT_MS = 1000L;
   public static final long ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS = 24 * 60 * 1000L;
   public static final int MAX_NETWORK_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS = 60 * 1000;
+  public static final long DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS = Long.MAX_VALUE;
   // This is a theoretical maximum value. Configured value may be much smaller since we might need to respond back to
   // client with either success or failure much sooner.
   public static final int MAX_OVERALL_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS = 60 * 60 * 1000;
@@ -119,6 +120,8 @@ public class RouterConfig {
   public static final String ROUTER_STORE_KEY_CONVERTER_FACTORY = "router.store.key.converter.factory";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS = "router.unavailable.due.to.offline.replicas";
   public static final String ROUTER_NOT_FOUND_CACHE_TTL_IN_MS = "router.not.found.cache.ttl.in.ms";
+  public static final String ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS =
+      "router.update.op.metadata.reliance.timestamp.in.ms";
 
   /**
    * Number of independent scaling units for the router.
@@ -614,6 +617,19 @@ public class RouterConfig {
   public static final int MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT = 10;
 
   /**
+   * Blobs created after this timestamp can rely on metadata chunk to get the overall status of update operations
+   * (ttl update, undelete) on the blob.
+   * This config is expected to be a temporary stop gap to improve the resiliency of update operations on a blob, until
+   * the server version changes are deployed to identify update operations that can rely on metadata chunk for the
+   * update status of the entire blob.
+   * The value of this config will be an upper bound of the timestamp when the frontend code version that updates
+   * metadata chunk last has been deployed to all frontend hosts on a cluster.
+   * A value of LONG.MAX_VALUE for this config would mean that this config is effectively disabled.
+   */
+  @Config(ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS)
+  public final long routerUpdateOpMetadataRelianceTimestampInMs;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -748,5 +764,7 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS, false);
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
+    routerUpdateOpMetadataRelianceTimestampInMs = verifiableProperties.getLong(
+        ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS, DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
   }
 }
