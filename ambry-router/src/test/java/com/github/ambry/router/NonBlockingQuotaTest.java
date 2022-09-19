@@ -265,8 +265,105 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
 
       router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount += (quotaAccountingSize * numChunks), listenerCalledCount.get());
+      assertEquals(0, routerMetrics.updateOptimizedCount.getCount());
+      assertEquals(0, routerMetrics.updateUnOptimizedCount.getCount());
+
+      router.updateBlobTtl(stitchedBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
+      assertEquals(expectedChargeCallbackCount += (quotaAccountingSize * numChunks), listenerCalledCount.get());
+      assertEquals(0, routerMetrics.updateOptimizedCount.getCount());
+      assertEquals(1, routerMetrics.updateUnOptimizedCount.getCount());
 
       router.deleteBlob(stitchedBlobId, null, null, quotaChargeCallback).get();
+      assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
+    } finally {
+      router.close();
+      assertExpectedThreadCounts(0, 0);
+
+      //submission after closing should return a future that is already done.
+      assertClosed();
+    }
+  }
+
+  /**
+   * Test for cases where successive update operations are optimized (i.e, metadata chunk is updated last).
+   * @throws Exception
+   */
+  @Test
+  public void testOptimizedTtl() throws Exception {
+    try {
+      Properties properties = getNonBlockingRouterProperties("DC1");
+      properties.setProperty(RouterConfig.ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS, "0");
+      setRouter(properties, mockServerLayout, new LoggingNotificationSystem());
+      assertExpectedThreadCounts(2, 1);
+      AtomicLong listenerCalledCount = new AtomicLong(0);
+      int expectedChargeCallbackCount = 0;
+      // create a quota charge callback that increments an atomic counter everytime its called.
+      // Also tests that in case quota if charged in tracking mode with throttleInProgress config set to false
+      // then the requests go through even in case of exception.
+      QuotaChargeCallback quotaChargeCallback = new QuotaChargeCallback() {
+        @Override
+        public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge, long chunkSize)
+            throws QuotaException {
+          listenerCalledCount.addAndGet(chunkSize);
+          throw new QuotaException("exception during check and charge",
+              new RouterException("Quota exceeded.", RouterErrorCode.TooManyRequests), false);
+        }
+
+        @Override
+        public QuotaAction checkAndCharge(boolean shouldCheckExceedAllowed, boolean forceCharge) throws QuotaException {
+          return checkAndCharge(shouldCheckExceedAllowed, forceCharge, quotaAccountingSize);
+        }
+
+        @Override
+        public QuotaResource getQuotaResource() {
+          return null;
+        }
+
+        @Override
+        public QuotaMethod getQuotaMethod() {
+          return null;
+        }
+
+        @Override
+        public QuotaConfig getQuotaConfig() {
+          return new QuotaConfig(new VerifiableProperties(new Properties()));
+        }
+      };
+
+      // test for a composite blob.
+      int blobSize = 3000;
+      int numChunks = (int) ((blobSize % quotaAccountingSize == 0) ? (blobSize / quotaAccountingSize)
+          : (blobSize / quotaAccountingSize) + 1) + 1;
+      setOperationParams(blobSize, TTL_SECS);
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
+              quotaChargeCallback).get();
+      expectedChargeCallbackCount += blobSize;
+      assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
+      RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+      router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, quotaChargeCallback)
+          .get()
+          .getBlobDataChannel()
+          .readInto(retainingAsyncWritableChannel, null)
+          .get();
+      expectedChargeCallbackCount += blobSize;
+      // read out all the chunks to make sure all the chunks are consumed and accounted for.
+      retainingAsyncWritableChannel.consumeContentAsInputStream().close();
+      assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
+
+      // Do the ttl update for the first time. All the chunk's ttl udpate quota usage should be charged.
+      router.updateBlobTtl(compositeBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
+      assertEquals(expectedChargeCallbackCount += (quotaAccountingSize * (numChunks + 1)), listenerCalledCount.get());
+      assertEquals(0, routerMetrics.updateOptimizedCount.getCount());
+      assertEquals(0, routerMetrics.updateUnOptimizedCount.getCount());
+
+      // Do the ttl update again. This time only one chunk's ttl udpate quota usage should be charged.
+      router.updateBlobTtl(compositeBlobId, null, Utils.Infinite_Time, null, quotaChargeCallback).get();
+      assertEquals(expectedChargeCallbackCount += quotaAccountingSize, listenerCalledCount.get());
+      assertEquals(1, routerMetrics.updateOptimizedCount.getCount());
+      assertEquals(0, routerMetrics.updateUnOptimizedCount.getCount());
+
+      router.deleteBlob(compositeBlobId, null, null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount + quotaAccountingSize, listenerCalledCount.get());
     } finally {
       router.close();

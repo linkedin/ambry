@@ -62,6 +62,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1532,9 +1533,15 @@ class GetBlobOperation extends GetOperation {
           getOptions().ageAtAccessTracker.trackAgeAtAccess(serverBlobInfo.getBlobProperties().getCreationTimeInMs());
           blobData = blobAll.getBlobData();
           encryptionKey = blobAll.getBlobEncryptionKey();
-          if (encryptionKey == null) {
-            // set blobInfo only if decryption is not required. If not, maybeProcessCallbackAndComplete() will set appropriate
-            // value
+          if (Objects.isNull(encryptionKey) || options.getChunkIdsOnly) {
+            // set blobInfo iff:
+            //   1. blob is not encrypted OR,
+            //   2. getChunkIdsOnly is set.
+            // If the blob is encrypted, then the user metadata is encrypted too. So in that case,
+            // maybeProcessCallbackAndComplete() will set the appropriate value for blobInfo after decryption.
+            // In the case of getChunkIdsOnly call, we don't need the user metadata but still need blob
+            // properties to evaluate if the metadata chunk is already updated for update requests. So we allow blobInfo
+            // to be set here.
             blobInfo = serverBlobInfo;
             blobInfo.setLifeVersion(messageInfo.getLifeVersion());
           } else {

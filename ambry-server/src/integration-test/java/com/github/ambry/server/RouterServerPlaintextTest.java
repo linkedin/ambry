@@ -253,6 +253,8 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.GET);
       operations.add(OperationType.TTL_UPDATE);
       operations.add(OperationType.AWAIT_TTL_UPDATE);
+      operations.add(OperationType.TTL_UPDATE);
+      operations.add(OperationType.AWAIT_TTL_UPDATE);
       operations.add(OperationType.GET);
       operations.add(OperationType.GET_INFO);
       operations.add(OperationType.DELETE_AUTHORIZATION_FAILURE);
