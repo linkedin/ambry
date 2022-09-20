@@ -13,6 +13,7 @@
  */
 package com.github.ambry.replication;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.Callback;
@@ -389,7 +390,7 @@ class InMemoryStore implements Store {
   }
 
   @Override
-  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys, DataNodeId sourceDataNodeId) throws StoreException {
     Set<StoreKey> keysMissing = new HashSet<>();
     for (StoreKey key : keys) {
       boolean found = false;

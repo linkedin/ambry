@@ -470,6 +470,26 @@ public class StoreConfig {
   @Default("200")
   public final int storeDiskIoReservoirTimeWindowMs;
 
+  /**
+   * True to enable batch mode in findMissingKeys
+   */
+  @Config(storeEnableFindMissingKeysInBatchModeName)
+  @Default("false")
+  public final boolean storeEnableFindMissingKeysInBatchMode;
+  public static final String storeEnableFindMissingKeysInBatchModeName = "store.enable.find.missing.keys.in.batch.mode";
+
+  @Config(storeCacheSizeForFindMissingKeysInBatchModeName)
+  @Default("3")
+  public final int storeCacheSizeForFindMissingKeysInBatchMode;
+  public static final String storeCacheSizeForFindMissingKeysInBatchModeName =
+      "store.cache.size.for.find.missing.keys.in.batch.mode";
+
+  @Config(storeNumOfCacheMissForFindMissingKeysInBatchModeName)
+  @Default("5")
+  public final int storeNumOfCacheMissForFindMissingKeysInBatchMode;
+  public static final String storeNumOfCacheMissForFindMissingKeysInBatchModeName =
+      "store.num.of.cache.miss.for.find.missing.keys.in.batch.mode";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -583,5 +603,11 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     storeDiskIoReservoirTimeWindowMs =
         verifiableProperties.getIntInRange("store.disk.io.reservoir.time.window.ms", 200, 0, Integer.MAX_VALUE);
+    storeEnableFindMissingKeysInBatchMode =
+        verifiableProperties.getBoolean(storeEnableFindMissingKeysInBatchModeName, false);
+    storeCacheSizeForFindMissingKeysInBatchMode =
+        verifiableProperties.getIntInRange(storeCacheSizeForFindMissingKeysInBatchModeName, 3, 1, 100);
+    storeNumOfCacheMissForFindMissingKeysInBatchMode =
+        verifiableProperties.getIntInRange(storeNumOfCacheMissForFindMissingKeysInBatchModeName, 5, 3, 100);
   }
 }
