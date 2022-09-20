@@ -349,7 +349,7 @@ public class DeleteManagerTest {
   }
 
   @Test
-  public void testBlobNotFoundReturned() throws Exception {
+  public void testBlobNotFoundReturnedWhenAllReplicasReturnNotFound() throws Exception {
     int serverCount = serverLayout.getMockServers().size();
     List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
     setServerErrorCodes(serverErrorCodes, serverLayout);
@@ -366,7 +366,7 @@ public class DeleteManagerTest {
   }
 
   @Test
-  public void testAmbryUnavailableReturned() throws Exception {
+  public void testBlobNotFoundReturnedWhenOneReplicaReturnSucceed() throws Exception {
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
       if (mockServer.getDataCenter().equals(LOCAL_DC)) {
@@ -380,7 +380,7 @@ public class DeleteManagerTest {
       serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
     }
     serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
-    RouterErrorCode expectedErrorCode = RouterErrorCode.AmbryUnavailable;
+    RouterErrorCode expectedErrorCode = RouterErrorCode.BlobDoesNotExist;
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
     deleteManager.submitDeleteBlobOperation(blobIdString, LOCAL_DC, future, callback,
@@ -389,7 +389,6 @@ public class DeleteManagerTest {
     router.incrementOperationsCount(1);
     sendRequestsGetResponses(future, deleteManager);
     assertFailureAndCheckErrorCode(future, expectedErrorCode);
-    assertEquals("There should be an Ambry Unavailable error", routerMetrics.ambryUnavailableErrorCount.getCount(), 1);
   }
 
   /**
