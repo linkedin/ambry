@@ -162,8 +162,13 @@ class PersistentIndex {
   // the result of the compaction already, it will not point to any old log segment.
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private Runnable getBlobReadInfoTestCallback = null;
+
+  // A map from index segment start offset before compaction to index segment start offset after compaction.
+  // This map will only be modified in the compaction thread and accessed in the replication threads.
   private final NavigableMap<Offset, Offset> beforeAndAfterCompactionIndexSegmentOffsets =
       new ConcurrentSkipListMap<>();
+  // A map from the compaction start timestamp to the set of offsets in the before and after compaction index segment
+  // offset map. This map will only be accessed in the compaction thread after startup.
   private final TreeMap<Long, Set<Offset>> compactionTimestampToIndexSegmentOffsets = new TreeMap<>();
 
   private ConcurrentHashMap<String, LinkedList<Pair<Offset, Set<StoreKey>>>> cachedKeys = new ConcurrentHashMap<>();
@@ -554,6 +559,11 @@ class PersistentIndex {
     }
   }
 
+  /**
+   * Update the before and after compaction index segment offsets.
+   * @param compactionStartTime The compaction start time in milliseconds.
+   * @param offsets The map from index segment offsets before compaction to index segment offsets after compaction.
+   */
   void updateBeforeAndAfterCompactionIndexSegmentOffsets(long compactionStartTime, Map<Offset, Offset> offsets) {
     compactionTimestampToIndexSegmentOffsets.computeIfAbsent(compactionStartTime, k -> new HashSet<>())
         .addAll(offsets.keySet());
@@ -576,7 +586,7 @@ class PersistentIndex {
 
   /**
    * Adds a new entry to the index. For recovery, only the index segments belongs to last log segment should be put into
-   * journal, other wise it won't be compacted and we will facing the issue when last log segment is empty but journal size
+   * journal, otherwise it won't be compacted. And we will face the issue when last log segment is empty but journal size
    * is non-zero.
    * @param entry The entry to be added to the index
    * @param fileSpan The file span that this entry represents in the log
@@ -615,11 +625,20 @@ class PersistentIndex {
     }
   }
 
+  /**
+   * Return the start offset of the active index segment. If there is no index segment at all, just return the beginning
+   * offset of the entire log.
+   * @return
+   */
   Offset getActiveIndexSegmentOffset() {
-    if (validIndexSegments.size() > 0) {
-      return validIndexSegments.lastKey();
+    Offset logEndOffset = log.getEndOffset();
+    Offset lastKey = validIndexSegments.lastKey();
+    // Fetch the log end offset before last key in the map
+    if (lastKey != null) {
+      return lastKey;
     } else {
-      return log.getEndOffset();
+      // No index segment in the map, then this log is empty. End offset is the start offset.
+      return logEndOffset;
     }
   }
 
@@ -2540,7 +2559,7 @@ class PersistentIndex {
         // previous log segment.
         Offset floorOffset = indexSegments.floorKey(offset);
         if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
-          if (config.storeEnableOffsetBasedTokenReset) {
+          if (config.storeRebuildTokenBasedOnCompactionHistory) {
             revalidatedToken = generateTokenBasedOnIndexSegmentOffset(token, indexSegments);
           } else {
             if (ignoreResetKey || token.getResetKey() == null) {
@@ -2557,7 +2576,7 @@ class PersistentIndex {
       case IndexBased:
         // An index based token, but the offset is not in the segments, might be caused by the compaction
         if (!indexSegments.containsKey(offset)) {
-          if (config.storeEnableOffsetBasedTokenReset) {
+          if (config.storeRebuildTokenBasedOnCompactionHistory) {
             revalidatedToken = generateTokenBasedOnIndexSegmentOffset(token, indexSegments);
           } else {
             if (!ignoreResetKey && token.getResetKey() != null) {

@@ -569,7 +569,7 @@ class BlobStoreCompactor {
    * @return {@code true} if copying is required. {@code false} otherwise.
    */
   private boolean needsCopying(Offset offset) {
-    if (!compactionLog.isIndexSegmentOffsetRecordingSupported()) {
+    if (!compactionLog.isIndexSegmentOffsetsPersisted()) {
       // If index segment offsets before and after compaction is not saved within compaction log, then
       // just use recovery start token to decide if we should copy this index segment.
       return recoveryStartToken == null || recoveryStartToken.getOffset().compareTo(offset) < 0;
@@ -578,7 +578,7 @@ class BlobStoreCompactor {
     // in the compaction log already has its content copied, with the last index segment as exception.
     TreeMap<Offset, Offset> indexSegmentOffsets = compactionLog.getIndexSegmentOffsets();
     Offset underCompactionIndexSegmentOffset = indexSegmentOffsets.lastKey();
-    return underCompactionIndexSegmentOffset.compareTo(offset) < 0;
+    return underCompactionIndexSegmentOffset == null || underCompactionIndexSegmentOffset.compareTo(offset) < 0;
   }
 
   /**
@@ -587,7 +587,7 @@ class BlobStoreCompactor {
    * @return {@code True} if the index segment is under copy to the target persistent index.
    */
   private boolean isIndexSegmentUnderCopy(Offset indexSegmentStartOffset) {
-    if (!compactionLog.isIndexSegmentOffsetRecordingSupported()) {
+    if (!compactionLog.isIndexSegmentOffsetsPersisted()) {
       // If index segment offsets before and after compaction is not saved within compaction log, then
       // just use recovery start token to decide if we should copy this index segment.
       return recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentStartOffset);
@@ -641,18 +641,28 @@ class BlobStoreCompactor {
   private boolean copyDataByIndexSegment(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
       FileSpan duplicateSearchSpan) throws IOException, StoreException {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
-    compactionLog.addIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),
-        tgtIndex.getActiveIndexSegmentOffset());
+
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
     boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
         indexSegmentToCopy.getStartOffset());
     logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
 
+    // Here we add the pair of before and after index segment offsets to the compaction log. This pair would be useful
+    // in replication thread. In replication thread, when a remote peer sends a replication token here to resume replication,
+    // the token would have an offset to indicate which index segment this token is pointing if it's index based token.
+    // However, this index segment would be removed if the log segment is under compaction. Here we save the pair of start
+    // offsets of index segments before and after compaction so in replication thread, we can just reset the token back to
+    // the after compaction index segment start offset when the before compaction index segment is removed.
+    // We are adding the offsets without any if any of the content from the current index segment would be copied to the
+    // target. Even if there is no content from this index segment would be preserved after compaction, we still want to
+    // save this pair of index segment offsets since replication might be working on this index segment.
+    compactionLog.addIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),
+        tgtIndex.getActiveIndexSegmentOffset());
     List<IndexEntry> indexEntriesToCopy =
         validEntryFilter.getValidEntry(indexSegmentToCopy, duplicateSearchSpan, checkAlreadyCopied);
     long dataSize = indexEntriesToCopy.stream().mapToLong(entry -> entry.getValue().getSize()).sum();
-    logger.info("{} entries/{} bytes need to be copied in {} with {}", indexEntriesToCopy.size(), dataSize,
+    logger.trace("{} entries/{} bytes need to be copied in {} with {}", indexEntriesToCopy.size(), dataSize,
         indexSegmentToCopy.getFile(), storeId);
 
     if (indexEntriesToCopy.isEmpty()) {
@@ -1107,7 +1117,7 @@ class BlobStoreCompactor {
     logger.debug("Adding {} to the application index and removing {} from the application index in {}",
         indexSegmentFilesToAdd, indexSegmentsToRemove, storeId);
 
-    if (compactionLog.isIndexSegmentOffsetRecordingSupported()) {
+    if (compactionLog.isIndexSegmentOffsetsPersisted()) {
       srcIndex.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
           compactionLog.getIndexSegmentOffsets());
     }

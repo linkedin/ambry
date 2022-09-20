@@ -1306,19 +1306,29 @@ public class BlobStore implements Store {
     }
   }
 
-  private void buildCompactionHistory() throws IOException {
+  /**
+   * Build the compaction history.
+   */
+  private void buildCompactionHistory() {
     long now = time.milliseconds();
     long cutoffTime = now - Duration.ofDays(config.storeCompactionHistoryInDay).toMillis();
-    CompactionLog.processCompactionHistory(dataDir, storeId, factory, time, config, compactionLog -> {
-      if (compactionLog.getStartTime() > cutoffTime) {
-        if (compactionLog.isIndexSegmentOffsetRecordingSupported()) {
-          index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
-              compactionLog.getIndexSegmentOffsets());
+    try {
+      CompactionLog.processCompactionLogs(dataDir, storeId, factory, time, config, compactionLog -> {
+        if (compactionLog.getStartTime() > cutoffTime) {
+          if (compactionLog.isIndexSegmentOffsetsPersisted()) {
+            logger.trace("Store {}: build compaction history by processing compaction log started at {}", storeId,
+                compactionLog.getStartTime());
+            index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
+                compactionLog.getIndexSegmentOffsets());
+          }
+          return true;
         }
-        return true;
-      }
-      return false;
-    });
+        return false;
+      });
+    } catch (Exception e) {
+      // Don't fatal the process just because we can't build the compaction history.
+      logger.error("Store {}: Failed to process CompactionLogs", storeId, e);
+    }
   }
 
   @Override

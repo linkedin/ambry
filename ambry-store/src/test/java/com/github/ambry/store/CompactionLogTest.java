@@ -15,23 +15,24 @@ package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static com.github.ambry.store.StoreFindToken.*;
@@ -111,6 +112,20 @@ public class CompactionLogTest {
               new UUID(1, 1), new UUID(1, 1), null, null, UNINITIALIZED_RESET_KEY_VERSION);
       cLog.setSafeToken(safeToken);
       assertEquals("Returned token not the same as the one that was set", safeToken, cLog.getSafeToken());
+      assertTrue(cLog.isIndexSegmentOffsetsPersisted());
+      int sizeBefore = cLog.getIndexSegmentOffsets().size();
+      Pair<Offset, Offset> pair = addOneIndexSegmentOffsetPair(cLog);
+      cLog.addIndexSegmentOffsetPair(pair.getFirst(), pair.getSecond());
+      assertEquals(sizeBefore + 1, cLog.getIndexSegmentOffsets().size());
+      try {
+        LogSegmentName logSegmentName = StoreTestUtils.getRandomLogSegmentName(generatedSegmentNames);
+        Offset before = new Offset(logSegmentName, LogSegment.HEADER_SIZE);
+        Offset after = new Offset(logSegmentName.getNextGenerationName(), LogSegment.HEADER_SIZE);
+        cLog.addIndexSegmentOffsetPair(before, after);
+        fail("Offset " + before + " doesn't belong to under compaction log seegment, should fail");
+      } catch (Exception e) {
+        // Expect to see exception
+      }
       CompactionDetails nextDetails = detailsIterator.hasNext() ? detailsIterator.next() : null;
       if (nextDetails != null) {
         cLog.splitCurrentCycle(nextDetails.getLogSegmentsUnderCompaction().get(0));
@@ -177,6 +192,26 @@ public class CompactionLogTest {
       cLog.close();
       cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
       assertEquals("Returned token not the same as the one that was set", safeToken, cLog.getSafeToken());
+      assertTrue(cLog.isIndexSegmentOffsetsPersisted());
+      int sizeBefore = cLog.getIndexSegmentOffsets().size();
+      Pair<Offset, Offset> pair = addOneIndexSegmentOffsetPair(cLog);
+      assertEquals(sizeBefore + 1, cLog.getIndexSegmentOffsets().size());
+      cLog.addIndexSegmentOffsetPair(pair.getFirst(), pair.getSecond());
+      assertEquals(sizeBefore + 1, cLog.getIndexSegmentOffsets().size());
+      try {
+        LogSegmentName logSegmentName = StoreTestUtils.getRandomLogSegmentName(generatedSegmentNames);
+        Offset before = new Offset(logSegmentName, LogSegment.HEADER_SIZE);
+        Offset after = new Offset(logSegmentName.getNextGenerationName(), LogSegment.HEADER_SIZE);
+        cLog.addIndexSegmentOffsetPair(before, after);
+        fail("Offset " + before + " doesn't belong to under compaction log seegment, should fail");
+      } catch (Exception e) {
+        // Expect to see exception
+      }
+
+      cLog.close();
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
+      assertTrue(cLog.isIndexSegmentOffsetsPersisted());
+      assertEquals(sizeBefore + 1, cLog.getIndexSegmentOffsets().size());
       CompactionDetails nextDetails = detailsIterator.hasNext() ? detailsIterator.next() : null;
       if (nextDetails != null) {
         cLog.splitCurrentCycle(nextDetails.getLogSegmentsUnderCompaction().get(0));
@@ -275,38 +310,87 @@ public class CompactionLogTest {
   }
 
   /**
-   * Tests the reading of versions older than the current versions.
+   * Tests the reading of version 0
    * @throws IOException
    */
   @Test
-  public void oldVersionsReadTest() throws IOException {
+  public void versionZeroReadTest() throws IOException {
     String storeName = "store";
-    long startTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
     long referenceTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
     CompactionDetails details = getCompactionDetails(referenceTimeMs);
-    for (int i = 0; i < CompactionLog.CURRENT_VERSION; i++) {
-      File file = new File(tempDir, storeName + CompactionLog.COMPACTION_LOG_SUFFIX);
-      switch (i) {
-        case CompactionLog.VERSION_0:
-          try (FileOutputStream fileOutputStream = new FileOutputStream(file)) {
-            CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
-            DataOutputStream stream = new DataOutputStream(crcOutputStream);
-            stream.writeShort(i);
-            stream.writeLong(startTimeMs);
-            stream.writeInt(0);
-            stream.writeInt(1);
-            stream.write(new CompactionLog.CycleLog(details).toBytes());
-            stream.writeLong(crcOutputStream.getValue());
-            fileOutputStream.getChannel().force(true);
-          }
-          CompactionLog cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
-          verifyEquality(details, cLog.getCompactionDetails());
-          assertEquals("Current Idx not as expected", 0, cLog.getCurrentIdx());
-          break;
-        default:
-          throw new IllegalStateException("No serialization implementation for version: " + i);
-      }
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, CompactionLog.VERSION_0, time, details, config);
+    cLog.close();
+    cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
+    verifyEquality(details, cLog.getCompactionDetails());
+    assertEquals("Current Idx not as expected", 0, cLog.getCurrentIdx());
+  }
+
+  /**
+   * Tests the reading of version 1
+   * @throws IOException
+   */
+  @Test
+  public void versionOneReadTest() throws IOException {
+    String storeName = "store";
+    long referenceTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    CompactionDetails details = getCompactionDetails(referenceTimeMs);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, CompactionLog.VERSION_1, time, details, config);
+    LogSegmentName logSegmentName = details.getLogSegmentsUnderCompaction().get(0);
+    Offset before = new Offset(logSegmentName, LogSegment.HEADER_SIZE);
+    Offset after = new Offset(logSegmentName.getNextGenerationName(), LogSegment.HEADER_SIZE);
+    cLog.addIndexSegmentOffsetPair(before, after);
+    Assert.assertFalse(cLog.isIndexSegmentOffsetsPersisted());
+    Assert.assertEquals(0, cLog.getIndexSegmentOffsets().size());
+    cLog.close();
+    // Adding index segment offset pair shouldn't change any of the version 1 compaction log
+    cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
+    Assert.assertFalse(cLog.isIndexSegmentOffsetsPersisted());
+    Assert.assertEquals(0, cLog.getIndexSegmentOffsets().size());
+    verifyEquality(details, cLog.getCompactionDetails());
+    assertEquals("Current Idx not as expected", 0, cLog.getCurrentIdx());
+  }
+
+  @Test
+  public void testProcessCompactionLogs() throws Exception {
+    // First create some compaction logs
+    String storeName = "store";
+    List<CompactionDetails> detailsList = getCompactionDetailsList(10);
+    List<Long> expectedStartTimes = new ArrayList<>();
+    Map<Offset, Offset> expectedIndexSegmentOffsets = new HashMap<>();
+    for (CompactionDetails details : detailsList) {
+      CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, details, config);
+      Pair<Offset, Offset> pair = addOneIndexSegmentOffsetPair(cLog);
+      expectedIndexSegmentOffsets.put(pair.getFirst(), pair.getSecond());
+      expectedStartTimes.add(0, time.milliseconds());
+      cLog.markCopyStart();
+      cLog.markCommitStart();
+      cLog.markCleanupStart();
+      cLog.markCycleComplete();
+      cLog.close();
+      Assert.assertFalse(CompactionLog.isCompactionInProgress(tempDirStr, storeName));
+      time.sleep(10000);
     }
+
+    CompactionDetails details = getCompactionDetailsList(1).get(0);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, details, config);
+    addOneIndexSegmentOffsetPair(cLog);
+    cLog.close();
+    Assert.assertTrue(CompactionLog.isCompactionInProgress(tempDirStr, storeName));
+
+    // Now we have 10 completed compaction logs and one in progress compaction log
+    List<Long> obtainedStartTimes = new ArrayList<>();
+    Map<Offset, Offset> obtainedIndexSegmentOffsets = new HashMap<>();
+    CompactionLog.processCompactionLogs(tempDirStr, storeName, STORE_KEY_FACTORY, time, config, log -> {
+      obtainedStartTimes.add(log.getStartTime());
+      obtainedIndexSegmentOffsets.putAll(log.getIndexSegmentOffsets());
+      return true;
+    });
+
+    Assert.assertEquals(10, obtainedStartTimes.size());
+    Assert.assertEquals(10, obtainedIndexSegmentOffsets.size());
+
+    Assert.assertEquals(expectedIndexSegmentOffsets, obtainedIndexSegmentOffsets);
+    Assert.assertEquals(expectedStartTimes, obtainedStartTimes);
   }
 
   // helpers
@@ -421,5 +505,13 @@ public class CompactionLogTest {
         // expected. Nothing to do.
       }
     }
+  }
+
+  private Pair<Offset, Offset> addOneIndexSegmentOffsetPair(CompactionLog cLog) {
+    LogSegmentName logSegmentName = cLog.getCompactionDetails().getLogSegmentsUnderCompaction().get(0);
+    Offset before = new Offset(logSegmentName, LogSegment.HEADER_SIZE);
+    Offset after = new Offset(logSegmentName.getNextGenerationName(), LogSegment.HEADER_SIZE);
+    cLog.addIndexSegmentOffsetPair(before, after);
+    return new Pair<>(before, after);
   }
 }

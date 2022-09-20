@@ -490,15 +490,22 @@ public class StoreConfig {
   public static final String storeNumOfCacheMissForFindMissingKeysInBatchModeName =
       "store.num.of.cache.miss.for.find.missing.keys.in.batch.mode";
 
+  /**
+   * How many days of compactionlogs we have to read from disk to build the compaction history
+   */
   @Config(storeCompactionHistoryInDayName)
   @Default("7")
   public final int storeCompactionHistoryInDay;
   public static final String storeCompactionHistoryInDayName = "store.compaction.history.in.day";
 
-  @Config(storeEnableOffsetBasedTokenResetName)
+  /**
+   * True to enable rebuilding replication token based on compaction history.
+   */
+  @Config(storeRebuildTokenBasedOnCompactionHistoryName)
   @Default("false")
-  public final boolean storeEnableOffsetBasedTokenReset;
-  public static final String storeEnableOffsetBasedTokenResetName = "store.enable.offset.based.tokne.reset";
+  public final boolean storeRebuildTokenBasedOnCompactionHistory;
+  public static final String storeRebuildTokenBasedOnCompactionHistoryName =
+      "store.rebuild.token.based.on.compaction.history";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -620,6 +627,7 @@ public class StoreConfig {
     storeNumOfCacheMissForFindMissingKeysInBatchMode =
         verifiableProperties.getIntInRange(storeNumOfCacheMissForFindMissingKeysInBatchModeName, 5, 3, 100);
     storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 7, 1, 30);
-    storeEnableOffsetBasedTokenReset = verifiableProperties.getBoolean(storeEnableOffsetBasedTokenResetName, false);
+    storeRebuildTokenBasedOnCompactionHistory =
+        verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
   }
 }

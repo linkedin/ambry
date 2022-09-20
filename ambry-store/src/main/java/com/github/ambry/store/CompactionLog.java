@@ -79,18 +79,37 @@ class CompactionLog implements Closeable {
     return new File(dir, storeId + COMPACTION_LOG_SUFFIX).exists();
   }
 
+  /**
+   * The {@link CompactionLog} processor.
+   */
   @FunctionalInterface
-  static interface CompactionLogProcessor {
+  interface CompactionLogProcessor {
+
+    /**
+     * Process a given {@link CompactionLog}.
+     * @param log The {@link CompactionLog} to process.
+     * @return True if you want to process more compaction log.
+     */
     boolean process(CompactionLog log);
   }
 
-  static void processCompactionHistory(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time,
+  /**
+   * Process all the available {@link CompactionLog}s in descending order. The CompactionLog created most recently would
+   * be processed first.
+   * @param dir The data dir that contains all the compaction log files.
+   * @param storeId The store id.
+   * @param storeKeyFactory The {@link StoreKeyFactory}.
+   * @param time The time instance.
+   * @param config The {@link StoreConfig} object.
+   * @param processor The {@link CompactionLogProcessor}.
+   * @throws IOException
+   */
+  static void processCompactionLogs(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time,
       StoreConfig config, CompactionLogProcessor processor) throws IOException {
-    // Ignore current in process compaction
+    // Ignore current in process compaction.
     File storeDir = new File(dir);
-    File[] files = storeDir.listFiles((fileDir, name) -> {
-      return name.startsWith(storeId + COMPACTION_LOG_SUFFIX + BlobStore.SEPARATOR);
-    });
+    File[] files =
+        storeDir.listFiles((fileDir, name) -> name.startsWith(storeId + COMPACTION_LOG_SUFFIX + BlobStore.SEPARATOR));
     List<File> sortedFiles = Stream.of(files)
         .sorted((file1, file2) -> (int) (getStartTimeFromFile(file2) - getStartTimeFromFile(file1)))
         .collect(Collectors.toList());
@@ -101,6 +120,11 @@ class CompactionLog implements Closeable {
     }
   }
 
+  /**
+   * Getting start time from the compaction log file.
+   * @param file The compaction log file.
+   * @return The start time in milliseconds.
+   */
   static long getStartTimeFromFile(File file) {
     return Long.valueOf(file.getName().split(BlobStore.SEPARATOR)[2]);
   }
@@ -115,8 +139,25 @@ class CompactionLog implements Closeable {
    */
   CompactionLog(String dir, String storeId, Time time, CompactionDetails compactionDetails, StoreConfig config)
       throws IOException {
+    this(dir, storeId, CURRENT_VERSION, time, compactionDetails, config);
+  }
+
+  /**
+   * Creates a new compaction log, with custom version. This should only be used in test.
+   * @param dir the directory at which the compaction log must be created.
+   * @param storeId the ID of the store.
+   * @param version the version number.
+   * @param time the {@link Time} instance to use.
+   * @param compactionDetails the details about the compaction.
+   * @param config the store config to use in this compaction log.
+   */
+  CompactionLog(String dir, String storeId, short version, Time time, CompactionDetails compactionDetails,
+      StoreConfig config) throws IOException {
     this.time = time;
-    this.version = CURRENT_VERSION;
+    if (version < VERSION_0 || version > VERSION_2) {
+      throw new IllegalArgumentException("Invalid version number: " + version);
+    }
+    this.version = version;
     file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (!file.createNewFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " already exists");
@@ -260,8 +301,15 @@ class CompactionLog implements Closeable {
         cycleLog.compactionDetails);
   }
 
+  /**
+   * Add a pair of index segment start offset. The first offset has to be an index segment start offset that belongs to
+   * an under compaction log segment. The second offset hast to be an index segment start offset that belongs to a log
+   * segment created this compaction.
+   * @param before The index segment start offset before compaction
+   * @param after The index segment start offset after compaction
+   */
   void addIndexSegmentOffsetPair(Offset before, Offset after) {
-    if (!isIndexSegmentOffsetRecordingSupported()) {
+    if (!isIndexSegmentOffsetsPersisted()) {
       return;
     }
     // If the before offset already exists, it means the index segment has already been copied, or half way through
@@ -271,16 +319,31 @@ class CompactionLog implements Closeable {
       logger.trace("{}: Offset already exist in the map", file, before);
       return;
     }
+    LogSegmentName logSegmentName = before.getName();
+    if (!getCompactionDetails().getLogSegmentsUnderCompaction().contains(logSegmentName)) {
+      throw new IllegalArgumentException("Offset is not part of the under compaction log segments: " + before);
+    }
+    // TODO: Can we find a way to validate the after offset?
     beforeAndAfterIndexSegmentOffsets.put(before, after);
     logger.trace("{}: Add offsets pair to {}: {}", file, before, after);
     flush();
   }
 
+  /**
+   * Return the index segment offset map. Each key and value is before and after pair passed to {@link #addIndexSegmentOffsetPair}.
+   * DON'T modify this map.
+   * @return
+   */
   TreeMap<Offset, Offset> getIndexSegmentOffsets() {
     return beforeAndAfterIndexSegmentOffsets;
   }
 
-  boolean isIndexSegmentOffsetRecordingSupported() {
+  /**
+   * True when the {@link CompactionLog} persists index segment offset. Starting from version 2, compaction log should
+   * persist index segment offsets.
+   * @return
+   */
+  boolean isIndexSegmentOffsetsPersisted() {
     return version >= VERSION_2;
   }
 
@@ -457,25 +520,33 @@ class CompactionLog implements Closeable {
       CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
       DataOutputStream stream = new DataOutputStream(crcOutputStream);
       stream.writeShort(version); // If we read this log from file, then keep this the same version.
-      stream.writeLong(startTime);
-      if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
-        stream.writeByte(0);
-      } else {
-        stream.writeByte(1);
-        stream.write(startOffsetOfLastIndexSegmentForDeleteCheck.toBytes());
-      }
-      stream.writeInt(currentIdx);
-      stream.writeInt(cycleLogs.size());
-      for (CycleLog cycleLog : cycleLogs) {
-        stream.write(cycleLog.toBytes());
-      }
-      if (version >= VERSION_2) {
-        stream.writeInt(beforeAndAfterIndexSegmentOffsets.size());
-        // BeforeAndAfterIndexSegmentOffsets is a tree map that would return offset in order
-        for (Map.Entry<Offset, Offset> entry : beforeAndAfterIndexSegmentOffsets.entrySet()) {
-          stream.write(entry.getKey().toBytes());
-          stream.write(entry.getValue().toBytes());
-        }
+      switch (version) {
+        case VERSION_0:
+          flushVersion_0(stream);
+          break;
+        case VERSION_1:
+        case VERSION_2:
+          stream.writeLong(startTime);
+          if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
+            stream.writeByte(0);
+          } else {
+            stream.writeByte(1);
+            stream.write(startOffsetOfLastIndexSegmentForDeleteCheck.toBytes());
+          }
+          stream.writeInt(currentIdx);
+          stream.writeInt(cycleLogs.size());
+          for (CycleLog cycleLog : cycleLogs) {
+            stream.write(cycleLog.toBytes());
+          }
+          if (version >= VERSION_2) {
+            stream.writeInt(beforeAndAfterIndexSegmentOffsets.size());
+            // BeforeAndAfterIndexSegmentOffsets is a tree map that would return offset in order
+            for (Map.Entry<Offset, Offset> entry : beforeAndAfterIndexSegmentOffsets.entrySet()) {
+              stream.write(entry.getKey().toBytes());
+              stream.write(entry.getValue().toBytes());
+            }
+          }
+          break;
       }
       stream.writeLong(crcOutputStream.getValue());
       fileOutputStream.getChannel().force(true);
@@ -484,6 +555,15 @@ class CompactionLog implements Closeable {
     }
     if (!tempFile.renameTo(file)) {
       throw new IllegalStateException("Newly written compaction log could not be saved");
+    }
+  }
+
+  private void flushVersion_0(DataOutputStream stream) throws IOException {
+    stream.writeLong(startTime);
+    stream.writeInt(currentIdx);
+    stream.writeInt(cycleLogs.size());
+    for (CycleLog cycleLog : cycleLogs) {
+      stream.write(cycleLog.toBytes());
     }
   }
 
