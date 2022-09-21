@@ -14,6 +14,7 @@
 package com.github.ambry.compression;
 
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 
 /**
  * Compression interface that provides compression and decompression feature.
@@ -117,9 +118,7 @@ public interface Compression {
    * @throws CompressionException Throws this exception if compression has internal failure.
    */
   default int getDecompressBufferSize(byte[] compressedBuffer) throws CompressionException {
-    if (compressedBuffer == null || compressedBuffer.length == 0) {
-      throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
-    }
+    Utils.checkNotNullOrEmpty(compressedBuffer, "compressedBuffer cannot be null or empty.");
     return getDecompressBufferSize(compressedBuffer, 0, compressedBuffer.length);
   }
 
@@ -153,9 +152,7 @@ public interface Compression {
    * @throws CompressionException Throws this exception if compression has internal failure.
    */
   default Pair<Integer, byte[]> compress(byte[] sourceBuffer) throws CompressionException {
-    if (sourceBuffer == null || sourceBuffer.length == 0) {
-      throw new IllegalArgumentException("sourceBuffer cannot be null or empty.");
-    }
+    Utils.checkNotNullOrEmpty(sourceBuffer, "sourceBuffer cannot be null or empty.");
     return compress(sourceBuffer, 0, sourceBuffer.length);
   }
 
@@ -172,9 +169,7 @@ public interface Compression {
    */
   default Pair<Integer, byte[]> compress(byte[] sourceBuffer, int sourceBufferOffset, int sourceDataSize)
       throws CompressionException {
-    if (sourceBuffer == null || sourceBuffer.length == 0) {
-      throw new IllegalArgumentException("sourceBuffer cannot be null or empty.");
-    }
+    Utils.checkNotNullOrEmpty(sourceBuffer, "sourceBuffer cannot be null or empty.");
     int compressedBufferSize = getCompressBufferSize(sourceDataSize);
     byte[] compressedBuffer = new byte[compressedBufferSize];
     int compressedSize = compress(sourceBuffer, sourceBufferOffset, sourceDataSize, compressedBuffer, 0, compressedBuffer.length);
@@ -207,9 +202,7 @@ public interface Compression {
    * @throws CompressionException Throws this exception if decompression has internal failure.
    */
   default byte[] decompress(byte[] compressedBuffer) throws CompressionException {
-    if (compressedBuffer == null || compressedBuffer.length == 0) {
-      throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
-    }
+    Utils.checkNotNullOrEmpty (compressedBuffer, "compressedBuffer cannot be null or empty.");
     return decompress(compressedBuffer, 0, compressedBuffer.length);
   }
 
@@ -226,9 +219,7 @@ public interface Compression {
    */
   default byte[] decompress(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize)
       throws CompressionException {
-    if (compressedBuffer == null || compressedBuffer.length == 0) {
-      throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
-    }
+    Utils.checkNotNullOrEmpty (compressedBuffer, "compressedBuffer cannot be null or empty.");
     int originalDataSize = getDecompressBufferSize(compressedBuffer, compressedBufferOffset, compressedDataSize);
     byte[] originalData = new byte[originalDataSize];
     decompress(compressedBuffer, compressedBufferOffset, compressedDataSize,

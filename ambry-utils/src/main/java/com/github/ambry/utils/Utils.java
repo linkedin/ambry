@@ -1298,6 +1298,32 @@ public class Utils {
   }
 
   /**
+   * Check whether the given byte array is null or empty and throw IllegalArgumentException if so.
+   *
+   * @param array The array to check.
+   * @param exceptionMessage The IllegalArgumentException message to use if null or empty.
+   */
+  public static void checkNotNullOrEmpty(byte[] array, String exceptionMessage) {
+    if (array == null || array.length == 0) {
+      throw new IllegalArgumentException(exceptionMessage);
+    }
+  }
+
+  /**
+   * Check the given value is in the specific range (min and max).
+   * If outside the range, through IllegalArgumentException using the provided message.
+   * @param value The value to check.
+   * @param min The minimum inclusive.
+   * @param max The maximum inclusive.
+   * @param exceptionMessage The error message if outside the range.
+   */
+  public static void checkValueInRange(int value, int min, int max, String exceptionMessage) {
+    if (value < min || value > max) {
+      throw new IllegalArgumentException(exceptionMessage);
+    }
+  }
+
+  /**
    * Close a resource without throwing exception.
    * @param resource the resource to close.
    */

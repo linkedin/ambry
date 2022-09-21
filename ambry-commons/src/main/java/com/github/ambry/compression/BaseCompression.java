@@ -13,6 +13,7 @@
  */
 package com.github.ambry.compression;
 
+import com.github.ambry.utils.Utils;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -37,7 +38,7 @@ public abstract class BaseCompression implements Compression {
    * Excluding the name chars, the minimal size is 6 bytes.
    */
   private static final int SIZE_OF_VERSION_AND_ORIGINAL_SIZE = 5;
-  static final int SIZE_OF_VERSION_AND_ORIGINAL_SIZE_AND_NAME_SIZE = SIZE_OF_VERSION_AND_ORIGINAL_SIZE + 1;
+  static final int MINIMUM_OVERHEAD_SIZE = SIZE_OF_VERSION_AND_ORIGINAL_SIZE + 1;
 
   /**
    * The binary representation of the algorithm name.
@@ -155,7 +156,7 @@ public abstract class BaseCompression implements Compression {
       throws CompressionException {
     // Verify each parameter.
     verifyCompressedBuffer(compressedBuffer, compressedBufferOffset, compressedDataSize);
-    if (compressedDataSize < SIZE_OF_VERSION_AND_ORIGINAL_SIZE_AND_NAME_SIZE) {
+    if (compressedDataSize < MINIMUM_OVERHEAD_SIZE) {
       throw new IllegalArgumentException("compressedDataSize of " + compressedDataSize + " bytes is too small.");
     }
 
@@ -249,34 +250,26 @@ public abstract class BaseCompression implements Compression {
    * @param sourceDataSize The size of the source data.
    */
   private void verifySourceData(byte[] sourceData, int sourceDataOffset, int sourceDataSize) {
-    if (sourceData == null || sourceData.length == 0) {
-      throw new IllegalArgumentException("sourceData cannot be null");
-    }
-    if (sourceDataOffset < 0 || sourceDataOffset >= sourceData.length) {
-      throw new IllegalArgumentException("sourceDataOffset is outside of sourceData.");
-    }
-    if (sourceDataSize < 0 || sourceDataOffset + sourceDataSize > sourceData.length) {
-      throw new IllegalArgumentException("sourceDataSize is outside of sourceData.");
-    }
+    Utils.checkNotNullOrEmpty(sourceData, "sourceData cannot be null");
+    Utils.checkValueInRange(sourceDataOffset, 0, sourceData.length - 1,
+      "sourceDataOffset is outside of sourceData.");
+    Utils.checkValueInRange(sourceDataSize, 0, sourceData.length - sourceDataOffset,
+      "sourceDataSize is outside of sourceData.");
   }
 
   /**
    * Verify compressed buffer parameters.
    * @param compressedBuffer The compressed buffer.
    * @param compressedBufferOffset  The compressed buffer offset.
-   * @param compressedBufferSize The compressed buffer size.
+   * @param compressedDataSize The compressed data size.
    */
-  static void verifyCompressedBuffer(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
+  static void verifyCompressedBuffer(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize) {
     // Verify target buffer parameters.
-    if (compressedBuffer == null || compressedBuffer.length == 0) {
-      throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
-    }
-    if (compressedBufferOffset < 0 || compressedBufferOffset >= compressedBuffer.length) {
-      throw new IllegalArgumentException("compressedBufferOffset is outside of compressedBuffer.");
-    }
-    if (compressedBufferSize < 0 || compressedBufferOffset + compressedBufferSize > compressedBuffer.length) {
-      throw new IllegalArgumentException("compressedBufferSize " + compressedBufferSize + " is invalid.");
-    }
+    Utils.checkNotNullOrEmpty(compressedBuffer, "compressedBuffer cannot be null or empty.");
+    Utils.checkValueInRange(compressedBufferOffset, 0, compressedBuffer.length - 1,
+        "compressedBufferOffset is outside of compressedBuffer.");
+    Utils.checkValueInRange(compressedDataSize, 0, compressedBuffer.length - compressedBufferOffset,
+        "compressedDataSize " + compressedDataSize + " is invalid.");
   }
 
   /**
@@ -307,7 +300,7 @@ public abstract class BaseCompression implements Compression {
     }
 
     // Calculate overhead size = 1 (version) + 1 (name size) + name length + 4 (original size);
-    int overheadSize = compressedBufferOffset + SIZE_OF_VERSION_AND_ORIGINAL_SIZE_AND_NAME_SIZE +
+    int overheadSize = compressedBufferOffset + MINIMUM_OVERHEAD_SIZE +
         compressedBuffer[compressedBufferOffset + 1];
     decompressNative(compressedBuffer, compressedBufferOffset + overheadSize,
         compressedDataSize - overheadSize, decompressedBuffer, decompressedBufferOffset, originalSize);
