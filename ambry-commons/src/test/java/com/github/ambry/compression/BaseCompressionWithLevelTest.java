@@ -37,7 +37,7 @@ public class BaseCompressionWithLevelTest {
     Mockito.when(compressor.getMaximumCompressionLevel()).thenReturn(10);
 
     // Test: Out of range.
-    Throwable ex = TestUtils.invokeAndGetException(() -> compressor.setCompressionLevel(20));
+    Throwable ex = TestUtils.getException(() -> compressor.setCompressionLevel(20));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     // Test: Valid range.

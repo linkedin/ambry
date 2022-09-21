@@ -16,7 +16,7 @@ package com.github.ambry.compression;
 /**
  * Generic compression failure exception.
  */
-public class CompressionException extends RuntimeException {
+public class CompressionException extends Exception {
   /**
    * Create new instance with a specific message.
    * @param message The error message.

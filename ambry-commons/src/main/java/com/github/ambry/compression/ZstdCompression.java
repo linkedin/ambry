@@ -20,11 +20,16 @@ import com.github.luben.zstd.Zstd;
  * Zstandard has fast decompression speed and pretty good compression ratio.
  * It is not as fast as LZ4 but has higher compression ratio than LZ4.
  * More info about Zstandard in <a href="https://github.com/lz4/lz4">GitHub</a>.
- *
+ * <p>
  * Zstd compression level range is from negative 7 (fastest) to 22 (slowest in compression speed,
  * but best compression ratio), with level 3 as the default.
  */
 public class ZstdCompression extends BaseCompressionWithLevel {
+
+  /**
+   * Name of this algorithm.
+   */
+  public static final String ALGORITHM_NAME = "ZSTD";
 
   /**
    * Get the unique name of this compression algorithm.
@@ -33,7 +38,7 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    */
   @Override
   public final String getAlgorithmName() {
-    return "ZSTD";
+    return ALGORITHM_NAME;
   }
 
   /**
@@ -80,30 +85,30 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    * The compression output is stored in the compressed buffer at the specific offset.
    * All parameters have been verified before calling so implementation can skip verification.
    *
-   * @param sourceData The source uncompressed data.  It has already been null and empty verified.
-   * @param sourceDataOffset Offset in sourceData to start reading.
+   * @param sourceBuffer The source uncompressed data.  It has already been null and empty verified.
+   * @param sourceBufferOffset Offset in sourceData to start reading.
    * @param sourceDataSize Number of bytes in sourceData to compress.
    * @param compressedBuffer  The buffer to hold the compressed data.
    * @param compressedBufferOffset The offset in compressedBuffer where the compression output should write.
-   * @param compressedBufferSize Size of the buffer where compression can write to.  This size should be same as
+   * @param compressedDataSize Size of the buffer where compression can write to.  This size should be same as
    *                             estimateMaxCompressedDataSize().
    * @return The size of the compressed data in bytes.
    */
   @Override
-  protected int compressNative(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
-      byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
+  protected int compressNative(byte[] sourceBuffer, int sourceBufferOffset, int sourceDataSize,
+      byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize) throws CompressionException {
 
-    long compressedSize = Zstd.compressByteArray(compressedBuffer, compressedBufferOffset,
-        compressedBufferSize, sourceData, sourceDataOffset, sourceDataSize, getCompressionLevel());
+    long compressedSize = Zstd.compressByteArray(compressedBuffer, compressedBufferOffset, compressedDataSize, sourceBuffer, sourceBufferOffset, sourceDataSize, getCompressionLevel());
 
     if (Zstd.isError(compressedSize)) {
       throw new CompressionException(String.format("Zstd compression failed with error code: %d, name: %s. "
-              + "sourceData.length=%d, sourceDataOffset=%d, sourceDataSize=%d, "
-              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d, compressionLevel=%d",
+              + "sourceBuffer.length=%d, sourceBufferOffset=%d, sourceDataSize=%d, "
+              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedDataSize=%d, compressionLevel=%d",
           compressedSize, Zstd.getErrorName(compressedSize),
-          sourceData.length, sourceDataOffset, sourceDataSize,
-          compressedBuffer.length, compressedBufferOffset, compressedBufferSize, getCompressionLevel()));
+          sourceBuffer.length, sourceBufferOffset, sourceDataSize,
+          compressedBuffer.length, compressedBufferOffset, compressedDataSize, getCompressionLevel()));
     }
+
     return (int) compressedSize;
   }
 
@@ -114,24 +119,25 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    *
    * @param compressedBuffer The compressed buffer.
    * @param compressedBufferOffset The offset in compressedBuffer where the decompression should start reading.
-   * @param compressedBufferSize Size of the compressed buffer returned from compressNative().
-   * @param sourceDataBuffer The buffer to store decompression output (the original source data).
-   * @param sourceDataOffset Offset where to write the decompressed data.
-   * @param sourceDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
+   * @param compressedDataSize Size of the compressed buffer returned from compressNative().
+   * @param decompressedBuffer The buffer to store decompression output (the original source data).
+   * @param decompressedBufferOffset Offset where to write the decompressed data.
+   * @param decompressedDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
    */
   @Override
-  protected void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
-      byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) {
-    long decompressedSize = Zstd.decompressByteArray(sourceDataBuffer, sourceDataOffset, sourceDataSize,
-        compressedBuffer, compressedBufferOffset, compressedBufferSize);
+  protected void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize,
+      byte[] decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException {
+    long decompressedSize = Zstd.decompressByteArray(decompressedBuffer, decompressedBufferOffset,
+        decompressedDataSize,
+        compressedBuffer, compressedBufferOffset, compressedDataSize);
 
     if (Zstd.isError(decompressedSize)) {
       throw new CompressionException(String.format("Zstd decompression failed with error code: %d, name: %s. "
-              + "sourceDataBuffer.length=%d, sourceDataOffset=%d, sourceDataSize=%d, "
-              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
-          compressedBufferSize, Zstd.getErrorName(compressedBufferSize),
-          sourceDataBuffer.length, sourceDataOffset, sourceDataSize,
-          compressedBuffer.length, compressedBufferOffset, compressedBufferSize));
+              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedDataSize=%d, "
+              + "decompressedBuffer.length=%d, decompressedBufferOffset=%d, decompressedDataSize=%d",
+          decompressedSize, Zstd.getErrorName(decompressedSize),
+          compressedBuffer.length, compressedBufferOffset, compressedDataSize,
+          decompressedBuffer.length, decompressedBufferOffset, decompressedDataSize));
     }
   }
 }
