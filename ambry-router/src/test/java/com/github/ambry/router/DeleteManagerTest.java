@@ -349,7 +349,7 @@ public class DeleteManagerTest {
   }
 
   @Test
-  public void testBlobNotFoundReturned() throws Exception {
+  public void testBlobNotFoundReturnedWhenAllReplicasReturnNotFound() throws Exception {
     int serverCount = serverLayout.getMockServers().size();
     List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
     setServerErrorCodes(serverErrorCodes, serverLayout);
@@ -365,8 +365,34 @@ public class DeleteManagerTest {
     assertEquals("There should be an Blob Not Found error", routerMetrics.blobDoesNotExistErrorCount.getCount(), 1);
   }
 
+  /**
+   * Test the case when routerUnavailableDueToSuccessCountIsNonZero enabled, if success count is larger than zero,
+   * we should return AmbryUnavailable.
+   * if routerUnavailableDueToSuccessCountIsNonZero has been disabled, if success count is larger than zero,
+   * we should return BlobDoesNotExist.
+   * @throws Exception
+   */
   @Test
-  public void testAmbryUnavailableReturned() throws Exception {
+  public void testDeleteBlobWhenOneReplicaReturnSucceed() throws Exception {
+    deleteBlobWhenOneReplicaReturnSucceed(true);
+    deleteBlobWhenOneReplicaReturnSucceed(false);
+  }
+
+  private void deleteBlobWhenOneReplicaReturnSucceed(boolean routerUnavailableDueToSuccessCountIsNonZero)
+      throws Exception {
+    router.close();
+    Properties properties = getNonBlockingRouterProperties();
+    properties.setProperty(RouterConfig.ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE,
+        Boolean.toString(routerUnavailableDueToSuccessCountIsNonZero));
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
+        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+    deleteManager =
+        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
+            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime);
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
       if (mockServer.getDataCenter().equals(LOCAL_DC)) {
@@ -380,16 +406,19 @@ public class DeleteManagerTest {
       serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
     }
     serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
-    RouterErrorCode expectedErrorCode = RouterErrorCode.AmbryUnavailable;
+    RouterErrorCode expectedErrorCode;
+    if (routerUnavailableDueToSuccessCountIsNonZero) {
+      expectedErrorCode = RouterErrorCode.AmbryUnavailable;
+    } else {
+      expectedErrorCode = RouterErrorCode.BlobDoesNotExist;
+    }
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
-    deleteManager.submitDeleteBlobOperation(blobIdString, LOCAL_DC, future, callback,
-        quotaChargeCallback);
+    deleteManager.submitDeleteBlobOperation(blobIdString, LOCAL_DC, future, callback, quotaChargeCallback);
 
     router.incrementOperationsCount(1);
     sendRequestsGetResponses(future, deleteManager);
     assertFailureAndCheckErrorCode(future, expectedErrorCode);
-    assertEquals("There should be an Ambry Unavailable error", routerMetrics.ambryUnavailableErrorCount.getCount(), 1);
   }
 
   /**

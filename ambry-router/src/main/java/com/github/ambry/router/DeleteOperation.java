@@ -367,12 +367,13 @@ class DeleteOperation {
           2. put parallelism is 2 && 2 replicas are down (note that 2 replicas down happen all the time) && replication has not caught up such that blob doesn’t exist in at least one other replica.
               i.e, its very rare for 2 replicas to be down simultaneously and immediately after taking a POST (with parallelism 2)
          */
-        if (operationTracker.getSuccessCount() > 0) {
+        if (routerConfig.routerUnavailableDueToSuccessCountIsNonZeroForDelete && operationTracker.getSuccessCount() > 0) {
           routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
-          operationException.set(
-              new RouterException("DeleteOperation failed possibly because of unavailable replicas",
-                  RouterErrorCode.AmbryUnavailable));
+          operationException.set(new RouterException("DeleteOperation failed possibly because of unavailable replicas",
+              RouterErrorCode.AmbryUnavailable));
         } else {
+          //TODO: Temporarily return 404 when delete operation returns two NOT_FOUND.
+          //TODO: Will check all local replicas and return succeed if one replica return succeed in this case.
           operationException.set(
               new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
         }
