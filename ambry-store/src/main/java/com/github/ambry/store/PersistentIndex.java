@@ -584,6 +584,14 @@ class PersistentIndex {
     }
   }
 
+  NavigableMap<Offset, Offset> getBeforeAndAfterCompactionIndexSegmentOffsets() {
+    return beforeAndAfterCompactionIndexSegmentOffsets;
+  }
+
+  TreeMap<Long, Set<Offset>> getCompactionTimestampToIndexSegmentOffsets() {
+    return compactionTimestampToIndexSegmentOffsets;
+  }
+
   /**
    * Adds a new entry to the index. For recovery, only the index segments belongs to last log segment should be put into
    * journal, otherwise it won't be compacted. And we will face the issue when last log segment is empty but journal size
@@ -632,10 +640,10 @@ class PersistentIndex {
    */
   Offset getActiveIndexSegmentOffset() {
     Offset logEndOffset = log.getEndOffset();
-    Offset lastKey = validIndexSegments.lastKey();
+    Map.Entry<Offset, IndexSegment> lastEntry = validIndexSegments.lastEntry();
     // Fetch the log end offset before last key in the map
-    if (lastKey != null) {
-      return lastKey;
+    if (lastEntry != null) {
+      return lastEntry.getKey();
     } else {
       // No index segment in the map, then this log is empty. End offset is the start offset.
       return logEndOffset;

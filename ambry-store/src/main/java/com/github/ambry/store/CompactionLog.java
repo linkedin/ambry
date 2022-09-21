@@ -329,6 +329,21 @@ class CompactionLog implements Closeable {
     flush();
   }
 
+  void updateIndexSegmentOffsetsWithValidOffset(Offset validOffset) {
+    if (!isIndexSegmentOffsetsPersisted()) {
+      return;
+    }
+    logger.info("{}: validate offsets map with: {}", file, validOffset);
+    if (validOffset == null) {
+      beforeAndAfterIndexSegmentOffsets.clear();
+    } else {
+      for (Offset before : beforeAndAfterIndexSegmentOffsets.keySet()) {
+        beforeAndAfterIndexSegmentOffsets.put(before, validOffset);
+      }
+    }
+    flush();
+  }
+
   /**
    * Return the index segment offset map. Each key and value is before and after pair passed to {@link #addIndexSegmentOffsetPair}.
    * DON'T modify this map.

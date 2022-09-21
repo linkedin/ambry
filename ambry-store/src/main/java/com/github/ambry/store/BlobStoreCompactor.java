@@ -386,7 +386,7 @@ class BlobStoreCompactor {
     List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
     // 1. all segments should be available
     // 2. all segments should be in order
-    // 3. all segments should be a list of continuous log segments without skipping any one in the middle
+    // 3. all segments should be a list of continuous log segments without skipping anyone in the middle
     // 4. all segments should not have anything in the journal
     LogSegmentName prevSegmentName = null;
     for (LogSegmentName segmentName : segmentsUnderCompaction) {
@@ -477,6 +477,21 @@ class BlobStoreCompactor {
       // there were no valid entries copied, return any temp segments back to the pool
       logger.trace("Cleaning up temp segments in {} because no swap spaces were used", storeId);
       cleanupUnusedTempSegments();
+      // If the target log has no data, which means there were no active index segment while copying each index segment
+      // then the before and after pair we put in the compaction log is not valid anymore since all the after offset would
+      // be the start offset of the target log, which doesn't exist. In this case, we have to fix it.
+      Set<Offset> values = new HashSet<>(compactionLog.getIndexSegmentOffsets().values());
+      Offset startOffset = tgtLog.getEndOffset();
+      if (values.size() != 1 || !values.contains(startOffset)) {
+        logger.error("{}: Expecting one value {} in the compaction log for index segment offsets, but {}", storeId,
+            startOffset, values);
+      }
+      // This is the valid offset.
+      LogSegmentName logSegmentName = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().get(0);
+      LogSegment logSegment = srcLog.getSegment(logSegmentName);
+      Offset validOffset =
+          srcIndex.getIndexSegments().lowerKey(new Offset(logSegmentName, logSegment.getStartOffset()));
+      compactionLog.updateIndexSegmentOffsetsWithValidOffset(validOffset);
     }
   }
 
@@ -577,23 +592,18 @@ class BlobStoreCompactor {
     // We have index segment offsets before and after compaction, every index segment whose offset exists
     // in the compaction log already has its content copied, with the last index segment as exception.
     TreeMap<Offset, Offset> indexSegmentOffsets = compactionLog.getIndexSegmentOffsets();
-    Offset underCompactionIndexSegmentOffset = indexSegmentOffsets.lastKey();
-    return underCompactionIndexSegmentOffset == null || underCompactionIndexSegmentOffset.compareTo(offset) < 0;
+    Map.Entry<Offset, Offset> lastEntry = indexSegmentOffsets.lastEntry();
+    return lastEntry == null || lastEntry.getKey().compareTo(offset) < 0;
   }
 
   /**
-   * Return true if the index segment is under copy to target persistent index before crashing.
+   * Return true if the index segment is under copy to target persistent index before crashing. This is only used
+   * to check if there were a crash happened before compaction can finish.
    * @param indexSegmentStartOffset The start {@link Offset} of the {@link IndexSegment}.
    * @return {@code True} if the index segment is under copy to the target persistent index.
    */
   private boolean isIndexSegmentUnderCopy(Offset indexSegmentStartOffset) {
-    if (!compactionLog.isIndexSegmentOffsetsPersisted()) {
-      // If index segment offsets before and after compaction is not saved within compaction log, then
-      // just use recovery start token to decide if we should copy this index segment.
-      return recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentStartOffset);
-    }
-    TreeMap<Offset, Offset> indexSegmentOffsets = compactionLog.getIndexSegmentOffsets();
-    return indexSegmentOffsets.lastKey().equals(indexSegmentStartOffset);
+    return recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentStartOffset);
   }
 
   /**
@@ -642,12 +652,6 @@ class BlobStoreCompactor {
       FileSpan duplicateSearchSpan) throws IOException, StoreException {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
 
-    // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
-    diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
-    boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
-        indexSegmentToCopy.getStartOffset());
-    logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
-
     // Here we add the pair of before and after index segment offsets to the compaction log. This pair would be useful
     // in replication thread. In replication thread, when a remote peer sends a replication token here to resume replication,
     // the token would have an offset to indicate which index segment this token is pointing if it's index based token.
@@ -656,9 +660,17 @@ class BlobStoreCompactor {
     // the after compaction index segment start offset when the before compaction index segment is removed.
     // We are adding the offsets without any if any of the content from the current index segment would be copied to the
     // target. Even if there is no content from this index segment would be preserved after compaction, we still want to
-    // save this pair of index segment offsets since replication might be working on this index segment.
+    // save this pair of index segment offsets since replication might be working on this index segment. And it also
+    // indicates that last index segment finishes copying.
     compactionLog.addIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),
         tgtIndex.getActiveIndexSegmentOffset());
+
+    // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
+    diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
+    boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
+        indexSegmentToCopy.getStartOffset());
+    logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
+
     List<IndexEntry> indexEntriesToCopy =
         validEntryFilter.getValidEntry(indexSegmentToCopy, duplicateSearchSpan, checkAlreadyCopied);
     long dataSize = indexEntriesToCopy.stream().mapToLong(entry -> entry.getValue().getSize()).sum();
@@ -707,7 +719,7 @@ class BlobStoreCompactor {
     // 1. Duplicates in src: These can occur because compaction creates temporary duplicates
     // Consider the following situation
     // Segments 0_0, 1_0 and 2_0 are being compacted. All the data in 0_0 and half the data in 1_0 fit in 0_1 and the
-    // rest in 1_1. When 0_1 is full and is put into the "main" log, there will be some duplicated data in 0_1 and 1_0.
+    // rest in 1_1. When 0_1 is full and put into the "main" log, there will be some duplicated data in 0_1 and 1_0.
     // If a shutdown occurs after this point, then the code has to make sure not to copy any of the data already copied
     // 2. Duplicates in tgt: the checkpointing logic during copying works at the IndexSegment level
     // This means that a crash/shutdown could occur in the middle of copying the data represented by an IndexSegment and
