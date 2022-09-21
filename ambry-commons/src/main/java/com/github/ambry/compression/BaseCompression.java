@@ -21,9 +21,23 @@ import java.nio.charset.StandardCharsets;
  */
 public abstract class BaseCompression implements Compression {
 
-  // The maximum length of the algorithm name in bytes.
-  // This prevents algorithms from using long names that occupy more disk space.
-  public static final byte MAX_ALGORITHM_NAME_LENGTH = 10;
+  /**
+   * The maximum length of the algorithm name in bytes.
+   * This prevents algorithms from using long names that occupy more disk space.
+   */
+  public static final int MAX_ALGORITHM_NAME_LENGTH = 10;
+
+  /**
+   * The minimal overhead size of the compressed data structure in bytes.
+   * The overhead structure contains:
+   * - 1 (version)
+   * - 1 (name size)
+   * - N (name chars)
+   * - 4 (original size)
+   * Excluding the name chars, the minimal size is 6 bytes.
+   */
+  private static final int SIZE_OF_VERSION_AND_ORIGINAL_SIZE = 5;
+  static final int SIZE_OF_VERSION_AND_ORIGINAL_SIZE_AND_NAME_SIZE = SIZE_OF_VERSION_AND_ORIGINAL_SIZE + 1;
 
   /**
    * The binary representation of the algorithm name.
@@ -46,32 +60,34 @@ public abstract class BaseCompression implements Compression {
    * The compression implementation is algorithm specific.
    * All parameters have been verified before calling so implementation can skip verification.
    *
-   * @param sourceData The source uncompressed data.  It has already been null and empty verified.
-   * @param sourceDataOffset Offset in sourceData to start reading.
-   * @param sourceDataSize Number of bytes in sourceData to compress.
-   * @param compressedBuffer  The buffer to hold the compressed data.
+   * @param sourceBuffer The source uncompressed data.  This buffer may be shared.
+   *                     It has already been null and empty verified.
+   * @param sourceBufferOffset Offset in sourceBuffer to start reading.
+   * @param sourceDataSize Number of bytes in sourceBuffer to compress, not the size of sourceBuffer.
+   * @param compressedBuffer  The buffer to hold the compressed data.  This buffer may be shared.
    * @param compressedBufferOffset The offset in compressedBuffer where the compression output should write.
-   * @param compressedBufferSize Size of the buffer where compression can write to.  This size should be same as
-   *                             estimateMaxCompressedDataSize().
-   * @return The size of the compressed data in bytes.
+   * @param compressedDataSize Size in bytes in compressedBuffer reserved for compression to write.
+   *                         This size should be same as estimateMaxCompressedDataSize().
+   * @return The size of the actual compressed data in bytes.
    */
-  protected abstract int compressNative(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
-      byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize);
+  protected abstract int compressNative(byte[] sourceBuffer, int sourceBufferOffset, int sourceDataSize,
+      byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize) throws CompressionException;
 
   /**
    * Invoke the native decompression algorithm given the compressedBuffer and the offset of the compression output.
    * The size of sourceDataBuffer must be at least the original data source size.
    * The decompression implementation is algorithm specific.
    *
-   * @param compressedBuffer The compressed buffer.
+   * @param compressedBuffer The compressed buffer.  This buffer may be shared.
    * @param compressedBufferOffset The offset in compressedBuffer where the decompression should start reading.
-   * @param compressedBufferSize Size of the compressed buffer returned from compressNative().
-   * @param sourceDataBuffer The buffer to store decompression output (the original source data).
-   * @param sourceDataOffset Offset where to write the decompressed data.
-   * @param sourceDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
+   * @param compressedDataSize Size of the compressed data returned from compressNative(), not size of compressedBuffer.
+   * @param decompressedBuffer The buffer to store the decompressed output (the original data).
+   * @param decompressedBufferOffset Offset in decompressedBuffer to start writing the decompressed data.
+   * @param decompressedDataSize Size of the buffer to hold the decompressed data in decompressedBuffer.
+   *                           It should be same as the original data size.
    */
-  protected abstract void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
-      byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize);
+  protected abstract void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize,
+      byte[] decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException;
 
   /**
    * Get the algorithm name in binary format.
@@ -112,7 +128,7 @@ public abstract class BaseCompression implements Compression {
    * Given the source data size, what is the maximum compressed buffer size?
    * The max buffer size must sufficient to hold:
    * - version (1 byte)
-   * - algorithm name binary.
+   * - algorithm name binary (1 byte size + N bytes name)
    * - original data size (4 bytes)
    * - worst-case compression output.
    * This is an estimate calculation it is usually slightly larger than the sourceDataSize.
@@ -121,7 +137,8 @@ public abstract class BaseCompression implements Compression {
    * @return The estimated buffer size required to hold the compressed data.
    */
   public int getCompressBufferSize(int sourceDataSize) {
-    return estimateMaxCompressedDataSize(sourceDataSize) + getAlgorithmNameBinary().length + 5;
+    return estimateMaxCompressedDataSize(sourceDataSize) + getAlgorithmNameBinary().length +
+        SIZE_OF_VERSION_AND_ORIGINAL_SIZE;
   }
 
   /**
@@ -131,14 +148,15 @@ public abstract class BaseCompression implements Compression {
    * compression.  That is why it accepts the offset and size parameters.
    * @param compressedBuffer The compressed buffer.
    * @param compressedBufferOffset The offset in the compressed buffer where compression data is stored.
-   * @param compressedBufferSize The size in compressedBuffer to read.
+   * @param compressedDataSize The size in compressedBuffer to read.
    * @return The size of original data.
    */
-  public int getDecompressBufferSize(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
+  public int getDecompressBufferSize(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize)
+      throws CompressionException {
     // Verify each parameter.
-    verifyCompressedBuffer(compressedBuffer, compressedBufferOffset, compressedBufferSize);
-    if (compressedBufferSize < 6) {
-      throw new IllegalArgumentException("compressedBufferSize is " + compressedBufferSize + " is too small.");
+    verifyCompressedBuffer(compressedBuffer, compressedBufferOffset, compressedDataSize);
+    if (compressedDataSize < SIZE_OF_VERSION_AND_ORIGINAL_SIZE_AND_NAME_SIZE) {
+      throw new IllegalArgumentException("compressedDataSize of " + compressedDataSize + " bytes is too small.");
     }
 
     // Check version.  For now, only version 1 is supported.  Modify this code when more version added.
@@ -146,13 +164,14 @@ public abstract class BaseCompression implements Compression {
     if (version != 1) {
       // It should throw CompressionException to indicate internal error instead of illegal argument because
       // the compressed has a version that is not supported.  It's probably a code problem, not data problem.
+      // Modify this condition as new versions are added.
       throw new CompressionException("compressedBuffer has unsupported version " + version);
     }
 
     // Assume the algorithm name is correct, so skip the name verification.
     // Original size offset = 1 (version) + 1 (name size) + name length;
     int offset = compressedBufferOffset + 2 + compressedBuffer[compressedBufferOffset + 1];
-    if (offset + 4 >= compressedBuffer.length || offset + 4 >= compressedBufferSize) {
+    if (offset + 4 >= compressedBuffer.length || offset + 4 >= compressedDataSize) {
       throw new IllegalArgumentException("compressedBuffer too small and does not contain original data size.");
     }
 
@@ -171,30 +190,30 @@ public abstract class BaseCompression implements Compression {
    * The compressed buffer is a structure in this format:
    * - Version (1 byte) - the structure/format version.  It starts with value '1'.
    * - Algorithm name size (1 byte) - size of AlgorithmName in bytes.
-   * - Algorithm name (N bytes) - name of compression algorithm, up to the max size specified in CompressionFactory.
+   * - Algorithm name (N bytes) - name of compression algorithm, up to the max size specified in CompressionMap.
    * - Original Data size (4 bytes) - up to 2 GB.
    * - Compressed data - the output of the compression algorithm.
    *
    * Note that the compressed data does not contain original data size, but decompress() requires the original data
    * size.  The original data size is stored as 4-bytes integer in the compressed buffer.
    *
-   * @param sourceData The source uncompressed data to compress.  It cannot be null or empty.
-   * @param sourceDataOffset Offset in the sourceData to start compressing.
+   * @param sourceBuffer The source uncompressed data to compress.  It cannot be null or empty.
+   * @param sourceBufferOffset Offset in the sourceData to start compressing.
    * @param sourceDataSize The size to compress.
    * @param compressedBuffer The compressed buffer where the compressed data is written to.
    * @param compressedBufferOffset Offset in compressedBuffer to write to.
-   * @param compressedBufferSize The maximum size to write inside the compressedBuffer.
+   * @param compressedDataSize The maximum size to write inside the compressedBuffer.
    * @return The actual compressed data size in bytes.
    */
   @Override
-  public int compress(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
-      byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
-    verifySourceData(sourceData, sourceDataOffset, sourceDataSize);
-    verifyCompressedBuffer(compressedBuffer, compressedBufferOffset, compressedBufferSize);
+  public int compress(byte[] sourceBuffer, int sourceBufferOffset, int sourceDataSize,
+      byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize) throws CompressionException {
+    verifySourceData(sourceBuffer, sourceBufferOffset, sourceDataSize);
+    verifyCompressedBuffer(compressedBuffer, compressedBufferOffset, compressedDataSize);
 
-    int overheadSize = 5 + getAlgorithmNameBinary().length;
-    if (compressedBufferSize < overheadSize) {
-      throw new IllegalArgumentException("compressedBufferSize " + compressedBufferSize + " is too small.");
+    int overheadSize = SIZE_OF_VERSION_AND_ORIGINAL_SIZE + getAlgorithmNameBinary().length;
+    if (compressedDataSize < overheadSize) {
+      throw new IllegalArgumentException("compressedDataSize " + compressedDataSize + " is too small.");
     }
 
     // Write version #.
@@ -208,7 +227,7 @@ public abstract class BaseCompression implements Compression {
     offset += algorithmNameBinary.length;
 
     // Write original source data size.
-    int sourceSize = sourceData.length;
+    int sourceSize = sourceBuffer.length;
     compressedBuffer[offset] = (byte) (sourceSize & 0xFF);
     compressedBuffer[offset + 1] = (byte)(sourceSize >> 8 & 0xFF);
     compressedBuffer[offset + 2] = (byte)(sourceSize >> 16 & 0xFF);
@@ -217,12 +236,18 @@ public abstract class BaseCompression implements Compression {
 
     // Apply compression and store the output in the remaining buffer.
     // Note: compress() uses less than the remaining buffer and that's why it returns the actual compressed size.
-    int compressedDataLength = compressNative(sourceData, sourceDataOffset, sourceDataSize,
-        compressedBuffer, offset, compressedBufferSize - overheadSize);
+    int compressedDataLength = compressNative(sourceBuffer, sourceBufferOffset, sourceDataSize,
+        compressedBuffer, offset, compressedDataSize - overheadSize);
 
     return (overheadSize + compressedDataLength);
   }
 
+  /**
+   * Check the method parameters of the source data buffer, offset, and size.
+   * @param sourceData The source data buffer.  This buffer may be bigger than sourceDataSize.
+   * @param sourceDataOffset The source data offset.
+   * @param sourceDataSize The size of the source data.
+   */
   private void verifySourceData(byte[] sourceData, int sourceDataOffset, int sourceDataSize) {
     if (sourceData == null || sourceData.length == 0) {
       throw new IllegalArgumentException("sourceData cannot be null");
@@ -241,7 +266,7 @@ public abstract class BaseCompression implements Compression {
    * @param compressedBufferOffset  The compressed buffer offset.
    * @param compressedBufferSize The compressed buffer size.
    */
-  private void verifyCompressedBuffer(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
+  static void verifyCompressedBuffer(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
     // Verify target buffer parameters.
     if (compressedBuffer == null || compressedBuffer.length == 0) {
       throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
@@ -256,35 +281,36 @@ public abstract class BaseCompression implements Compression {
 
   /**
    * Decompress portion of the shared buffer in {@code compressedBuffer}.  Both the {@code compressedBuffer} and
-   * {@code sourceData} may be shared buffers and that's why both provide their offset and size as parameters.
+   * {@code decompressedBuffer} may be shared buffers and that's why both provide their offset and size as parameters.
    * The compressed buffer is the output from compress() that contains the version, algorithm name, original data size,
    * and compressed binary.
    *
    * @param compressedBuffer The compressed buffer generated in compress() method.
    * @param compressedBufferOffset Offset in the compressedBuffer to start reading.
-   * @param compressedBufferSize Number of bytes to read in compressedBuffer.
-   * @param sourceData The buffer to hold the decompressed/original data.
-   * @param sourceDataOffset Offset in the sourceData buffer to write.
-   * @param sourceDataSize Size of the original data in bytes.
-   * @return The original data size which is same as number of bytes written to sourceData buffer.
+   * @param compressedDataSize Number of bytes to read in compressedBuffer.
+   * @param decompressedBuffer The buffer to hold the decompressed/original data.
+   * @param decompressedBufferOffset Offset in the decompressedBuffer buffer to write.
+   * @param decompressedDataSize Size of the original data in bytes.
+   * @return The original data size which is same as number of bytes written to decompressedBuffer buffer.
    */
   @Override
-  public int decompress(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
-      byte[] sourceData, int sourceDataOffset, int sourceDataSize) {
+  public int decompress(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize,
+      byte[] decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException {
     // Verify source data parameters.
-    verifySourceData(sourceData, sourceDataOffset, sourceDataSize);
+    verifySourceData(decompressedBuffer, decompressedBufferOffset, decompressedDataSize);
 
     // Get the original size from the compressed buffer.  It also verifies compressed buffer parameters.
-    int originalSize = getDecompressBufferSize(compressedBuffer, compressedBufferOffset, compressedBufferSize);
-    if (sourceDataSize < originalSize) {
-      throw new IllegalArgumentException("sourceData size " + sourceDataSize +
+    int originalSize = getDecompressBufferSize(compressedBuffer, compressedBufferOffset, compressedDataSize);
+    if (decompressedDataSize < originalSize) {
+      throw new IllegalArgumentException("decompressedBuffer size " + decompressedDataSize +
           " is too small to hold decompressed data size " + originalSize);
     }
 
     // Calculate overhead size = 1 (version) + 1 (name size) + name length + 4 (original size);
-    int overheadSize = compressedBufferOffset + 6 + compressedBuffer[compressedBufferOffset + 1];
+    int overheadSize = compressedBufferOffset + SIZE_OF_VERSION_AND_ORIGINAL_SIZE_AND_NAME_SIZE +
+        compressedBuffer[compressedBufferOffset + 1];
     decompressNative(compressedBuffer, compressedBufferOffset + overheadSize,
-        compressedBufferSize - overheadSize, sourceData, sourceDataOffset, originalSize);
+        compressedDataSize - overheadSize, decompressedBuffer, decompressedBufferOffset, originalSize);
     return originalSize;
   }
 }

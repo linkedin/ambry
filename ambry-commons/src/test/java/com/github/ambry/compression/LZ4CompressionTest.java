@@ -52,7 +52,7 @@ public class LZ4CompressionTest {
   }
 
   @Test
-  public void testCompressAndDecompress_MinimumLevel() {
+  public void testCompressAndDecompress_MinimumLevel() throws CompressionException {
     LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
@@ -63,7 +63,7 @@ public class LZ4CompressionTest {
   }
 
   @Test
-  public void testCompressAndDecompress_MaximumLevel() {
+  public void testCompressAndDecompress_MaximumLevel() throws CompressionException {
     LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
@@ -85,7 +85,7 @@ public class LZ4CompressionTest {
     // Mock getCompressor() to return a compressor that throws when compress() is called.
     LZ4Compression lz4 = PowerMockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     PowerMockito.when(lz4, "getCompressor").thenReturn(throwCompressor);
-    Exception ex = TestUtils.invokeAndGetException(() ->
+    Exception ex = TestUtils.getException(() ->
         lz4.compressNative("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
             new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
@@ -105,14 +105,14 @@ public class LZ4CompressionTest {
     // Mock getDecompressor() to return a decompressor that throws when decompress() is called.
     LZ4Compression lz4 = PowerMockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     PowerMockito.when(lz4, "getDecompressor").thenReturn(throwDecompressor);
-    Exception ex = TestUtils.invokeAndGetException(() ->
+    Exception ex = TestUtils.getException(() ->
         lz4.decompressNative(new byte[10], 0, 10, new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
     Assert.assertEquals(theException, ex.getCause());
   }
 
   public static void compressAndDecompressNativeTest(BaseCompression compression, String testMessage,
-      int bufferLeftPadSize, int bufferRightPadSize) {
+      int bufferLeftPadSize, int bufferRightPadSize) throws CompressionException {
     // Apply compression to testMessage.
     // oversizeCompressedBuffer consists of bytes[bufferLeftPadSize] + bytes[actualCompressedSize]
     // + bytes[compressUnusedSpace] + bytes[bufferRightPadSize]

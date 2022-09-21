@@ -19,72 +19,66 @@ import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class CompressionFactoryTest {
+public class CompressionMapTest {
 
   @Test
-  public void testGetDefault() {
-    CompressionFactory factory = CompressionFactory.getDefault();
-    Assert.assertNotNull(factory);
+  public void testOf() {
+    CompressionMap map = CompressionMap.of(new LZ4Compression(), new ZstdCompression());
+    Assert.assertNotNull(map);
+    Assert.assertEquals(2, map.size());
   }
 
   @Test
-  public void testRegister() {
-    CompressionFactory factory = new CompressionFactory();
+  public void testAdd() {
+    CompressionMap map = new CompressionMap();
+
+    // Test invalid parameter case.
+    Exception ex = TestUtils.getException(() -> map.add(null));
+    Assert.assertTrue(ex instanceof NullPointerException);
+
+    // Test normal case.
     Compression lz4 = new LZ4Compression();
-    factory.register(lz4);
-    Compression compression = factory.getCompressorByName(lz4.getAlgorithmName());
+    map.add(lz4);
+    Compression compression = map.get(lz4.getAlgorithmName());
     Assert.assertEquals(lz4, compression);
   }
 
   @Test
-  public void testDefaultCompressor() {
-    CompressionFactory factory = new CompressionFactory();
-    Compression lz4 = new LZ4Compression();
-    Assert.assertNull(factory.getDefaultCompressor());
-
-    // Test: set default compressor fails due because it's not registerd.
-    Exception ex = TestUtils.invokeAndGetException(() -> factory.setDefaultCompressor(lz4));
-    Assert.assertTrue(ex instanceof IllegalArgumentException);
-
-    // Test: register compression then set default.
-    factory.register(lz4);
-    factory.setDefaultCompressor(lz4);
-    Compression compression = factory.getDefaultCompressor();
-    Assert.assertEquals(lz4, compression);
-  }
-
-  @Test
-  public void testGetDecompressor() {
+  public void testGetDecompressor() throws CompressionException {
     Compression lz4 = new LZ4Compression();
     Compression zstd = new ZstdCompression();
 
-    CompressionFactory factory = new CompressionFactory();
-    factory.register(lz4);
-    factory.register(zstd);
+    CompressionMap map = new CompressionMap();
+    map.add(lz4);
+    map.add(zstd);
 
     // Test: Invalid argument
-    Exception ex = TestUtils.invokeAndGetException(() -> factory.getCompressionFromCompressedData(new byte[0]));
+    Exception ex = TestUtils.getException(() -> map.getByCompressedData(null));
+    Assert.assertTrue(ex instanceof NullPointerException);
+
+    ex = TestUtils.getException(() -> map.getByCompressedData(new byte[0]));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     // Test: Compress the string using LZ4 and decompress using factory.
-    String testMessage = "Ambry rocks.  Ambry is fast.  Ambry is the way to go.";
+    String testMessage = "Ambry rocks.  Ambry again.  Ambry again.";
     byte[] testMessageBinary = testMessage.getBytes(StandardCharsets.UTF_8);
     Pair<Integer, byte[]> compressionResult = lz4.compress(testMessageBinary);
-    byte[] decompressedData = decompressUsingFactory(factory, compressionResult);
+    byte[] decompressedData = decompressUsingFactory(map, compressionResult);
     Assert.assertEquals(testMessage, new String(decompressedData, StandardCharsets.UTF_8));
 
     // Test: Compress the string using ZStd and decompress using factory.
     compressionResult = zstd.compress(testMessageBinary);
-    decompressedData = decompressUsingFactory(factory, compressionResult);
+    decompressedData = decompressUsingFactory(map, compressionResult);
     Assert.assertEquals(testMessage, new String(decompressedData, StandardCharsets.UTF_8));
   }
 
-  private byte[] decompressUsingFactory(CompressionFactory factory, Pair<Integer, byte[]> compressionResult) {
+  private byte[] decompressUsingFactory(CompressionMap factory, Pair<Integer, byte[]> compressionResult)
+      throws CompressionException {
     int bufferSize = compressionResult.getFirst();
     byte[] compressedBuffer = new byte[bufferSize];
     System.arraycopy(compressionResult.getSecond(), 0, compressedBuffer, 0, compressedBuffer.length);
 
-    Compression decompressor = factory.getCompressionFromCompressedData(compressedBuffer);
+    Compression decompressor = factory.getByCompressedData(compressedBuffer);
     return decompressor.decompress(compressedBuffer);
   }
 }

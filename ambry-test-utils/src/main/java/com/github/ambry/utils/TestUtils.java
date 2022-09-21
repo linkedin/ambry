@@ -507,14 +507,14 @@ public class TestUtils {
   }
 
   /**
-   * Call a method by name using reflection, such as private method, and return the exception thrown.
+   * Call a private method by name using reflection and return the exception thrown.
    * @param instance The private method instance.
-   * @param methodName Name of the method to call, such as the private method name.
-   * @param parameters The parameters.
+   * @param methodName Name of the private method to call.
+   * @param parameters The parameters to pass to the method.
    * @return The exception thrown by the method.  Null if call did not throw exception.
    * @throws ExecutionException if failed to invoke the method.  The method is not expected to throw this exception.
    */
-  public static Throwable invokeAndGetException(Object instance, String methodName, Object... parameters)
+  public static Throwable getPrivateException(Object instance, String methodName, Object... parameters)
       throws ExecutionException {
     try {
       MethodUtils.invokeMethod(instance, true, methodName, parameters);
@@ -530,30 +530,20 @@ public class TestUtils {
   }
 
   /**
-   * Invoke a lambda function and return the exception thrown by the function.
+   * Invoke a lambda function that throws 1 checked exception.
+   * If a lambda function throws a checked exception, the is required to put try-catch around the lambda function to
+   * cast away the throw, which makes the code ugly and bigger.  An alternative is to use this approach that supports
+   * lambda function that throws one checked exception, but it requires pass the class of the checked exception, due
+   * to the way Java handles generic at compile-time.
+   *
+   * Return the exception thrown by the function.
    * Returns null if no exception is thrown.
    * @param function The lambda function to run.
-   * @return The exception thrown.
+   * @return The exception thrown by the function.
    */
-  public static Exception invokeAndGetException(Runnable function) {
+  public static Exception getException(Utils.RunnableThatThrow<Exception> function) {
     try {
       function.run();
-      return null;
-    }
-    catch (Exception ex) {
-      return ex;
-    }
-  }
-
-  /**
-   * Invoke a supplier function and return the exception thrown by the function.
-   * Returns null if no exception is thrown.
-   * @param function The supplier function to run.
-   * @return The exception thrown.
-   */
-  public static <T> Exception invokeAndGetException(Supplier<T> function) {
-    try {
-      function.get();
       return null;
     }
     catch (Exception ex) {

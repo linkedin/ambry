@@ -36,7 +36,7 @@ public class ZstdCompressionFailedTests {
     PowerMockito.when(Zstd.isError(Mockito.anyLong())).thenReturn(true);
 
     ZstdCompression zstd = new ZstdCompression();
-    Exception ex = TestUtils.invokeAndGetException(() ->
+    Exception ex = TestUtils.getException(() ->
         zstd.compressNative("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
             new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
@@ -52,7 +52,7 @@ public class ZstdCompressionFailedTests {
     PowerMockito.when(Zstd.isError(Mockito.anyLong())).thenReturn(true);
 
     ZstdCompression zstd = new ZstdCompression();
-    Exception ex = TestUtils.invokeAndGetException(() ->
+    Exception ex = TestUtils.getException(() ->
         zstd.decompressNative(new byte[10], 0, 10, new byte[10], 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
   }

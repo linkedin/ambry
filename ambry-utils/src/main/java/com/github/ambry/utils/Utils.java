@@ -1383,4 +1383,27 @@ public class Utils {
     }
     return totalPendingTasks;
   }
+
+  /**
+   * This is a helper interface for getException().
+   * Java built-in interfaces like Runnable and Supplier do not support lambda functions that throw checked exceptions.
+   * This one interface allows lambda to call exceptions that throws checked exceptions.
+   */
+  public interface RunnableThatThrow<E extends Exception> {
+    void run() throws E;
+  }
+
+  /**
+   * Invoke a lambda function and intentionally ignore any exceptions thrown.
+   * @param function The lambda function to invoke.
+   */
+  public static void ignoreException(RunnableThatThrow<Exception> function) {
+    try {
+      function.run();
+    }
+    catch (Exception ex) {
+      // Exception is intentionally ignored.
+    }
+  }
+
 }

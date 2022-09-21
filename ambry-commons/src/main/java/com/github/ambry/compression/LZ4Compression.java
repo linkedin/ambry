@@ -20,23 +20,28 @@ import net.jpountz.lz4.LZ4FastDecompressor;
 /**
  * The LZ4 compression algorithm.  LZ4 has very fast decompression speed.
  * More info about LZ4  <a href="https://github.com/lz4/lz4">GitHub</a>.
- *
+ * <p>
  * LZ4 has 3 implementations and LZ4Factory.fastestInstance() picks the implementation in this order
  * 1. Native with JNI.
  * 2. Pure Java unsafe instance
  * 3. Pure Java safe instance
- *
+ * <p>
  * Each LZ4 compressor offers 2 compressors.
  * - LZ4 fast compressor (uses about 16 KB memory) for fastest compression speed but lower compression ratio.
  *   To use fast compressor, set compression level to 0.
  * - LZ4 high compressor (HC) (uses about 256 KB memory) for higher compression ratio but about 10x slower.
  *   To use LZ4 HC, select a compression level between 1 and 17.  Higher compression level yields higher compression
  *   ratio but slower compression speed.
- *
+ * <p>
  * The decompressor can decompress data compressed in either compressors and the decompression speed is about the
  * same regardless of which compression level was used.
  */
 public class LZ4Compression extends BaseCompressionWithLevel {
+
+  /**
+   * Name of this algorithm.
+   */
+  public static final String ALGORITHM_NAME = "LZ4";
 
   // For performance purpose, cache the factory.
   private static final LZ4Factory LZ4_FACTORY = LZ4Factory.fastestInstance();
@@ -47,7 +52,7 @@ public class LZ4Compression extends BaseCompressionWithLevel {
    * @return Name of this algorithm.
    */
   @Override
-  public String getAlgorithmName() { return "LZ4"; }
+  public String getAlgorithmName() { return ALGORITHM_NAME; }
 
   /**
    * Get the minimum compression level.
@@ -115,7 +120,7 @@ public class LZ4Compression extends BaseCompressionWithLevel {
    */
   @Override
   protected int compressNative(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
-      byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) {
+      byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) throws CompressionException {
     try {
       return getCompressor().compress(sourceData, sourceDataOffset, sourceDataSize,
           compressedBuffer, compressedBufferOffset, compressedBufferSize);
@@ -143,7 +148,7 @@ public class LZ4Compression extends BaseCompressionWithLevel {
    */
   @Override
   protected void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
-      byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) {
+      byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) throws CompressionException {
     // This decompressor supports all compressors, LZ4 and LZ4 HC.
     try {
       getDecompressor().decompress(compressedBuffer, compressedBufferOffset,

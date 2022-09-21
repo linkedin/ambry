@@ -40,7 +40,7 @@ public class ZstdCompressionTest {
   }
 
   @Test
-  public void testCompressAndDecompress_DefaultLevel() {
+  public void testCompressAndDecompress_DefaultLevel() throws CompressionException {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getDefaultCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
@@ -51,7 +51,7 @@ public class ZstdCompressionTest {
   }
 
   @Test
-  public void testCompressAndDecompress_MinimumLevel() {
+  public void testCompressAndDecompress_MinimumLevel() throws CompressionException {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
@@ -62,7 +62,7 @@ public class ZstdCompressionTest {
   }
 
   @Test
-  public void testCompressAndDecompress_MaximumLevel() {
+  public void testCompressAndDecompress_MaximumLevel() throws CompressionException {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
@@ -72,4 +72,3 @@ public class ZstdCompressionTest {
     LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test maximum compression using maximum level.", 3, 0);
   }
 }
-
