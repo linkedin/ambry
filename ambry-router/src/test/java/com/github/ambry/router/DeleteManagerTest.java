@@ -382,7 +382,7 @@ public class DeleteManagerTest {
       throws Exception {
     router.close();
     Properties properties = getNonBlockingRouterProperties();
-    properties.setProperty(RouterConfig.ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO,
+    properties.setProperty(RouterConfig.ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE,
         Boolean.toString(routerUnavailableDueToSuccessCountIsNonZero));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     RouterConfig routerConfig = new RouterConfig(vProps);

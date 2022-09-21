@@ -122,8 +122,8 @@ public class RouterConfig {
   public static final String ROUTER_NOT_FOUND_CACHE_TTL_IN_MS = "router.not.found.cache.ttl.in.ms";
   public static final String ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS =
       "router.update.op.metadata.reliance.timestamp.in.ms";
-  public static final String ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO =
-      "router.unavailable.due.to.success.count.is.non.zero";
+  public static final String ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE =
+      "router.unavailable.due.to.success.count.is.non.zero.for.delete";
 
   /**
    * Number of independent scaling units for the router.
@@ -583,9 +583,9 @@ public class RouterConfig {
   /**
    * If true the simple operation tracker will check if there's one replica return success, router will return unavailable error.
    */
-  @Config(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO)
+  @Config(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE)
   @Default("true")
-  public final boolean routerUnavailableDueToSuccessCountIsNonZero;
+  public final boolean routerUnavailableDueToSuccessCountIsNonZeroForDelete;
 
   /**
    * Expiration time for Blob IDs stored in not-found cache. Default value is 15 seconds.
@@ -771,8 +771,8 @@ public class RouterConfig {
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");
     routerUnavailableDueToOfflineReplicas =
         verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS, false);
-    routerUnavailableDueToSuccessCountIsNonZero =
-        verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO, true);
+    routerUnavailableDueToSuccessCountIsNonZeroForDelete =
+        verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE, true);
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
     routerUpdateOpMetadataRelianceTimestampInMs = verifiableProperties.getLong(
