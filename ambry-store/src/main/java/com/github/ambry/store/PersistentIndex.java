@@ -163,6 +163,7 @@ class PersistentIndex {
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private Runnable getBlobReadInfoTestCallback = null;
 
+  private volatile boolean shouldRebuildTokenBasedOnCompactionHistory = false;
   // A map from index segment start offset before compaction to index segment start offset after compaction.
   // This map will only be modified in the compaction thread and accessed in the replication threads.
   private final NavigableMap<Offset, Offset> beforeAndAfterCompactionIndexSegmentOffsets =
@@ -492,6 +493,11 @@ class PersistentIndex {
     }
   }
 
+  void enableRebuildTokenBasedOnCompactionHistory() {
+    logger.info("Index {}: Enable rebuild token based on compaction history");
+    shouldRebuildTokenBasedOnCompactionHistory = true;
+  }
+
   /**
    * @return the map of {@link Offset} to {@link IndexSegment} instances.
    */
@@ -563,8 +569,24 @@ class PersistentIndex {
    * Update the before and after compaction index segment offsets.
    * @param compactionStartTime The compaction start time in milliseconds.
    * @param offsets The map from index segment offsets before compaction to index segment offsets after compaction.
+   * @param fromInProgressComapction True if this update is from an in progress compaction.
    */
-  void updateBeforeAndAfterCompactionIndexSegmentOffsets(long compactionStartTime, Map<Offset, Offset> offsets) {
+  void updateBeforeAndAfterCompactionIndexSegmentOffsets(long compactionStartTime, Map<Offset, Offset> offsets,
+      boolean fromInProgressComapction) {
+    if (offsets.size() == 0) {
+      return;
+    }
+    if (fromInProgressComapction) {
+      // Sanity checking
+      for (Offset before : offsets.keySet()) {
+        if (validIndexSegments.get(before) == null) {
+          String message =
+              String.format("Index %s: Before offset %s is missing from the index segment map", dataDir, before);
+          logger.error(message);
+          throw new IllegalStateException(message);
+        }
+      }
+    }
     compactionTimestampToIndexSegmentOffsets.computeIfAbsent(compactionStartTime, k -> new HashSet<>())
         .addAll(offsets.keySet());
     beforeAndAfterCompactionIndexSegmentOffsets.putAll(offsets);
@@ -581,6 +603,34 @@ class PersistentIndex {
       Set<Offset> offsetsToRemove = entry.getValue();
       beforeAndAfterCompactionIndexSegmentOffsets.keySet().removeAll(offsetsToRemove);
       iterator.remove();
+    }
+  }
+
+  void sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets() {
+    for (Map.Entry<Offset, Offset> entry : beforeAndAfterCompactionIndexSegmentOffsets.entrySet()) {
+      // Before should not in the index segment map
+      Offset before = entry.getKey();
+      Offset after = entry.getValue();
+      if (validIndexSegments.get(before) != null) {
+        String message =
+            String.format("Index %s: Before offset %s shouldn't in the index segment map", dataDir, before);
+        logger.error(message);
+        throw new IllegalStateException(message);
+      }
+      IndexSegment segment = validIndexSegments.get(after);
+      while (segment == null) {
+        after = beforeAndAfterCompactionIndexSegmentOffsets.get(after);
+        if (after == null) {
+          break;
+        }
+        segment = validIndexSegments.get(after);
+      }
+      if (segment == null) {
+        String message =
+            String.format("Index {}: No path for Offset {} to reach a valid index segment", dataDir, before);
+        logger.error(message);
+        throw new IllegalStateException(message);
+      }
     }
   }
 
@@ -2567,7 +2617,7 @@ class PersistentIndex {
         // previous log segment.
         Offset floorOffset = indexSegments.floorKey(offset);
         if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
-          if (config.storeRebuildTokenBasedOnCompactionHistory) {
+          if (shouldRebuildTokenBasedOnCompactionHistory) {
             revalidatedToken = generateTokenBasedOnIndexSegmentOffset(token, indexSegments);
           } else {
             if (ignoreResetKey || token.getResetKey() == null) {
@@ -2584,7 +2634,7 @@ class PersistentIndex {
       case IndexBased:
         // An index based token, but the offset is not in the segments, might be caused by the compaction
         if (!indexSegments.containsKey(offset)) {
-          if (config.storeRebuildTokenBasedOnCompactionHistory) {
+          if (shouldRebuildTokenBasedOnCompactionHistory) {
             revalidatedToken = generateTokenBasedOnIndexSegmentOffset(token, indexSegments);
           } else {
             if (!ignoreResetKey && token.getResetKey() != null) {

@@ -16,7 +16,11 @@ package com.github.ambry.config;
 import com.github.ambry.store.IndexMemState;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 /**
@@ -507,6 +511,16 @@ public class StoreConfig {
   public static final String storeRebuildTokenBasedOnCompactionHistoryName =
       "store.rebuild.token.based.on.compaction.history";
 
+  /**
+   * Partition id to enable rebuild token based on compaction history. In order to enable this feature, we have to enable
+   * the storeRebuildTokenBasedOnCompactionHistory and add partition id here. This is a comma separated list.
+   */
+  @Config(storePartitionsToRebuildTokenBasedOnCompactionHistoryName)
+  @Default("")
+  public List<Long> storePartitionsToRebuildTokenBasedOnCompactionHistory;
+  public static final String storePartitionsToRebuildTokenBasedOnCompactionHistoryName =
+      "store.partitions.to.rebuild.token.based.on.compaction.history";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -629,5 +643,13 @@ public class StoreConfig {
     storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 7, 1, 30);
     storeRebuildTokenBasedOnCompactionHistory =
         verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
+    String partitions =
+        verifiableProperties.getString(storePartitionsToRebuildTokenBasedOnCompactionHistoryName, "").trim();
+    if (partitions.isEmpty()) {
+      storePartitionsToRebuildTokenBasedOnCompactionHistory = Collections.EMPTY_LIST;
+    } else {
+      storePartitionsToRebuildTokenBasedOnCompactionHistory =
+          Stream.of(partitions.split(",")).map(Long::valueOf).collect(Collectors.toList());
+    }
   }
 }

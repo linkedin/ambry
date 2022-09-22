@@ -30,7 +30,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -350,6 +353,91 @@ public class CompactionLogTest {
     assertEquals("Current Idx not as expected", 0, cLog.getCurrentIdx());
   }
 
+  /**
+   * Testing the methods to get the before and after index segment maps
+   * @throws IOException
+   */
+  @Test
+  public void testIndexSegmentOffsetsMethods() throws IOException {
+    String storeName = "store";
+    CompactionDetails details = getCompactionDetails(0);
+    List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
+    segmentsUnderCompaction.sort(LogSegmentName::compareTo);
+    details = new CompactionDetails(0, segmentsUnderCompaction, null);
+
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, details, config);
+    for (LogSegmentName name : segmentsUnderCompaction) {
+      addOneIndexSegmentOffsetPair(name, cLog);
+    }
+    TreeMap<Offset, Offset> indexSegmentOffsets = cLog.getIndexSegmentOffsets();
+    for (LogSegmentName name : segmentsUnderCompaction) {
+      Offset before = new Offset(name, LogSegment.HEADER_SIZE);
+      Offset expectedAfter = new Offset(name.getNextGenerationName(), LogSegment.HEADER_SIZE);
+      Assert.assertEquals(expectedAfter, indexSegmentOffsets.get(before));
+    }
+    SortedMap<Offset, Offset> indexSegmentOffsetsCompleted = cLog.getIndexSegmentOffsetsForCompletedCycles();
+    // There is no completedCycle yet
+    Assert.assertEquals(0, indexSegmentOffsetsCompleted.size());
+    // All log segments are under compaction at current cycle.
+    SortedMap<Offset, Offset> indexSegmentOffsetsCurrent = cLog.getIndexSegmentOffsetsForCurrentCycle();
+    Assert.assertEquals(segmentsUnderCompaction.size(), indexSegmentOffsetsCurrent.size());
+
+    for (int i = 0; i < segmentsUnderCompaction.size(); i++) {
+      LogSegmentName name = segmentsUnderCompaction.get(i);
+      cLog.markCopyStart();
+      if (i != segmentsUnderCompaction.size() - 1) {
+        cLog.splitCurrentCycle(segmentsUnderCompaction.get(i + 1));
+      }
+      cLog.markCommitStart();
+      cLog.markCleanupStart();
+
+      indexSegmentOffsetsCurrent = cLog.getIndexSegmentOffsetsForCurrentCycle();
+      Assert.assertEquals(1, indexSegmentOffsetsCurrent.size());
+      Assert.assertEquals(new Offset(name, LogSegment.HEADER_SIZE),
+          indexSegmentOffsetsCurrent.keySet().iterator().next());
+
+      cLog.close();
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
+
+      // Before completing this cycle, get the
+      indexSegmentOffsetsCompleted = cLog.getIndexSegmentOffsetsForCompletedCycles();
+      Assert.assertEquals(i, indexSegmentOffsetsCompleted.size());
+      for (int idx = 0; idx < i; idx++) {
+        LogSegmentName sname = segmentsUnderCompaction.get(idx);
+        Assert.assertTrue(indexSegmentOffsetsCompleted.containsKey(new Offset(sname, LogSegment.HEADER_SIZE)));
+      }
+      cLog.markCycleComplete();
+      indexSegmentOffsetsCompleted = cLog.getIndexSegmentOffsetsForCompletedCycles();
+      Assert.assertEquals(i + 1, indexSegmentOffsetsCompleted.size());
+      for (int idx = 0; idx < i + 1; idx++) {
+        LogSegmentName sname = segmentsUnderCompaction.get(idx);
+        Assert.assertTrue(indexSegmentOffsetsCompleted.containsKey(new Offset(sname, LogSegment.HEADER_SIZE)));
+      }
+
+      cLog.close();
+      if (i != segmentsUnderCompaction.size() - 1) {
+        cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time, config);
+      } else {
+        AtomicReference<CompactionLog> compactionLogRef = new AtomicReference<>();
+        CompactionLog.processCompactionLogs(tempDirStr, storeName, STORE_KEY_FACTORY, time, config, compactionLog -> {
+          compactionLogRef.set(compactionLog);
+          return false;
+        });
+        cLog = compactionLogRef.get();
+      }
+      indexSegmentOffsetsCompleted = cLog.getIndexSegmentOffsetsForCompletedCycles();
+      Assert.assertEquals(i + 1, indexSegmentOffsetsCompleted.size());
+      for (int idx = 0; idx < i + 1; idx++) {
+        LogSegmentName sname = segmentsUnderCompaction.get(idx);
+        Assert.assertTrue(indexSegmentOffsetsCompleted.containsKey(new Offset(sname, LogSegment.HEADER_SIZE)));
+      }
+    }
+  }
+
+  /**
+   * Test {@link CompactionLog#processCompactionLogs}.
+   * @throws Exception
+   */
   @Test
   public void testProcessCompactionLogs() throws Exception {
     // First create some compaction logs
@@ -373,7 +461,9 @@ public class CompactionLogTest {
 
     CompactionDetails details = getCompactionDetailsList(1).get(0);
     CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, details, config);
-    addOneIndexSegmentOffsetPair(cLog);
+    Pair<Offset, Offset> pair = addOneIndexSegmentOffsetPair(cLog);
+    expectedIndexSegmentOffsets.put(pair.getFirst(), pair.getSecond());
+    expectedStartTimes.add(0, time.milliseconds());
     cLog.close();
     Assert.assertTrue(CompactionLog.isCompactionInProgress(tempDirStr, storeName));
 
@@ -386,8 +476,8 @@ public class CompactionLogTest {
       return true;
     });
 
-    Assert.assertEquals(10, obtainedStartTimes.size());
-    Assert.assertEquals(10, obtainedIndexSegmentOffsets.size());
+    Assert.assertEquals(11, obtainedStartTimes.size());
+    Assert.assertEquals(11, obtainedIndexSegmentOffsets.size());
 
     Assert.assertEquals(expectedIndexSegmentOffsets, obtainedIndexSegmentOffsets);
     Assert.assertEquals(expectedStartTimes, obtainedStartTimes);
@@ -509,6 +599,10 @@ public class CompactionLogTest {
 
   private Pair<Offset, Offset> addOneIndexSegmentOffsetPair(CompactionLog cLog) {
     LogSegmentName logSegmentName = cLog.getCompactionDetails().getLogSegmentsUnderCompaction().get(0);
+    return addOneIndexSegmentOffsetPair(logSegmentName, cLog);
+  }
+
+  private Pair<Offset, Offset> addOneIndexSegmentOffsetPair(LogSegmentName logSegmentName, CompactionLog cLog) {
     Offset before = new Offset(logSegmentName, LogSegment.HEADER_SIZE);
     Offset after = new Offset(logSegmentName.getNextGenerationName(), LogSegment.HEADER_SIZE);
     cLog.addIndexSegmentOffsetPair(before, after);

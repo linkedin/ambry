@@ -1131,11 +1131,12 @@ class BlobStoreCompactor {
 
     if (compactionLog.isIndexSegmentOffsetsPersisted()) {
       srcIndex.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
-          compactionLog.getIndexSegmentOffsets());
+          compactionLog.getIndexSegmentOffsetsForCurrentCycle(), true);
     }
     // Update the index segments, this would remove some index segments and add others. We have to update the before and
     // after compaction index segment offsets before this method.
     srcIndex.changeIndexSegments(indexSegmentFilesToAdd, indexSegmentsToRemove);
+    srcIndex.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
   }
 
   /**

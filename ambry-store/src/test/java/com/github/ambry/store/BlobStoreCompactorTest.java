@@ -3268,6 +3268,7 @@ public class BlobStoreCompactorTest {
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     long indexSegmentCountBeforeCompaction = state.index.getIndexSegments().size();
+    List<LogSegmentName> allLogSegmentsBeforeCompaction = log.getAllLogSegmentNames();
 
     Set<Offset> indexSegmentOffsetsUnderCompaction = state.index.getIndexSegments()
         .keySet()
@@ -3311,10 +3312,37 @@ public class BlobStoreCompactorTest {
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER, null, false);
+    // Create a compactor before loading index. Since this compactor would remove the old log segment so the old index segments
+    // won't be loaded. This is the same order as the BlobStore initialize the compactor and index.
     state.initIndex(null);
     compactor.initialize(state.index);
     assertEquals("Wrong number of swap segments in use",
         tempDir.list(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length, compactor.getSwapSegmentsInUse().length);
+
+    // rebuild compaction history
+    CompactionLog.processCompactionLogs(tempDirStr, STORE_ID, STORE_KEY_FACTORY, time, state.config, cLog -> {
+      state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(cLog.getStartTime(),
+          cLog.getIndexSegmentOffsetsForCompletedCycles(), false);
+      return false;
+    });
+    state.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+    // For some reason this compaction is interrupted, we have to check if there is a new log segment added.
+    List<LogSegmentName> allLogSegmentsAfterCompaction = log.getAllLogSegmentNames();
+    List<LogSegmentName> newLogSegments = allLogSegmentsAfterCompaction.stream()
+        .filter(name -> !allLogSegmentsBeforeCompaction.contains(name))
+        .collect(Collectors.toList());
+
+    if (newLogSegments.size() != 0) {
+      // If we have new log segments, then the before offsets belong to the segments under compaction
+      // and the after offsets belong to the new log segments.
+      NavigableMap<Offset, Offset> indexSegmentOffsets = state.index.getBeforeAndAfterCompactionIndexSegmentOffsets();
+      assertTrue(indexSegmentOffsets.size() > 0);
+      for (Map.Entry<Offset, Offset> entry : indexSegmentOffsets.entrySet()) {
+        assertTrue(segmentsUnderCompaction.contains(entry.getKey().getName()));
+        assertTrue(newLogSegments.contains(entry.getValue().getName()));
+      }
+    }
+
     try {
       if (CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID)) {
         compactor.resumeCompaction(bundleReadBuffer);

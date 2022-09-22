@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -65,6 +66,7 @@ class CompactionLog implements Closeable {
   private final Time time;
   private final TreeMap<Offset, Offset> beforeAndAfterIndexSegmentOffsets = new TreeMap<>();
   private final short version;
+  private final StoreConfig config;
 
   private int currentIdx = 0;
   private Offset startOffsetOfLastIndexSegmentForDeleteCheck = null;
@@ -113,6 +115,10 @@ class CompactionLog implements Closeable {
     List<File> sortedFiles = Stream.of(files)
         .sorted((file1, file2) -> (int) (getStartTimeFromFile(file2) - getStartTimeFromFile(file1)))
         .collect(Collectors.toList());
+    File inProgressCompactionLog = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
+    if (inProgressCompactionLog.exists()) {
+      sortedFiles.add(0, inProgressCompactionLog); // If there is an in progress compaction log, put it in the front.
+    }
     for (File file : sortedFiles) {
       if (!processor.process(new CompactionLog(file, storeKeyFactory, time, config))) {
         break;
@@ -169,6 +175,7 @@ class CompactionLog implements Closeable {
     if (config.storeSetFilePermissionEnabled) {
       Files.setPosixFilePermissions(file.toPath(), config.storeOperationFilePermission);
     }
+    this.config = config;
     logger.trace("Created compaction log: {}", file);
   }
 
@@ -200,6 +207,7 @@ class CompactionLog implements Closeable {
     }
     this.file = compactionLogFile;
     this.time = time;
+    this.config = config;
     try (FileInputStream fileInputStream = new FileInputStream(file)) {
       CrcInputStream crcInputStream = new CrcInputStream(fileInputStream);
       DataInputStream stream = new DataInputStream(crcInputStream);
@@ -302,7 +310,7 @@ class CompactionLog implements Closeable {
   }
 
   /**
-   * Add a pair of index segment start offset. The first offset has to be an index segment start offset that belongs to
+   * Add a pair of index segment start offsets. The first offset has to be an index segment start offset that belongs to
    * an under compaction log segment. The second offset hast to be an index segment start offset that belongs to a log
    * segment created this compaction.
    * @param before The index segment start offset before compaction
@@ -329,11 +337,16 @@ class CompactionLog implements Closeable {
     flush();
   }
 
+  /**
+   * Update all the index segment offset values added through method {@link #addIndexSegmentOffsetPair}. If the input is
+   * null, the index segment offsets map would be cleared.
+   * @param validOffset The valid {@link Offset} to replace all the previous invalid {@link Offset}.
+   */
   void updateIndexSegmentOffsetsWithValidOffset(Offset validOffset) {
     if (!isIndexSegmentOffsetsPersisted()) {
       return;
     }
-    logger.info("{}: validate offsets map with: {}", file, validOffset);
+    logger.info("{}: Validate offsets map with: {}", file, validOffset);
     if (validOffset == null) {
       beforeAndAfterIndexSegmentOffsets.clear();
     } else {
@@ -351,6 +364,45 @@ class CompactionLog implements Closeable {
    */
   TreeMap<Offset, Offset> getIndexSegmentOffsets() {
     return beforeAndAfterIndexSegmentOffsets;
+  }
+
+  /**
+   * Return index segment offset map for completed cycles. Each key offset's LogSegmentName has to finish the compaction.
+   */
+  SortedMap<Offset, Offset> getIndexSegmentOffsetsForCompletedCycles() {
+    if (beforeAndAfterIndexSegmentOffsets.size() == 0 || currentIdx >= cycleLogs.size()) {
+      return beforeAndAfterIndexSegmentOffsets;
+    }
+
+    if (currentIdx == 0) {
+      return new TreeMap<>();
+    }
+
+    List<CycleLog> cycles = cycleLogs.subList(0, currentIdx);
+    List<LogSegmentName> completedLogSegmentNames = cycles.stream()
+        .flatMap(cycleLog -> cycleLog.compactionDetails.getLogSegmentsUnderCompaction().stream())
+        .collect(Collectors.toList());
+    return getIndexSegmentOffsetsForLogSegments(completedLogSegmentNames);
+  }
+
+  /**
+   * Return index segment offset map for current cycle. Each key offset's LogSegmentName has to be in current cycle.
+   */
+  SortedMap<Offset, Offset> getIndexSegmentOffsetsForCurrentCycle() {
+    if (currentIdx == -1) {
+      throw new IllegalArgumentException(file.getName() + "Current Index is -1, no current cycle");
+    }
+    return getIndexSegmentOffsetsForLogSegments(getCurrentCycleLog().compactionDetails.getLogSegmentsUnderCompaction());
+  }
+
+  private SortedMap<Offset, Offset> getIndexSegmentOffsetsForLogSegments(List<LogSegmentName> logSegmentNames) {
+    if (logSegmentNames.size() == 0) {
+      return new TreeMap<>();
+    }
+
+    Offset start = new Offset(logSegmentNames.get(0), 0);
+    Offset end = new Offset(logSegmentNames.get(logSegmentNames.size() - 1), config.storeSegmentSizeInBytes);
+    return beforeAndAfterIndexSegmentOffsets.subMap(start, end);
   }
 
   /**

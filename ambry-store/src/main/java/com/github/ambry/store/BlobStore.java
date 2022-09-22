@@ -252,7 +252,12 @@ public class BlobStore implements Store {
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
-        buildCompactionHistory();
+        if (config.storeRebuildTokenBasedOnCompactionHistory
+            && config.storePartitionsToRebuildTokenBasedOnCompactionHistory.contains(
+            replicaId.getPartitionId().getId())) {
+          index.enableRebuildTokenBasedOnCompactionHistory();
+          buildCompactionHistory();
+        }
         if (blobStoreStats == null) {
           blobStoreStats =
               new BlobStoreStats(storeId, index, config, time, longLivedTaskScheduler, taskScheduler, diskIOScheduler,
@@ -1319,12 +1324,13 @@ public class BlobStore implements Store {
             logger.trace("Store {}: build compaction history by processing compaction log started at {}", storeId,
                 compactionLog.getStartTime());
             index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
-                compactionLog.getIndexSegmentOffsets());
+                compactionLog.getIndexSegmentOffsetsForCompletedCycles(), false);
           }
           return true;
         }
         return false;
       });
+      index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
     } catch (Exception e) {
       // Don't fatal the process just because we can't build the compaction history.
       logger.error("Store {}: Failed to process CompactionLogs", storeId, e);
