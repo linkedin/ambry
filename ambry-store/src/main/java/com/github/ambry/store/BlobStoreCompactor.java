@@ -477,9 +477,18 @@ class BlobStoreCompactor {
       // there were no valid entries copied, return any temp segments back to the pool
       logger.trace("Cleaning up temp segments in {} because no swap spaces were used", storeId);
       cleanupUnusedTempSegments();
-      // If the target log has no data, which means there were no active index segment while copying each index segment
-      // then the before and after pair we put in the compaction log is not valid anymore since all the after offset would
-      // be the start offset of the target log, which doesn't exist. In this case, we have to fix it.
+      // If we are here, there are several things we can be sure with current implementation.
+      // 1. There is no split cycle for this compaction.
+      // 2. All the log segments under compaction have no valid data to copy.
+      // The reason to create a split cycle is that the log segments under compaction has too much data to write to current target
+      // log segment. If there is a split cycle, the target log segment in next cycle would definitely have some leftover
+      // data from the previous cycle to write.
+      // And since there is no split cycle, this is the only cycle for this compaction. And there is no valid data. So
+      // all log segments have no valid data.
+      //
+      // This means there were no active index segment for target index, therefore the before and after pairs we put in the
+      // compaction log are not valid anymore since all the after offsets would be the start offset of the target log, which
+      // doesn't exist. In this case, we have to fix it.
       Set<Offset> values = new HashSet<>(compactionLog.getIndexSegmentOffsets().values());
       Offset startOffset = tgtLog.getEndOffset();
       if (values.size() != 1 || !values.contains(startOffset)) {
@@ -585,12 +594,12 @@ class BlobStoreCompactor {
    */
   private boolean needsCopying(Offset offset) {
     if (!compactionLog.isIndexSegmentOffsetsPersisted()) {
-      // If index segment offsets before and after compaction is not saved within compaction log, then
-      // just use recovery start token to decide if we should copy this index segment.
+      // If index segment offsets are not saved within compaction log, then just use recovery start token to decide if
+      // we should copy this index segment.
       return recoveryStartToken == null || recoveryStartToken.getOffset().compareTo(offset) < 0;
     }
-    // We have index segment offsets before and after compaction, every index segment whose offset exists
-    // in the compaction log already has its content copied, with the last index segment as exception.
+    // We have index segment offsets from compaction log, every index segment whose offset exists in the compaction log
+    // already has its content copied, with the last index segment as exception since it might be halfway through copying.
     TreeMap<Offset, Offset> indexSegmentOffsets = compactionLog.getIndexSegmentOffsets();
     Map.Entry<Offset, Offset> lastEntry = indexSegmentOffsets.lastEntry();
     return lastEntry == null || lastEntry.getKey().compareTo(offset) < 0;
@@ -653,13 +662,13 @@ class BlobStoreCompactor {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
 
     // Here we add the pair of before and after index segment offsets to the compaction log. This pair would be useful
-    // in replication thread. In replication thread, when a remote peer sends a replication token here to resume replication,
-    // the token would have an offset to indicate which index segment this token is pointing if it's index based token.
+    // in replication thread. In replication thread, when a remote peer sends a replication token to resume replication,
+    // the token would have an offset to indicate which index segment this token is pointing to if it's index based token.
     // However, this index segment would be removed if the log segment is under compaction. Here we save the pair of start
     // offsets of index segments before and after compaction so in replication thread, we can just reset the token back to
     // the after compaction index segment start offset when the before compaction index segment is removed.
-    // We are adding the offsets without any if any of the content from the current index segment would be copied to the
-    // target. Even if there is no content from this index segment would be preserved after compaction, we still want to
+    // We are adding the offsets without knowing if any of the content from the current index segment would be copied to the
+    // target. Even if there is no content from this index segment that would be preserved after compaction, we still want to
     // save this pair of index segment offsets since replication might be working on this index segment. And it also
     // indicates that last index segment finishes copying.
     compactionLog.addIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),

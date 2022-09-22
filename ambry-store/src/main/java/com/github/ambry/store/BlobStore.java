@@ -1319,16 +1319,20 @@ public class BlobStore implements Store {
     long cutoffTime = now - Duration.ofDays(config.storeCompactionHistoryInDay).toMillis();
     try {
       CompactionLog.processCompactionLogs(dataDir, storeId, factory, time, config, compactionLog -> {
-        if (compactionLog.getStartTime() > cutoffTime) {
-          if (compactionLog.isIndexSegmentOffsetsPersisted()) {
-            logger.trace("Store {}: build compaction history by processing compaction log started at {}", storeId,
-                compactionLog.getStartTime());
-            index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
-                compactionLog.getIndexSegmentOffsetsForCompletedCycles(), false);
-          }
-          return true;
+        if (compactionLog.getStartTime() <= cutoffTime) {
+          // Ignore CompactionLogs that are created before the cutoffTime.
+          return false;
         }
-        return false;
+        // This change is probably not forward compatible. If we deploy this new version and start
+        // persisting index segment offsets in CompactionLog, we expect all the following CompactionLogs would
+        // keep persisting index segment offsets so there is no gap between CompactionLog history.
+        if (compactionLog.isIndexSegmentOffsetsPersisted()) {
+          logger.trace("Store {}: build compaction history by processing compaction log started at {}", storeId,
+              compactionLog.getStartTime());
+          index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
+              compactionLog.getIndexSegmentOffsetsForCompletedCycles(), false);
+        }
+        return true;
       });
       index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
     } catch (Exception e) {

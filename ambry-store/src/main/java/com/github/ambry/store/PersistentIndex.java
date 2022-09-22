@@ -659,15 +659,6 @@ class PersistentIndex {
     shouldRebuildTokenBasedOnCompactionHistory = true;
   }
 
-  boolean shouldRebuildTokenBasedOnCompactionHistory() {
-    return  shouldRebuildTokenBasedOnCompactionHistory;
-  }
-
-  boolean isSanityCheckFailed(){
-    return sanityCheckFailed;
-  }
-
-
   /**
    * Adds a new entry to the index. For recovery, only the index segments belongs to last log segment should be put into
    * journal, otherwise it won't be compacted. And we will face the issue when last log segment is empty but journal size
