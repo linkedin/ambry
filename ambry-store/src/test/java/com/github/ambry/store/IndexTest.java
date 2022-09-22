@@ -448,12 +448,12 @@ public class IndexTest {
     // Back to first dataNode, missing several keys would clear the cache
     int numKeys = DEFAULT_NUMBER_CACHE_MISS_IN_FIND_MISSING_KEY_IN_BATCH_MODE;
     keys = new ArrayList<>(numKeys);
-    for (int i = 0; i < numKeys+1; i++) {
+    for (int i = 0; i < numKeys + 1; i++) {
       keys.add(state.getUniqueId());
     }
     keys.addAll(getRandomKeyFromIndexSegment(0, 1));
     long findKeyCallCountBefore = state.metrics.findTime.getCount();
-    Assert.assertEquals(numKeys+1, state.index.findMissingKeysInBatch(keys, dataNode).size());
+    Assert.assertEquals(numKeys + 1, state.index.findMissingKeysInBatch(keys, dataNode).size());
     long findKeyCallCountAfter = state.metrics.findTime.getCount();
     Assert.assertEquals(keys.size(), findKeyCallCountAfter - findKeyCallCountBefore);
     Assert.assertEquals(0, state.index.getCachedKeys().get(dataNode).size());
@@ -1370,40 +1370,38 @@ public class IndexTest {
    */
   @Test
   public void tokenRevalidationTest() throws StoreException {
-    // this test is valid only when the log has > 1 log segments i.e. when it can undergo compaction.
-    if (isLogSegmented) {
-      IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(state.logOrder.lastKey()).getValue();
-      StoreFindToken absoluteEndToken =
-          new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false,
-              segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
-      absoluteEndToken.setBytesRead(state.index.getLogUsedCapacity());
+    assumeTrue(isLogSegmented);
+    IndexSegment segmentOfToken = state.index.getIndexSegments().floorEntry(state.logOrder.lastKey()).getValue();
+    StoreFindToken absoluteEndToken =
+        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false,
+            segmentOfToken.getResetKey(), segmentOfToken.getResetKeyType(), segmentOfToken.getResetKeyLifeVersion());
+    absoluteEndToken.setBytesRead(state.index.getLogUsedCapacity());
 
-      Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
-      assertTrue("The first index segment must have an offset > 0", firstIndexSegmentStartOffset.getOffset() > 0);
+    Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
+    assertTrue("The first index segment must have an offset > 0", firstIndexSegmentStartOffset.getOffset() > 0);
 
-      // generate an offset that does not exist.
-      LogSegmentName newName = firstIndexSegmentStartOffset.getName().getNextGenerationName();
-      long newOffset = firstIndexSegmentStartOffset.getOffset() + 1;
+    // generate an offset that does not exist.
+    LogSegmentName newName = firstIndexSegmentStartOffset.getName().getNextGenerationName();
+    long newOffset = firstIndexSegmentStartOffset.getOffset() + 1;
 
-      // Generate an offset that is below the index start offset
-      long offsetBeforeStart = firstIndexSegmentStartOffset.getOffset() - 1;
+    // Generate an offset that is below the index start offset
+    long offsetBeforeStart = firstIndexSegmentStartOffset.getOffset() - 1;
 
-      Offset[] invalidOffsets =
-          {new Offset(newName, newOffset), new Offset(firstIndexSegmentStartOffset.getName(), offsetBeforeStart)};
-      MockId firstIdInFirstIndexSegment = state.referenceIndex.firstEntry().getValue().firstKey();
+    Offset[] invalidOffsets =
+        {new Offset(newName, newOffset), new Offset(firstIndexSegmentStartOffset.getName(), offsetBeforeStart)};
+    MockId firstIdInFirstIndexSegment = state.referenceIndex.firstEntry().getValue().firstKey();
 
-      for (Offset invalidOffset : invalidOffsets) {
-        // Generate an index based token from invalidOffset
-        StoreFindToken startToken =
-            new StoreFindToken(firstIdInFirstIndexSegment, invalidOffset, state.sessionId, state.incarnationId, null,
-                null, UNINITIALIZED_RESET_KEY_VERSION);
-        doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
+    for (Offset invalidOffset : invalidOffsets) {
+      // Generate an index based token from invalidOffset
+      StoreFindToken startToken =
+          new StoreFindToken(firstIdInFirstIndexSegment, invalidOffset, state.sessionId, state.incarnationId, null,
+              null, UNINITIALIZED_RESET_KEY_VERSION);
+      doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
 
-        // Generate a journal based token from invalidOffset (not in journal and is invalid)
-        startToken = new StoreFindToken(invalidOffset, state.sessionId, state.incarnationId, false, null, null,
-            UNINITIALIZED_RESET_KEY_VERSION);
-        doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
-      }
+      // Generate a journal based token from invalidOffset (not in journal and is invalid)
+      startToken = new StoreFindToken(invalidOffset, state.sessionId, state.incarnationId, false, null, null,
+          UNINITIALIZED_RESET_KEY_VERSION);
+      doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
     }
   }
 
@@ -1670,6 +1668,81 @@ public class IndexTest {
     expectedToken = new StoreFindToken(firstKey, firstIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
         stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
         firstIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+  }
+
+  @Test
+  public void rebuildTokenBasedOnCompactionHistoryTest() throws StoreException {
+    assumeTrue(isLogSegmented);
+    stateForTokenTest.index.enableRebuildTokenBasedOnCompactionHistory();
+
+    IndexSegment firstIndexSegment = stateForTokenTest.index.getIndexSegments().firstEntry().getValue();
+    IndexSegment secondIndexSegment =
+        stateForTokenTest.index.getIndexSegments().higherEntry(firstIndexSegment.getStartOffset()).getValue();
+    long now = stateForTokenTest.time.milliseconds();
+    Map<Offset, Offset> indexSegmentOffsets = new HashMap<>();
+    Offset secondIndexSegmentOffset = secondIndexSegment.getStartOffset();
+    Offset before =
+        new Offset(secondIndexSegmentOffset.getName().getNextGenerationName(), secondIndexSegmentOffset.getOffset());
+    indexSegmentOffsets.put(before, secondIndexSegmentOffset);
+    stateForTokenTest.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(now, indexSegmentOffsets, false);
+    stateForTokenTest.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+
+    // 1. Generate an invalid index-based token with invalid offset, but it can be found in the before and after compaction map
+    Offset invalidOffset = before;
+    StoreKey keyFromFirstIndexSegment = firstIndexSegment.iterator().next().getKey();
+    StoreKey keyFromSecondIndexSegment = secondIndexSegment.iterator().next().getKey();
+    StoreFindToken startToken = new StoreFindToken(keyFromFirstIndexSegment, invalidOffset, stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, null, null, (short) -1);
+    // The invalid token should be revalidated by looking up the before and after compaction index segment map
+    FindInfo findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
+    StoreFindToken expectedToken =
+        new StoreFindToken(keyFromSecondIndexSegment, secondIndexSegmentOffset, stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, secondIndexSegment.getResetKey(), secondIndexSegment.getResetKeyType(),
+            secondIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+
+    // 2. Generate an invalid index-based token with invalid offset, but it can't be found in the before and after compaction map
+    invalidOffset = new Offset(before.getName().getNextGenerationName(), before.getOffset());
+    startToken = new StoreFindToken(keyFromSecondIndexSegment, invalidOffset, stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, null, null, (short) -1);
+    // The invalid token will be revalidated to the beginning of the log
+    findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    token = (StoreFindToken) findInfo.getFindToken();
+    expectedToken =
+        new StoreFindToken(keyFromFirstIndexSegment, firstIndexSegment.getStartOffset(), stateForTokenTest.sessionId,
+            stateForTokenTest.incarnationId, firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
+            firstIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+
+    // 3. Generate an invalid index-based token with invalid offset, but it can be found by multiple redirections.
+    Offset beforeBefore = new Offset(before.getName().getNextGenerationName(), before.getOffset() + 100);
+    indexSegmentOffsets.put(beforeBefore, before);
+    stateForTokenTest.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(now, indexSegmentOffsets, false);
+    stateForTokenTest.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+    invalidOffset = beforeBefore;
+    startToken = new StoreFindToken(keyFromFirstIndexSegment, invalidOffset, stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, null, null, (short) -1);
+    // The invalid token should be revalidated by looking up the before and after compaction index segment map
+    findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    token = (StoreFindToken) findInfo.getFindToken();
+    expectedToken = new StoreFindToken(keyFromSecondIndexSegment, secondIndexSegmentOffset, stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, secondIndexSegment.getResetKey(), secondIndexSegment.getResetKeyType(),
+        secondIndexSegment.getResetKeyLifeVersion());
+    compareTokens(expectedToken, token);
+
+    // Generate an invalid journal-based token with invalid offset, but it can be found in the before and after compaction map
+    invalidOffset = new Offset(before.getName(), before.getOffset() + 100);
+    startToken =
+        new StoreFindToken(invalidOffset, stateForTokenTest.sessionId, stateForTokenTest.incarnationId, false, null,
+            null, (short) -1);
+    // The invalid token should be revalidated by looking up the before and after compaction index segment map
+    findInfo = stateForTokenTest.index.findEntriesSince(startToken, 1);
+    token = (StoreFindToken) findInfo.getFindToken();
+    expectedToken = new StoreFindToken(keyFromSecondIndexSegment, secondIndexSegmentOffset, stateForTokenTest.sessionId,
+        stateForTokenTest.incarnationId, secondIndexSegment.getResetKey(), secondIndexSegment.getResetKeyType(),
+        secondIndexSegment.getResetKeyLifeVersion());
     compareTokens(expectedToken, token);
   }
 
