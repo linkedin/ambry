@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -31,9 +32,15 @@ import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatMetrics;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.network.ChannelOutput;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.LocalRequestResponseChannel.LocalChannelRequest;
 import com.github.ambry.network.NetworkRequest;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
@@ -57,6 +64,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufInputStream;
@@ -90,7 +98,10 @@ public class AmbryRequests implements RequestAPI {
   protected final NotificationSystem notification;
   protected final StoreKeyFactory storeKeyFactory;
   private final StoreKeyConverterFactory storeKeyConverterFactory;
-
+  protected final ConnectionPool connectionPool;
+  protected final MetricRegistry metricRegistry;
+  protected final ServerConfig serverConfig;
+  protected Transformer transformer;
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
@@ -98,6 +109,14 @@ public class AmbryRequests implements RequestAPI {
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
       StoreKeyConverterFactory storeKeyConverterFactory) {
+    this(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
+        operationNotification, replicationEngine, storeKeyFactory, storeKeyConverterFactory, null, null);
+  }
+
+  public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
+      DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
+      NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
+      StoreKeyConverterFactory storeKeyConverterFactory, ConnectionPool connectionPool, ServerConfig serverConfig) {
     this.storeManager = storeManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -109,6 +128,18 @@ public class AmbryRequests implements RequestAPI {
     this.notification = operationNotification;
     this.storeKeyFactory = storeKeyFactory;
     this.storeKeyConverterFactory = storeKeyConverterFactory;
+    this.connectionPool = connectionPool;
+    this.metricRegistry = registry;
+    this.serverConfig = serverConfig;
+    transformer = null;
+    if (serverConfig != null) {
+      try {
+        StoreKeyConverter keyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+        transformer = Utils.getObj(serverConfig.serverMessageTransformer, storeKeyFactory, keyConverter);
+      } catch (Exception e) {
+        logger.error("Failed to create transformer", e);
+      }
+    }
   }
 
   @Override
@@ -144,6 +175,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case UndeleteRequest:
           handleUndeleteRequest(networkRequest);
+          break;
+        case ReplicateBlobRequest:
+          handleReplicateBlobRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -679,6 +713,152 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
+  public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
+    if (connectionPool == null || transformer == null) {
+      throw new UnsupportedOperationException("ReplicateBlobRequest is not supported on this node.");
+    }
+
+    ReplicateBlobRequest replicateBlobRequest;
+    if (request instanceof LocalChannelRequest) {
+      // This is a case where handleReplicateBlobRequest is called when frontends are talking to Azure. In this case, this method
+      // is called by request handler threads running within the frontend router itself. So, the request can be directly
+      // referenced as java objects without any need for deserialization.
+      replicateBlobRequest = (ReplicateBlobRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
+    } else {
+      replicateBlobRequest = ReplicateBlobRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    }
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+    metrics.replicateBlobRequestQueueTimeInMs.update(requestQueueTime);
+    metrics.replicateBlobRequestRate.mark();
+    ReplicateBlobResponse response = null;
+
+    // step 1: get the blob from the remote replica
+    // Get the three parameters from the replicateBlobRequest: blobId, remoteHostName and remoteHostPort
+    BlobId blobId = replicateBlobRequest.getBlobId();
+    String remoteHostName = replicateBlobRequest.getSourceHostName();
+    // We only support HTTP2 port for on demand replication.
+    Port remoteHostPort = new Port(replicateBlobRequest.getSourceHostPort(), PortType.HTTP2);
+    final int connectionPoolCheckoutTimeoutMs = 1000; // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
+
+    List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+    List<BlobId> blobIds = new ArrayList<BlobId>();
+    blobIds.add(blobId);
+    PartitionRequestInfo partitionInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
+    partitionRequestInfoList.add(partitionInfo);
+    // Get the Blob including expired and deleted.
+    GetRequest getRequest = new GetRequest(replicateBlobRequest.getCorrelationId(),
+        replicateBlobRequest.getClientId(), MessageFormatFlags.All, partitionRequestInfoList,
+        GetOption.Include_All);
+    GetResponse getResponse = null;
+    try {
+      ConnectedChannel connectedChannel = connectionPool.checkOutConnection(remoteHostName, remoteHostPort, connectionPoolCheckoutTimeoutMs);;
+      ChannelOutput channelOutput = connectedChannel.sendAndReceive(getRequest);
+      getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
+      if ((getResponse.getError() != ServerErrorCode.No_Error) || (getResponse.getPartitionResponseInfoList() == null)
+          || (getResponse.getPartitionResponseInfoList().size() == 0)) {
+        logger.error("ReplicateBlobRequest failed to get blob {} from the remote node {} {} {}",
+            blobId, remoteHostName, remoteHostPort, getResponse.getError());
+        response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+            ServerErrorCode.Unknown_Error);
+      }
+    } catch (Exception e) {
+      logger.error("ReplicateBlobRequest getBlob {} from the remote node {} {} hit exception ",
+          blobId, remoteHostName, remoteHostPort, e);
+      response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+    } finally {
+      if (response != null) {
+        long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+        totalTimeSpent += processingTime;
+        publicAccessLogger.info("{} {} processingTime {}", replicateBlobRequest, response, processingTime);
+        metrics.replicateBlobProcessingTimeInMs.update(processingTime);
+        requestResponseChannel.sendResponse(response, request,
+            new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs, metrics.replicateBlobSendTimeInMs,
+                metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
+        return;
+      }
+    }
+
+    // step 2: get the blob message from the response and write to the store
+    // only have one partition. And checked at least it has one entry above.
+    PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
+    if (partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) {
+      try {
+        List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
+        // set keepDeletedExpired to true. Will treat deleted and expired messages as valid.
+        MessageSievingInputStream validMessageDetectionInputStream =
+            new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
+                Collections.singletonList(transformer), metricRegistry, true);
+        messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
+        if (validMessageDetectionInputStream.hasInvalidMessages() || messageInfoList.size() == 0) {
+          logger.error("ReplicateBlobRequest out of {} messages, {} invalid messages were found in message stream from {} {} {}",
+              messageInfoList.size(), messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size(),
+              remoteHostName, remoteHostPort, blobId);
+          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+              ServerErrorCode.Blob_Not_Found);
+        } else {
+          MessageFormatWriteSet writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
+          Store store = storeManager.getStore(blobId.getPartition());
+          store.put(writeset);
+
+          // As ReplicateThread, we do applyTtlUpdate and also applyDelete.
+          // Suppose we should have one messageInfo and it is for this Blob ID.
+          if (messageInfoList.size() != 1 || !messageInfoList.get(0).getStoreKey().equals(blobId)) {
+            throw new StoreException("ReplicateBlobRequest getBlob returned unexpected message list size="
+                + messageInfoList.size() + " key=" + messageInfoList.get(0).getStoreKey() + " request=" + replicateBlobRequest,
+                StoreErrorCodes.Unknown_Error);
+          }
+          MessageInfo messageInfo = messageInfoList.get(0);
+          if (messageInfo.isTtlUpdated()) {
+            applyTtlUpdate(messageInfo, replicateBlobRequest);
+          }
+          if (messageInfo.isDeleted()) {
+            applyDelete(messageInfo, replicateBlobRequest);
+          }
+          logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName, remoteHostPort);
+          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+              ServerErrorCode.No_Error);
+        }
+      } catch (StoreException e) {
+        if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+          logger.info("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
+          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+              ServerErrorCode.No_Error);
+        } else {
+          logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
+          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+              ServerErrorCode.Unknown_Error);
+        }
+      }
+    } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Deleted) {
+      // Since GetOption is Include_All, even it's deleted on the remote replica, we'll still get the PutBlob.
+      // One exception is that because of compaction or other reasons, the PutRecord is gone.
+      logger.error("ReplicateBlobRequest Blob {} of {} is delete from the source replica", blobId, replicateBlobRequest);
+      response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+          ServerErrorCode.Blob_Not_Found);
+    } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Authorization_Failure) {
+      logger.error("ReplicateBlobRequest authorization failure for replicateBlobRequest {}", replicateBlobRequest);
+      response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+          ServerErrorCode.Blob_Authorization_Failure);
+    } else {
+      logger.error("ReplicateBlobRequest unknown failure {} for replicateBlobRequest {}",
+          partitionResponseInfo.getErrorCode(), replicateBlobRequest);
+      response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+    }
+
+    long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+    totalTimeSpent += processingTime;
+    publicAccessLogger.info("{} {} processingTime {}", replicateBlobRequest, response, processingTime);
+    metrics.replicateBlobProcessingTimeInMs.update(processingTime);
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs, metrics.replicateBlobSendTimeInMs,
+            metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  @Override
   public void handleUndeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
     UndeleteRequest undeleteRequest;
     if (request instanceof LocalChannelRequest) {
@@ -944,5 +1124,53 @@ public class AmbryRequests implements RequestAPI {
 
   protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
     return store.getSizeInBytes() - totalBytesRead;
+  }
+
+  /**
+   * Applies a TTL update to the blob described by {@code messageInfo}.
+   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+   * @param replicateBlobRequest the {@link ReplicateBlobRequest}
+   * @throws StoreException
+   */
+  private void applyTtlUpdate(MessageInfo messageInfo, ReplicateBlobRequest replicateBlobRequest) throws StoreException {
+    BlobId blobId = replicateBlobRequest.getBlobId();
+    Store store = storeManager.getStore(blobId.getPartition());
+    try {
+      messageInfo = new MessageInfo.Builder(messageInfo).isTtlUpdated(true).build();
+      store.updateTtl(Collections.singletonList(messageInfo));
+      logger.info("ReplicateBlobRequest applyTtlUpdate for {} of {} ", blobId, replicateBlobRequest);
+    } catch (StoreException e) {
+      // The blob may be deleted or updated which is alright
+      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted || e.getErrorCode() == StoreErrorCodes.Already_Updated) {
+        logger.info("ReplicateBlobRequest applyTtlUpdate for {}, Key already updated: {}", blobId, e.getErrorCode());
+      } else {
+        logger.error("ReplicateBlobRequest applyTtlUpdate for {} failed with {}", blobId, e.getErrorCode());
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Applies a DELETE update to the blob described by {@code messageInfo}.
+   * @param messageInfo the {@link MessageInfo} that will be transformed into a Delete update
+   * @param replicateBlobRequest the {@link ReplicateBlobRequest}
+   * @throws StoreException
+   */
+  private void applyDelete(MessageInfo messageInfo, ReplicateBlobRequest replicateBlobRequest) throws StoreException {
+    BlobId blobId = replicateBlobRequest.getBlobId();
+    Store store = storeManager.getStore(blobId.getPartition());
+    try {
+      messageInfo = new MessageInfo.Builder(messageInfo).isDeleted(true).isUndeleted(false).build();
+      store.delete(Collections.singletonList(messageInfo));
+      logger.info("ReplicateBlobRequest applyDelete for {} of {} ", blobId, replicateBlobRequest);
+    } catch (StoreException e) {
+      // The blob may be deleted or updated which is alright
+      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted || e.getErrorCode() == StoreErrorCodes.Life_Version_Conflict) {
+        logger.info("ReplicateBlobRequest applyDelete for {}, Key already updated: {}", blobId, e.getErrorCode());
+      } else {
+        logger.error("ReplicateBlobRequest applyDelete for {} failed with {}", blobId, e.getErrorCode());
+        throw e;
+      }
+    }
   }
 }

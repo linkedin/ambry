@@ -63,11 +63,13 @@ public class MockConnectionPool implements ConnectionPool {
   private final Map<DataNodeId, MockHost> hosts;
   private final ClusterMap clusterMap;
   private final int maxEntriesToReturn;
+  private Map<DataNodeId, MockConnection> connections;
 
   public MockConnectionPool(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int maxEntriesToReturn) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.maxEntriesToReturn = maxEntriesToReturn;
+    this.connections = new HashMap<DataNodeId, MockConnection>();
   }
 
   @Override
@@ -82,7 +84,10 @@ public class MockConnectionPool implements ConnectionPool {
   public ConnectedChannel checkOutConnection(String host, Port port, long timeout) {
     DataNodeId dataNodeId = clusterMap.getDataNodeId(host, port.getPort());
     MockHost hostObj = hosts.get(dataNodeId);
-    return new MockConnection(hostObj, maxEntriesToReturn);
+    if (!connections.containsKey(dataNodeId)) {
+      connections.put(dataNodeId, new MockConnection(hostObj, maxEntriesToReturn));
+    }
+    return connections.get(dataNodeId);
   }
 
   @Override

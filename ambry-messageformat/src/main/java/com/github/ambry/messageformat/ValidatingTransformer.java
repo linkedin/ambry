@@ -88,8 +88,10 @@ public class ValidatingTransformer implements Transformer {
             new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata,
                 new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType(),
                 msgInfo.getLifeVersion());
+        // Keep the isDeleted same as msgInfo.isDeleted().
+        // For normal replication, the isDeleted message will be filtered out any way.
+        // For on-demand blob replication, we keep the isDeleted flag so we can apply delete message to the Blob.
         MessageInfo transformedMsgInfo = new MessageInfo.Builder(msgInfo).size(transformedStream.getSize())
-            .isDeleted(false)
             .isUndeleted(false)
             .build();
         transformationOutput = new TransformationOutput(new Message(transformedMsgInfo, transformedStream));
