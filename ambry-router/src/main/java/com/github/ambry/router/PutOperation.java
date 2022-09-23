@@ -1184,21 +1184,11 @@ class PutOperation {
     private void prepareForSending() {
       try {
         // Determine data type to set
-        BlobDataType blobDataType = null;
-        if (isMetadataChunk()) {
-          blobDataType = BlobDataType.METADATA;
-        } else if (chunkIndex == 0) {
-          // TODO: need more data to distinguish between Simple and Data Chunk
-          blobDataType = BlobDataType.DATACHUNK;
-        } else {
-          blobDataType = BlobDataType.DATACHUNK;
-        }
+        BlobDataType blobDataType = isMetadataChunk() ? BlobDataType.METADATA : BlobDataType.DATACHUNK;
 
-        // if this is part of a retry, make sure no previously attempted partitions are retried.
-        if (partitionId != null) {
-          attemptedPartitionIds.add(partitionId);
-        }
         partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
+        // To ensure previously attempted partitions are not retried for this PUT after a failure.
+        attemptedPartitionIds.add(partitionId);
 
         chunkBlobId =
             new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
