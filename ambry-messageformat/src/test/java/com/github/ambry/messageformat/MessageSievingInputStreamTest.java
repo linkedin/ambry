@@ -63,8 +63,17 @@ public class MessageSievingInputStreamTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{EnumSet.noneOf(TransformerOptions.class)}, {EnumSet.of(TransformerOptions.Validate)},
-            {EnumSet.of(TransformerOptions.KeyConvert)}, {EnumSet.allOf(TransformerOptions.class)}});
+        new Object[][]{
+            {EnumSet.noneOf(TransformerOptions.class), false},
+            {EnumSet.of(TransformerOptions.Validate), false},
+            {EnumSet.of(TransformerOptions.KeyConvert), false},
+            {EnumSet.allOf(TransformerOptions.class), false},
+            {EnumSet.noneOf(TransformerOptions.class), true},
+            {EnumSet.of(TransformerOptions.Validate), true},
+            {EnumSet.of(TransformerOptions.KeyConvert), true},
+            {EnumSet.allOf(TransformerOptions.class), true}
+        }
+    );
   }
 
   private static short messageFormatHeaderVersionSaved;
@@ -73,6 +82,7 @@ public class MessageSievingInputStreamTest {
   private final StoreKeyFactory storeKeyFactory;
   private final RandomKeyConverter randomKeyConverter;
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private final boolean keepDeletedExpired;
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
@@ -94,7 +104,7 @@ public class MessageSievingInputStreamTest {
     nettyByteBufLeakHelper.afterTest();
   }
 
-  public MessageSievingInputStreamTest(EnumSet<TransformerOptions> options) throws Exception {
+  public MessageSievingInputStreamTest(EnumSet<TransformerOptions> options, boolean keepDeletedExpired) throws Exception {
     this.options = options;
     this.storeKeyFactory = new MockIdFactory();
     this.randomKeyConverter = new RandomKeyConverter();
@@ -104,6 +114,7 @@ public class MessageSievingInputStreamTest {
     if (options.contains(TransformerOptions.KeyConvert)) {
       transformers.add(new ValidatingKeyConvertingTransformer(storeKeyFactory, randomKeyConverter));
     }
+    this.keepDeletedExpired = keepDeletedExpired;
   }
 
   /**
@@ -112,7 +123,7 @@ public class MessageSievingInputStreamTest {
   @Test
   public void testEmptyMsgInfoList() throws Exception {
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(null, Collections.emptyList(), Collections.emptyList(), new MetricRegistry());
+        new MessageSievingInputStream(null, Collections.emptyList(), Collections.emptyList(), new MetricRegistry(), keepDeletedExpired);
     Assert.assertFalse(sievedStream.hasInvalidMessages());
     Assert.assertEquals(0, sievedStream.getSize());
     Assert.assertEquals(0, sievedStream.getValidMessageInfoList().size());
@@ -316,7 +327,7 @@ public class MessageSievingInputStreamTest {
     }
 
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry(), keepDeletedExpired);
 
     Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3));
     Map<StoreKey, StoreKey> convertedMapExtra = randomKeyConverter.convert(Arrays.asList(key4, key5));
@@ -410,11 +421,12 @@ public class MessageSievingInputStreamTest {
       throws Exception {
     MessageFormatRecord.headerVersionToUse = headerVersionToUse;
 
-    // MessageSievingInputStream contains put records for 2 valid blobs, 1 corrupt blob, 1 deleted blob and 1 expired.
+    // MessageSievingInputStream contains put records for 2 valid blobs, 2 corrupt blob, 1 deleted blob and 1 expired.
     // id1(put record for valid blob), id2(corrupt), id3(put record of deleted blob), id4(put record of expired blob)
-    // and id3(put record for valid blob)
+    // and id5(put record for valid blob), id6(corrupted)
+    int validMessages = keepDeletedExpired ? 4 : 2;
 
-    // create message stream for blob 1
+    // create message stream for blob 1(put record for valid blob)
     StoreKey key1 = new MockId("id1");
     short accountId1 = Utils.getRandomShort(RANDOM);
     short containerId1 = Utils.getRandomShort(RANDOM);
@@ -446,7 +458,7 @@ public class MessageSievingInputStreamTest {
     MessageInfo msgInfo1 =
         new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs());
 
-    // create message stream for blob 2
+    // create message stream for blob 2(corrupt)
     StoreKey key2 = new MockId("id2");
     short accountId2 = Utils.getRandomShort(RANDOM);
     short containerId2 = Utils.getRandomShort(RANDOM);
@@ -537,7 +549,7 @@ public class MessageSievingInputStreamTest {
     MessageInfo msgInfo4 =
         new MessageInfo(key4, messageFormatStream4.getSize(), 1, accountId4, containerId4, prop4.getCreationTimeInMs());
 
-    // create message stream for blob 5
+    // create message stream for blob 5(put record for valid blob)
     StoreKey key5 = new MockId("id5");
     short accountId5 = Utils.getRandomShort(RANDOM);
     short containerId5 = Utils.getRandomShort(RANDOM);
@@ -565,7 +577,7 @@ public class MessageSievingInputStreamTest {
     MessageInfo msgInfo5 =
         new MessageInfo(key5, messageFormatStream5.getSize(), accountId5, containerId5, prop5.getCreationTimeInMs());
 
-    // create message stream for blob 6
+    // create message stream for blob 6(corrupted)
     StoreKey key6 = new MockId("id6");
     short accountId6 = Utils.getRandomShort(RANDOM);
     short containerId6 = Utils.getRandomShort(RANDOM);
@@ -634,7 +646,7 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo6);
 
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry(), keepDeletedExpired);
 
     Map<StoreKey, StoreKey> convertedMap =
         randomKeyConverter.convert(Arrays.asList(key1, key2, key3, key4, key5, key6));
@@ -643,13 +655,19 @@ public class MessageSievingInputStreamTest {
     int blobPropertiesRecordSize = BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
     int userMetadataSize = UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata1));
 
-    int totalHeadSize = 2 * headerSize;
-    int totalBlobPropertiesSize = 2 * blobPropertiesRecordSize;
-    int totalUserMetadataSize = 2 * userMetadataSize;
-    int totalBlobSize = 2 * (int) blobSize;
+    int totalHeadSize = validMessages * headerSize;
+    int totalBlobPropertiesSize = validMessages * blobPropertiesRecordSize;
+    int totalUserMetadataSize = validMessages * userMetadataSize;
+    int totalBlobSize = validMessages * (int) blobSize;
     int totalKeySize =
         options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1).sizeInBytes() + convertedMap.get(key5)
             .sizeInBytes() : key1.sizeInBytes() + key5.sizeInBytes();
+    if (keepDeletedExpired) {
+      totalKeySize +=
+          options.contains(TransformerOptions.KeyConvert) ?
+              convertedMap.get(key3).sizeInBytes() + convertedMap.get(key4).sizeInBytes()
+              : key3.sizeInBytes() + key4.sizeInBytes();
+    }
     int totalEncryptionRecordSize = blobVersion > Blob_Version_V1 ?
         BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey1))
             + BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey5)) : 0;
@@ -667,21 +685,44 @@ public class MessageSievingInputStreamTest {
           containerId1, blobVersion > Blob_Version_V1 ? encryptionKey1 : null, usermetadata1, data1, blobVersion,
           blobType);
 
+      if (keepDeletedExpired) {
+        verifySievedTransformedMessage(sievedStream,
+            options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key3) : key3, "servid3", accountId3,
+            containerId3, null, usermetadata3, data3, blobVersion,
+            blobType);
+        verifySievedTransformedMessage(sievedStream,
+            options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key4) : key4, "servid4", accountId4,
+            containerId4, null, usermetadata4, data4, blobVersion,
+            blobType);
+      }
+
       verifySievedTransformedMessage(sievedStream,
           options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key5) : key5, "servid5", accountId5,
           containerId5, blobVersion > Blob_Version_V1 ? encryptionKey5 : null, usermetadata5, data5, blobVersion,
           blobType);
     } else {
       // even if there are no transformers, deleted and expired messages should be dropped by the MessageSievingInputStream.
-      byte[] expectedBytes = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
-          + (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize()];
-      System.arraycopy(totalMessageStreamContent, 0, expectedBytes, 0,
-          (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize());
-      System.arraycopy(totalMessageStreamContent,
-          totalMessageStreamContent.length - (int) messageFormatStream5.getSize()
-              - (int) messageFormatStream6.getSize(), expectedBytes,
-          (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
-          (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize());
+      byte[] expectedBytes;
+      if (!keepDeletedExpired) {
+        expectedBytes = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+            + (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize()];
+        System.arraycopy(totalMessageStreamContent, 0, expectedBytes, 0,
+            (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize());
+        System.arraycopy(totalMessageStreamContent,
+            totalMessageStreamContent.length - (int) messageFormatStream5.getSize()
+                - (int) messageFormatStream6.getSize(), expectedBytes,
+            (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
+            (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize());
+      } else {
+        expectedBytes = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
+            + (int) messageFormatStream3.getSize() + (int) messageFormatStream4.getSize()
+            + (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize()];
+        System.arraycopy(totalMessageStreamContent, 0, expectedBytes, 0,
+            (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize() +
+                   (int) messageFormatStream3.getSize() + (int) messageFormatStream4.getSize() +
+                   (int) messageFormatStream5.getSize() + (int) messageFormatStream6.getSize());
+      }
+
       Assert.assertEquals(expectedBytes.length, sievedStream.getSize());
       byte[] sievedBytes = Utils.readBytesFromStream(sievedStream, sievedStream.getSize());
       Assert.assertArrayEquals(expectedBytes, sievedBytes);
@@ -797,7 +838,7 @@ public class MessageSievingInputStreamTest {
         msgInfoList.add(msgInfo2);
         msgInfoList.add(msgInfo3);
 
-        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry(), keepDeletedExpired);
         if (!options.isEmpty()) {
           Assert.fail("IOException should have been thrown due to delete record ");
         }
@@ -939,7 +980,7 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo3);
 
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry(), keepDeletedExpired);
 
     Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3));
 

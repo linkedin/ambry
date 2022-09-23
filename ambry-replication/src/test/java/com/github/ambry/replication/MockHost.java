@@ -46,7 +46,7 @@ public class MockHost {
   final Map<PartitionId, List<MessageInfo>> infosByPartition = new HashMap<>();
   final Map<PartitionId, List<ByteBuffer>> buffersByPartition = new HashMap<>();
 
-  MockHost(DataNodeId dataNodeId, ClusterMap clusterMap) {
+  public MockHost(DataNodeId dataNodeId, ClusterMap clusterMap) {
     this.dataNodeId = dataNodeId;
     this.clusterMap = clusterMap;
   }

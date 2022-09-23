@@ -67,6 +67,11 @@ public class VcrRequests extends AmbryRequests {
   }
 
   @Override
+  public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
+    throw new UnsupportedOperationException("Request type not supported");
+  }
+
+  @Override
   protected ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
       boolean skipPartitionAvailableCheck) {
     // 1. Check partition is null
