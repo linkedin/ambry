@@ -66,6 +66,7 @@ public class OperationController implements Runnable {
   final DeleteManager deleteManager;
   final TtlUpdateManager ttlUpdateManager;
   final UndeleteManager undeleteManager;
+  final ReplicateBlobManager replicateBlobManager;
   private final NetworkClient networkClient;
   private final ResponseHandler responseHandler;
   private final RouterConfig routerConfig;
@@ -146,6 +147,9 @@ public class OperationController implements Runnable {
             routerCallback, time);
     ttlUpdateManager =
         new TtlUpdateManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
+            routerMetrics, time);
+    replicateBlobManager =
+        new ReplicateBlobManager(clusterMap, responseHandler, accountService, notificationSystem, routerConfig,
             routerMetrics, time);
     undeleteManager = new UndeleteManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
         routerMetrics, time);
@@ -294,6 +298,29 @@ public class OperationController implements Runnable {
   }
 
   /**
+   * Requests for a blob to be replicated asynchronously and invokes the {@link Callback} when the request
+   * completes.
+   * @param blobId ID of the blob that needs to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} where to get the Blob.
+   * @param futureResult A future that would contain the BlobId eventually.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
+   */
+  protected void replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, FutureResult<Void> futureResult,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+    try {
+      replicateBlobManager.submitReplicateBlobOperation(blobId, serviceId, sourceDataNode, futureResult, callback,
+          quotaChargeCallback);
+      routerCallback.onPollReady();
+    } catch (RouterException e) {
+      routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.onReplicateBlobError(e);
+      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
+    }
+  }
+
+  /**
    * A helper method to perform ttl update and undelete operation on a composite blob.
    * @param blobIdStr The ID of the blob that needs the ttl update in string form
    *                    permanent
@@ -433,6 +460,7 @@ public class OperationController implements Runnable {
     deleteManager.close();
     ttlUpdateManager.close();
     undeleteManager.close();
+    replicateBlobManager.close();
   }
 
   /**
@@ -450,6 +478,7 @@ public class OperationController implements Runnable {
       deleteManager.poll(requestsToSend, requestsToDrop);
       ttlUpdateManager.poll(requestsToSend, requestsToDrop);
       undeleteManager.poll(requestsToSend, requestsToDrop);
+      replicateBlobManager.poll(requestsToSend, requestsToDrop);
     } catch (Exception e) {
       logger.error("Operation Manager poll received an unexpected error: ", e);
       routerMetrics.operationManagerPollErrorCount.inc();
@@ -495,6 +524,9 @@ public class OperationController implements Runnable {
               break;
             case UndeleteRequest:
               undeleteManager.handleResponse(responseInfo);
+              break;
+            case ReplicateBlobRequest:
+              replicateBlobManager.handleResponse(responseInfo);
               break;
             default:
               logger.error("Unexpected response type: {} received, discarding", type);

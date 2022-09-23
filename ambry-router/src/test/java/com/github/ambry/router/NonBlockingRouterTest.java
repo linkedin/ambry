@@ -18,10 +18,12 @@ import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
@@ -44,6 +46,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1161,6 +1164,97 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.updateBlobTtl(blobIdCheck, null, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertTtl(router, Collections.singleton(blobIdCheck), Utils.Infinite_Time);
       });
+    } finally {
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * Test for ReplicateBlob success case
+   * @throws Exception
+   */
+  @Test
+  public void testReplicateBlobSuccess() throws Exception {
+    try {
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      String serviceId = "replicate-blob-service";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      // PutBlob to the three local replicas
+      String blobIdStr =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      GetBlobResult localGetBlobResult = router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
+      ReadableStreamChannel localStreamChannel = localGetBlobResult.getBlobDataChannel();
+
+      // set error status for all the local replica
+      // read from the remote replica, it should fail
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+      try {
+        router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
+        Assert.fail("Should return Ambry unavailable.");
+      } catch (ExecutionException e) {
+        Throwable t = e.getCause();
+        assertTrue("Cause should be RouterException", t instanceof RouterException);
+        assertEquals("ErrorCode mismatch", RouterErrorCode.AmbryUnavailable, ((RouterException) t).getErrorCode());
+      }
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+
+      // ReplicateBlob from the local replica to some remote replicas.
+      BlobId blobId = new BlobId(blobIdStr, mockClusterMap);
+      PartitionId partitionId = blobId.getPartition();
+      DataNodeId sourceDataNode = null;
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        if (replicaId.getDataNodeId().getDatacenterName().equals(localDcName)) {
+          if (sourceDataNode == null) {
+            sourceDataNode = replicaId.getDataNodeId();
+            break;
+          }
+        }
+      }
+      // only one local replica is available.
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          if (server.getHostName().equals(sourceDataNode.getHostname()) && (server.getHttp2Port() == sourceDataNode.getPort())) {
+            // this is the sourceDataNode. Leave it available.
+          } else {
+            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          }
+        }
+      }
+      // since there is only one local available, it'll replicate to at least 1 remote replica.
+      router.replicateBlob(blobIdStr, serviceId, sourceDataNode).get();
+
+      // set unavailable to all local replicas. So router.getBlob will get the Blob from remote replicas.
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        } else {
+          server.setServerErrorForAllRequests(null);
+        }
+      }
+      GetBlobResult remoteGetBlobResult =  router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
+
+      // compare the Blob got from local replica and remote replica including blob properties, user metadata and blob content.
+      ReadableStreamChannel remoteSteamChannel = remoteGetBlobResult.getBlobDataChannel();
+      Assert.assertEquals(localGetBlobResult.getBlobInfo().getBlobProperties(), remoteGetBlobResult.getBlobInfo().getBlobProperties());
+      Assert.assertTrue(Arrays.equals(localGetBlobResult.getBlobInfo().getUserMetadata(), remoteGetBlobResult.getBlobInfo().getUserMetadata()));
+      long size = localGetBlobResult.getBlobInfo().getBlobProperties().getBlobSize();
+      InputStream localInput = new ReadableStreamChannelInputStream(localStreamChannel);
+      InputStream remoteInput = new ReadableStreamChannelInputStream(remoteSteamChannel);
+      byte[] localBlobContent = Utils.readBytesFromStream(localInput, (int)size);
+      byte[] remoteBlobContent = Utils.readBytesFromStream(remoteInput, (int)size);
+      Assert.assertTrue(Arrays.equals(localBlobContent, remoteBlobContent));
+
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
     } finally {
       if (router != null) {
         router.close();

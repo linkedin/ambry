@@ -15,6 +15,7 @@ package com.github.ambry.tools.perf.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -208,6 +209,21 @@ class PerfRouter implements Router {
       completeOperation(futureResult, callback, null, null);
     }
     return futureResult;
+  }
+
+  /**
+   * Requests for a new blob to be replicated on-demand asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service id that is replicating the blob.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  @Override
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    throw new UnsupportedOperationException("replicateBlob is not supported by this mock");
   }
 
   @Override

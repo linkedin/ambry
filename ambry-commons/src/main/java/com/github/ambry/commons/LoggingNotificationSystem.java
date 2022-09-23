@@ -69,7 +69,14 @@ public class LoggingNotificationSystem implements NotificationSystem {
         ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
             account == null ? null : account.getId()) + ", containerName " + (container == null ? null
             : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
+  }
 
+  @Override
+  public void onBlobReplicated(String blobId, String serviceId, Account account, Container container) {
+    logger.debug("onBlobReplicated {}", blobId,
+        ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
+            account == null ? null : account.getId()) + ", containerName " + (container == null ? null
+            : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
   }
 
   @Override

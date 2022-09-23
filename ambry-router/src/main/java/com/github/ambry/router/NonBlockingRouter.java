@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -316,6 +317,38 @@ class NonBlockingRouter implements Router {
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), false);
+      completeOperation(futureResult, callback, null, routerException);
+    }
+    return futureResult;
+  }
+
+  /**
+   * Requests for a new blob to be replicated on-demand asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  @Override
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    if (blobId == null || sourceDataNode == null) {
+      throw new IllegalArgumentException("blobId or sourceHost must not be null");
+    }
+
+    currentOperationsCount.incrementAndGet();
+    routerMetrics.replicateBlobOperationRate.mark(); // ON_DEMAND_REPLICATION_TODO: check all the metrics related code and add senseor.
+    routerMetrics.operationQueuingRate.mark();
+
+    FutureResult<Void> futureResult = new FutureResult<>();
+    if (isOpen.get()) {
+      getOperationController().replicateBlob(blobId, serviceId, sourceDataNode, futureResult, callback, quotaChargeCallback);
+    } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+      routerMetrics.operationDequeuingRate.mark();
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
