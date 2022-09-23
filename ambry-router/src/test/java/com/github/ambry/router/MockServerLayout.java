@@ -38,7 +38,8 @@ class MockServerLayout {
     this.mockServers = new HashMap<DataNodeId, MockServer>();
     this.clustermap = clusterMap;
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
-      mockServers.put(dataNodeId, new MockServer(clusterMap, dataNodeId.getDatacenterName()));
+      mockServers.put(dataNodeId, new MockServer(clusterMap, dataNodeId.getDatacenterName(),
+          dataNodeId.getHostname(), dataNodeId.getHttp2Port(), this));
     }
   }
 
@@ -48,7 +49,8 @@ class MockServerLayout {
    * @param clusterMap the {@link ClusterMap} used to associate a host and port with a MockServer.
    */
   public void addMockServers(List<? extends DataNodeId> newNodes, ClusterMap clusterMap) {
-    newNodes.forEach(node -> mockServers.putIfAbsent(node, new MockServer(clusterMap, node.getDatacenterName())));
+    newNodes.forEach(node -> mockServers.putIfAbsent(node, new MockServer(clusterMap, node.getDatacenterName(),
+        node.getHostname(), node.getHttp2Port(), this)));
   }
 
   /**

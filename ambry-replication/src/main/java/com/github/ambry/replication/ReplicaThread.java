@@ -1135,9 +1135,10 @@ public class ReplicaThread implements Runnable {
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
               MessageFormatWriteSet writeset;
+              // set keepDeletedExpired to false. MessageSievingInputStream will filter out deleted and expired messages.
               MessageSievingInputStream validMessageDetectionInputStream =
                   new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
-                      Collections.singletonList(transformer), metricRegistry);
+                      Collections.singletonList(transformer), metricRegistry, false);
               if (validMessageDetectionInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 logger.error("Out of {} messages, {} invalid messages were found in message stream from {}",

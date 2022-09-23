@@ -31,5 +31,7 @@ public enum RequestOrResponseType {
   AdminRequest,
   AdminResponse,
   UndeleteRequest,
-  UndeleteResponse
+  UndeleteResponse,
+  ReplicateBlobRequest,
+  ReplicateBlobResponse,
 }

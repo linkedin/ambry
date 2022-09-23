@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -282,6 +283,12 @@ public class InMemoryRouter implements Router {
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
+  }
+
+  @Override
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode,
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+    throw new UnsupportedOperationException("replicateBlob is not supported by this mock");
   }
 
   @Override

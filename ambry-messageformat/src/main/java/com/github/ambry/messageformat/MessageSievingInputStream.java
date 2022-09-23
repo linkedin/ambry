@@ -58,11 +58,14 @@ public class MessageSievingInputStream extends InputStream {
    * @param inStream The stream from which bytes need to be read. If the underlying stream is SocketInputStream, it needs
    *               to be blocking
    * @param messageInfoList List of MessageInfo which contains details about the messages in the stream
+   * @param transformers the list of the {@link Transformer} to use (in order).
    * @param metricRegistry Metric register to register metrics
+   * @param keepDeletedExpired if true, will keep the deleted or expired message.
+   *                           if false, will filter out the deleted or expired message.
    * @throws java.io.IOException
    */
   public MessageSievingInputStream(InputStream inStream, List<MessageInfo> messageInfoList,
-      List<Transformer> transformers, MetricRegistry metricRegistry) throws IOException {
+      List<Transformer> transformers, MetricRegistry metricRegistry, boolean keepDeletedExpired) throws IOException {
     this.transformers = transformers;
     singleMessageSieveTime =
         metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "SingleMessageSieveTime"));
@@ -100,11 +103,11 @@ public class MessageSievingInputStream extends InputStream {
       int msgSize = (int) msgInfo.getSize();
       // @todo: We can use a BoundedInputStream for each message and then empty it out in case all of it was not read
       // @todo: (say, due to corruption). This can help avoid a copy.
-      if (msgInfo.isDeleted()) {
+      if (!keepDeletedExpired && msgInfo.isDeleted()) {
         messageSievingDeletedMessagesDiscardedCount.inc();
         logger.trace("Skipping message with key {}, because it is deleted.", msgInfo.getStoreKey());
         Utils.readBytesFromStream(inStream, msgSize);
-      } else if (msgInfo.isExpired()) {
+      } else if (!keepDeletedExpired && msgInfo.isExpired()) {
         messageSievingExpiredMessagesDiscardedCount.inc();
         logger.trace("Skipping message with key {}, because it has expired.", msgInfo.getStoreKey());
         Utils.readBytesFromStream(inStream, msgSize);

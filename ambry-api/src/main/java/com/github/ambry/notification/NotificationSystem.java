@@ -68,6 +68,16 @@ public interface NotificationSystem extends Closeable {
   }
 
   /**
+   * Notifies the underlying system when the blob is replicated on-demand.
+   * @param blobId The id of the blob that was replicated to the local store.
+   * @param serviceId The service ID of the service undeleting the blob. This can be null if unknown.
+   * @param account The {@link Account} for the blob
+   * @param container The {@link Container} for the blob
+   */
+  default void onBlobReplicated(String blobId, String serviceId, Account account, Container container) {
+  }
+
+  /**
    * Notifies the underlying system when a blob is replicated to a node
    * @param sourceHost The source host from where the notification is being invoked
    * @param port The port of the source host from where the notification is being invoked.
