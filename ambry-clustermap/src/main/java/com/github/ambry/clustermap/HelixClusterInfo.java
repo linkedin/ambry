@@ -14,6 +14,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import java.util.List;
 import org.apache.helix.HelixManager;
 
@@ -25,11 +26,12 @@ public class HelixClusterInfo extends ClusterInfo {
 
   /**
    * Construct a DcInfo object with the given parameters.
-   * @param helixManager
-   * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
-   * @param dataNodeConfigSources
+   * @param helixManager the associated {@link HelixManager} for this cluster.
+   * @param clusterChangeHandler the associated {@link HelixClusterChangeHandler}
+   *                            for this datacenter.
+   * @param dataNodeConfigSources the list of {@link DataNodeConfigSource}s for data centers in this cluster.
    */
-  HelixClusterInfo(HelixManager helixManager, ClusterChangeHandler clusterChangeHandler,
+  HelixClusterInfo(HelixManager helixManager, HelixClusterChangeHandler clusterChangeHandler,
       List<DataNodeConfigSource> dataNodeConfigSources) {
     super(clusterChangeHandler);
     this.helixManager = helixManager;

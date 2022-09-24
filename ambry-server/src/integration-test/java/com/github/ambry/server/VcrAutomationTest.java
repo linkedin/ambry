@@ -119,7 +119,6 @@ public class VcrAutomationTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.state.model.definition", mainClusterStateModelDef);
     props.setProperty("clustermap.data.node.config.source.type", dataNodeConfigSourceType.name());
-    props.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     props.setProperty("vcr.helix.updater.partition.id", "1");
     props.setProperty("vcr.helix.update.delay.time.in.seconds", "1");
 

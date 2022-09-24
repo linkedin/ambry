@@ -793,17 +793,17 @@ public class ReplicationMetrics {
 
   /**
    * Get tha average replication lag of remote replicas in given datacenter
-   * @param dcName the name of dc where remote replicas sit
+   * @param dcOrClusterName the name of dc where remote replicas sit
    * @return the average replication lag
    */
-  double getAvgLagFromDc(String dcName) {
-    Set<RemoteReplicaInfo> replicaInfos = remoteReplicaInfosByDc.get(dcName);
+  double getAvgLagFromDc(String dcOrClusterName) {
+    Set<RemoteReplicaInfo> replicaInfos = remoteReplicaInfosByDc.get(dcOrClusterName);
     if (replicaInfos == null || replicaInfos.isEmpty()) {
       return -1.0;
     }
     LongSummaryStatistics longSummaryStatistics =
         replicaInfos.stream().collect(Collectors.summarizingLong(RemoteReplicaInfo::getRemoteLagFromLocalInBytes));
-    dcToReplicaLagStats.put(dcName, longSummaryStatistics);
+    dcToReplicaLagStats.put(dcOrClusterName, longSummaryStatistics);
     return longSummaryStatistics.getAverage();
   }
 

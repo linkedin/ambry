@@ -15,17 +15,14 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicLong;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.PropertyType;
@@ -44,19 +41,10 @@ class ClusterInitializer {
   private final CompletableFuture<ClusterInfo> initializationFuture = new CompletableFuture<>();
   private final ClusterMapConfig clusterMapConfig;
   private final HelixFactory helixFactory;
-
-  // Fields to pass into both ClusterChangeHandlers
   private final String selfInstanceName;
-  private final Map<String, Map<String, String>> partitionOverrideInfoMap;
-  private final HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback;
   private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
-  private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics;
-  private final AtomicLong sealedStateChangeCounter;
-  // Fields to pass into only SimpleClusterChangeHandler (These can be removed if SimpleClusterChangeHandler is removed)
-  private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap;
-  private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition;
-  private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas;
+  private final HelixClusterManager helixClusterManager;
   private final Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
 
   /**
@@ -64,37 +52,21 @@ class ClusterInitializer {
    * @param dataCenterToZkAddress map of data center to ZK information.
    * @param helixFactory the {@link HelixFactory} instance to construct managers.
    * @param selfInstanceName the name of instance on which {@link HelixClusterManager} resides.
-   * @param partitionOverrideInfoMap a map specifying partitions whose state should be overridden.
-   * @param clusterChangeHandlerCallback a call back that allows current handler to update cluster-wide info.
    * @param helixClusterManagerCallback a help class to get cluster state from all DCs.
-   * @param helixClusterManagerMetrics metrics that help track of cluster changes and infos.
    * @param dataNodeConfigSourceMetrics metrics related to {@link DataNodeConfigSource}.
-   * @param sealedStateChangeCounter a counter that records event when replica is sealed or unsealed
-   * @param partitionMap a map from serialized bytes to corresponding partition.
-   * @param partitionNameToAmbryPartition a map from partition name to {@link AmbryPartition} object.
-   * @param ambryPartitionToAmbryReplicas a map from {@link AmbryPartition} to its replicas.
+   * @param helixClusterManager reference to {@link HelixClusterManager} that creates this class.
    */
   ClusterInitializer(ClusterMapConfig clusterMapConfig, Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress,
-      HelixFactory helixFactory, String selfInstanceName, Map<String, Map<String, String>> partitionOverrideInfoMap,
-      HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback,
+      HelixFactory helixFactory, String selfInstanceName,
       HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
-      HelixClusterManagerMetrics helixClusterManagerMetrics, DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics,
-      AtomicLong sealedStateChangeCounter, ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap,
-      ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition,
-      ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas) {
+      DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics, HelixClusterManager helixClusterManager) {
     this.clusterMapConfig = clusterMapConfig;
     this.dataCenterToZkAddress = dataCenterToZkAddress;
     this.helixFactory = helixFactory;
     this.selfInstanceName = selfInstanceName;
-    this.partitionOverrideInfoMap = partitionOverrideInfoMap;
-    this.clusterChangeHandlerCallback = clusterChangeHandlerCallback;
     this.helixClusterManagerCallback = helixClusterManagerCallback;
-    this.helixClusterManagerMetrics = helixClusterManagerMetrics;
     this.dataNodeConfigSourceMetrics = dataNodeConfigSourceMetrics;
-    this.sealedStateChangeCounter = sealedStateChangeCounter;
-    this.partitionMap = partitionMap;
-    this.partitionNameToAmbryPartition = partitionNameToAmbryPartition;
-    this.ambryPartitionToAmbryReplicas = ambryPartitionToAmbryReplicas;
+    this.helixClusterManager = helixClusterManager;
   }
 
   /**
@@ -114,7 +86,7 @@ class ClusterInitializer {
 
   /**
    * Wait for startup to either succeed or fail.
-   * @return the {@link DcInfo} for the datacenter (a handle to the stateful objects related to the datacenter).
+   * @return the {@link ClusterInfo} that contains the {@link HelixClusterChangeHandler}.
    * @throws Exception if startup of the datacenter fails.
    */
   ClusterInfo join() throws Exception {
@@ -139,8 +111,6 @@ class ClusterInitializer {
    * @throws Exception if something went wrong during startup
    */
   public HelixClusterInfo initializeHelixCluster() throws Exception {
-
-    // TODO: Check with helix team on below.
     // We can assume that Helix Aggregated view cluster will be present in local zookeeper hosting regular ambry cluster
     // information. Get the HelixManager to talk to the local zk service.
     ClusterMapUtils.DcZkInfo localDcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
@@ -151,25 +121,13 @@ class ClusterInitializer {
         helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapAggregatedViewClusterName, selfInstanceName,
             InstanceType.SPECTATOR, localZkConnectStr);
 
-    HelixClusterChangeHandler clusterChangeHandler;
-    String clusterChangeHandlerType = clusterMapConfig.clusterMapClusterChangeHandlerType;
-    if (clusterChangeHandlerType.equals(SimpleClusterChangeHandler.class.getSimpleName())) {
-      clusterChangeHandler =
-          new SimpleClusterChangeHandler(clusterMapConfig, clusterMapConfig.clusterMapClusterName, selfInstanceName, partitionOverrideInfoMap,
-              partitionMap, partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas, helixClusterManagerCallback,
-              helixClusterManagerMetrics, this::onInitializationFailure, sealedStateChangeCounter);
-    } else if (clusterChangeHandlerType.equals(DynamicClusterChangeHandler.class.getSimpleName())) {
-      clusterChangeHandler =
-          new DynamicClusterChangeHandler(clusterMapConfig, clusterMapConfig.clusterMapClusterName, selfInstanceName, partitionOverrideInfoMap,
-              helixClusterManagerCallback, clusterChangeHandlerCallback, helixClusterManagerMetrics,
-              this::onInitializationFailure, sealedStateChangeCounter);
-    } else {
-      throw new IllegalArgumentException("Unsupported cluster change handler type: " + clusterChangeHandlerType);
-    }
+    HelixClusterChangeHandler clusterChangeHandler =
+        helixClusterManager.new HelixClusterChangeHandler(clusterMapConfig.clusterMapClusterName, helixClusterManagerCallback,
+            this::onInitializationFailure, true);
 
     logger.info("Cluster name {}", aggregatedViewManager.getClusterName());
     logger.info("Clusters Info {}", aggregatedViewManager.getClusterManagmentTool().getClusters());
-    // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
+    // Create RoutingTableProvider of entire cluster to keep track of partition(replicas) state. Here, we use current
     // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
     logger.info("Creating routing table provider for entire cluster associated with Helix manager at {}",
         localZkConnectStr);
@@ -179,34 +137,40 @@ class ClusterInitializer {
     routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
     logger.info("Registered routing table change listeners for entire cluster");
 
-    // Since data node configs are stored in helix property store now and aggregation view is not supported for
-    // property store yet, we need to add listeners for data node config sources
+    // Helix property store Znodes (which contain node configs like disks, replicas hosted on each disk, etc) and ideal
+    // state Znodes are not aggregated. We need to listen to original helix source clusters for these details from both
+    // local and remote colos.
     List<DataNodeConfigSource> dataNodeConfigSources = new ArrayList<>();
     for (ClusterMapUtils.DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
       String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
+      // Register Data node configs listener.
       DataNodeConfigSource dataNodeConfigSource =
           helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr, dataNodeConfigSourceMetrics);
       dataNodeConfigSource.addDataNodeConfigChangeListener(clusterChangeHandler);
       dataNodeConfigSources.add(dataNodeConfigSource);
       logger.info("Registered data node config change listeners for data center {} via Helix manager at {}",
           dcZkInfo.getDcName(), zkConnectStr);
+      // Register ideal state listener.
+      HelixManager manager =
+          helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
+              InstanceType.SPECTATOR, zkConnectStr);
+      manager.addIdealStateChangeListener(clusterChangeHandler);
+      logger.info("Registered ideal state change listeners for data center {} via Helix manager at {}",
+          dcZkInfo.getDcName(), zkConnectStr);
     }
 
-    aggregatedViewManager.addIdealStateChangeListener(clusterChangeHandler);
-    logger.info("Registered ideal state change listeners for entire cluster via Helix manager at {}",
-        localZkConnectStr);
-    // Now register listeners to get notified on live instance change in every datacenter.
+    // Now register listeners to get notified on live instance change in entire cluster.
     aggregatedViewManager.addLiveInstanceChangeListener(clusterChangeHandler);
     logger.info("Registered live instance change listeners for entire cluster via Helix manager at {}",
         localZkConnectStr);
 
     // in case initial event occurs before adding routing table listener, here we explicitly set snapshot in
-    // ClusterChangeHandler. The reason is, if listener missed initial event, snapshot inside routing table
+    // HelixClusterManager. The reason is, if listener missed initial event, snapshot inside routing table
     // provider should be already populated.
     clusterChangeHandler.setRoutingTableSnapshot(routingTableProvider.getRoutingTableSnapshot());
     // the initial routing table change should populate the instanceConfigs. If it's empty that means initial
     // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
-    if (clusterChangeHandler.getRoutingTableSnapshot().getInstanceConfigs().isEmpty()) {
+    if (helixClusterManagerCallback.getRoutingTableSnapshot(null).getInstanceConfigs().isEmpty()) {
       // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
       // trigger routing table change within 5 minutes
       logger.info("Routing table snapshot for cluster is currently empty. Waiting for initial notification.");

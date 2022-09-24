@@ -15,6 +15,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import java.io.Closeable;
 
 
@@ -24,14 +25,15 @@ import java.io.Closeable;
 class ClusterInfo implements Closeable {
 
   // Handler that handles any resource state changes in the entire cluster
-  final ClusterChangeHandler clusterChangeHandler;
+  final HelixClusterChangeHandler clusterChangeHandler;
 
   /**
-   * Construct a DcInfo object with the given parameters.
-   * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
+   * Construct a ClusterInfo object with the given parameters.
+   * @param clusterChangeHandler the associated {@link HelixClusterChangeHandler}
+   *                            for this datacenter.
    *
    */
-  ClusterInfo(ClusterChangeHandler clusterChangeHandler) {
+  ClusterInfo(HelixClusterChangeHandler clusterChangeHandler) {
     this.clusterChangeHandler = clusterChangeHandler;
   }
 

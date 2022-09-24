@@ -142,7 +142,7 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
 
     @Override
     public void onDataDelete(String path) {
-      // TODO handle node deletions dynamically. Doing so requires further work in the ClusterChangeHandler impl
+      // TODO handle node deletions dynamically. Doing so requires further work in the HelixClusterChangeHandler impl
       LOGGER.info("DataNodeConfig path {} deleted. This requires a restart to handle", path);
     }
 
