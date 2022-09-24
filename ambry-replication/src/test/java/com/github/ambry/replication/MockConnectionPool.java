@@ -298,6 +298,7 @@ public class MockConnectionPool implements ConnectionPool {
       }
       buffer.flip();
       buffer.getLong();
+      response.release();
       return new ChannelOutput(new DataInputStream(new ByteBufferInputStream(buffer)), buffer.remaining());
     }
 
