@@ -20,11 +20,11 @@ import java.io.Closeable;
 
 
 /**
- * Class that stores all the information associated with a cluster.
+ * Class that stores the information associated with the entire cluster.
  */
 class ClusterInfo implements Closeable {
 
-  // Handler that handles any resource state changes in the entire cluster
+  // Handler that handles resource state changes in the entire cluster.
   final HelixClusterChangeHandler clusterChangeHandler;
 
   /**

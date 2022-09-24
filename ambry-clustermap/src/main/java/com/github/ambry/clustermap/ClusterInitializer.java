@@ -71,6 +71,8 @@ class ClusterInitializer {
 
   /**
    * Begin the startup procedure in a background thread.
+   * TODO: Since we would only have one ClusterInitializer (unlike multiple DataCenterInitializers), we could perform
+   *  the initialization in the calling thread itself.
    */
   public void start() {
     Utils.newThread(() -> {
@@ -111,22 +113,23 @@ class ClusterInitializer {
    * @throws Exception if something went wrong during startup
    */
   public HelixClusterInfo initializeHelixCluster() throws Exception {
-    // We can assume that Helix Aggregated view cluster will be present in local zookeeper hosting regular ambry cluster
+    // We can assume that Helix Aggregated view cluster will be present in same zookeeper hosting regular Ambry cluster
     // information. Get the HelixManager to talk to the local zk service.
     ClusterMapUtils.DcZkInfo localDcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
+
     // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default for initialization.
     // Note that, Ambry currently doesn't support multiple spectators, because there should be only one source of truth.
     String localZkConnectStr = localDcZkInfo.getZkConnectStrs().get(0);
     HelixManager aggregatedViewManager =
         helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapAggregatedViewClusterName, selfInstanceName,
             InstanceType.SPECTATOR, localZkConnectStr);
+    logger.info("Cluster name {}", aggregatedViewManager.getClusterName());
+    logger.info("Clusters Info {}", aggregatedViewManager.getClusterManagmentTool().getClusters());
 
     HelixClusterChangeHandler clusterChangeHandler =
         helixClusterManager.new HelixClusterChangeHandler(clusterMapConfig.clusterMapClusterName, helixClusterManagerCallback,
             this::onInitializationFailure, true);
 
-    logger.info("Cluster name {}", aggregatedViewManager.getClusterName());
-    logger.info("Clusters Info {}", aggregatedViewManager.getClusterManagmentTool().getClusters());
     // Create RoutingTableProvider of entire cluster to keep track of partition(replicas) state. Here, we use current
     // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
     logger.info("Creating routing table provider for entire cluster associated with Helix manager at {}",
@@ -159,16 +162,16 @@ class ClusterInitializer {
           dcZkInfo.getDcName(), zkConnectStr);
     }
 
-    // Now register listeners to get notified on live instance change in entire cluster.
+    // Register listeners to get notified on live instance change in entire cluster.
     aggregatedViewManager.addLiveInstanceChangeListener(clusterChangeHandler);
     logger.info("Registered live instance change listeners for entire cluster via Helix manager at {}",
         localZkConnectStr);
 
-    // in case initial event occurs before adding routing table listener, here we explicitly set snapshot in
+    // Since it is possible that initial event occurs before adding routing table listener, we explicitly set snapshot in
     // HelixClusterManager. The reason is, if listener missed initial event, snapshot inside routing table
     // provider should be already populated.
     clusterChangeHandler.setRoutingTableSnapshot(routingTableProvider.getRoutingTableSnapshot());
-    // the initial routing table change should populate the instanceConfigs. If it's empty that means initial
+    // The initial routing table change should populate the instanceConfigs. If it's empty that means initial
     // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
     if (helixClusterManagerCallback.getRoutingTableSnapshot(null).getInstanceConfigs().isEmpty()) {
       // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should

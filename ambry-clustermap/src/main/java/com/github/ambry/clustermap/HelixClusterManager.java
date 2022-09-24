@@ -100,7 +100,6 @@ public class HelixClusterManager implements ClusterMap {
   // reflects the current value.
   private final AtomicLong currentXid;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
-  Map<String, DcZkInfo> dataCenterToZkAddress = null;
   private ClusterInfo clusterInfo = null;
   private final AtomicLong errorCount = new AtomicLong(0);
 
@@ -122,6 +121,7 @@ public class HelixClusterManager implements ClusterMap {
     selfInstanceName = instanceName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
+    Map<String, DcZkInfo> dataCenterToZkAddress = null;
     HelixManager localManager = null;
     Map<String, Exception> initializationFailureMap = new HashMap<>();
     try {
@@ -192,7 +192,7 @@ public class HelixClusterManager implements ClusterMap {
       helixClusterManagerMetrics.initializePartitionMetrics();
       helixClusterManagerMetrics.initializeCapacityMetrics();
     }
-    localDatacenterId = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName).getDcId();
+    localDatacenterId = dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
         new PartitionSelectionHelper(helixClusterManagerCallback, clusterMapConfig.clusterMapDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
@@ -332,12 +332,12 @@ public class HelixClusterManager implements ClusterMap {
     snapshot.put(CLUSTER_NAME, clusterName);
     snapshot.put(TIMESTAMP_MS, SystemTime.getInstance().milliseconds());
     JSONArray datacentersJsonArray = new JSONArray();
-    dataCenterToZkAddress.forEach((dc, zkInfo) -> {
+    dcIdToDcName.forEach((dcId, dcName) -> {
       JSONObject data = new JSONObject();
-      data.put(DATACENTER_NAME, zkInfo.getDcName());
-      data.put(DATACENTER_ID, zkInfo.getDcId());
+      data.put(DATACENTER_NAME, dcName);
+      data.put(DATACENTER_ID, dcId);
       JSONArray datanodesInDc = new JSONArray();
-      dcToNodes.get(zkInfo.getDcName()).forEach(node -> datanodesInDc.put(node.getSnapshot()));
+      dcToNodes.get(dcName).forEach(node -> datanodesInDc.put(node.getSnapshot()));
       data.put(DATACENTER_NODES, datanodesInDc);
       datacentersJsonArray.put(data);
     });
@@ -543,7 +543,6 @@ public class HelixClusterManager implements ClusterMap {
   Map<String, RoutingTableSnapshot> getRoutingTableSnapshots() {
     Map<String, RoutingTableSnapshot> dcToRoutingTableSnapshot = new HashMap<>();
     if (clusterMapConfig.clusterMapUseAggregatedView) {
-      // TODO Fix tests
       dcToRoutingTableSnapshot.put(clusterMapConfig.clusterMapDatacenterName, globalRoutingTableSnapshotRef.get());
     } else {
       for (DcInfo dcInfo : dcToDcInfo.values()) {
@@ -1119,7 +1118,7 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * A callback class used to update and query cluster information from the {@link HelixClusterManager}
+   * A callback class used to query information from the {@link HelixClusterManager}
    */
   class HelixClusterManagerCallback
       implements ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
