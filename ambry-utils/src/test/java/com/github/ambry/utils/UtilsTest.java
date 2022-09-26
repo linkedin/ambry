@@ -720,7 +720,7 @@ public class UtilsTest {
     } catch (Exception ex) {
       thrownEx = ex;
     }
-    assertTrue(thrownEx instanceof NullPointerException);
+    assertTrue(thrownEx instanceof IllegalArgumentException);
 
     thrownEx = null;
     try {
