@@ -54,6 +54,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
+import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
@@ -787,40 +788,38 @@ public class AmbryRequests implements RequestAPI {
     if (partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) {
       try {
         List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
-        // set keepDeletedExpired to true. Will treat deleted and expired messages as valid.
-        MessageSievingInputStream validMessageDetectionInputStream =
-            new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
-                Collections.singletonList(transformer), metricRegistry, true);
-        messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
-        if (validMessageDetectionInputStream.hasInvalidMessages() || messageInfoList.size() == 0) {
-          logger.error("ReplicateBlobRequest out of {} messages, {} invalid messages were found in message stream from {} {} {}",
-              messageInfoList.size(), messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size(),
-              remoteHostName, remoteHostPort, blobId);
+        if (messageInfoList == null || messageInfoList.size() != 1) {
+          logger.error("ReplicateBlobRequest PartitionResponseInfo response from GetRequest {} {} {} {} {} returned null.",
+              partitionResponseInfo, messageInfoList, remoteHostName, remoteHostPort, blobId);
           response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
               ServerErrorCode.Blob_Not_Found);
         } else {
-          MessageFormatWriteSet writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
-          Store store = storeManager.getStore(blobId.getPartition());
-          store.put(writeset);
+          MessageInfo orgMsgInfo = messageInfoList.get(0);
+          Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
+              getResponse.getInputStream(), orgMsgInfo);
+          if (output == null || !output.getMessageInfo().getStoreKey().equals(blobId)) {
+            logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}",
+                orgMsgInfo, remoteHostName, remoteHostPort, blobId);
+            throw new StoreException("ReplicateBlobRequest " + replicateBlobRequest + " transferInputStream returned "
+                + output, StoreErrorCodes.Unknown_Error);
+          } else {
+            MessageFormatWriteSet writeset = new MessageFormatWriteSet(output.getStream(),
+                                            Collections.singletonList(output.getMessageInfo()), false);
+            Store store = storeManager.getStore(blobId.getPartition());
+            store.put(writeset);
 
-          // As ReplicateThread, we do applyTtlUpdate and also applyDelete.
-          // Suppose we should have one messageInfo and it is for this Blob ID.
-          if (messageInfoList.size() != 1 || !messageInfoList.get(0).getStoreKey().equals(blobId)) {
-            throw new StoreException("ReplicateBlobRequest getBlob returned unexpected message list size="
-                + messageInfoList.size() + " key=" + messageInfoList.get(0).getStoreKey() + " request=" + replicateBlobRequest,
-                StoreErrorCodes.Unknown_Error);
-          }
-          MessageInfo messageInfo = messageInfoList.get(0);
-          if (messageInfo.isTtlUpdated()) {
-            applyTtlUpdate(messageInfo, replicateBlobRequest);
-          }
-          if (messageInfo.isDeleted()) {
-            applyDelete(messageInfo, replicateBlobRequest);
-          }
-          logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName, remoteHostPort);
-          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-              ServerErrorCode.No_Error);
-        }
+            // As ReplicateThread, we do applyTtlUpdate and also applyDelete.
+            if (orgMsgInfo.isTtlUpdated()) {
+              applyTtlUpdate(orgMsgInfo, replicateBlobRequest);
+            }
+            if (orgMsgInfo.isDeleted()) {
+              applyDelete(orgMsgInfo, replicateBlobRequest);
+            }
+            logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName, remoteHostPort);
+            response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                ServerErrorCode.No_Error);
+          } // if (output == null) {
+        } // if (messageInfoList == null || messageInfoList.size() != 1)
       } catch (StoreException e) {
         if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
           logger.info("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);

@@ -60,12 +60,10 @@ public class MessageSievingInputStream extends InputStream {
    * @param messageInfoList List of MessageInfo which contains details about the messages in the stream
    * @param transformers the list of the {@link Transformer} to use (in order).
    * @param metricRegistry Metric register to register metrics
-   * @param keepDeletedExpired if true, will keep the deleted or expired message.
-   *                           if false, will filter out the deleted or expired message.
    * @throws java.io.IOException
    */
   public MessageSievingInputStream(InputStream inStream, List<MessageInfo> messageInfoList,
-      List<Transformer> transformers, MetricRegistry metricRegistry, boolean keepDeletedExpired) throws IOException {
+      List<Transformer> transformers, MetricRegistry metricRegistry) throws IOException {
     this.transformers = transformers;
     singleMessageSieveTime =
         metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "SingleMessageSieveTime"));
@@ -103,11 +101,11 @@ public class MessageSievingInputStream extends InputStream {
       int msgSize = (int) msgInfo.getSize();
       // @todo: We can use a BoundedInputStream for each message and then empty it out in case all of it was not read
       // @todo: (say, due to corruption). This can help avoid a copy.
-      if (!keepDeletedExpired && msgInfo.isDeleted()) {
+      if (msgInfo.isDeleted()) {
         messageSievingDeletedMessagesDiscardedCount.inc();
         logger.trace("Skipping message with key {}, because it is deleted.", msgInfo.getStoreKey());
         Utils.readBytesFromStream(inStream, msgSize);
-      } else if (!keepDeletedExpired && msgInfo.isExpired()) {
+      } else if (msgInfo.isExpired()) {
         messageSievingExpiredMessagesDiscardedCount.inc();
         logger.trace("Skipping message with key {}, because it has expired.", msgInfo.getStoreKey());
         Utils.readBytesFromStream(inStream, msgSize);
@@ -146,6 +144,51 @@ public class MessageSievingInputStream extends InputStream {
     sievedStream = new SequenceInputStream(inputStreamEnumeration);
     this.sievedStreamSize = (int) sievedMessageInfoList.stream().mapToLong(MessageInfo::getSize).sum();
     logger.trace("Completed validation of message stream ");
+  }
+
+  /**
+   * Transfer one message with a list of {@link Transformer}
+   * @param inStream The stream from which bytes need to be read.
+   * @param msgInfo MessageInfo which contains details about the message in the stream
+   * @param transformers the list of the {@link Transformer} to use (in order).
+   * @throws java.io.IOException
+   */
+  public static Message transferInputStream(List<Transformer> transformers, InputStream inStream, MessageInfo msgInfo)
+      throws IOException {
+    Message msg = new Message(msgInfo, inStream);
+    logger.trace("transferInputStream for message {}", msgInfo);
+
+    if (transformers == null || transformers.isEmpty()) {
+      // Write the message without any transformations.
+      return msg;
+    } else {
+      TransformationOutput output = null;
+      for (Transformer transformer : transformers) {
+        output = transformer.transform(msg);
+        if (output.getException() != null || output.getMsg() == null) {
+          break;
+        } else {
+          msg = output.getMsg();
+        }
+      }
+      if (output.getException() != null) {
+        if (output.getException() instanceof MessageFormatException) {
+          logger.error(
+              "Error validating/transforming the message {} and hence skipping the message", msgInfo, output.getException());
+          return null;
+        } else {
+          throw new IOException("Encountered exception during transformation", output.getException());
+        }
+      } else if (output.getMsg() == null) {
+        logger.trace("Transformation is on, and the message with id {} does not have a replacement and was discarded.",
+            msgInfo.getStoreKey());
+        return null;
+      } else {
+        logger.trace("Original message length {}, transformed bytes read {}", msgInfo.getSize(),
+            output.getMsg().getMessageInfo().getSize());
+        return output.getMsg();
+      }
+    }
   }
 
   /**
