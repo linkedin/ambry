@@ -70,12 +70,38 @@ public class CompressionConfig {
   /**
    * Whether compression is enabled.
    */
+  @Config(CONFIG_COMPRESSION_ENABLED)
   public boolean isCompressionEnabled;
 
   /**
    * Whether compression is skipped when the content-encoding is present in the request.
    */
+  @Config(CONFIG_SKIP_CONTENT_ENCODING)
   public boolean isSkipWithContentEncoding;
+
+  /**
+   * The string that contains the list of compressible full content-types.
+   */
+  @Config(CONFIG_CONTENT_TYPES_COMPRESSIBLE)
+  public String compressibleContentTypes;
+
+  /**
+   * The string that contains the list of incompressible full content-types.
+   */
+  @Config(CONFIG_CONTENT_TYPES_INCOMPRESSIBLE)
+  public String incompressibleContentTypes;
+
+  /**
+   * The string that contains the list of compressible full content-type prefixes.
+   */
+  @Config(CONFIG_CONTENT_PREFIXES_COMPRESSIBLE)
+  public String compressibleContentTypePrefixes;
+
+  /**
+   * The string that contains the list of incompressible full content-type prefixes.
+   */
+  @Config(CONFIG_CONTENT_PREFIXES_INCOMPRESSIBLE)
+  public String incompressibleContentTypePrefixes;
 
   /**
    * The map contains list of content-types and whether they are compressible.
@@ -97,12 +123,14 @@ public class CompressionConfig {
    * Whether unknown content-type should be compressed or not.
    * Unknown content-type are those not listed in compressibleContentTypes and compressibleContentTypePrefixs.
    */
+  @Config(CONFIG_COMPRESS_OTHER_CONTENT_TYPE)
   public boolean compressOtherContentTypes;
 
   /**
    * The minimal source/chunk size in bytes in order to qualify for compression.
    * Chunk size smaller than this size will not be compressed.
    */
+  @Config(CONFIG_MINIMAL_DATA_SIZE_IN_BYTES)
   public int minimalSourceDataSizeInBytes;
 
   /**
@@ -110,11 +138,13 @@ public class CompressionConfig {
    * If the size of compressed content is almost the same size as original content, discard the compressed content.
    * Compression ratio is defined as OriginalSize/CompressedSize.  Normally, higher is better.
    */
+  @Config(CONFIG_MINIMAL_COMPRESS_RATIO)
   public double minimalCompressRatio;
 
   /**
    * The name of the compression to use in PUT operation.
    */
+  @Config(CONFIG_ALGORITHM_NAME)
   public String algorithmName;
 
   /**
@@ -149,18 +179,18 @@ public class CompressionConfig {
         DEFAULT_MINIMAL_COMPRESS_RATIO);
 
     // Build the content-type map.
-    String compressibleContentTypes = verifiableProperties.getString(CONFIG_CONTENT_TYPES_COMPRESSIBLE,
+    compressibleContentTypes = verifiableProperties.getString(CONFIG_CONTENT_TYPES_COMPRESSIBLE,
         DEFAULT_CONTENT_TYPES_COMPRESSIBLE);
-    String incompressibleContentTypes = verifiableProperties.getString(CONFIG_CONTENT_TYPES_INCOMPRESSIBLE,
+    incompressibleContentTypes = verifiableProperties.getString(CONFIG_CONTENT_TYPES_INCOMPRESSIBLE,
         DEFAULT_CONTENT_TYPES_INCOMPRESSIBLE);
     compressContentTypes = parseContentTypes(compressibleContentTypes, incompressibleContentTypes);
 
     // build the content-type prefix map.
-    String compressibleContentPrefixes = verifiableProperties.getString(CONFIG_CONTENT_PREFIXES_COMPRESSIBLE,
+    compressibleContentTypePrefixes = verifiableProperties.getString(CONFIG_CONTENT_PREFIXES_COMPRESSIBLE,
         DEFAULT_CONTENT_PREFIXES_COMPRESSIBLE);
-    String incompressibleContentPrefixes = verifiableProperties.getString(CONFIG_CONTENT_PREFIXES_INCOMPRESSIBLE,
+    incompressibleContentTypePrefixes = verifiableProperties.getString(CONFIG_CONTENT_PREFIXES_INCOMPRESSIBLE,
         DEFAULT_CONTENT_PREFIXES_INCOMPRESSIBLE);
-    compressContentPrefixes = parseContentPrefixes(compressibleContentPrefixes, incompressibleContentPrefixes);
+    compressContentPrefixes = parseContentPrefixes(compressibleContentTypePrefixes, incompressibleContentTypePrefixes);
   }
 
   /**
