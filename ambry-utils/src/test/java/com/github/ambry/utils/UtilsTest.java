@@ -691,6 +691,45 @@ public class UtilsTest {
     assertEquals("Empty segments should be ignored", new ArrayList<>(Arrays.asList("a", "b-extra", "c")),
         Utils.splitString(",a,,b-extra,c,,", ",", ArrayList::new));
   }
+
+  @Test
+  public void testStringCheckNotNullOrEmpty() {
+    // Test
+    Exception thrownEx = null;
+    try {
+      Utils.checkNotNullOrEmpty((String) null, "It is null");
+    } catch (Exception ex) {
+      thrownEx = ex;
+    }
+    assertTrue(thrownEx instanceof NullPointerException);
+
+    thrownEx = null;
+    try {
+      Utils.checkNotNullOrEmpty("", "It is empty");
+    } catch (Exception ex) {
+      thrownEx = ex;
+    }
+    assertTrue(thrownEx instanceof IllegalArgumentException);
+  }
+
+  @Test
+  public void testByteArrayCheckNotNullOrEmpty() {
+    Exception thrownEx = null;
+    try {
+      Utils.checkNotNullOrEmpty((byte[]) null, "Array is null");
+    } catch (Exception ex) {
+      thrownEx = ex;
+    }
+    assertTrue(thrownEx instanceof NullPointerException);
+
+    thrownEx = null;
+    try {
+      Utils.checkNotNullOrEmpty(new byte[0], "Array is empty");
+    } catch (Exception ex) {
+      thrownEx = ex;
+    }
+    assertTrue(thrownEx instanceof IllegalArgumentException);
+  }
 }
 
 class MockClassForTesting {

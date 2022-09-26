@@ -168,6 +168,7 @@ class PutOperation {
   // Variables to keep track of netty chunks
   private final RestRequest restRequest;
   private final String loggingContext;
+  private final CompressionService compressionService;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -305,6 +306,9 @@ class PutOperation {
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
+    // Apply compression if enabled and not metadata chunk.
+    compressionService = new CompressionService(routerConfig.getCompressionConfig(),
+        routerMetrics.getCompressionMetrics());
   }
 
   /**
@@ -1202,6 +1206,7 @@ class PutOperation {
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename());
+        chunkBlobProperties.setCompressed(passedInBlobProperties.isCompressed());
         operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
@@ -1292,6 +1297,27 @@ class PutOperation {
     }
 
     /**
+     * Compress the buffer in "buf" field for data chunks.  It does not compress metadata chunks.
+     * It also applies rules specified in config.
+     * After compression, it replaces "buf" field and update isCompressed field in blob properties.
+     */
+    private void compressChunk() {
+      // Do not compress metadata chunk.
+      if (isMetadataChunk()) {
+        return;
+      }
+
+      // Note: compress() returns null if it failed.
+      boolean isFullChunk = (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes);
+      ByteBuf newBuffer = compressionService.compress(getBlobProperties(), buf, isFullChunk);
+      if (newBuffer != buf) {
+        // New buffer is different.  It means it has been compressed.
+        getBlobProperties().setCompressed(true);
+        buf = newBuffer;
+      }
+    }
+
+    /**
      * Submits encrypt job for the given {@link PutChunk} and processes the callback for the same
      */
     private void encryptChunk() {
@@ -1325,6 +1351,9 @@ class PutOperation {
       if (updateMetric) {
         routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
       }
+
+      // Attempt to apply compression on data chunk.
+      compressChunk();
 
       if (!passedInBlobProperties.isEncrypted()) {
         prepareForSending();
@@ -1824,6 +1853,7 @@ class PutOperation {
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
               passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename());
+      finalBlobProperties.setCompressed(passedInBlobProperties.isCompressed());
       if (isStitchOperation() || getNumDataChunks() > 1) {
         ByteBuffer serialized = null;
         // values returned are in the right order as TreeMap returns them in key-order.

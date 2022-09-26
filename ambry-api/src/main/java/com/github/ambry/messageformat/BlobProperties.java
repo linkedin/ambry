@@ -33,6 +33,7 @@ public class BlobProperties {
   private final short accountId;
   private final short containerId;
   private final boolean isEncrypted;
+  private boolean isCompressed;
   private long blobSize;
   private long timeToLiveInSeconds;
   // Non persistent blob properties.
@@ -127,6 +128,7 @@ public class BlobProperties {
     this(other.blobSize, other.serviceId, other.ownerId, other.contentType, other.isPrivate, other.timeToLiveInSeconds,
         other.creationTimeInMs, other.accountId, other.containerId, other.isEncrypted, other.externalAssetTag,
         other.contentEncoding, other.filename);
+    this.isCompressed = other.isCompressed;
   }
 
   public long getTimeToLiveInSeconds() {
@@ -187,6 +189,21 @@ public class BlobProperties {
   }
 
   /**
+   * Get whether the blob is compressed.
+   * This property is between Frontend and Server only, not in client.
+   * @return True if blob is compressed; FALSE if blob is not compressed.
+   */
+  public boolean isCompressed() { return isCompressed; }
+
+  /**
+   * Set whether the blob is compressed.
+   * @param isCompressed True if compressed; FALSE if not compressed.
+   */
+  public void setCompressed(boolean isCompressed) {
+    this.isCompressed = isCompressed;
+  }
+
+  /**
    * @return the ExternalAssetTag of a uploaded blob. Can be null.
    */
   public String getExternalAssetTag() {
@@ -225,6 +242,7 @@ public class BlobProperties {
     sb.append(", ").append("AccountId=").append(getAccountId());
     sb.append(", ").append("ContainerId=").append(getContainerId());
     sb.append(", ").append("IsEncrypted=").append(isEncrypted());
+    sb.append(", ").append("IsCompressed=").append(isCompressed());
     sb.append(", ").append("externalAssetTag=").append(getExternalAssetTag());
     sb.append(", ").append("ContentEncoding=").append(getContentEncoding());
     sb.append(", ").append("Filename=").append(getFilename());
@@ -244,8 +262,8 @@ public class BlobProperties {
     return isPrivate == that.isPrivate && creationTimeInMs == that.creationTimeInMs && accountId == that.accountId
         && containerId == that.containerId && isEncrypted == that.isEncrypted && blobSize == that.blobSize
         && timeToLiveInSeconds == that.timeToLiveInSeconds && Objects.equals(serviceId, that.serviceId)
-        && Objects.equals(ownerId, that.ownerId) && Objects.equals(contentType, that.contentType) && Objects.equals(
-        contentEncoding, that.contentEncoding) && Objects.equals(filename, that.filename) && Objects.equals(
-        externalAssetTag, that.externalAssetTag);
+        && Objects.equals(ownerId, that.ownerId) && Objects.equals(contentType, that.contentType)
+        && Objects.equals(contentEncoding, that.contentEncoding) && Objects.equals(filename, that.filename)
+        && Objects.equals(externalAssetTag, that.externalAssetTag) && isCompressed == that.isCompressed;
   }
 }

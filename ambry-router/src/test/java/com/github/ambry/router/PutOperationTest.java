@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.config.CompressionConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -36,7 +37,10 @@ import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
@@ -46,6 +50,8 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.TreeMap;
 import java.util.stream.LongStream;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -536,6 +542,43 @@ public class PutOperationTest {
   private ResponseInfo getResponseInfo(RequestInfo requestInfo) throws IOException {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
     return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().content());
+  }
+
+  @Test
+  public void compressChunk()
+      throws IOException, InvocationTargetException, NoSuchMethodException, IllegalAccessException {
+    int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
+    BlobProperties blobProperties = new BlobProperties(-1, "serviceId", "memberId",
+        "text/javascript", false, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    FutureResult<String> future = new FutureResult<>();
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op = PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+        new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, future, null,
+        new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, null, time, blobProperties,
+        MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback);
+
+    FieldUtils.writeField(op, "finalBlobProperties", blobProperties, true);
+    PutOperation.PutChunk putChunk = op.new PutChunk();
+
+    byte[] sourceBuffer = ("Test Message for testing purpose.  The Message is part of the testing message."
+        + "Test Message for testing purpose.  The Message is part of the testing message."
+        + "Test Message for testing purpose.  The Message is part of the testing message.").getBytes();
+    ByteBuf sourceByteBuf = Unpooled.wrappedBuffer(sourceBuffer);
+    putChunk.buf = sourceByteBuf;
+    CompressionConfig compressionConfig = routerConfig.getCompressionConfig();
+    compressionConfig.minimalCompressRatio = 1.0;
+    compressionConfig.minimalSourceDataSizeInBytes = 1;
+
+    Assert.assertFalse(blobProperties.isCompressed());
+    MethodUtils.invokeMethod(putChunk, true, "compressChunk");
+
+    // Verify the isCompressed is set.
+    Assert.assertTrue(blobProperties.isCompressed());
+    Assert.assertNotEquals(sourceByteBuf, putChunk.buf);
   }
 }
 
