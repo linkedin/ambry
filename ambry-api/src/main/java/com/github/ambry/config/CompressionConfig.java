@@ -14,9 +14,9 @@
 package com.github.ambry.config;
 
 import com.github.ambry.utils.Utils;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Set;
 
 /**
  * Configuration parameters required by a CompressionService.
@@ -26,111 +26,57 @@ import java.util.Map;
 public class CompressionConfig {
 
   // Boolean whether compression is enabled in PUT operation.
-  private static final String CONFIG_COMPRESSION_ENABLED = "router.compression.enabled";
-  private static final boolean DEFAULT_COMPRESSION_ENABLED = true;
+  // TODO - Compression is disabled by default.  Need to enable after testing and verification.
+  static final String COMPRESSION_ENABLED = "router.compression.enabled";
+  static final boolean DEFAULT_COMPRESSION_ENABLED = false;
 
   // Whether to skip compression if content-encoding present.
-  private static final String CONFIG_SKIP_CONTENT_ENCODING = "router.compression.skip.content.encoding";
-  private static final boolean DEFAULT_SKIP_CONTENT_ENCODING = true;
+  static final String SKIP_IF_CONTENT_ENCODED = "router.compression.skip.if.content.encoded";
+  static final boolean DEFAULT_SKIP_IF_CONTENT_ENCODED = true;
 
-  // A comma-separated list of compressible fully content-types, like "text/javascript, text/log; Charset=UTF8"
-  private static final String CONFIG_CONTENT_TYPES_COMPRESSIBLE = "router.compression.content.types.compressible";
-  private static final String DEFAULT_CONTENT_TYPES_COMPRESSIBLE = null;
-
-  // A comma-separated list of incompressible fully content-types, like "text/javascript, text/log; Charset=UTF8"
-  private static final String CONFIG_CONTENT_TYPES_INCOMPRESSIBLE = "router.compression.content.types.incompressible";
-  private static final String DEFAULT_CONTENT_TYPES_INCOMPRESSIBLE = null;
-
-  // A comma-separated list of compressible content-prefixes, such as "text" for text/*
-  private static final String CONFIG_CONTENT_PREFIXES_COMPRESSIBLE = "router.compression.content.prefixes.compressible";
-  private static final String DEFAULT_CONTENT_PREFIXES_COMPRESSIBLE = "text";
-
-  // A comma-separated list of incompressible content-prefixes, such as "image" for image/*.
-  private static final String CONFIG_CONTENT_PREFIXES_INCOMPRESSIBLE = "router.compression.content.prefixes.incompressible";
-  private static final String DEFAULT_CONTENT_PREFIXES_INCOMPRESSIBLE = "image";
-
-  // Boolean whether to compress other content-types not specified in content-types and content-prefixes.
-  // It applies to PUT operation only.
-  private static final String CONFIG_COMPRESS_OTHER_CONTENT_TYPE = "router.compression.other.content.types";
-  private static final boolean DEFAULT_COMPRESS_OTHER_CONTENT_TYPE = false;
+  // A comma-separated list of compressible content-types.  For example, "text/javascript, text/log, text".
+  // This list supports both full content-type and content-prefix that has no slash "/".
+  // All other content-type not in this list will not be compressed.  Default is compress every start with "text/*".
+  static final String COMPRESS_CONTENT_TYPES = "router.compression.compress.content.types";
+  static final String DEFAULT_COMPRESS_CONTENT_TYPES = "text";
 
   // The minimal source/chunk size in bytes in order to qualify for compression.
-  private static final String CONFIG_MINIMAL_DATA_SIZE_IN_BYTES = "router.compression.minimal.content.size";
-  private static final int DEFAULT_MINIMAL_DATA_SIZE_IN_BYTES = 1024;
+  static final String MINIMAL_DATA_SIZE_IN_BYTES = "router.compression.minimal.content.size";
+  static final int DEFAULT_MINIMAL_DATA_SIZE_IN_BYTES = 1024;
 
   // The minimal compression ratio (uncompressedSize/compressSize) in order to keep compressed content.
   // The higher the compression ratio the better with 1 means the same size.
-  private static final String CONFIG_MINIMAL_COMPRESS_RATIO = "router.compression.minimal.ratio";
-  private static final float DEFAULT_MINIMAL_COMPRESS_RATIO = 1.1f;
+  static final String MINIMAL_COMPRESS_RATIO = "router.compression.minimal.ratio";
+  static final float DEFAULT_MINIMAL_COMPRESS_RATIO = 1.1f;
 
   // The name of the algorithm to use.  This name must be pre-registered in CompressionMap class.
-  private static final String CONFIG_ALGORITHM_NAME = "router.compression.algorithm.name";
-  private static final String DEFAULT_ALGORITHM_NAME = null;
+  // Default is Zstandard compression algorithm.  This string is defined in ambry-common that cannot be referenced here.
+  static final String ALGORITHM_NAME = "router.compression.algorithm.name";
+  static final String DEFAULT_ALGORITHM_NAME = "ZSTD";
 
   /**
    * Whether compression is enabled.
    */
-  @Config(CONFIG_COMPRESSION_ENABLED)
+  @Config(COMPRESSION_ENABLED)
   public boolean isCompressionEnabled;
 
   /**
    * Whether compression is skipped when the content-encoding is present in the request.
    */
-  @Config(CONFIG_SKIP_CONTENT_ENCODING)
+  @Config(SKIP_IF_CONTENT_ENCODED)
   public boolean isSkipWithContentEncoding;
 
   /**
-   * The string that contains the list of compressible full content-types.
+   * The string that contains the list of comma-separated compressible full content-types.
    */
-  @Config(CONFIG_CONTENT_TYPES_COMPRESSIBLE)
-  public String compressibleContentTypes;
-
-  /**
-   * The string that contains the list of incompressible full content-types.
-   */
-  @Config(CONFIG_CONTENT_TYPES_INCOMPRESSIBLE)
-  public String incompressibleContentTypes;
-
-  /**
-   * The string that contains the list of compressible full content-type prefixes.
-   */
-  @Config(CONFIG_CONTENT_PREFIXES_COMPRESSIBLE)
-  public String compressibleContentTypePrefixes;
-
-  /**
-   * The string that contains the list of incompressible full content-type prefixes.
-   */
-  @Config(CONFIG_CONTENT_PREFIXES_INCOMPRESSIBLE)
-  public String incompressibleContentTypePrefixes;
-
-  /**
-   * The map contains list of content-types and whether they are compressible.
-   * The map key (content type) must be lower-case only.
-   * The map value should either be true for compressible content-type or false for incompressible content-type.
-   */
-  public Map<String, Boolean> compressContentTypes;
-
-  /**
-   * The map contains list from content-type prefix and whether they are compressible.
-   * Unlike compressContentTypes that has fully content-type, such as text/javascript,
-   * content-type prefix is the content category before separator, such as "text" means "text/*".
-   * The map key (content type prefix) must be in lower-case only.
-   * The map value should either be true for compressible content-type or false for incompressible content-type.
-   */
-  public Map<String, Boolean> compressContentPrefixes;
-
-  /**
-   * Whether unknown content-type should be compressed or not.
-   * Unknown content-type are those not listed in compressibleContentTypes and compressibleContentTypePrefixs.
-   */
-  @Config(CONFIG_COMPRESS_OTHER_CONTENT_TYPE)
-  public boolean compressOtherContentTypes;
+  @Config(COMPRESS_CONTENT_TYPES)
+  public String compressibleContentTypesCSV;
 
   /**
    * The minimal source/chunk size in bytes in order to qualify for compression.
    * Chunk size smaller than this size will not be compressed.
    */
-  @Config(CONFIG_MINIMAL_DATA_SIZE_IN_BYTES)
+  @Config(MINIMAL_DATA_SIZE_IN_BYTES)
   public int minimalSourceDataSizeInBytes;
 
   /**
@@ -138,28 +84,33 @@ public class CompressionConfig {
    * If the size of compressed content is almost the same size as original content, discard the compressed content.
    * Compression ratio is defined as OriginalSize/CompressedSize.  Normally, higher is better.
    */
-  @Config(CONFIG_MINIMAL_COMPRESS_RATIO)
+  @Config(MINIMAL_COMPRESS_RATIO)
   public double minimalCompressRatio;
 
   /**
    * The name of the compression to use in PUT operation.
    */
-  @Config(CONFIG_ALGORITHM_NAME)
+  @Config(ALGORITHM_NAME)
   public String algorithmName;
+
+  /**
+   * The map contains list of compressible content-types and content-prefixes.
+   * The map key (content type) must be lower-case only.
+   * This map is generated from the compressibleContentTypes property.
+   */
+  public Set<String> compressibleContentTypes;
 
   /**
    * Create an instance of CompressionConfig using the default values.
    */
   public CompressionConfig() {
     isCompressionEnabled = DEFAULT_COMPRESSION_ENABLED;
-    isSkipWithContentEncoding = DEFAULT_SKIP_CONTENT_ENCODING;
+    isSkipWithContentEncoding = DEFAULT_SKIP_IF_CONTENT_ENCODED;
     algorithmName = DEFAULT_ALGORITHM_NAME;
-    compressOtherContentTypes = DEFAULT_COMPRESS_OTHER_CONTENT_TYPE;
+    compressibleContentTypesCSV = DEFAULT_COMPRESS_CONTENT_TYPES;
     minimalSourceDataSizeInBytes = DEFAULT_MINIMAL_DATA_SIZE_IN_BYTES;
     minimalCompressRatio = DEFAULT_MINIMAL_COMPRESS_RATIO;
-    compressContentTypes = parseContentTypes(DEFAULT_CONTENT_TYPES_COMPRESSIBLE, DEFAULT_CONTENT_TYPES_INCOMPRESSIBLE);
-    compressContentPrefixes = parseContentPrefixes(DEFAULT_CONTENT_PREFIXES_COMPRESSIBLE,
-        DEFAULT_CONTENT_PREFIXES_INCOMPRESSIBLE);
+    compressibleContentTypes = parseContentTypes(compressibleContentTypesCSV);
   }
 
   /**
@@ -167,98 +118,35 @@ public class CompressionConfig {
    * @param verifiableProperties The verifiable properties.
    */
   public CompressionConfig(VerifiableProperties verifiableProperties) {
-    isCompressionEnabled = verifiableProperties.getBoolean(CONFIG_COMPRESSION_ENABLED, DEFAULT_COMPRESSION_ENABLED);
-    isSkipWithContentEncoding = verifiableProperties.getBoolean(CONFIG_SKIP_CONTENT_ENCODING,
-        DEFAULT_SKIP_CONTENT_ENCODING);
-    algorithmName = verifiableProperties.getString(CONFIG_ALGORITHM_NAME, DEFAULT_ALGORITHM_NAME);
-    compressOtherContentTypes = verifiableProperties.getBoolean(CONFIG_COMPRESS_OTHER_CONTENT_TYPE,
-        DEFAULT_COMPRESS_OTHER_CONTENT_TYPE);
-    minimalSourceDataSizeInBytes = verifiableProperties.getInt(CONFIG_MINIMAL_DATA_SIZE_IN_BYTES,
+    isCompressionEnabled = verifiableProperties.getBoolean(COMPRESSION_ENABLED, DEFAULT_COMPRESSION_ENABLED);
+    isSkipWithContentEncoding = verifiableProperties.getBoolean(SKIP_IF_CONTENT_ENCODED, DEFAULT_SKIP_IF_CONTENT_ENCODED);
+    algorithmName = verifiableProperties.getString(ALGORITHM_NAME, DEFAULT_ALGORITHM_NAME);
+    compressibleContentTypesCSV = verifiableProperties.getString(COMPRESS_CONTENT_TYPES, DEFAULT_COMPRESS_CONTENT_TYPES);
+    minimalSourceDataSizeInBytes = verifiableProperties.getInt(MINIMAL_DATA_SIZE_IN_BYTES,
         DEFAULT_MINIMAL_DATA_SIZE_IN_BYTES);
-    minimalCompressRatio = verifiableProperties.getDouble(CONFIG_MINIMAL_COMPRESS_RATIO,
+    minimalCompressRatio = verifiableProperties.getDouble(MINIMAL_COMPRESS_RATIO,
         DEFAULT_MINIMAL_COMPRESS_RATIO);
 
     // Build the content-type map.
-    compressibleContentTypes = verifiableProperties.getString(CONFIG_CONTENT_TYPES_COMPRESSIBLE,
-        DEFAULT_CONTENT_TYPES_COMPRESSIBLE);
-    incompressibleContentTypes = verifiableProperties.getString(CONFIG_CONTENT_TYPES_INCOMPRESSIBLE,
-        DEFAULT_CONTENT_TYPES_INCOMPRESSIBLE);
-    compressContentTypes = parseContentTypes(compressibleContentTypes, incompressibleContentTypes);
-
-    // build the content-type prefix map.
-    compressibleContentTypePrefixes = verifiableProperties.getString(CONFIG_CONTENT_PREFIXES_COMPRESSIBLE,
-        DEFAULT_CONTENT_PREFIXES_COMPRESSIBLE);
-    incompressibleContentTypePrefixes = verifiableProperties.getString(CONFIG_CONTENT_PREFIXES_INCOMPRESSIBLE,
-        DEFAULT_CONTENT_PREFIXES_INCOMPRESSIBLE);
-    compressContentPrefixes = parseContentPrefixes(compressibleContentTypePrefixes, incompressibleContentTypePrefixes);
+    compressibleContentTypes = parseContentTypes(compressibleContentTypesCSV);
   }
 
   /**
    * Combine the compressible and incompressible list of content-types into a map of content-type to boolean.
    *
-   * @param compressibleContentTypes List of compressible content-types.
-   * @param incompressibleContentTypes List of incompressible content-types.
-   * @return A map from content-type to boolean (compressible or incompressible).
+   * @param compressibleContentTypesCSV Comma-separated list of compressible content-types and content prefixes.
+   * @return A set of compressible content-type and content-type prefixes.
    */
-  private Map<String, Boolean> parseContentTypes(String compressibleContentTypes, String incompressibleContentTypes) {
-    Map<String, Boolean> result = new HashMap<>();
-    addContentTypesToMap(result, compressibleContentTypes, true);
-    addContentTypesToMap(result, incompressibleContentTypes, false);
-    return result;
-  }
-
-  /**
-   * Combine the compressible and incompressible list of content-type prefixes into a map of prefix to boolean.
-   *
-   * @param compressibleContentPrefixes List of compressible content-types.
-   * @param incompressibleContentPrefixes List of incompressible content-types.
-   * @return A map from content-type prefix to boolean (compressible or incompressible).
-   */
-  private Map<String, Boolean> parseContentPrefixes(String compressibleContentPrefixes,
-      String incompressibleContentPrefixes) {
-    Map<String, Boolean> result = new HashMap<>();
-    addContentPrefixToMap(result, compressibleContentPrefixes, true);
-    addContentPrefixToMap(result, incompressibleContentPrefixes, false);
-    return result;
-  }
-
-  /**
-   * A helper method to build the map from content-type to compressibility value.
-   * @param map The map to store the result.
-   * @param contentTypesCsv A comma-separated content-types to add.  The keys will be split, trimmed, in lower case.
-   * @param value The fixed value to add to the map for each key.
-   */
-  private void addContentTypesToMap(Map<String, Boolean> map, String contentTypesCsv, boolean value) {
-    if (contentTypesCsv != null && contentTypesCsv.length() > 0) {
-      for (String contentType : contentTypesCsv.split(",")) {
+  private Set<String> parseContentTypes(String compressibleContentTypesCSV) {
+    Set<String> contentTypes = new HashSet<>();
+    if (compressibleContentTypesCSV != null && compressibleContentTypesCSV.length() > 0) {
+      for (String contentType : compressibleContentTypesCSV.split(",")) {
         String loweredContentType = contentType.trim().toLowerCase(Locale.ENGLISH);
-        if (loweredContentType.length() > 0) {
-          map.put(loweredContentType, value);
-        }
+        contentTypes.add(loweredContentType);
       }
     }
-  }
 
-  /**
-   * A helper method to build the map from content-type to compressibility value.
-   * @param map The map to store the result.
-   * @param contentPrefixesCsv A comma-separated prefixes to add.  The keys will be split, trimmed, in lower case.
-   * @param value The fixed value to add to the map for each key.
-   */
-  private void addContentPrefixToMap(Map<String, Boolean> map, String contentPrefixesCsv, boolean value) {
-    if (contentPrefixesCsv != null && contentPrefixesCsv.length() > 0) {
-      for (String contentPrefix : contentPrefixesCsv.split(",")) {
-        String loweredContentPrefix = contentPrefix.trim().toLowerCase(Locale.ENGLISH);
-        // If prefix contains slash like "text/*", pickup the prefix "text".
-        int separatorPrefix = loweredContentPrefix.indexOf("/");
-        if (separatorPrefix >= 0) {
-          loweredContentPrefix = loweredContentPrefix.substring(0, separatorPrefix);
-        }
-        if (loweredContentPrefix.length() > 0) {
-          map.put(loweredContentPrefix, value);
-        }
-      }
-    }
+    return contentTypes;
   }
 
   /**
@@ -270,50 +158,47 @@ public class CompressionConfig {
    *   - multipart/form-data; boundary=something
    * <p>
    * Content type format is "prefix/specific; option=value".
-   * Content check is applied in this order:
-   * 1. Check whether the full contentType is specified in content-type map.  Example "text/html; charset=UTF-8"
-   * 2. If contentType contains option (separated by ";"), remove the option and check content-type map again.
+   * Content check is applied in this order.  If not in the list, it's not compressible.
+   * 1. Check whether the full contentType parameter is specified in content-type set.  Example "text/html"
+   * 2. If contentType parameter contains option (separated by ";"), remove the option and check again.
    *    For example, parameter content-type "text/html; charset=UTF-8", check config by content-type "text/html".
-   * 3. Get the content-type prefix (the string before the "/" separator) and lookup prefix in the content prefix map.
+   * 3. Get the content-type prefix (the string before the "/" separator) and lookup prefix again.
    *    For example, parameter content-type "text/html; charset=UTF-8", check config by content-prefix "text".
-   * 4. The content-type is not configured, return the compressOtherContentTypes value.
    * @param contentType The HTTP content type.
    * @return TRUE if compression allowed; FALSE if compression not allowed.
    */
   public boolean isCompressibleContentType(String contentType) {
     // If there is no content-type, assume it's other content-type.
     if (Utils.isNullOrEmpty(contentType)) {
-      return compressOtherContentTypes;
+      return false;
     }
 
-    // Check whether there's an exact match by the full content-type.
+    // If an exact match by the full content-type is found, it's compressible.
     String contentTypeLower = contentType.trim().toLowerCase();
-    Boolean isCompressible = compressContentTypes.get(contentTypeLower);
-    if (isCompressible != null) {
-      return isCompressible;
+    if (compressibleContentTypes.contains(contentTypeLower)) {
+      return true;
     }
 
     // Check whether the content-type contains options separated by ";"
     int mimeSeparatorIndex = contentTypeLower.indexOf(';');
     if (mimeSeparatorIndex > 0) {
       String contentTypeWithoutOption = contentTypeLower.substring(0, mimeSeparatorIndex);
-      isCompressible = compressContentTypes.get(contentTypeWithoutOption);
-      if (isCompressible != null) {
-        return isCompressible;
+      if (compressibleContentTypes.contains(contentTypeWithoutOption)) {
+        return true;
       }
     }
 
     // Check whether there's a match by content-type prefix.
+    // For example, if input content-type is "text/csv", check whether "text" is compressible.
     int prefixSeparatorIndex = contentTypeLower.indexOf('/');
     if (prefixSeparatorIndex > 0) {
       String prefix = contentTypeLower.substring(0, prefixSeparatorIndex);
-      isCompressible = compressContentPrefixes.get(prefix);
-      if (isCompressible != null) {
-        return isCompressible;
+      if (compressibleContentTypes.contains(prefix)) {
+        return true;
       }
     }
 
-    // Content-type is not found in either map.  Apply other content-type value.
-    return compressOtherContentTypes;
+    // Content-type is not found in the allowed list, assume it's not compressible.
+    return false;
   }
 }
