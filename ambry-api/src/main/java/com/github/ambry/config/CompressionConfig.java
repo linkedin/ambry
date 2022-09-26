@@ -94,9 +94,9 @@ public class CompressionConfig {
   public String algorithmName;
 
   /**
-   * The map contains list of compressible content-types and content-prefixes.
-   * The map key (content type) must be lower-case only.
-   * This map is generated from the compressibleContentTypes property.
+   * The set contains a list of compressible content-types and content-prefixes.
+   * The key (content type) must be lower-case only.
+   * This set is generated from the compressibleContentTypesCSV property.
    */
   public Set<String> compressibleContentTypes;
 
@@ -127,12 +127,12 @@ public class CompressionConfig {
     minimalCompressRatio = verifiableProperties.getDouble(MINIMAL_COMPRESS_RATIO,
         DEFAULT_MINIMAL_COMPRESS_RATIO);
 
-    // Build the content-type map.
+    // Build the content-type set.
     compressibleContentTypes = parseContentTypes(compressibleContentTypesCSV);
   }
 
   /**
-   * Combine the compressible and incompressible list of content-types into a map of content-type to boolean.
+   * Parse the comma-separated list of content-types and prefixes into a set.
    *
    * @param compressibleContentTypesCSV Comma-separated list of compressible content-types and content prefixes.
    * @return A set of compressible content-type and content-type prefixes.
