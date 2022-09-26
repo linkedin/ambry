@@ -49,6 +49,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1317,6 +1318,9 @@ public class BlobStore implements Store {
   private void buildCompactionHistory() {
     long now = time.milliseconds();
     long cutoffTime = now - Duration.ofDays(config.storeCompactionHistoryInDay).toMillis();
+    AtomicInteger count = new AtomicInteger();
+    AtomicLong startTime = new AtomicLong(0);
+    AtomicLong endTime = new AtomicLong();
     try {
       CompactionLog.processCompactionLogs(dataDir, storeId, factory, time, config, compactionLog -> {
         if (compactionLog.getStartTime() <= cutoffTime) {
@@ -1331,9 +1335,14 @@ public class BlobStore implements Store {
               compactionLog.getStartTime());
           index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
               compactionLog.getIndexSegmentOffsetsForCompletedCycles(), false);
+          count.incrementAndGet();
+          startTime.compareAndSet(0, compactionLog.getStartTime());
+          endTime.set(compactionLog.getStartTime());
         }
         return true;
       });
+      logger.info("Store {}: Build compaction history with {} compaction logs from {} to {}", storeId, count.get(),
+          startTime.get(), endTime.get());
       index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
     } catch (Exception e) {
       // Don't fatal the process just because we can't build the compaction history.

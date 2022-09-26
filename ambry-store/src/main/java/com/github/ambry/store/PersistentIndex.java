@@ -494,7 +494,6 @@ class PersistentIndex {
     }
   }
 
-
   /**
    * @return the map of {@link Offset} to {@link IndexSegment} instances.
    */
@@ -579,7 +578,6 @@ class PersistentIndex {
         if (validIndexSegments.get(before) == null) {
           String message =
               String.format("Index %s: Before offset %s is missing from the index segment map", dataDir, before);
-          logger.error(message);
           throw new IllegalStateException(message);
         }
       }
@@ -2730,6 +2728,8 @@ class PersistentIndex {
    */
   private StoreFindToken generateTokenBasedOnIndexSegmentOffset(StoreFindToken token,
       ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) throws StoreException {
+    metrics.generateTokenBasedOnCompactionHistoryCount.inc();
+    logger.trace("Index {}: Generating token based on index segment offset for token {}", dataDir, token);
     if (token.getType() == FindTokenType.Uninitialized) {
       throw new IllegalArgumentException("Index" + dataDir + ": Invalid token: " + token);
     }
@@ -2745,13 +2745,13 @@ class PersistentIndex {
       if (isIndexSegmentOffset) {
         afterOffset = beforeAndAfterCompactionIndexSegmentOffsets.get(offset);
       } else {
+        // This map only contains the index segments' start offsets, it doesn't have offsets from journal based token.
+        // Lucky for us, offset in journal based token is the index entry's offset and the index entry's offset should
+        // always be greater than or equal to the start offset of the index segment, which this index entry belongs to.
+        // And this index segment's start offset should be saved in this map.
         Offset start = new Offset(offset.getName(), 0);
         Offset end = new Offset(offset.getName(), config.storeSegmentSizeInBytes + 1);
-        afterOffset =
-            beforeAndAfterCompactionIndexSegmentOffsets.headMap(end, false).tailMap(start, false).floorKey(offset);
-        // First, use this map fo find the floor key for the given offset. Offset in journal token is the same as the
-        // index entry's offset. And the index entry's offset should always be greater than or equal to the start offset
-        // of the index segment, which this index entry belongs to.
+        afterOffset = beforeAndAfterCompactionIndexSegmentOffsets.subMap(start, false, end, false).floorKey(offset);
         if (afterOffset == null || !afterOffset.getName().equals(offset.getName())) {
           // LogSegmentName check is for sanity, we already have a start and end offset to limit the range for offset.
           logger.info("Index {}: Non-IndexSegment Offset {} can't find its index segment offset before compaction: {}",
@@ -2770,6 +2770,7 @@ class PersistentIndex {
       if (segment != null) {
         logger.trace("Index {}: Offset {} maps to {} after compaction, reset token to this index segment", dataDir,
             offset, afterOffset);
+        metrics.offsetFoundInBeforeAfterMapCount.inc();
         return new StoreFindToken(FindTokenType.IndexBased, segment.getStartOffset(),
             segment.getFirstKeyInSealedSegment(), sessionId, incarnationId, true, StoreFindToken.CURRENT_VERSION,
             segment.getResetKey(), segment.getResetKeyType(), segment.getResetKeyLifeVersion());

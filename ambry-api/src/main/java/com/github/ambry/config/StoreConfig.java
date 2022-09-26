@@ -498,7 +498,7 @@ public class StoreConfig {
    * How many days of compactionlogs we have to read from disk to build the compaction history
    */
   @Config(storeCompactionHistoryInDayName)
-  @Default("7")
+  @Default("21")
   public final int storeCompactionHistoryInDay;
   public static final String storeCompactionHistoryInDayName = "store.compaction.history.in.day";
 
@@ -640,7 +640,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeCacheSizeForFindMissingKeysInBatchModeName, 3, 1, 100);
     storeNumOfCacheMissForFindMissingKeysInBatchMode =
         verifiableProperties.getIntInRange(storeNumOfCacheMissForFindMissingKeysInBatchModeName, 5, 3, 100);
-    storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 7, 1, 30);
+    storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 21, 1, 365);
     storeRebuildTokenBasedOnCompactionHistory =
         verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
     String partitions =

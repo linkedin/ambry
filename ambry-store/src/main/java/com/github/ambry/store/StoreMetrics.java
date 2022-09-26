@@ -57,6 +57,8 @@ public class StoreMetrics {
   public final Counter indexBasedTokenResetCount;
   public final Counter journalBasedTokenResetCount;
   public final Counter resetKeyFoundInCurrentIndex;
+  public final Counter generateTokenBasedOnCompactionHistoryCount;
+  public final Counter offsetFoundInBeforeAfterMapCount;
   public final Timer recoveryTime;
   public final Timer findTime;
   public final Timer indexFlushTime;
@@ -157,6 +159,10 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "JournalBasedTokenResetCount"));
     resetKeyFoundInCurrentIndex =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "ResetKeyFoundInCurrentIndex"));
+    generateTokenBasedOnCompactionHistoryCount = registry.counter(
+        MetricRegistry.name(PersistentIndex.class, name + "GenerateTokenBasedOnCompactionHistoryCount"));
+    offsetFoundInBeforeAfterMapCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "OffsetFoundInBeforeAfterMapCount"));
     recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexRecoveryTime"));
     findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFindTime"));
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));
