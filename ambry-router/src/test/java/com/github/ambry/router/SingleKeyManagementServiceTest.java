@@ -26,6 +26,7 @@ import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Hex;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.ambry.router.CryptoTestUtils.*;
@@ -34,6 +35,7 @@ import static com.github.ambry.router.CryptoTestUtils.*;
 /**
  * Tests {@link SingleKeyManagementService} and {@link SingleKeyManagementServiceFactory}
  */
+@Ignore("Disable to test TtlUpdateManagerTest failure")
 public class SingleKeyManagementServiceTest {
 
   static final int DEFAULT_KEY_SIZE_CHARS = 64;

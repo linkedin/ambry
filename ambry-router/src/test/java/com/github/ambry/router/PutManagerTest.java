@@ -170,6 +170,7 @@ public class PutManagerTest {
       if (router.isOpen()) {
         router.close();
       }
+      RouterTestHelpers.assertCleanStartup(router);
     }
     nettyByteBufLeakHelper.afterTest();
   }

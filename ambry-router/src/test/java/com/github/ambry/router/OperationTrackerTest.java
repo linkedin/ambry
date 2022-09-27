@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -62,6 +63,7 @@ import static org.junit.Assume.*;
  *
  * The number of replicas for most tests is 12.
  */
+@Ignore("Disable to test TtlUpdateManagerTest failure")
 @RunWith(Parameterized.class)
 public class OperationTrackerTest {
   private static final int PORT = 6666;

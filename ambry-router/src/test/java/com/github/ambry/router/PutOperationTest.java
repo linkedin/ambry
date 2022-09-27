@@ -49,9 +49,11 @@ import java.util.stream.LongStream;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 
+@Ignore("Disable to test TtlUpdateManagerTest failure")
 public class PutOperationTest {
   private final RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap = new MockClusterMap();
