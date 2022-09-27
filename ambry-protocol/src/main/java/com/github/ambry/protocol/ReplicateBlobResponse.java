@@ -23,10 +23,10 @@ import java.io.IOException;
  * Response of ReplicateBlob request
  */
 public class ReplicateBlobResponse extends Response {
-  private static final short ReplicateBlob_Response_Version_V1 = 1;
+  private static final short Version_V1 = 1;
 
   public ReplicateBlobResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.ReplicateBlobResponse, ReplicateBlob_Response_Version_V1, correlationId, clientId, error);
+    super(RequestOrResponseType.ReplicateBlobResponse, Version_V1, correlationId, clientId, error);
   }
 
   /**
@@ -44,7 +44,7 @@ public class ReplicateBlobResponse extends Response {
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
-    if (versionId != ReplicateBlob_Response_Version_V1) {
+    if (versionId != Version_V1) {
       throw new IllegalArgumentException("Unexpected ReplicateBlobResponse version " + versionId);
     }
     return new ReplicateBlobResponse(correlationId, clientId, error);

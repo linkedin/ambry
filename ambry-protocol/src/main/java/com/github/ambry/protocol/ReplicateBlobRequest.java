@@ -24,26 +24,22 @@ import java.io.IOException;
  * ReplicateBlob request to replicate one particular blob
  */
 public class ReplicateBlobRequest extends RequestOrResponse {
-  public final static short ReplicateBlob_REQUEST_VERSION_1 = 1;
-  private final static short CURRENT_VERSION = ReplicateBlob_REQUEST_VERSION_1;
+  public final static short VERSION_1 = 1;
+  private final static short CURRENT_VERSION = VERSION_1;
   private final BlobId blobId;
   private final String sourceHostName;
-  private final int sourceHostPort;
 
-  private static final short Source_Host_Name_Size_In_Bytes = Integer.BYTES;
-  private static final short Source_Host_Port_Size_In_Bytes = Integer.BYTES;
+  private static final short SOURCE_HOST_NAME_SIZE_IN_BYTES = Integer.BYTES;
 
   /**
-   * Constructs {@link ReplicateBlobRequest} in {@link #ReplicateBlob_REQUEST_VERSION_1}
+   * Constructs {@link ReplicateBlobRequest} in {@link #VERSION_1}
    * @param correlationId correlationId of the ReplicateBlob request
    * @param clientId clientId of the ReplicateBlob request
    * @param blobId blobId of the ReplicateBlob request
    * @param sourceHostName the name of the source host to get the blob from
-   * @param sourceHostPort the port of the source host to get the blob from
    */
-  public ReplicateBlobRequest(int correlationId, String clientId, BlobId blobId,
-      String sourceHostName, int sourceHostPort) {
-    this(correlationId, clientId, blobId, sourceHostName, sourceHostPort, CURRENT_VERSION);
+  public ReplicateBlobRequest(int correlationId, String clientId, BlobId blobId, String sourceHostName) {
+    this(correlationId, clientId, blobId, sourceHostName, CURRENT_VERSION);
   }
 
   /**
@@ -52,15 +48,12 @@ public class ReplicateBlobRequest extends RequestOrResponse {
    * @param clientId clientId of the ReplicateBlob request
    * @param blobId blobId of the ReplicateBlob request
    * @param sourceHostName the name of the source host to get the blob from
-   * @param sourceHostPort the port of the source host to get the blob from
    * @param version version of the {@link ReplicateBlobRequest}
    */
-  private ReplicateBlobRequest(int correlationId, String clientId, BlobId blobId,
-      String sourceHostName, int sourceHostPort, short version) {
+  private ReplicateBlobRequest(int correlationId, String clientId, BlobId blobId, String sourceHostName, short version) {
     super(RequestOrResponseType.ReplicateBlobRequest, version, correlationId, clientId);
     this.blobId = blobId;
     this.sourceHostName = sourceHostName;
-    this.sourceHostPort = sourceHostPort;
   }
 
   /**
@@ -71,9 +64,9 @@ public class ReplicateBlobRequest extends RequestOrResponse {
    * @throws IOException Any I/O Errors.
    */
   public static ReplicateBlobRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
-    Short version = stream.readShort();
+    short version = stream.readShort();
     switch (version) {
-      case ReplicateBlob_REQUEST_VERSION_1:
+      case VERSION_1:
         return ReplicateBlobRequest_V1.readFrom(stream, map);
       default:
         throw new IllegalStateException("Unknown ReplicateBlob Request version " + version);
@@ -89,7 +82,6 @@ public class ReplicateBlobRequest extends RequestOrResponse {
     bufferToSend.writeBytes(blobId.toBytes());
     bufferToSend.writeInt(sourceHostName.length());
     bufferToSend.writeBytes(sourceHostName.getBytes());
-    bufferToSend.writeInt(sourceHostPort);
   }
 
   /**
@@ -121,21 +113,13 @@ public class ReplicateBlobRequest extends RequestOrResponse {
   }
 
   /**
-   * @return the port of the source host from where to get the Blob.
-   */
-  public int getSourceHostPort() {
-    return sourceHostPort;
-  }
-
-  /**
    * @return the size of the serialized ReplicateBlobRequest stream
    */
   @Override
   public long sizeInBytes() {
-    // header + blobId + sourceHostName + sourceHostPort
+    // header + blobId + sourceHostName
     long sizeInBytes = super.sizeInBytes() + blobId.sizeInBytes();
-    sizeInBytes += Source_Host_Name_Size_In_Bytes + sourceHostName.length();
-    sizeInBytes += Source_Host_Port_Size_In_Bytes;
+    sizeInBytes += SOURCE_HOST_NAME_SIZE_IN_BYTES + sourceHostName.length();
     return sizeInBytes;
   }
 
@@ -150,7 +134,6 @@ public class ReplicateBlobRequest extends RequestOrResponse {
     sb.append(", ").append("AccountId=").append(blobId.getAccountId());
     sb.append(", ").append("ContainerId=").append(blobId.getContainerId());
     sb.append(", ").append("SourceHostName=").append(sourceHostName);
-    sb.append(", ").append("SourceHostPort=").append(sourceHostPort);
     sb.append("]");
     return sb.toString();
   }
@@ -164,8 +147,7 @@ public class ReplicateBlobRequest extends RequestOrResponse {
       String clientId = Utils.readIntString(stream);
       BlobId id = new BlobId(stream, map);
       String sourceHostName = Utils.readIntString(stream);
-      int sourceHostPort = stream.readInt();
-      return new ReplicateBlobRequest(correlationId, clientId, id, sourceHostName, sourceHostPort, ReplicateBlob_REQUEST_VERSION_1);
+      return new ReplicateBlobRequest(correlationId, clientId, id, sourceHostName, VERSION_1);
     }
   }
 }

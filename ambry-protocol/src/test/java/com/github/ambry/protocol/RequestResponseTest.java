@@ -1024,30 +1024,45 @@ public class RequestResponseTest {
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     final String sourceHostName = "datacenter1_host1";
-    // 1 ~ 65535 are legit TCP ports. getRandomLong(x, n) returns [0..n)
-    final int sourceHostPort = (int)Utils.getRandomLong(TestUtils.RANDOM, 65535) + 1;
     final int correlationId = TestUtils.RANDOM.nextInt();
 
-    final ReplicateBlobRequest replicateBlobRequest = new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName, sourceHostPort);
+    final ReplicateBlobRequest replicateBlobRequest = new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName);
     DataInputStream requestStream = serAndPrepForRead(replicateBlobRequest, -1, true);
     final ReplicateBlobRequest deserializedReplicateBlobRequest = ReplicateBlobRequest.readFrom(requestStream, clusterMap);
-    Assert.assertEquals(correlationId, deserializedReplicateBlobRequest.getCorrelationId());
-    Assert.assertEquals(accountId, deserializedReplicateBlobRequest.getAccountId());
-    Assert.assertEquals(containerId, deserializedReplicateBlobRequest.getContainerId());
-    Assert.assertEquals(clientId, deserializedReplicateBlobRequest.getClientId());
-    Assert.assertEquals(id1, deserializedReplicateBlobRequest.getBlobId());
-    Assert.assertEquals(sourceHostName, deserializedReplicateBlobRequest.getSourceHostName());
-    Assert.assertEquals(sourceHostPort, deserializedReplicateBlobRequest.getSourceHostPort());
+    verifyReplicateBlobRequest(replicateBlobRequest, deserializedReplicateBlobRequest);
     replicateBlobRequest.release();
 
     final ReplicateBlobResponse response = new ReplicateBlobResponse(correlationId, clientId, ServerErrorCode.No_Error);
     requestStream = serAndPrepForRead(response, -1, false);
     final ReplicateBlobResponse deserializedReplicateBlobResponse = ReplicateBlobResponse.readFrom(requestStream);
-    Assert.assertEquals(deserializedReplicateBlobResponse.getCorrelationId(), correlationId);
-    Assert.assertEquals(deserializedReplicateBlobResponse.getClientId(), clientId);
-    Assert.assertEquals(deserializedReplicateBlobResponse.getRequestType(), RequestOrResponseType.AdminRequest.ReplicateBlobResponse);
-    Assert.assertEquals(deserializedReplicateBlobResponse.getError(), ServerErrorCode.No_Error);
+    verifyReplicateBlobResponse(response, deserializedReplicateBlobResponse);
     response.release();
+  }
+
+  /**
+   * Verify the two {@link ReplicateBlobRequest} are the same
+   * @param orgReq the original {@link ReplicateBlobRequest}
+   * @param deserializedReq the deserialized {@link ReplicateBlobRequest}
+   */
+  private void verifyReplicateBlobRequest(ReplicateBlobRequest orgReq, ReplicateBlobRequest deserializedReq) {
+    Assert.assertEquals(orgReq.getCorrelationId(), deserializedReq.getCorrelationId());
+    Assert.assertEquals(orgReq.getAccountId(), deserializedReq.getAccountId());
+    Assert.assertEquals(orgReq.getContainerId(), deserializedReq.getContainerId());
+    Assert.assertEquals(orgReq.getClientId(), deserializedReq.getClientId());
+    Assert.assertEquals(orgReq.getBlobId(), deserializedReq.getBlobId());
+    Assert.assertEquals(orgReq.getSourceHostName(), deserializedReq.getSourceHostName());
+  }
+
+  /**
+   * Verify the two {@link ReplicateBlobResponse} are the same
+   * @param orgRes the original {@link ReplicateBlobResponse}
+   * @param deserializedRes the deserialized {@link ReplicateBlobResponse}
+   */
+  private void verifyReplicateBlobResponse(ReplicateBlobResponse orgRes, ReplicateBlobResponse deserializedRes) {
+    Assert.assertEquals(deserializedRes.getCorrelationId(), orgRes.getCorrelationId());
+    Assert.assertEquals(deserializedRes.getClientId(), orgRes.getClientId());
+    Assert.assertEquals(deserializedRes.getRequestType(), RequestOrResponseType.ReplicateBlobResponse);
+    Assert.assertEquals(deserializedRes.getError(), orgRes.getError());
   }
 
   /**
