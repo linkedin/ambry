@@ -127,30 +127,35 @@ class GetBlobOperation extends GetOperation {
   private CompositeBlobInfo compositeBlobInfo;
   // A cache for blob metadata of composite blobs
   private AmbryCache blobMetadataCache;
+  private NonBlockingRouter nonBlockingRouter;
 
   /**
    * Construct a GetBlobOperation
-   * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
-   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param clusterMap the {@link ClusterMap} of the cluster
-   * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param blobId the {@link BlobId} associated with the operation.
-   * @param options the {@link GetBlobOptionsInternal} associated with the operation.
-   * @param callback the callback that is to be called when the operation completes.
-   * @param routerCallback the {@link RouterCallback} to use to complete operations.
-   * @param blobIdFactory the factory to use to deserialize keys in a metadata chunk.
-   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
-   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param time the Time instance to use.
-   * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
+   *
+   * @param routerConfig      the {@link RouterConfig} containing the configs for get operations.
+   * @param routerMetrics     The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap        the {@link ClusterMap} of the cluster
+   * @param responseHandler   the {@link ResponseHandler} responsible for failure detection.
+   * @param blobId            the {@link BlobId} associated with the operation.
+   * @param options           the {@link GetBlobOptionsInternal} associated with the operation.
+   * @param callback          the callback that is to be called when the operation completes.
+   * @param routerCallback    the {@link RouterCallback} to use to complete operations.
+   * @param blobIdFactory     the factory to use to deserialize keys in a metadata chunk.
+   * @param kms               {@link KeyManagementService} to assist in fetching container keys for encryption or
+   *                          decryption
+   * @param cryptoService     {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler  {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time              the Time instance to use.
+   * @param isEncrypted       if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
+   * @param nonBlockingRouter
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResult> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache) {
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache,
+      NonBlockingRouter nonBlockingRouter) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -160,6 +165,7 @@ class GetBlobOperation extends GetOperation {
     BlobMetadata blobMetadata =
         shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
     firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -275,7 +281,7 @@ class GetBlobOperation extends GetOperation {
   @Override
   void abort(Exception abortCause) {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
-      NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
+      nonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
     } else {
       setOperationException(abortCause);
       if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
@@ -345,7 +351,7 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.onGetBlobError(e, options, isEncrypted);
           }
         }
-        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
+        nonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
       }
     }
     chunk.postCompletionCleanup();

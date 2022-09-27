@@ -27,7 +27,6 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.util.HashMap;
@@ -69,23 +68,28 @@ class GetManager {
   // appropriate before the callback is passed on to GetOperations, every time.
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback;
   private final AmbryCache blobMetadataCache;
+  private final NonBlockingRouter nonBlockingRouter;
 
   /**
    * Create a GetManager
-   * @param clusterMap The {@link ClusterMap} of the cluster.
-   * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
-   * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
-   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
-   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
-   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param time The {@link Time} instance to use.
+   *
+   * @param clusterMap        The {@link ClusterMap} of the cluster.
+   * @param responseHandler   The {@link ResponseHandler} used to notify failures for failure detection.
+   * @param routerConfig      The {@link RouterConfig} containing the configs for the PutManager.
+   * @param routerMetrics     The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param routerCallback    The {@link RouterCallback} to use for callbacks to the router.
+   * @param kms               {@link KeyManagementService} to assist in fetching container keys for encryption or
+   *                          decryption
+   * @param cryptoService     {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler  {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time              The {@link Time} instance to use.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
+   * @param nonBlockingRouter
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
       NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, AmbryCache blobMetadataCache) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, AmbryCache blobMetadataCache,
+      NonBlockingRouter nonBlockingRouter) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
@@ -100,6 +104,7 @@ class GetManager {
     correlationIdToGetOperation = new HashMap<>();
     requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToGetOperation);
     this.blobMetadataCache = blobMetadataCache;
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -130,12 +135,12 @@ class GetManager {
         && options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       getOperation =
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeCallback);
+              routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted, quotaChargeCallback, nonBlockingRouter);
     } else {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
-              quotaChargeCallback, blobMetadataCache);
+              quotaChargeCallback, blobMetadataCache, nonBlockingRouter);
     }
     getOperations.add(getOperation);
   }

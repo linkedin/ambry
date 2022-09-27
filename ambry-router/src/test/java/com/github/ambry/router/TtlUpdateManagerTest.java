@@ -114,7 +114,7 @@ public class TtlUpdateManagerTest {
     }
     ttlUpdateManager =
         new TtlUpdateManager(clusterMap, new ResponseHandler(clusterMap), notificationSystem, accountService,
-            routerConfig, metrics, time);
+            routerConfig, metrics, time, nonBlockingRouter);
     networkClient = networkClientFactory.getNetworkClient();
   }
 

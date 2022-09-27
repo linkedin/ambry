@@ -74,28 +74,31 @@ class GetBlobInfoOperation extends GetOperation {
   private final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new LinkedHashMap<>();
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobInfoOperation.class);
-
+  private final NonBlockingRouter nonBlockingRouter;
   /**
    * Construct a GetBlobInfoOperation
-   * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
-   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param clusterMap the {@link ClusterMap} of the cluster
-   * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param blobId the {@link BlobId} associated with the operation.
-   * @param options the {@link GetBlobOptionsInternal} containing the options associated with this operation.
-   * @param callback the callback that is to be called when the operation completes.
-   * @param routerCallback the {@link RouterCallback} to use to complete operations.
-   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
-   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param time the Time instance to use.
-   * @param isEncrypted if encrypted bit set based on original string of a {@link BlobId}
+   *
+   * @param routerConfig      the {@link RouterConfig} containing the configs for get operations.
+   * @param routerMetrics     The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap        the {@link ClusterMap} of the cluster
+   * @param responseHandler   the {@link ResponseHandler} responsible for failure detection.
+   * @param blobId            the {@link BlobId} associated with the operation.
+   * @param options           the {@link GetBlobOptionsInternal} containing the options associated with this operation.
+   * @param callback          the callback that is to be called when the operation completes.
+   * @param routerCallback    the {@link RouterCallback} to use to complete operations.
+   * @param kms               {@link KeyManagementService} to assist in fetching container keys for encryption or
+   *                          decryption
+   * @param cryptoService     {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler  {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time              the Time instance to use.
+   * @param isEncrypted       if encrypted bit set based on original string of a {@link BlobId}
+   * @param nonBlockingRouter
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResult> callback, RouterCallback routerCallback, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -106,12 +109,13 @@ class GetBlobInfoOperation extends GetOperation {
     progressTracker = new ProgressTracker(operationTracker);
     operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   @Override
   void abort(Exception abortCause) {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
-      NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
+      nonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
       operationCompleted = true;
     }
   }
@@ -520,7 +524,7 @@ class GetBlobInfoOperation extends GetOperation {
       } else {
         routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);
       }
-      NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
+      nonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
   }
 

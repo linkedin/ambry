@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
  * Streaming, non-blocking router implementation for Ambry.
  */
 class NonBlockingRouter implements Router {
-  static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
+  private final AtomicInteger currentOperationsCount = new AtomicInteger(0);
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
@@ -131,6 +131,14 @@ class NonBlockingRouter implements Router {
     routerMetrics.initializeQuotaOCMetrics(ocList);
   }
 
+  Integer incrementAndGetOperationCount() {
+    return currentOperationsCount.incrementAndGet();
+  }
+
+  Integer decrementAndGetOperationCount() {
+    return currentOperationsCount.decrementAndGet();
+  }
+
   /**
    * @return cache used to store IDs of blobs recently not found in server. Used only in tests.
    */
@@ -155,7 +163,7 @@ class NonBlockingRouter implements Router {
    * @param operationResult the result of the operation (if any).
    * @param exception {@link Exception} encountered while performing the operation (if any).
    */
-  static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
+  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception) {
     completeOperation(futureResult, callback, operationResult, exception, true);
   }
@@ -170,10 +178,10 @@ class NonBlockingRouter implements Router {
    * @param exception {@link Exception} encountered while performing the operation (if any).
    * @param decrementOperationsCount if {@code true}, decrements current outstanding operations count.
    */
-  static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
+  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception, boolean decrementOperationsCount) {
     if (decrementOperationsCount) {
-      NonBlockingRouter.currentOperationsCount.decrementAndGet();
+      decrementAndGetOperationCount();
     }
     try {
       if (futureResult != null) {

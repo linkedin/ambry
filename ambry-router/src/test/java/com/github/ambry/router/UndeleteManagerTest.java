@@ -126,7 +126,7 @@ public class UndeleteManagerTest {
       }
     }
     undeleteManager = new UndeleteManager(clusterMap, new ResponseHandler(clusterMap), new LoggingNotificationSystem(),
-        accountService, routerConfig, metrics, time);
+        accountService, routerConfig, metrics, time, nonBlockingRouter);
     networkClient = networkClientFactory.getNetworkClient();
   }
 

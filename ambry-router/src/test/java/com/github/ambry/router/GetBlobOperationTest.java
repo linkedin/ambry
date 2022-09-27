@@ -92,7 +92,6 @@ import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -357,7 +356,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
         getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-        quotaChargeCallback, null);
+        quotaChargeCallback, null, nonBlockingRouter);
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
@@ -369,7 +368,7 @@ public class GetBlobOperationTest {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
           new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
           getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-          quotaChargeCallback, null);
+          quotaChargeCallback, null, nonBlockingRouter);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -1832,11 +1831,11 @@ public class GetBlobOperationTest {
    * @return the operation
    */
   private GetBlobOperation createOperation(RouterConfig routerConfig, Callback<GetBlobResult> callback) {
-    NonBlockingRouter.currentOperationsCount.incrementAndGet();
+    router.incrementAndGetOperationCount();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
             routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback,
-            this.blobMetadataCache);
+            this.blobMetadataCache, nonBlockingRouter);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     return op;
   }
