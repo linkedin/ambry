@@ -63,7 +63,7 @@ import static org.junit.Assume.*;
  *
  * The number of replicas for most tests is 12.
  */
-@Ignore("Disable to test TtlUpdateManagerTest failure")
+//@Ignore("Disable to test TtlUpdateManagerTest failure")
 @RunWith(Parameterized.class)
 public class OperationTrackerTest {
   private static final int PORT = 6666;

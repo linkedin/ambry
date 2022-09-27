@@ -198,7 +198,7 @@ class RouterTestHelpers {
   /**
    * Asserts clean startup.
    */
-  static void assertCleanStartup(NonBlockingRouter router) {
+  static void assertZeroOperation(NonBlockingRouter router) {
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 

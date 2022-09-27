@@ -120,7 +120,7 @@ public class TtlUpdateManagerTest {
 
   @Before
   public void before() {
-    assertCleanStartup(router);
+    assertZeroOperation(router);
 
     nettyByteBufLeakHelper.beforeTest();
   }

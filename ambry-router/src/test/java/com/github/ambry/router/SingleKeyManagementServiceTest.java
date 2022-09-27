@@ -35,7 +35,7 @@ import static com.github.ambry.router.CryptoTestUtils.*;
 /**
  * Tests {@link SingleKeyManagementService} and {@link SingleKeyManagementServiceFactory}
  */
-@Ignore("Disable to test TtlUpdateManagerTest failure")
+//@Ignore("Disable to test TtlUpdateManagerTest failure")
 public class SingleKeyManagementServiceTest {
 
   static final int DEFAULT_KEY_SIZE_CHARS = 64;
