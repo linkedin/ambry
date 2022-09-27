@@ -196,6 +196,13 @@ class RouterTestHelpers {
   }
 
   /**
+   * Asserts clean startup.
+   */
+  static void assertCleanStartup(NonBlockingRouter router) {
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  /**
    * Asserts that expected threads are not running after the router is closed.
    */
   static void assertCloseCleanup(NonBlockingRouter router) {

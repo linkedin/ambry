@@ -247,6 +247,8 @@ class TtlUpdateManager {
         routerMetrics.operationAbortCount.inc();
         routerMetrics.onUpdateBlobTtlError(e);
         NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
+      } else {
+        LOGGER.error("Couldn't remove TtlUpdateOperatioin {} ", op);
       }
     }
   }
