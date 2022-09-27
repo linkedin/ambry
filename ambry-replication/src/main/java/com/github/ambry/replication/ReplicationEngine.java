@@ -297,12 +297,13 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   }
 
   /**
-   * Assign {@link RemoteReplicaInfo} to a {@link ReplicaThread} for replication.
-   * The assignment is based on {@link DataNodeId}. If no {@link ReplicaThread} responsible for a {@link DataNodeId},
-   * a {@link ReplicaThread} will be selected by {@link ReplicationEngine#getReplicaThreadIndexToUse(String)}.
-   * Create threads pool for a DC if not exists.
+   * Assign {@link RemoteReplicaInfo} to a {@link ReplicaThread} for replication. The assignment is based on
+   * {@link DataNodeId}. If no {@link ReplicaThread} responsible for a {@link DataNodeId}, a {@link ReplicaThread} will
+   * be selected by {@link ReplicationEngine#getReplicaThreadIndexToUse(String)}. Create threads pool for a DC if not
+   * exists.
+   *
    * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} to add.
-   * @param startThread if threads need to be started when create.
+   * @param startThread        if threads need to be started when create.
    */
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
@@ -331,14 +332,15 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   /**
    * Get thread pool for given datacenter. Create thread pool for a datacenter if its thread pool doesn't exist.
-   * @param datacenter The datacenter String.
-   * @param startThread If thread needs to be started when create.
+   *
+   * @param datacenter        The datacenter String.
+   * @param startThread       If thread needs to be started when create.
    * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
    */
   private List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
     int numOfThreadsInPool =
-        datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
-            : replicationConfig.replicationNumOfInterDCReplicaThreads;
+        datacenter.equals(dataNodeId.getDatacenterName()) ? this.replicationConfig.replicationNumOfIntraDCReplicaThreads
+            : this.replicationConfig.replicationNumOfInterDCReplicaThreads;
     if (numOfThreadsInPool <= 0) {
       return null;
     }
@@ -348,9 +350,10 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   /**
    * Create thread pool for a datacenter.
-   * @param datacenter The datacenter String.
-   * @param numberOfThreads Number of threads to create for the thread pool.
-   * @param startThread If thread needs to be started when create.
+   *
+   * @param datacenter        The datacenter String.
+   * @param numberOfThreads   Number of threads to create for the thread pool.
+   * @param startThread       If thread needs to be started when create.
    */
   private List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
     nextReplicaThreadIndexByDc.put(datacenter, new AtomicInteger(0));
@@ -366,7 +369,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
         ReplicaThread replicaThread =
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-                connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
+                connectionPool, this.replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
                 threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler, time,
                 replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
         replicaThreads.add(replicaThread);

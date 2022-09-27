@@ -1,0 +1,36 @@
+{
+  "clusterName": "localhostTwoNodes",
+  "version": 1,
+  "datacenters": [
+    {
+      "dataNodes": [
+        {
+          "disks": [
+            {
+              "capacityInBytes": 21474836480,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/ambry/1"
+            }
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 6670
+        },
+        {
+          "disks": [
+            {
+              "capacityInBytes": 21474836480,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/ambry/2"
+            }
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 6671
+        }
+      ],
+      "name": "Datacenter",
+      "id": "1"
+    }
+  ]
+}

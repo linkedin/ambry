@@ -29,6 +29,7 @@ public class ReplicationConfig {
   public static final String REPLICATION_MODEL_ACROSS_DATACENTERS = "replication.model.across.datacenters";
   public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
       "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
+  public static final String DR_VERIFICATION_THREAD = "dr.verification.thread";
 
   /**
    * The factory class the replication uses to creates its tokens
@@ -224,7 +225,11 @@ public class ReplicationConfig {
   @Default("120")
   public final int replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds;
 
+  @Config(DR_VERIFICATION_THREAD)
+  public final boolean drVerificationThread;
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
+
+    drVerificationThread = verifiableProperties.getBoolean("dr.verification.thread", false);
 
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");

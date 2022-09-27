@@ -64,6 +64,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -114,6 +115,8 @@ public class ReplicaThread implements Runnable {
   private final Predicate<MessageInfo> skipPredicate;
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
+
+  private boolean drVerificationThread = false;
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
@@ -166,7 +169,10 @@ public class ReplicaThread implements Runnable {
     }
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
+    this.drVerificationThread = replicationConfig.drVerificationThread;
+    logger.info("|snkt| drVerificationThread = " + drVerificationThread);
   }
+
 
   /**
    * Enables/disables replication on the given {@code ids}.
@@ -228,7 +234,10 @@ public class ReplicaThread implements Runnable {
         } finally {
           lock.unlock();
         }
+        TimeUnit.MINUTES.sleep(1);
       }
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
     } finally {
       running = false;
       shutdownLatch.countDown();
@@ -411,7 +420,7 @@ public class ReplicaThread implements Runnable {
             exchangeMetadataTimeInMs = -1;
             fixMissingStoreKeysTimeInMs = -1;
             currentReplicaList = replicaSubList;
-            logger.debug("Exchanging metadata with {} remote replicas on {}", currentReplicaList.size(), remoteNode);
+            logger.info("|snkt| Exchanging metadata with {} remote replicas on {}", currentReplicaList.size(), remoteNode);
             startTimeInMs = time.milliseconds();
             List<ExchangeMetadataResponse> exchangeMetadataResponseList =
                 exchangeMetadata(connectedChannel, replicaSubList);
@@ -582,8 +591,10 @@ public class ReplicaThread implements Runnable {
                     remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                     replicaMetadataResponseInfo.getFindToken(),
                     replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
+                // snkt; get missing keys since last sync point
                 Set<MessageInfo> remoteMissingStoreMessages =
                     getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+                logger.info("|snkt| remoteMissingStoreMessages.size = " + remoteMissingStoreMessages.size());
                 processReplicaMetadataResponse(remoteMissingStoreMessages, replicaMetadataResponseInfo,
                     remoteReplicaInfo, remoteNode, remoteKeyToLocalKeyMap);
 
@@ -627,8 +638,8 @@ public class ReplicaThread implements Runnable {
                 if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {
                   remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
                   remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-                  logger.trace(
-                      "Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
+                  logger.info(
+                      "|snkt| NO MISSING KEYS | Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                       remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
                 }
 
@@ -755,7 +766,7 @@ public class ReplicaThread implements Runnable {
               remoteReplicaInfo.getLocalReplicaId().getReplicaPath(), remoteReplicaInfo.getReplicaId().getReplicaType(),
               replicationConfig.replicaMetadataRequestVersion);
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
-      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
+      logger.info("|snkt| SEND TO REMOTE | Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
     }
 
@@ -765,11 +776,14 @@ public class ReplicaThread implements Runnable {
           "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
           replicaMetadataRequestInfoList, replicationConfig.replicationFetchSizeInBytes,
           replicationConfig.replicaMetadataRequestVersion);
+      // snkt - this is where request is sent to remote node for metadata
       channelOutput = connectedChannel.sendAndReceive(request);
       logger.trace("Remote node: {} Thread name: {} Remote replicas: {} Stream size after deserialization: {} ",
           remoteNode, threadName, replicasToReplicatePerNode, channelOutput.getInputStream().available());
       ReplicaMetadataResponse response =
           ReplicaMetadataResponse.readFrom(channelOutput.getInputStream(), findTokenHelper, clusterMap);
+      logger.info("|snkt| RCVD RESP FROM REMOTE | Remote node: {} Thread name: {} Remote replicas: {} Metadata: {} ",
+          remoteNode, threadName, replicasToReplicatePerNode, response);
 
       long metadataRequestTime = time.milliseconds() - replicaMetadataRequestStartTime;
       replicationMetrics.updateMetadataRequestTime(metadataRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
@@ -824,16 +838,20 @@ public class ReplicaThread implements Runnable {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }
+
     Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore()
         .findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()),
             remoteReplicaInfo.getReplicaId().getDataNodeId());
+
     Set<MessageInfo> missingRemoteMessages = new HashSet<>();
     remoteMessageToConvertedKeyNonNull.forEach((messageInfo, convertedKey) -> {
       if (convertedMissingStoreKeys.contains(convertedKey)) {
-        logger.trace(
-            "Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (remote): {}",
+        logger.info(
+            "|snkt| MISSING KEYS | Remote node: {} Thread name: {} Remote replica: {} missing local key : {} missing remote key : {}",
             remoteNode, threadName, remoteReplicaInfo.getReplicaId(), convertedKey, messageInfo.getStoreKey());
-        missingRemoteMessages.add(messageInfo);
+        if (!drVerificationThread) {
+          missingRemoteMessages.add(messageInfo);
+        }
       }
     });
     if (messageInfoList.size() != 0 && missingRemoteMessages.size() == 0) {
@@ -904,6 +922,9 @@ public class ReplicaThread implements Runnable {
         // if the blob is from deprecated container, then nothing needs to be done.
         if (replicationConfig.replicationContainerDeletionEnabled && skipPredicate != null && skipPredicate.test(
             messageInfo)) {
+          continue;
+        }
+        if(drVerificationThread) {
           continue;
         }
         applyUpdatesToBlobInLocalStore(messageInfo, remoteReplicaInfo, localKey);
@@ -1052,6 +1073,7 @@ public class ReplicaThread implements Runnable {
           if (remoteNode instanceof CloudDataNode) {
             logger.trace("Replicating blobs from CloudDataNode: {}", missingStoreKeys);
           }
+          // snkt: Here is where we add keys to fetch data for
           ArrayList<BlobId> keysToFetch = new ArrayList<BlobId>();
           for (StoreKey storeKey : missingStoreKeys) {
             keysToFetch.add((BlobId) storeKey);
@@ -1070,6 +1092,7 @@ public class ReplicaThread implements Runnable {
           replicationConfig.replicationIncludeAll ? GetOption.Include_All : GetOption.None);
       long startTime = time.milliseconds();
       try {
+        // snkt: sends a GET to remote node, not a GET-BLOB request. This is different from GET-BLOB.
         ChannelOutput channelOutput = connectedChannel.sendAndReceive(getRequest);
         getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
         long getRequestTime = time.milliseconds() - startTime;
@@ -1151,6 +1174,7 @@ public class ReplicaThread implements Runnable {
                     "MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
               } else {
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
+                // TODO: snkt here is write to local store
                 remoteReplicaInfo.getLocalStore().put(writeset);
               }
 
@@ -1181,6 +1205,7 @@ public class ReplicaThread implements Runnable {
                     messageInfoList);
               }
 
+              // snkt: here is where token is persisted
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
               remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
               // reset stored metadata response for this replica

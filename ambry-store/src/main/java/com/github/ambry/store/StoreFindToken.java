@@ -586,27 +586,29 @@ public class StoreFindToken implements FindToken {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("version: ").append(version);
-    sb.append(" type: ").append(type);
+    sb.append("{");
+    sb.append("version=").append(version);
+    sb.append(" type=").append(type);
     if (incarnationId != null) {
-      sb.append(" incarnationId ").append(incarnationId);
+      sb.append(" incarnationId=").append(incarnationId);
     }
-    sb.append(" inclusiveness ").append(inclusive == 1);
+    sb.append(" inclusiveness=").append(inclusive == 1);
     if (!type.equals(FindTokenType.Uninitialized)) {
       if (sessionId != null) {
-        sb.append(" sessionId ").append(sessionId);
+        sb.append(" sessionId=").append(sessionId);
       }
       if (storeKey != null) {
-        sb.append(" storeKey ").append(storeKey);
+        sb.append(" storeKey=").append(storeKey);
       }
       if (resetKey != null) {
-        sb.append(" resetKey ").append(resetKey);
-        sb.append(" resetKeyType ").append(resetKeyType);
-        sb.append(" resetKeyVersion ").append(resetKeyVersion);
+        sb.append(" resetKey=").append(resetKey);
+        sb.append(" resetKeyType=").append(resetKeyType);
+        sb.append(" resetKeyVersion=").append(resetKeyVersion);
       }
-      sb.append(" offset ").append(offset);
-      sb.append(" bytesRead ").append(bytesRead);
+      sb.append(" offset=").append(offset);
+      sb.append(" bytesRead=").append(bytesRead);
     }
+    sb.append("}");
     return sb.toString();
   }
 

@@ -1,6 +1,6 @@
 {
-    "clusterName": "OneDiskOneReplica",
-    "version": 88,
+    "clusterName": "localhostMainNode",
+    "version": 1,
     "partitions": [
         {
             "id": 0,
@@ -10,8 +10,8 @@
             "replicas": [
                 {
                     "hostname": "localhost",
-                    "mountPath": "/tmp",
-                    "port": 6667
+                    "mountPath": "/tmp/ambry/1",
+                    "port": 6670
                 }
             ]
         }

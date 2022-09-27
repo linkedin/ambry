@@ -1,6 +1,6 @@
 {
-    "clusterName": "OneDiskOneReplica",
-    "version": 99,
+    "clusterName": "localhostMainNode",
+    "version": 1,
     "datacenters": [
         {
             "dataNodes": [
@@ -9,17 +9,16 @@
                         {
                             "capacityInBytes": 21474836480,
                             "hardwareState": "AVAILABLE",
-                            "mountPath": "/tmp"
+                            "mountPath": "/tmp/ambry/1"
                         }
                     ],
                     "hardwareState": "AVAILABLE",
                     "hostname": "localhost",
-                    "port": 6667,
-                    "http2port": 26667
+                    "port": 6670
                 }
             ],
             "name": "Datacenter",
-            "id" : "1"
+            "id": "1"
         }
     ]
 }

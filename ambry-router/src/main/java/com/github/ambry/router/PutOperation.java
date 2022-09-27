@@ -1224,7 +1224,7 @@ class PutOperation {
       String originatingDcName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
       if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
         operationTracker =
-            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, originatingDcName, true,
+            new SimpleOperationTracker(routerConfig, RouterOperation.PutOperation, partitionId, originatingDcName, false,
                 routerMetrics);
       } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
         operationTracker =

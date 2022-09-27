@@ -82,6 +82,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
   @Override
   public List<ReplicaTokenInfo> retrieve(String mountPath) throws ReplicationException {
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
+    logger.info("|snkt| TOKEN FILE | " + replicaTokenFile.getAbsolutePath());
     if (replicaTokenFile.exists()) {
       try (FileInputStream fileInputStream = new FileInputStream(replicaTokenFile)) {
         return replicaTokenSerde.deserializeTokens(fileInputStream);

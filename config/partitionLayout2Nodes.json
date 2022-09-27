@@ -1,0 +1,24 @@
+{
+  "clusterName": "localhostTwoNodes",
+  "version": 1,
+  "partitions": [
+    {
+      "id": 0,
+      "partitionClass": "max-replicas-all-datacenters",
+      "partitionState": "READ_WRITE",
+      "replicaCapacityInBytes": 10737418240,
+      "replicas": [
+        {
+          "hostname": "localhost",
+          "mountPath": "/tmp/ambry/1",
+          "port": 6670
+        },
+        {
+          "hostname": "localhost",
+          "mountPath": "/tmp/ambry/2",
+          "port": 6671
+        }
+      ]
+    }
+  ]
+}

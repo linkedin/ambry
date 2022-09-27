@@ -127,6 +127,6 @@ public class Offset implements Comparable<Offset> {
 
   @Override
   public String toString() {
-    return "Name = [" + name + "] Offset = [" + offset + "]";
+    return "{Segment=[" + name + "] Offset=[" + offset + "]}";
   }
 }
