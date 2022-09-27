@@ -27,15 +27,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import static com.github.ambry.router.RouterTestHelpers.*;
 
 
 /**
  * Tests for {@link BatchOperationCallbackTracker}.
  */
-@Ignore("Disable to test TtlUpdateManagerTest failure")
+//@Ignore("Disable to test TtlUpdateManagerTest failure")
 public class BatchOperationCallbackTrackerTest {
   private static final QuotaChargeCallback quotaChargeCallback = new QuotaTestUtils.TestQuotaChargeCallback();
   private static final int NUM_CHUNKS = 5;
@@ -68,6 +72,20 @@ public class BatchOperationCallbackTrackerTest {
       trackerException = exception;
     };
   }
+
+  @Before
+  public void before() {
+    assertZeroOperation();
+  }
+
+  /**
+   * Closes the router and ttl manager and does some post verification.
+   */
+  @After
+  public void cleanUp() {
+    assertZeroOperation();
+  }
+
 
   /**
    * Test that if final blob id is completed before any other blob, it causes an error.

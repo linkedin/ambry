@@ -70,6 +70,19 @@ class NonBlockingRouter implements Router {
   private final Cache<String, Boolean> notFoundCache;
   private final AmbryCache blobMetadataCache;
 
+  NonBlockingRouter() {
+    ocList = null;
+    backgroundDeleter = null;
+    ocCount = 0;
+    routerConfig = null;
+    resourcesToClose = null;
+    notFoundCache = null;
+    routerMetrics = null;
+    kms = null;
+    cryptoJobHandler = null;
+    blobMetadataCache = null;
+  }
+
   /**
    * Constructs a NonBlockingRouter.
    * @param routerConfig the configs for the router.

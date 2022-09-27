@@ -202,6 +202,11 @@ class RouterTestHelpers {
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
+  static void assertZeroOperation() {
+    NonBlockingRouter router = new NonBlockingRouter();
+    assertZeroOperation(router);
+  }
+
   /**
    * Asserts that expected threads are not running after the router is closed.
    */

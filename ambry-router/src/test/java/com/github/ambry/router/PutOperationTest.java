@@ -52,8 +52,9 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import static com.github.ambry.router.RouterTestHelpers.*;
 
-@Ignore("Disable to test TtlUpdateManagerTest failure")
+//@Ignore("Disable to test TtlUpdateManagerTest failure")
 public class PutOperationTest {
   private final RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap = new MockClusterMap();
@@ -84,12 +85,14 @@ public class PutOperationTest {
 
   @Before
   public void before() {
+    assertZeroOperation();
     nettyByteBufLeakHelper.beforeTest();
   }
 
   @After
   public void after() {
     nettyByteBufLeakHelper.afterTest();
+    assertZeroOperation();
   }
 
   /**
