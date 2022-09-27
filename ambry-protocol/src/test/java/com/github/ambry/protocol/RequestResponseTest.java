@@ -64,8 +64,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
@@ -1009,6 +1007,47 @@ public class RequestResponseTest {
           deserializedTtlUpdateResponse.getError());
       response.release();
     }
+  }
+
+  /**
+   * Tests for {@link ReplicateBlobRequest} and {@link ReplicateBlobResponse}.
+   * @throws IOException
+   */
+  @Test
+  public void replicateBlobRequestResponseTest() throws IOException {
+    final MockClusterMap clusterMap = new MockClusterMap();
+    final short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    final short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    final String clientId = "client";
+    final BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
+    final String sourceHostName = "datacenter1_host1";
+    // 1 ~ 65535 are legit TCP ports. getRandomLong(x, n) returns [0..n)
+    final int sourceHostPort = (int)Utils.getRandomLong(TestUtils.RANDOM, 65535) + 1;
+    final int correlationId = TestUtils.RANDOM.nextInt();
+
+    final ReplicateBlobRequest replicateBlobRequest = new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName, sourceHostPort);
+    DataInputStream requestStream = serAndPrepForRead(replicateBlobRequest, -1, true);
+    final ReplicateBlobRequest deserializedReplicateBlobRequest = ReplicateBlobRequest.readFrom(requestStream, clusterMap);
+    Assert.assertEquals(correlationId, deserializedReplicateBlobRequest.getCorrelationId());
+    Assert.assertEquals(accountId, deserializedReplicateBlobRequest.getAccountId());
+    Assert.assertEquals(containerId, deserializedReplicateBlobRequest.getContainerId());
+    Assert.assertEquals(clientId, deserializedReplicateBlobRequest.getClientId());
+    Assert.assertEquals(id1, deserializedReplicateBlobRequest.getBlobId());
+    Assert.assertEquals(sourceHostName, deserializedReplicateBlobRequest.getSourceHostName());
+    Assert.assertEquals(sourceHostPort, deserializedReplicateBlobRequest.getSourceHostPort());
+    replicateBlobRequest.release();
+
+    final ReplicateBlobResponse response = new ReplicateBlobResponse(correlationId, clientId, ServerErrorCode.No_Error);
+    requestStream = serAndPrepForRead(response, -1, false);
+    final ReplicateBlobResponse deserializedReplicateBlobResponse = ReplicateBlobResponse.readFrom(requestStream);
+    Assert.assertEquals(deserializedReplicateBlobResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedReplicateBlobResponse.getClientId(), clientId);
+    Assert.assertEquals(deserializedReplicateBlobResponse.getRequestType(), RequestOrResponseType.AdminRequest.ReplicateBlobResponse);
+    Assert.assertEquals(deserializedReplicateBlobResponse.getError(), ServerErrorCode.No_Error);
+    response.release();
   }
 
   /**
