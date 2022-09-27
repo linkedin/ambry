@@ -123,9 +123,6 @@ public class TtlUpdateManagerTest {
     nettyByteBufLeakHelper.beforeTest();
   }
 
-  @After
-  public void after() { nettyByteBufLeakHelper.afterTest(); }
-
   /**
    * Closes the router and ttl manager and does some post verification.
    */
@@ -133,6 +130,8 @@ public class TtlUpdateManagerTest {
   public void cleanUp() {
     ttlUpdateManager.close();
     assertCloseCleanup(router);
+
+    nettyByteBufLeakHelper.afterTest();
   }
 
   /**
