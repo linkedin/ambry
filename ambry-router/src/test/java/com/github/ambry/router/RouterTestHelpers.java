@@ -132,8 +132,7 @@ class RouterTestHelpers {
    * @param errorCodeChecker Performs the checks that ensure that {@link RouterErrorCode#TooManyRequests} is returned .
    * @throws Exception
    */
-  static void testWithQuotaRejection(ErrorCodeChecker errorCodeChecker)
-      throws Exception {
+  static void testWithQuotaRejection(ErrorCodeChecker errorCodeChecker) throws Exception {
     errorCodeChecker.testAndAssert(RouterErrorCode.TooManyRequests);
   }
 
@@ -198,13 +197,14 @@ class RouterTestHelpers {
   /**
    * Asserts that expected threads are not running after the router is closed.
    */
-  static void assertCloseCleanup(NonBlockingRouter router) {
+  static void assertCloseCleanup(NonBlockingRouter router, long operationCount) {
     router.close();
     Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    long operationCountAfterTest = router.getOperationsCount();
+    Assert.assertEquals("All operations should have completed", operationCount, operationCountAfterTest);
   }
 
   /**
@@ -312,7 +312,7 @@ class RouterTestHelpers {
   static List<ChunkInfo> buildChunkList(ClusterMap clusterMap, BlobId.BlobDataType blobDataType, long ttl,
       LongStream chunkSizeStream) {
     return chunkSizeStream.mapToObj(
-        chunkSize -> new ChunkInfo(getRandomBlobId(clusterMap, blobDataType), chunkSize, ttl))
+            chunkSize -> new ChunkInfo(getRandomBlobId(clusterMap, blobDataType), chunkSize, ttl))
         .collect(Collectors.toList());
   }
 

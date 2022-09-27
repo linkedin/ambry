@@ -88,6 +88,7 @@ public class UndeleteManagerTest {
   private final NonBlockingRouterMetrics metrics;
   private UndeleteManager undeleteManager;
   private SocketNetworkClient networkClient;
+  private long operationCountBeforeTest = 0;
 
   /**
    * Constructor to setup UndeleteManagerTest
@@ -102,6 +103,7 @@ public class UndeleteManagerTest {
     router =
         new NonBlockingRouter(routerConfig, metrics, networkClientFactory, notificationSystem, clusterMap, null, null,
             null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+    operationCountBeforeTest = router.getOperationsCount();
   }
 
   @Before
@@ -112,7 +114,8 @@ public class UndeleteManagerTest {
       BlobProperties putBlobProperties =
           new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
               Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
       // Make sure all the mock servers have this put
       BlobId id = new BlobId(blobId, clusterMap);
@@ -137,7 +140,7 @@ public class UndeleteManagerTest {
   public void cleanup() {
     undeleteManager.close();
     // Only first test would use router, so close it here.
-    assertCloseCleanup(router);
+    assertCloseCleanup(router, operationCountBeforeTest);
   }
 
   /**
@@ -151,8 +154,7 @@ public class UndeleteManagerTest {
     for (String blobId : blobIds) {
       deleteBlobInAllServer(blobId);
       // Undelete requires global quorum, so we have to make sure all the mock servers received a delete.
-      router.undeleteBlob(blobId, UNDELETE_SERVICE_ID)
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.undeleteBlob(blobId, UNDELETE_SERVICE_ID).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       verifyUndelete(blobId);
     }
   }
@@ -363,8 +365,7 @@ public class UndeleteManagerTest {
 
   private void assertDeleted(String blobId) throws Exception {
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().build())
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       fail("blob " + blobId + " Should be deleted");
     } catch (ExecutionException e) {
       assertTrue(e.getCause() instanceof RouterException);
@@ -373,14 +374,12 @@ public class UndeleteManagerTest {
   }
 
   private void assertNotDeleted(String blobId) throws Exception {
-    router.getBlob(blobId, new GetBlobOptionsBuilder().build())
-        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
   }
 
   private void deleteBlobInAllServer(String blobId) throws Exception {
     // Delete this blob
-    router.deleteBlob(blobId, "serviceid")
-        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    router.deleteBlob(blobId, "serviceid").get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     // Then make sure all the mock servers have the delete request.
     assertDeleted(blobId);
     BlobId id = new BlobId(blobId, clusterMap);
@@ -456,8 +455,8 @@ public class UndeleteManagerTest {
     executeOpAndVerify(ids, expectedErrorCode, false);
   }
 
-  private void sendRequestsGetResponse(FutureResult<Void> future, UndeleteManager undeleteManager,
-      boolean advanceTime, boolean isQuotaRejected) {
+  private void sendRequestsGetResponse(FutureResult<Void> future, UndeleteManager undeleteManager, boolean advanceTime,
+      boolean isQuotaRejected) {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     Set<Integer> requestsToDrop = new HashSet<>();
     Set<RequestInfo> requestAcks = new HashSet<>();
@@ -468,8 +467,9 @@ public class UndeleteManagerTest {
 
       List<ResponseInfo> responseInfoList;
       if (isQuotaRejected) {
-        responseInfoList = requestInfoList.stream().map(requestInfo -> new ResponseInfo(requestInfo, true)).collect(
-            Collectors.toList());
+        responseInfoList = requestInfoList.stream()
+            .map(requestInfo -> new ResponseInfo(requestInfo, true))
+            .collect(Collectors.toList());
       } else {
         responseInfoList = new ArrayList<>();
         try {

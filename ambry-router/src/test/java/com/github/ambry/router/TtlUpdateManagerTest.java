@@ -88,6 +88,7 @@ public class TtlUpdateManagerTest {
   private final AccountService accountService = new InMemAccountService(true, false);
   private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createTestQuotaChargeCallback();
   private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  private long operationCount = 0;
 
   /**
    * Sets up all required components including a blob.
@@ -121,6 +122,7 @@ public class TtlUpdateManagerTest {
   @Before
   public void before() {
     nettyByteBufLeakHelper.beforeTest();
+    operationCount = router.getOperationsCount();
   }
 
   @After
@@ -132,7 +134,7 @@ public class TtlUpdateManagerTest {
   @After
   public void cleanUp() {
     ttlUpdateManager.close();
-    assertCloseCleanup(router);
+    assertCloseCleanup(router, operationCount);
   }
 
   /**

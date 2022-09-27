@@ -80,6 +80,7 @@ public class DeleteManagerTest {
   private DeleteManager deleteManager;
   private SocketNetworkClient networkClient;
   private NonBlockingRouterMetrics routerMetrics;
+  private long operationCountBeforeTest = 0;
   private final AccountService accountService = new InMemAccountService(true, false);
   private final LoggingNotificationSystem notificationSystem = new LoggingNotificationSystem();
   private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createTestQuotaChargeCallback();
@@ -130,12 +131,13 @@ public class DeleteManagerTest {
             BlobId.BlobDataType.DATACHUNK);
     blobIdString = blobId.getID();
     deleteManager =
-        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem,
-            routerConfig, routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime);
+        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
+            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime);
     networkClient = networkClientFactory.getNetworkClient();
+    operationCountBeforeTest = router.getOperationsCount();
   }
 
   /**
@@ -143,7 +145,7 @@ public class DeleteManagerTest {
    */
   @After
   public void cleanUp() {
-    assertCloseCleanup(router);
+    assertCloseCleanup(router, operationCountBeforeTest);
   }
 
   /**
@@ -356,8 +358,7 @@ public class DeleteManagerTest {
     RouterErrorCode expectedErrorCode = RouterErrorCode.BlobDoesNotExist;
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
-    deleteManager.submitDeleteBlobOperation(blobIdString, LOCAL_DC, future, callback,
-        quotaChargeCallback);
+    deleteManager.submitDeleteBlobOperation(blobIdString, LOCAL_DC, future, callback, quotaChargeCallback);
 
     router.incrementOperationsCount(1);
     sendRequestsGetResponses(future, deleteManager);
@@ -515,7 +516,7 @@ public class DeleteManagerTest {
    */
   @Test
   public void testVariousServerErrorCodesForThreeParallelism() throws Exception {
-    assertCloseCleanup(router);
+    assertCloseCleanup(router, operationCountBeforeTest);
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "3");
     VerifiableProperties vProps = new VerifiableProperties(props);
@@ -617,7 +618,7 @@ public class DeleteManagerTest {
    */
   @Test
   public void testOriginDcNotFoundError() throws Exception {
-    assertCloseCleanup(router);
+    assertCloseCleanup(router, operationCountBeforeTest);
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "1");
     props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
