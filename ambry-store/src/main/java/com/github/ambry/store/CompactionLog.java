@@ -547,40 +547,7 @@ class CompactionLog implements Closeable {
   private void flush() {
     /*
         Description of serialized format
-        Version 0:
-          version
-          startTime
-          index of current cycle's log
-          size of cycle log list
-          cycleLog1 (see CycleLog#toBytes())
-          cycleLog2
-          ...
-          crc
-         Version 1:
-          version
-          startTime
-          byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
-          startOffsetOfLastIndexSegmentForDeleteCheck if not null
-          index of current cycle's log
-          size of cycle log list
-          cycleLog1 (see CycleLog#toBytes())
-          cycleLog2
-          ...
-         Version 2:
-          version
-          startTime
-          byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
-          startOffsetOfLastIndexSegmentForDeleteCheck if not null
-          index of current cycle's log
-          size of cycle log list
-          cycleLog1 (see CycleLog#toBytes())
-          cycleLog2
-          ...
-          size of beforeAndAfterIndexSegmentOffsetsMap
-          beforeOffset1, afterOffset1
-          beforeOffset2, afterOffset2
-          ...
-          crc
+
        */
     File tempFile = new File(file.getAbsolutePath() + ".tmp");
     try (FileOutputStream fileOutputStream = new FileOutputStream(tempFile)) {
@@ -589,30 +556,11 @@ class CompactionLog implements Closeable {
       stream.writeShort(version); // If we read this log from file, then keep this the same version.
       switch (version) {
         case VERSION_0:
-          flushVersion_0(stream);
+          flushVersion0(stream);
           break;
         case VERSION_1:
         case VERSION_2:
-          stream.writeLong(startTime);
-          if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
-            stream.writeByte(0);
-          } else {
-            stream.writeByte(1);
-            stream.write(startOffsetOfLastIndexSegmentForDeleteCheck.toBytes());
-          }
-          stream.writeInt(currentIdx);
-          stream.writeInt(cycleLogs.size());
-          for (CycleLog cycleLog : cycleLogs) {
-            stream.write(cycleLog.toBytes());
-          }
-          if (version >= VERSION_2) {
-            stream.writeInt(beforeAndAfterIndexSegmentOffsets.size());
-            // BeforeAndAfterIndexSegmentOffsets is a tree map that would return offset in order
-            for (Map.Entry<Offset, Offset> entry : beforeAndAfterIndexSegmentOffsets.entrySet()) {
-              stream.write(entry.getKey().toBytes());
-              stream.write(entry.getValue().toBytes());
-            }
-          }
+          flushVersion1And2(stream);
           break;
       }
       stream.writeLong(crcOutputStream.getValue());
@@ -625,12 +573,81 @@ class CompactionLog implements Closeable {
     }
   }
 
-  private void flushVersion_0(DataOutputStream stream) throws IOException {
+  /**
+   * Flush the CompactionLog following the version 0 format.
+   * Version 0:
+   *    version
+   *    startTime
+   *    index of current cycle's log
+   *    size of cycle log list
+   *    cycleLog1 (see CycleLog#toBytes())
+   *    cycleLog2
+   *    ...
+   *    crc
+   * @param stream The output stream to write bytes to
+   * @throws IOException
+   */
+  private void flushVersion0(DataOutputStream stream) throws IOException {
     stream.writeLong(startTime);
     stream.writeInt(currentIdx);
     stream.writeInt(cycleLogs.size());
     for (CycleLog cycleLog : cycleLogs) {
       stream.write(cycleLog.toBytes());
+    }
+  }
+
+  /**
+   * Flush the CompactionLog following the version 1 or 2 format.
+   * Version 1:
+   *     version
+   *     startTime
+   *     byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
+   *     startOffsetOfLastIndexSegmentForDeleteCheck if not null
+   *     index of current cycle's log
+   *     size of cycle log list
+   *     cycleLog1 (see CycleLog#toBytes())
+   *     cycleLog2
+   *     ...
+   *     crc
+   *
+   * Version 2:
+   *     version
+   *     startTime
+   *     byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
+   *     startOffsetOfLastIndexSegmentForDeleteCheck if not null
+   *     index of current cycle's log
+   *     size of cycle log list
+   *     cycleLog1 (see CycleLog#toBytes())
+   *     cycleLog2
+   *     ...
+   *     size of beforeAndAfterIndexSegmentOffsetsMap
+   *     beforeOffset1, afterOffset1
+   *     beforeOffset2, afterOffset2
+   *     ...
+   *     crc
+   * @param stream The output stream to write bytes to
+   * @throws IOException
+   */
+  private void flushVersion1And2(DataOutputStream stream) throws IOException {
+    stream.writeLong(startTime);
+    if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
+      stream.writeByte(0);
+    } else {
+      stream.writeByte(1);
+      stream.write(startOffsetOfLastIndexSegmentForDeleteCheck.toBytes());
+    }
+    stream.writeInt(currentIdx);
+    stream.writeInt(cycleLogs.size());
+    for (CycleLog cycleLog : cycleLogs) {
+      stream.write(cycleLog.toBytes());
+    }
+    if (version >= VERSION_2) {
+      stream.writeInt(beforeAndAfterIndexSegmentOffsets.size());
+      // BeforeAndAfterIndexSegmentOffsets is a tree map that would return offset in order
+      for (Map.Entry<Offset, Offset> entry : beforeAndAfterIndexSegmentOffsets.entrySet()) {
+        stream.write(entry.getKey().toBytes());
+        stream.write(entry.getValue().toBytes());
+      }
     }
   }
 
