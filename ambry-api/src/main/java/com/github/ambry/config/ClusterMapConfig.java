@@ -110,13 +110,6 @@ public class ClusterMapConfig {
   public final String clusterMapClusterAgentsFactory;
 
   /**
-   * The cluster change handler to use for Cluster Map.
-   */
-  @Config("clustermap.cluster.change.handler.type")
-  @Default("SimpleClusterChangeHandler")
-  public final String clusterMapClusterChangeHandlerType;
-
-  /**
    * The {@code DataNodeConfigSource} implementation to use with the Helix-based Cluster Map.
    */
   @Config(CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE)
@@ -352,8 +345,6 @@ public class ClusterMapConfig {
     clusterMapEnableHttp2Replication = verifiableProperties.getBoolean("clustermap.enable.http2.replication", false);
     clusterMapClusterAgentsFactory = verifiableProperties.getString("clustermap.clusteragents.factory",
         "com.github.ambry.clustermap.StaticClusterAgentsFactory");
-    clusterMapClusterChangeHandlerType =
-        verifiableProperties.getString("clustermap.cluster.change.handler.type", "SimpleClusterChangeHandler");
     clusterMapDataNodeConfigSourceType =
         verifiableProperties.getEnum(CLUSTERMAP_DATA_NODE_CONFIG_SOURCE_TYPE, DataNodeConfigSourceType.class,
             DataNodeConfigSourceType.INSTANCE_CONFIG);

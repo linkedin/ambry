@@ -47,7 +47,7 @@ class DatacenterInitializer {
   private final ClusterMapUtils.DcZkInfo dcZkInfo;
   private final String dcName;
 
-  // Fields to pass into both ClusterChangeHandlers
+  // Fields to pass into Dynamic ClusterChangeHandler
   private final String selfInstanceName;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap;
   private final HelixClusterManager.ClusterChangeHandlerCallback clusterChangeHandlerCallback;
@@ -55,10 +55,6 @@ class DatacenterInitializer {
   private final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics;
   private final AtomicLong sealedStateChangeCounter;
-  // Fields to pass into only SimpleClusterChangeHandler (These can be removed if SimpleClusterChangeHandler is removed)
-  private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap;
-  private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition;
-  private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas;
 
   /**
    * @param clusterMapConfig {@link ClusterMapConfig} to help some admin operations
@@ -96,9 +92,6 @@ class DatacenterInitializer {
     this.helixClusterManagerMetrics = helixClusterManagerMetrics;
     this.dataNodeConfigSourceMetrics = dataNodeConfigSourceMetrics;
     this.sealedStateChangeCounter = sealedStateChangeCounter;
-    this.partitionMap = partitionMap;
-    this.partitionNameToAmbryPartition = partitionNameToAmbryPartition;
-    this.ambryPartitionToAmbryReplicas = ambryPartitionToAmbryReplicas;
     dcName = dcZkInfo.getDcName();
   }
 
@@ -171,21 +164,10 @@ class DatacenterInitializer {
       manager = helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
           InstanceType.SPECTATOR, zkConnectStr);
     }
-    HelixClusterChangeHandler clusterChangeHandler;
-    String clusterChangeHandlerType = clusterMapConfig.clusterMapClusterChangeHandlerType;
-    if (clusterChangeHandlerType.equals(SimpleClusterChangeHandler.class.getSimpleName())) {
-      clusterChangeHandler =
-          new SimpleClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
-              partitionMap, partitionNameToAmbryPartition, ambryPartitionToAmbryReplicas, helixClusterManagerCallback,
-              helixClusterManagerMetrics, this::onInitializationFailure, sealedStateChangeCounter);
-    } else if (clusterChangeHandlerType.equals(DynamicClusterChangeHandler.class.getSimpleName())) {
-      clusterChangeHandler =
-          new DynamicClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
-              helixClusterManagerCallback, clusterChangeHandlerCallback, helixClusterManagerMetrics,
-              this::onInitializationFailure, sealedStateChangeCounter);
-    } else {
-      throw new IllegalArgumentException("Unsupported cluster change handler type: " + clusterChangeHandlerType);
-    }
+    HelixClusterChangeHandler clusterChangeHandler =
+        new DynamicClusterChangeHandler(clusterMapConfig, dcName, selfInstanceName, partitionOverrideInfoMap,
+            helixClusterManagerCallback, clusterChangeHandlerCallback, helixClusterManagerMetrics,
+            this::onInitializationFailure, sealedStateChangeCounter);
     // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
     // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
     logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
