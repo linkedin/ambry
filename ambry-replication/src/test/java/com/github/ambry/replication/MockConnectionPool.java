@@ -16,6 +16,7 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.network.PortType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.ChannelOutput;
@@ -63,11 +64,18 @@ public class MockConnectionPool implements ConnectionPool {
   private final Map<DataNodeId, MockHost> hosts;
   private final ClusterMap clusterMap;
   private final int maxEntriesToReturn;
+  private Map<DataNodeId, MockConnection> connections;
+  private final Map<String, Port> hostPorts;
 
   public MockConnectionPool(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int maxEntriesToReturn) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.maxEntriesToReturn = maxEntriesToReturn;
+    this.connections = new HashMap<DataNodeId, MockConnection>();
+    this.hostPorts = new HashMap<String, Port>();
+    for (DataNodeId node : hosts.keySet()) {
+      hostPorts.put(node.getHostname(), new Port(node.getPort(), PortType.PLAINTEXT));
+    }
   }
 
   @Override
@@ -80,9 +88,16 @@ public class MockConnectionPool implements ConnectionPool {
 
   @Override
   public ConnectedChannel checkOutConnection(String host, Port port, long timeout) {
+    // For mock layer, we ignore the port provided.
+    // For mock layer, each replica is using incremental port number.
+    // When we send ReplicateBlobRequest, don't know the remote port number.
+    port = hostPorts.get(host);
     DataNodeId dataNodeId = clusterMap.getDataNodeId(host, port.getPort());
     MockHost hostObj = hosts.get(dataNodeId);
-    return new MockConnection(hostObj, maxEntriesToReturn);
+    if (!connections.containsKey(dataNodeId)) {
+      connections.put(dataNodeId, new MockConnection(hostObj, maxEntriesToReturn));
+    }
+    return connections.get(dataNodeId);
   }
 
   @Override
