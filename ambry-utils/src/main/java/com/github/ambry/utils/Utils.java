@@ -1298,6 +1298,20 @@ public class Utils {
   }
 
   /**
+   * Check whether the given String is null or empty and throw IllegalArgumentException if so.
+   *
+   * @param parameter The string parameter to check.
+   * @param exceptionMessage The IllegalArgumentException message to use if null or empty.
+   */
+  public static void checkNotNullOrEmpty(String parameter, String exceptionMessage) {
+    if (parameter == null) {
+      throw new NullPointerException(exceptionMessage);
+    } else if(parameter.length() == 0) {
+      throw new IllegalArgumentException(exceptionMessage);
+    }
+  }
+
+  /**
    * Check whether the given byte array is null or empty and throw IllegalArgumentException if so.
    *
    * @param array The array to check.
