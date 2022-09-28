@@ -1225,7 +1225,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
    */
   @Test
   public void testResponseWithNullRequestInfo() throws Exception {
-    NonBlockingRouter testRouter = null;
     try {
       Properties props = getNonBlockingRouterProperties("DC1");
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
@@ -1246,15 +1245,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }).when(mockNetworkClient).sendAndPoll(anyList(), anySet(), anyInt());
       NetworkClientFactory networkClientFactory = Mockito.mock(NetworkClientFactory.class);
       Mockito.when(networkClientFactory.getNetworkClient()).thenReturn(mockNetworkClient);
-      testRouter =
+      router =
           new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
               mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
       assertTrue("Invocation latch didn't count to 0 within 10 seconds", invocationLatch.await(10, TimeUnit.SECONDS));
       // verify the test node is considered timeout
       assertTrue("The node should be considered timeout", testDataNode.isTimedOut());
     } finally {
-      if (testRouter != null) {
-        testRouter.close();
+      if (router != null) {
+        router.close();
       }
     }
   }
