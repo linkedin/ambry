@@ -85,7 +85,7 @@ class PutManager {
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob creations.
-   * @param routerConfig The {@link RouterConfig} containing the configs for the PutManager.
+   * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param suffix the suffix to associate with the names of the threads created by this PutManager
@@ -93,10 +93,10 @@ class PutManager {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param accountService the {@link AccountService} to use.
-   * @param time The {@link Time} instance to use.
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
+   * @param time The {@link Time} instance to use.
    * @param nonBlockingRouter The non-blocking router object
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,

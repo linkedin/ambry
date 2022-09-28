@@ -74,7 +74,7 @@ class GetManager {
    * Create a GetManager
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
-   * @param routerConfig The {@link RouterConfig} containing the configs for the PutManager.
+   * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption

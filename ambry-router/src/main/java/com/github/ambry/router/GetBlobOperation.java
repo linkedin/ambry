@@ -142,7 +142,7 @@ class GetBlobOperation extends GetOperation {
    * @param blobIdFactory the factory to use to deserialize keys in a metadata chunk.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler  {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
