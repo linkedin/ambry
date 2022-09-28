@@ -73,18 +73,17 @@ class GetManager {
   /**
    * Create a GetManager
    *
-   * @param clusterMap        The {@link ClusterMap} of the cluster.
-   * @param responseHandler   The {@link ResponseHandler} used to notify failures for failure detection.
-   * @param routerConfig      The {@link RouterConfig} containing the configs for the PutManager.
-   * @param routerMetrics     The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param routerCallback    The {@link RouterCallback} to use for callbacks to the router.
-   * @param kms               {@link KeyManagementService} to assist in fetching container keys for encryption or
-   *                          decryption
-   * @param cryptoService     {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler  {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param time              The {@link Time} instance to use.
+   * @param clusterMap The {@link ClusterMap} of the cluster.
+   * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
+   * @param routerConfig The {@link RouterConfig} containing the configs for the PutManager.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time The {@link Time} instance to use.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
-   * @param nonBlockingRouter
+   * @param nonBlockingRouter The non-blocking router object
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
       NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, KeyManagementService kms,

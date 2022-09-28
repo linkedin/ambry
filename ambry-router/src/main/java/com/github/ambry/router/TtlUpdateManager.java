@@ -62,14 +62,14 @@ class TtlUpdateManager {
   /**
    * Creates a TtlUpdateManager.
    *
-   * @param clusterMap         The {@link ClusterMap} of the cluster.
-   * @param responseHandler    The {@link ResponseHandler} used to notify failures for failure detection.
+   * @param clusterMap The {@link ClusterMap} of the cluster.
+   * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param notificationSystem The {@link NotificationSystem} used for notifying ttl updates for blobs.
-   * @param accountService     The {@link AccountService} used for account/container id and name mapping.
-   * @param routerConfig       The {@link RouterConfig} containing the configs for the TtlUpdateManager.
-   * @param routerMetrics      The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param time               The {@link Time} instance to use.
-   * @param nonBlockingRouter
+   * @param accountService The {@link AccountService} used for account/container id and name mapping.
+   * @param routerConfig The {@link RouterConfig} containing the configs for the TtlUpdateManager.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param time The {@link Time} instance to use.
+   * @param nonBlockingRouter The non-blocking router object
    */
   TtlUpdateManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       AccountService accountService, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time,

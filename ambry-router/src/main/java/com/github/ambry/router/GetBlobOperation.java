@@ -132,23 +132,22 @@ class GetBlobOperation extends GetOperation {
   /**
    * Construct a GetBlobOperation
    *
-   * @param routerConfig      the {@link RouterConfig} containing the configs for get operations.
-   * @param routerMetrics     The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param clusterMap        the {@link ClusterMap} of the cluster
-   * @param responseHandler   the {@link ResponseHandler} responsible for failure detection.
-   * @param blobId            the {@link BlobId} associated with the operation.
-   * @param options           the {@link GetBlobOptionsInternal} associated with the operation.
-   * @param callback          the callback that is to be called when the operation completes.
-   * @param routerCallback    the {@link RouterCallback} to use to complete operations.
-   * @param blobIdFactory     the factory to use to deserialize keys in a metadata chunk.
-   * @param kms               {@link KeyManagementService} to assist in fetching container keys for encryption or
-   *                          decryption
-   * @param cryptoService     {@link CryptoService} to assist in encryption or decryption
+   * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap the {@link ClusterMap} of the cluster
+   * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
+   * @param blobId the {@link BlobId} associated with the operation.
+   * @param options the {@link GetBlobOptionsInternal} associated with the operation.
+   * @param callback the callback that is to be called when the operation completes.
+   * @param routerCallback the {@link RouterCallback} to use to complete operations.
+   * @param blobIdFactory the factory to use to deserialize keys in a metadata chunk.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler  {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param time              the Time instance to use.
-   * @param isEncrypted       if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
+   * @param time the Time instance to use.
+   * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
-   * @param nonBlockingRouter
+   * @param nonBlockingRouter The non-blocking router object
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,

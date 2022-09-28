@@ -75,24 +75,24 @@ class GetBlobInfoOperation extends GetOperation {
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobInfoOperation.class);
   private final NonBlockingRouter nonBlockingRouter;
+
   /**
    * Construct a GetBlobInfoOperation
    *
-   * @param routerConfig      the {@link RouterConfig} containing the configs for get operations.
-   * @param routerMetrics     The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param clusterMap        the {@link ClusterMap} of the cluster
-   * @param responseHandler   the {@link ResponseHandler} responsible for failure detection.
-   * @param blobId            the {@link BlobId} associated with the operation.
-   * @param options           the {@link GetBlobOptionsInternal} containing the options associated with this operation.
-   * @param callback          the callback that is to be called when the operation completes.
-   * @param routerCallback    the {@link RouterCallback} to use to complete operations.
-   * @param kms               {@link KeyManagementService} to assist in fetching container keys for encryption or
-   *                          decryption
-   * @param cryptoService     {@link CryptoService} to assist in encryption or decryption
-   * @param cryptoJobHandler  {@link CryptoJobHandler} to assist in the execution of crypto jobs
-   * @param time              the Time instance to use.
-   * @param isEncrypted       if encrypted bit set based on original string of a {@link BlobId}
-   * @param nonBlockingRouter
+   * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap the {@link ClusterMap} of the cluster
+   * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
+   * @param blobId the {@link BlobId} associated with the operation.
+   * @param options the {@link GetBlobOptionsInternal} containing the options associated with this operation.
+   * @param callback the callback that is to be called when the operation completes.
+   * @param routerCallback the {@link RouterCallback} to use to complete operations.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time the Time instance to use.
+   * @param isEncrypted if encrypted bit set based on original string of a {@link BlobId}
+   * @param nonBlockingRouter The non-blocking router object
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,

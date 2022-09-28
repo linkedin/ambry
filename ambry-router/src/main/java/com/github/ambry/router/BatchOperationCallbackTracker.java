@@ -50,13 +50,13 @@ class BatchOperationCallbackTracker {
   /**
    * Constructor
    *
-   * @param blobIds             the {@link BlobId}s being tracked
-   * @param finalBlobId         the final {@link BlobId} to send after all the {@code blobids} are acked.
-   * @param futureResult        the {@link FutureResult} to be triggered once acks are received for all blobs
-   * @param callback            the {@link Callback} to be triggered once acks are received for all blobs
+   * @param blobIds the {@link BlobId}s being tracked
+   * @param finalBlobId the final {@link BlobId} to send after all the {@code blobids} are acked.
+   * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
+   * @param callback the {@link Callback} to be triggered once acks are received for all blobs
    * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
-   * @param finalOperation      The operation to call on the {@code finalBlobId}.
-   * @param nonBlockingRouter
+   * @param finalOperation The operation to call on the {@code finalBlobId}.
+   * @param nonBlockingRouter The non-blocking router object
    */
   BatchOperationCallbackTracker(List<BlobId> blobIds, BlobId finalBlobId, FutureResult<Void> futureResult,
       Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, BiConsumer<BlobId, Callback> finalOperation,
