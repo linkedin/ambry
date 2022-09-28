@@ -21,6 +21,14 @@ import com.github.ambry.compression.Compression;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Metrics for both compression service and compression algorithm.
+ * The compression service metrics counts why compression is skip due to configuration and its error rate.
+ * The algorithm-specific metrics measure the time and speed of the algorithm.
+ * The service metric names use the format [Owner].[MetricName].
+ * These algorithm-specific metric names use the format [Owner].[AlgorithmName].[MetricName].
+ * Example algorithm names include "LZ4" and "ZSTD".
+ */
 public class CompressionMetrics {
   public static class AlgorithmMetrics {
 
@@ -28,18 +36,26 @@ public class CompressionMetrics {
     public final Meter compressRate;      // Rate compress() is called.
     public final Counter compressError;   // Rate compress() throws exception.
     public final Histogram compressRatioPercent;    // compression ratio % = 100 * UncompressedSize/CompressedSize
+
+    // Full size is the maximum chunk size.  For example, the default full chunk size is 4MB.
+    // Less than 4MB is considered partial full.  For simplicity, let's call it small size (< 4 MB).
+    // The duration measurements for small size chunks (< 4 MB) are highly skewed due to overheads.
+    // For example, compressing a 1KB chunk is probably less efficient than compressing a 100 KB chunk,
+    // so the metrics for compressing 1 KB chunks will generate many misleading metrics (like low compression ratio,
+    // low throughput due to overhead). It's recommended to use the full size (4 MB) compression metrics for
+    // consistent and comparable picture of the algorithm performance.
     public final Histogram fullSizeCompressTimeInMicroseconds;
     public final Histogram fullSizeCompressSpeedMBPerSec;
-    public final Histogram partialFullCompressTimeInMicroseconds;
-    public final Histogram partialFullCompressSpeedMBPerSec;
+    public final Histogram smallSizeCompressTimeInMicroseconds;
+    public final Histogram smallSizeCompressSpeedMBPerSec;
 
     // Algorithm's decompress() metrics.
     public final Meter decompressRate;     // Rate decompress() is called.
     public final Counter decompressError;  // Rate decompress() throws exception.
     public final Histogram fullSizeDecompressTimeInMicroseconds;
     public final Histogram fullSizeDecompressSpeedMBPerSec;
-    public final Histogram partialFullDecompressTimeInMicroseconds;
-    public final Histogram partialFullDecompressSpeedMBPerSec;
+    public final Histogram smallSizeDecompressTimeInMicroseconds;
+    public final Histogram smallSizeDecompressSpeedMBPerSec;
 
     /**
      * Create an instance of algorithm-specific metrics.
@@ -55,10 +71,10 @@ public class CompressionMetrics {
           "FullSizeCompressTimeInMicroseconds"));
       fullSizeCompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
           "FullSizeCompressSpeedMBPerSec"));
-      partialFullCompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
-          "PartialFullCompressTimeInMicroseconds"));
-      partialFullCompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
-          "PartialFullCompressSpeedMBPerSec"));
+      smallSizeCompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+          "SmallSizeCompressTimeInMicroseconds"));
+      smallSizeCompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+          "SmallSizeCompressSpeedMBPerSec"));
 
       // Decompression metrics.
       decompressRate = registry.meter(MetricRegistry.name(ownerClass, algorithmName, "DecompressRate"));
@@ -67,10 +83,10 @@ public class CompressionMetrics {
           "FullSizeDecompressTimeInMicroseconds"));
       fullSizeDecompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
           "FullSizeDecompressSpeedMBPerSec"));
-      partialFullDecompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
-          "PartialFullDecompressTimeInMicroseconds"));
-      partialFullDecompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
-          "PartialFullDecompressSpeedMBPerSec"));
+      smallSizeDecompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+          "SmallSizeDecompressTimeInMicroseconds"));
+      smallSizeDecompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+          "SmallSizeDecompressSpeedMBPerSec"));
     }
   }
 
@@ -87,24 +103,24 @@ public class CompressionMetrics {
   public final Counter compressReduceSizeBytes;  // For accepted, bytes reduce = OriginalSize - CompressedSize.
 
   // Compression error metrics.  These metrics must be monitored and raise alarm if as soon as they occurred.
-  public final Counter compressError_BufferConversion;
-  public final Counter compressError_ConfigInvalidCompressorName;
-  public final Counter compressError_CompressFailed;
+  public final Counter compressErrorBufferConversion;
+  public final Counter compressErrorConfigInvalidCompressorName;
+  public final Counter compressErrorCompressFailed;
 
   // Compression skip metrics based on config settings.
-  public final Counter compressSkip_ContentEncoding;
-  public final Counter compressSkip_ContentTypeFiltering;
-  public final Counter compressSkip_SizeTooSmall;
-  public final Counter compressSkip_RatioTooSmall;
+  public final Counter compressSkipContentEncoding;
+  public final Counter compressSkipContentTypeFiltering;
+  public final Counter compressSkipSizeTooSmall;
+  public final Counter compressSkipRatioTooSmall;
 
   // Decompression metrics, regardless of decompression algorithms.
   public final Meter decompressSuccessRate;
   public final Meter decompressErrorRate;
   public final Counter decompressExpandSizeBytes;  // Bytes expand  = OriginalSize - CompressedSize
-  public final Counter decompressError_BufferConversion;
-  public final Counter decompressError_BufferTooSmall;
-  public final Counter decompressError_UnknownAlgorithmName;
-  public final Counter decompressError_DecompressFailed;
+  public final Counter decompressErrorBufferConversion;
+  public final Counter decompressErrorBufferTooSmall;
+  public final Counter decompressErrorUnknownAlgorithmName;
+  public final Counter decompressErrorDecompressFailed;
 
   /**
    * Create an instance of compression metrics.
@@ -119,25 +135,25 @@ public class CompressionMetrics {
     compressErrorRate = registry.meter(MetricRegistry.name(ownerClass,"CompressErrorRate"));
     compressAcceptRate = registry.meter(MetricRegistry.name(ownerClass,"CompressAcceptRate"));
     compressReduceSizeBytes = registry.counter(MetricRegistry.name(ownerClass, "CompressReduceSizeBytes"));
-    compressError_BufferConversion = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorBufferConversion"));
-    compressError_ConfigInvalidCompressorName = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorInvalidCompressorName"));
-    compressError_CompressFailed = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorCompressFailed"));
-    compressSkip_ContentEncoding = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipContentEncoding"));
-    compressSkip_ContentTypeFiltering = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipContentTypeFiltering"));
-    compressSkip_SizeTooSmall = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipSizeTooSmall"));
-    compressSkip_RatioTooSmall = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipRatioTooSmall"));
+    compressErrorBufferConversion = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorBufferConversion"));
+    compressErrorConfigInvalidCompressorName = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorInvalidCompressorName"));
+    compressErrorCompressFailed = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorCompressFailed"));
+    compressSkipContentEncoding = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipContentEncoding"));
+    compressSkipContentTypeFiltering = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipContentTypeFiltering"));
+    compressSkipSizeTooSmall = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipSizeTooSmall"));
+    compressSkipRatioTooSmall = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipRatioTooSmall"));
 
     // Decompression metrics.
     decompressSuccessRate = registry.meter(MetricRegistry.name(ownerClass,"DecompressSuccessRate"));
     decompressErrorRate = registry.meter(MetricRegistry.name(ownerClass,"DecompressErrorRate"));
     decompressExpandSizeBytes = registry.counter(MetricRegistry.name(ownerClass,"DecompressExpandSizeBytes"));
-    decompressError_BufferConversion = registry.counter(MetricRegistry.name(ownerClass,
+    decompressErrorBufferConversion = registry.counter(MetricRegistry.name(ownerClass,
         "DecompressErrorBufferConversion"));
-    decompressError_BufferTooSmall = registry.counter(MetricRegistry.name(ownerClass,
+    decompressErrorBufferTooSmall = registry.counter(MetricRegistry.name(ownerClass,
         "DecompressErrorBufferTooSmall"));
-    decompressError_UnknownAlgorithmName = registry.counter(MetricRegistry.name(ownerClass,
+    decompressErrorUnknownAlgorithmName = registry.counter(MetricRegistry.name(ownerClass,
         "DecompressErrorUnknownAlgorithmName"));
-    decompressError_DecompressFailed = registry.counter(MetricRegistry.name(ownerClass,
+    decompressErrorDecompressFailed = registry.counter(MetricRegistry.name(ownerClass,
         "DecompressErrorDecompressFailed"));
   }
 

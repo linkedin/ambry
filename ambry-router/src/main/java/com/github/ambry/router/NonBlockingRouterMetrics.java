@@ -263,11 +263,12 @@ public class NonBlockingRouterMetrics {
 
   Map<Resource, CachedHistogram> putBlobResourceToLatency = new HashMap<>();
 
+  public final CompressionMetrics compressionMetrics;
+
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
   private final RouterConfig routerConfig;
   private ScheduledExecutorService scheduler = null;
-  private CompressionMetrics compressionMetrics;
 
   public NonBlockingRouterMetrics(ClusterMap clusterMap, RouterConfig routerConfig) {
     metricRegistry = clusterMap.getMetricRegistry();
@@ -603,6 +604,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollQuotaCompliantRequestTime"));
     pollExceedAllowedRequestTime =
         metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollExceedAllowedRequestTime"));
+
+    compressionMetrics = new CompressionMetrics(metricRegistry);
   }
 
   /**
@@ -1005,18 +1008,6 @@ public class NonBlockingRouterMetrics {
     // dynamically adding new nodes into cluster.
     return dataNodeToMetrics.computeIfAbsent(dataNodeId, k -> new NodeLevelMetrics(metricRegistry,
         dataNodeId.getDatacenterName() + "." + dataNodeId.getHostname() + "." + dataNodeId.getPort()));
-  }
-
-  /**
-   * Return the compression-related metrics, which is part of the router metrics but grouped by feature.
-   * This method creates and caches the compression metrics so only 1 instance will be created.
-   * @return All compression related metrics.
-   */
-  CompressionMetrics getCompressionMetrics() {
-    if (compressionMetrics == null) {
-      compressionMetrics = new CompressionMetrics(metricRegistry);
-    }
-    return compressionMetrics;
   }
 
   /**
