@@ -28,10 +28,10 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -125,7 +125,7 @@ public class CompactionLogTest {
         Offset before = new Offset(logSegmentName, LogSegment.HEADER_SIZE);
         Offset after = new Offset(logSegmentName.getNextGenerationName(), LogSegment.HEADER_SIZE);
         cLog.addIndexSegmentOffsetPair(before, after);
-        fail("Offset " + before + " doesn't belong to under compaction log seegment, should fail");
+        fail("Offset " + before + " doesn't belong to under compaction log segment, should fail");
       } catch (Exception e) {
         // Expect to see exception
       }
@@ -369,7 +369,7 @@ public class CompactionLogTest {
     for (LogSegmentName name : segmentsUnderCompaction) {
       addOneIndexSegmentOffsetPair(name, cLog);
     }
-    TreeMap<Offset, Offset> indexSegmentOffsets = cLog.getIndexSegmentOffsets();
+    NavigableMap<Offset, Offset> indexSegmentOffsets = cLog.getIndexSegmentOffsets();
     for (LogSegmentName name : segmentsUnderCompaction) {
       Offset before = new Offset(name, LogSegment.HEADER_SIZE);
       Offset expectedAfter = new Offset(name.getNextGenerationName(), LogSegment.HEADER_SIZE);

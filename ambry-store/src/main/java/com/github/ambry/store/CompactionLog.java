@@ -27,9 +27,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -132,7 +134,7 @@ class CompactionLog implements Closeable {
    * @return The start time in milliseconds.
    */
   static long getStartTimeFromFile(File file) {
-    return Long.valueOf(file.getName().split(BlobStore.SEPARATOR)[2]);
+    return Long.parseLong(file.getName().split(BlobStore.SEPARATOR)[2]);
   }
 
   /**
@@ -362,8 +364,8 @@ class CompactionLog implements Closeable {
    * DON'T modify this map.
    * @return
    */
-  TreeMap<Offset, Offset> getIndexSegmentOffsets() {
-    return beforeAndAfterIndexSegmentOffsets;
+  NavigableMap<Offset, Offset> getIndexSegmentOffsets() {
+    return Collections.unmodifiableNavigableMap(beforeAndAfterIndexSegmentOffsets);
   }
 
   /**
@@ -545,10 +547,6 @@ class CompactionLog implements Closeable {
    * Flushes all changes to the file backing this compaction log.
    */
   private void flush() {
-    /*
-        Description of serialized format
-
-       */
     File tempFile = new File(file.getAbsolutePath() + ".tmp");
     try (FileOutputStream fileOutputStream = new FileOutputStream(tempFile)) {
       CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
