@@ -113,7 +113,7 @@ class DataNodeConfig {
   }
 
   /**
-   * @return the xid for this server. After {@link SimpleClusterChangeHandler} is retired, this field will be removed.
+   * @return the xid for this server. TODO: Remove xid usage since we don't use it anymore.
    */
   @Deprecated
   long getXid() {
