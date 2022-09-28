@@ -360,9 +360,7 @@ class CompactionLog implements Closeable {
   }
 
   /**
-   * Return the index segment offset map. Each key and value is before and after pair passed to {@link #addIndexSegmentOffsetPair}.
-   * DON'T modify this map.
-   * @return
+   * @return The index segment offset map. Each key and value is before and after pair passed to {@link #addIndexSegmentOffsetPair}.
    */
   NavigableMap<Offset, Offset> getIndexSegmentOffsets() {
     return Collections.unmodifiableNavigableMap(beforeAndAfterIndexSegmentOffsets);
