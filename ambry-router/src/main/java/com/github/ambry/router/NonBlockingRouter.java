@@ -49,7 +49,6 @@ import org.slf4j.LoggerFactory;
  * Streaming, non-blocking router implementation for Ambry.
  */
 class NonBlockingRouter implements Router {
-  private final AtomicInteger currentOperationsCount = new AtomicInteger(0);
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
@@ -69,6 +68,8 @@ class NonBlockingRouter implements Router {
   // Cache to store blob IDs which were not found in servers recently.
   private final Cache<String, Boolean> notFoundCache;
   private final AmbryCache blobMetadataCache;
+
+  public final AtomicInteger currentOperationsCount = new AtomicInteger(0);
 
   /**
    * Constructs a NonBlockingRouter.
@@ -131,14 +132,6 @@ class NonBlockingRouter implements Router {
     routerMetrics.initializeQuotaOCMetrics(ocList);
   }
 
-  Integer incrementAndGetOperationCount() {
-    return currentOperationsCount.incrementAndGet();
-  }
-
-  Integer decrementAndGetOperationCount() {
-    return currentOperationsCount.decrementAndGet();
-  }
-
   /**
    * @return cache used to store IDs of blobs recently not found in server. Used only in tests.
    */
@@ -181,7 +174,7 @@ class NonBlockingRouter implements Router {
   <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception, boolean decrementOperationsCount) {
     if (decrementOperationsCount) {
-      decrementAndGetOperationCount();
+      currentOperationsCount.decrementAndGet();
     }
     try {
       if (futureResult != null) {

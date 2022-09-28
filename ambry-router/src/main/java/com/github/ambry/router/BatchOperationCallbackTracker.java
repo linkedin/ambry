@@ -94,7 +94,7 @@ class BatchOperationCallbackTracker {
           if(finalOperationReadyToDo.compareAndSet(false, true)) {
             // if final operation hasn't been started yet, then start it.
             blobIdToAck.put(finalBlobId, false);
-            nonBlockingRouter.incrementAndGetOperationCount();
+            nonBlockingRouter.currentOperationsCount.incrementAndGet();
             finalOperation.accept(finalBlobId, getCallback(finalBlobId));
           }
 

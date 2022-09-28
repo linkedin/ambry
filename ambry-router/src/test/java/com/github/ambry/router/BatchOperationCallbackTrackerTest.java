@@ -75,7 +75,7 @@ public class BatchOperationCallbackTrackerTest {
     // test if final blob is the first blob to be completed.
     BatchOperationCallbackTracker tracker =
         new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-            finalOperation, nonBlockingRouter);
+            finalOperation, null);
     tracker.getCallback(finalBlobId).onCompletion(null, null);
     Assert.assertTrue(trackerException instanceof RouterException);
     Assert.assertTrue(tracker.isCompleted());
@@ -85,7 +85,7 @@ public class BatchOperationCallbackTrackerTest {
     for (int i = 0; i < NUM_CHUNKS - 1; i++) {
       tracker =
           new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-              finalOperation, nonBlockingRouter);
+              finalOperation, null);
       for (int j = 0; j <= i; j++) {
         tracker.getCallback(chunkIds.get(j)).onCompletion(null, null);
         Assert.assertFalse(finalOperationCalled.get());
@@ -104,7 +104,7 @@ public class BatchOperationCallbackTrackerTest {
   public void testOperationCompleteAfterFinalBlob() {
     BatchOperationCallbackTracker tracker =
         new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-            finalOperation, nonBlockingRouter);
+            finalOperation, null);
 
     // update all data chunks and ensure that tracker isn't marked as complete.
     for (int i = 0; i < NUM_CHUNKS; i++) {
@@ -126,7 +126,7 @@ public class BatchOperationCallbackTrackerTest {
   public void testDuplicateAcks() {
     BatchOperationCallbackTracker tracker =
         new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-            finalOperation, nonBlockingRouter);
+            finalOperation, null);
     tracker.getCallback(chunkIds.get(0)).onCompletion(null, null);
     Assert.assertFalse(tracker.isCompleted());
     Assert.assertFalse(finalOperationCalled.get());
@@ -144,7 +144,7 @@ public class BatchOperationCallbackTrackerTest {
   public void testChunkException() {
     BatchOperationCallbackTracker tracker =
         new BatchOperationCallbackTracker(chunkIds, finalBlobId, new FutureResult<>(), callback, quotaChargeCallback,
-            finalOperation, nonBlockingRouter);
+            finalOperation, null);
     tracker.getCallback(chunkIds.get(0))
         .onCompletion(null, new RouterException("test", RouterErrorCode.UnexpectedInternalError));
     Assert.assertTrue(tracker.isCompleted());

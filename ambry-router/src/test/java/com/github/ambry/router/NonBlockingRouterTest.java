@@ -1308,7 +1308,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
       putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(), new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
           new RouterCallback(networkClient, new ArrayList<>()), "0", localKMS, cryptoService, cryptoJobHandler,
-          accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, nonBlockingRouter);
+          accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, router);
       OperationHelper opHelper = new OperationHelper(OperationType.PUT);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
           invalidResponse, -1);
@@ -1324,7 +1324,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       opHelper = new OperationHelper(OperationType.GET);
       getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
           new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService,
-          cryptoJobHandler, mockTime, null, nonBlockingRouter);
+          cryptoJobHandler, mockTime, null, router);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
           invalidResponse, -1);
       // Test that if a failed response comes before the operation is completed, failure detector is notified.
@@ -1339,7 +1339,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       opHelper = new OperationHelper(OperationType.DELETE);
       deleteManager =
           new DeleteManager(mockClusterMap, mockResponseHandler, accountService, new LoggingNotificationSystem(), new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
-              new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime, nonBlockingRouter);
+              new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime, router);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
           invalidResponse, -1);
       // Test that if a failed response comes before the operation is completed, failure detector is notified.
