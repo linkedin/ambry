@@ -324,7 +324,7 @@ class CompactionLog implements Closeable {
     // copying. Either way, we should keep the original after offset, since the after offset should reference to the
     // first index segment that has data from before index segment.
     if (beforeAndAfterIndexSegmentOffsets.containsKey(before)) {
-      logger.trace("{}: Offset already exist in the map", file, before);
+      logger.trace("{}: Offset {} already exist in the map", file, before);
       return;
     }
     LogSegmentName logSegmentName = before.getName();
