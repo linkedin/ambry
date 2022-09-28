@@ -49,7 +49,6 @@ class BatchOperationCallbackTracker {
 
   /**
    * Constructor
-   *
    * @param blobIds the {@link BlobId}s being tracked
    * @param finalBlobId the final {@link BlobId} to send after all the {@code blobids} are acked.
    * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs

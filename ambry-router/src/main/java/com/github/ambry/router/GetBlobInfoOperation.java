@@ -78,7 +78,6 @@ class GetBlobInfoOperation extends GetOperation {
 
   /**
    * Construct a GetBlobInfoOperation
-   *
    * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster

@@ -72,7 +72,6 @@ class GetManager {
 
   /**
    * Create a GetManager
-   *
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param routerConfig The {@link RouterConfig} containing the configs for the PutManager.

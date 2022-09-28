@@ -61,7 +61,6 @@ class TtlUpdateManager {
 
   /**
    * Creates a TtlUpdateManager.
-   *
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param notificationSystem The {@link NotificationSystem} used for notifying ttl updates for blobs.

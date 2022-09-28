@@ -59,7 +59,6 @@ class DeleteManager {
 
   /**
    * Creates a DeleteManager.
-   *
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param accountService The {@link AccountService} used for account/container id and name mapping.

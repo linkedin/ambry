@@ -82,7 +82,6 @@ class PutManager {
   private final NonBlockingRouter nonBlockingRouter;
   /**
    * Create a PutManager
-   *
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob creations.
