@@ -34,6 +34,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -48,6 +49,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -251,6 +253,12 @@ public class BlobStore implements Store {
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
+        if (config.storeRebuildTokenBasedOnCompactionHistory
+            && config.storePartitionsToRebuildTokenBasedOnCompactionHistory.contains(
+            replicaId.getPartitionId().getId())) {
+          compactor.enablePersistIndexSegmentOffsets();
+          buildCompactionHistory();
+        }
         if (blobStoreStats == null) {
           blobStoreStats =
               new BlobStoreStats(storeId, index, config, time, longLivedTaskScheduler, taskScheduler, diskIOScheduler,
@@ -1301,6 +1309,44 @@ public class BlobStore implements Store {
       // This is to be compatible with static clustermap. If static cluster manager is adopted, all replicas are supposed to be STANDBY
       // and router relies on failure detector to track liveness of replicas(stores).
       currentState = ReplicaState.STANDBY;
+    }
+  }
+
+  /**
+   * Build the compaction history.
+   */
+  private void buildCompactionHistory() {
+    long now = time.milliseconds();
+    long cutoffTime = now - Duration.ofDays(config.storeCompactionHistoryInDay).toMillis();
+    AtomicInteger count = new AtomicInteger();
+    AtomicLong startTime = new AtomicLong(0);
+    AtomicLong endTime = new AtomicLong();
+    try {
+      CompactionLog.processCompactionLogs(dataDir, storeId, factory, time, config, compactionLog -> {
+        if (compactionLog.getStartTime() <= cutoffTime) {
+          // Ignore CompactionLogs that are created before the cutoffTime.
+          return false;
+        }
+        // This change is probably not forward compatible. If we deploy this new version and start
+        // persisting index segment offsets in CompactionLog, we expect all the following CompactionLogs would
+        // keep persisting index segment offsets so there is no gap between CompactionLog history.
+        if (compactionLog.isIndexSegmentOffsetsPersisted()) {
+          logger.trace("Store {}: build compaction history by processing compaction log started at {}", storeId,
+              compactionLog.getStartTime());
+          index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
+              compactionLog.getIndexSegmentOffsetsForCompletedCycles(), false);
+          count.incrementAndGet();
+          startTime.compareAndSet(0, compactionLog.getStartTime());
+          endTime.set(compactionLog.getStartTime());
+        }
+        return true;
+      });
+      logger.info("Store {}: Build compaction history with {} compaction logs from {} to {}", storeId, count.get(),
+          startTime.get(), endTime.get());
+      index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+    } catch (Exception e) {
+      // Don't fatal the process just because we can't build the compaction history.
+      logger.error("Store {}: Failed to process CompactionLogs", storeId, e);
     }
   }
 
