@@ -439,12 +439,6 @@ public class StoreConfig {
   public static final String storeEnableIndexDirectMemoryUsageMetricName =
       "store.enable.index.direct.memory.usage.metric";
 
-  @Config(storeAlwaysEnableTargetIndexDuplicateCheckingName)
-  @Default("false")
-  public final boolean storeAlwaysEnableTargetIndexDuplicateChecking;
-  public static final String storeAlwaysEnableTargetIndexDuplicateCheckingName =
-      "store.always.enable.target.index.duplicate.checking";
-
   @Config(storeCompactionEnableBasicInfoOnMissingDuplicateName)
   @Default("false")
   public final boolean storeCompactionEnableBasicInfoOnMissingDuplicate;
@@ -621,8 +615,6 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.enable.current.invalid.size.metric", false);
     storeEnableIndexDirectMemoryUsageMetric =
         verifiableProperties.getBoolean(storeEnableIndexDirectMemoryUsageMetricName, false);
-    storeAlwaysEnableTargetIndexDuplicateChecking =
-        verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
     storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);
     storeCompactionEnableBasicInfoOnMissingDuplicate =
         verifiableProperties.getBoolean(storeCompactionEnableBasicInfoOnMissingDuplicateName, false);

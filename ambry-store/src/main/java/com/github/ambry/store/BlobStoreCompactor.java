@@ -664,8 +664,7 @@ class BlobStoreCompactor {
 
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
-    boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
-        indexSegmentToCopy.getStartOffset());
+    boolean checkAlreadyCopied = isIndexSegmentUnderCopy(indexSegmentToCopy.getStartOffset());
     logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
 
     List<IndexEntry> indexEntriesToCopy =
@@ -737,10 +736,6 @@ class BlobStoreCompactor {
         logger.trace("{} in segment with start offset {} in {} is a duplicate because it has already been copied",
             copyCandidate, indexSegmentStartOffset, storeId);
         isDuplicate = true;
-        if (!isIndexSegmentUnderCopy(indexSegmentStartOffset)) {
-          // This is not for recovery purpose, then it must be due to always checking target index duplicate.
-          tgtMetrics.compactionTargetIndexDuplicateOnNonRecoveryCount.inc();
-        }
       } else {
         // not a duplicate
         logger.trace("{} in index segment with start offset {} in {} is not a duplicate", copyCandidate,
