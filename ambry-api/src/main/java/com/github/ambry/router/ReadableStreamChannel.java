@@ -31,7 +31,7 @@ public interface ReadableStreamChannel extends Channel {
    * Return the size of stream that is available on this channel. If -1, then size is unknown.
    * @return the size of the stream available on this channel. -1 if size is unknown.
    */
-  public long getSize();
+  long getSize();
 
   /**
    * Reads all the data inside this channel into the given {@code asyncWritableChannel} asynchronously. The
@@ -45,5 +45,5 @@ public interface ReadableStreamChannel extends Channel {
    *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
    * @return the {@link Future} that will eventually contain the result of the operation.
    */
-  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback);
+  Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback);
 }
