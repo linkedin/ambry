@@ -27,8 +27,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +46,8 @@ import org.slf4j.LoggerFactory;
 class CompactionLog implements Closeable {
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
-  static final short CURRENT_VERSION = VERSION_1;
+  static final short VERSION_2 = 2;
+  static final short CURRENT_VERSION = VERSION_2;
   static final String COMPACTION_LOG_SUFFIX = "_compactionLog";
 
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
@@ -58,6 +66,9 @@ class CompactionLog implements Closeable {
   final List<CycleLog> cycleLogs;
   private final File file;
   private final Time time;
+  private final TreeMap<Offset, Offset> beforeAndAfterIndexSegmentOffsets = new TreeMap<>();
+  private final short version;
+  private final StoreConfig config;
 
   private int currentIdx = 0;
   private Offset startOffsetOfLastIndexSegmentForDeleteCheck = null;
@@ -73,6 +84,60 @@ class CompactionLog implements Closeable {
   }
 
   /**
+   * The {@link CompactionLog} processor.
+   */
+  @FunctionalInterface
+  interface CompactionLogProcessor {
+
+    /**
+     * Process a given {@link CompactionLog}.
+     * @param log The {@link CompactionLog} to process.
+     * @return True if you want to process more compaction log.
+     */
+    boolean process(CompactionLog log);
+  }
+
+  /**
+   * Process all the available {@link CompactionLog}s in descending order. The CompactionLog created most recently would
+   * be processed first.
+   * @param dir The data dir that contains all the compaction log files.
+   * @param storeId The store id.
+   * @param storeKeyFactory The {@link StoreKeyFactory}.
+   * @param time The time instance.
+   * @param config The {@link StoreConfig} object.
+   * @param processor The {@link CompactionLogProcessor}.
+   * @throws IOException
+   */
+  static void processCompactionLogs(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time,
+      StoreConfig config, CompactionLogProcessor processor) throws IOException {
+    // Ignore current in process compaction.
+    File storeDir = new File(dir);
+    File[] files =
+        storeDir.listFiles((fileDir, name) -> name.startsWith(storeId + COMPACTION_LOG_SUFFIX + BlobStore.SEPARATOR));
+    List<File> sortedFiles = Stream.of(files)
+        .sorted((file1, file2) -> (int) (getStartTimeFromFile(file2) - getStartTimeFromFile(file1)))
+        .collect(Collectors.toList());
+    File inProgressCompactionLog = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
+    if (inProgressCompactionLog.exists()) {
+      sortedFiles.add(0, inProgressCompactionLog); // If there is an in progress compaction log, put it in the front.
+    }
+    for (File file : sortedFiles) {
+      if (!processor.process(new CompactionLog(file, storeKeyFactory, time, config))) {
+        break;
+      }
+    }
+  }
+
+  /**
+   * Getting start time from the compaction log file.
+   * @param file The compaction log file.
+   * @return The start time in milliseconds.
+   */
+  static long getStartTimeFromFile(File file) {
+    return Long.parseLong(file.getName().split(BlobStore.SEPARATOR)[2]);
+  }
+
+  /**
    * Creates a new compaction log.
    * @param dir the directory at which the compaction log must be created.
    * @param storeId the ID of the store.
@@ -82,7 +147,25 @@ class CompactionLog implements Closeable {
    */
   CompactionLog(String dir, String storeId, Time time, CompactionDetails compactionDetails, StoreConfig config)
       throws IOException {
+    this(dir, storeId, CURRENT_VERSION, time, compactionDetails, config);
+  }
+
+  /**
+   * Creates a new compaction log, with custom version. This should only be used in test.
+   * @param dir the directory at which the compaction log must be created.
+   * @param storeId the ID of the store.
+   * @param version the version number.
+   * @param time the {@link Time} instance to use.
+   * @param compactionDetails the details about the compaction.
+   * @param config the store config to use in this compaction log.
+   */
+  CompactionLog(String dir, String storeId, short version, Time time, CompactionDetails compactionDetails,
+      StoreConfig config) throws IOException {
     this.time = time;
+    if (version < VERSION_0 || version > VERSION_2) {
+      throw new IllegalArgumentException("Invalid version number: " + version);
+    }
+    this.version = version;
     file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (!file.createNewFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " already exists");
@@ -94,6 +177,7 @@ class CompactionLog implements Closeable {
     if (config.storeSetFilePermissionEnabled) {
       Files.setPosixFilePermissions(file.toPath(), config.storeOperationFilePermission);
     }
+    this.config = config;
     logger.trace("Created compaction log: {}", file);
   }
 
@@ -125,10 +209,11 @@ class CompactionLog implements Closeable {
     }
     this.file = compactionLogFile;
     this.time = time;
+    this.config = config;
     try (FileInputStream fileInputStream = new FileInputStream(file)) {
       CrcInputStream crcInputStream = new CrcInputStream(fileInputStream);
       DataInputStream stream = new DataInputStream(crcInputStream);
-      short version = stream.readShort();
+      this.version = stream.readShort();
       switch (version) {
         case VERSION_0:
           startTime = stream.readLong();
@@ -144,6 +229,7 @@ class CompactionLog implements Closeable {
           }
           break;
         case VERSION_1:
+        case VERSION_2:
           startTime = stream.readLong();
           if (stream.readByte() == (byte) 1) {
             startOffsetOfLastIndexSegmentForDeleteCheck = Offset.fromBytes(stream);
@@ -153,6 +239,14 @@ class CompactionLog implements Closeable {
           cycleLogs = new ArrayList<>(cycleLogsSize);
           while (cycleLogs.size() < cycleLogsSize) {
             cycleLogs.add(CycleLog.fromBytes(stream, storeKeyFactory));
+          }
+          if (version == VERSION_2) {
+            int mapSize = stream.readInt();
+            for (int i = 0; i < mapSize; i++) {
+              Offset before = Offset.fromBytes(stream);
+              Offset after = Offset.fromBytes(stream);
+              beforeAndAfterIndexSegmentOffsets.put(before, after);
+            }
           }
           crc = crcInputStream.getValue();
           if (crc != stream.readLong()) {
@@ -167,6 +261,10 @@ class CompactionLog implements Closeable {
       }
       logger.trace("Loaded compaction log: {}", file);
     }
+  }
+
+  long getStartTime() {
+    return startTime;
   }
 
   /**
@@ -211,6 +309,109 @@ class CompactionLog implements Closeable {
     flush();
     logger.trace("{}: Set safe token to {} during compaction of {}", file, cycleLog.safeToken,
         cycleLog.compactionDetails);
+  }
+
+  /**
+   * Add a pair of index segment start offsets. The first offset has to be an index segment start offset that belongs to
+   * an under compaction log segment. The second offset hast to be an index segment start offset that belongs to a log
+   * segment created this compaction.
+   * @param before The index segment start offset before compaction
+   * @param after The index segment start offset after compaction
+   */
+  void addIndexSegmentOffsetPair(Offset before, Offset after) {
+    if (!isIndexSegmentOffsetsPersisted()) {
+      return;
+    }
+    // If the before offset already exists, it means the index segment has already been copied, or half way through
+    // copying. Either way, we should keep the original after offset, since the after offset should reference to the
+    // first index segment that has data from before index segment.
+    if (beforeAndAfterIndexSegmentOffsets.containsKey(before)) {
+      logger.trace("{}: Offset {} already exist in the map", file, before);
+      return;
+    }
+    LogSegmentName logSegmentName = before.getName();
+    if (!getCompactionDetails().getLogSegmentsUnderCompaction().contains(logSegmentName)) {
+      throw new IllegalArgumentException("Offset is not part of the under compaction log segments: " + before);
+    }
+    // TODO: Can we find a way to validate the after offset?
+    beforeAndAfterIndexSegmentOffsets.put(before, after);
+    logger.trace("{}: Add offsets pair to {}: {}", file, before, after);
+    flush();
+  }
+
+  /**
+   * Update all the index segment offset values added through method {@link #addIndexSegmentOffsetPair}. If the input is
+   * null, the index segment offsets map would be cleared.
+   * @param validOffset The valid {@link Offset} to replace all the previous invalid {@link Offset}.
+   */
+  void updateIndexSegmentOffsetsWithValidOffset(Offset validOffset) {
+    if (!isIndexSegmentOffsetsPersisted()) {
+      return;
+    }
+    logger.info("{}: Validate offsets map with: {}", file, validOffset);
+    if (validOffset == null) {
+      beforeAndAfterIndexSegmentOffsets.clear();
+    } else {
+      for (Offset before : beforeAndAfterIndexSegmentOffsets.keySet()) {
+        beforeAndAfterIndexSegmentOffsets.put(before, validOffset);
+      }
+    }
+    flush();
+  }
+
+  /**
+   * @return The index segment offset map. Each key and value is before and after pair passed to {@link #addIndexSegmentOffsetPair}.
+   */
+  NavigableMap<Offset, Offset> getIndexSegmentOffsets() {
+    return Collections.unmodifiableNavigableMap(beforeAndAfterIndexSegmentOffsets);
+  }
+
+  /**
+   * Return index segment offset map for completed cycles. Each key offset's LogSegmentName has to finish the compaction.
+   */
+  SortedMap<Offset, Offset> getIndexSegmentOffsetsForCompletedCycles() {
+    if (beforeAndAfterIndexSegmentOffsets.size() == 0 || currentIdx >= cycleLogs.size()) {
+      return beforeAndAfterIndexSegmentOffsets;
+    }
+
+    if (currentIdx == 0) {
+      return new TreeMap<>();
+    }
+
+    List<CycleLog> cycles = cycleLogs.subList(0, currentIdx);
+    List<LogSegmentName> completedLogSegmentNames = cycles.stream()
+        .flatMap(cycleLog -> cycleLog.compactionDetails.getLogSegmentsUnderCompaction().stream())
+        .collect(Collectors.toList());
+    return getIndexSegmentOffsetsForLogSegments(completedLogSegmentNames);
+  }
+
+  /**
+   * Return index segment offset map for current cycle. Each key offset's LogSegmentName has to be in current cycle.
+   */
+  SortedMap<Offset, Offset> getIndexSegmentOffsetsForCurrentCycle() {
+    if (currentIdx == -1) {
+      throw new IllegalArgumentException(file.getName() + "Current Index is -1, no current cycle");
+    }
+    return getIndexSegmentOffsetsForLogSegments(getCurrentCycleLog().compactionDetails.getLogSegmentsUnderCompaction());
+  }
+
+  private SortedMap<Offset, Offset> getIndexSegmentOffsetsForLogSegments(List<LogSegmentName> logSegmentNames) {
+    if (logSegmentNames.size() == 0) {
+      return new TreeMap<>();
+    }
+
+    Offset start = new Offset(logSegmentNames.get(0), 0);
+    Offset end = new Offset(logSegmentNames.get(logSegmentNames.size() - 1), config.storeSegmentSizeInBytes);
+    return beforeAndAfterIndexSegmentOffsets.subMap(start, end);
+  }
+
+  /**
+   * True when the {@link CompactionLog} persists index segment offset. Starting from version 2, compaction log should
+   * persist index segment offsets.
+   * @return
+   */
+  boolean isIndexSegmentOffsetsPersisted() {
+    return version >= VERSION_2;
   }
 
   /**
@@ -268,8 +469,8 @@ class CompactionLog implements Closeable {
         newList.add(segmentUnderCompaction);
       }
     }
-    getCurrentCycleLog().compactionDetails = new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList,
-        null);
+    getCurrentCycleLog().compactionDetails =
+        new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList, null);
     cycleLogs.add(new CycleLog(new CompactionDetails(currentDetails.getReferenceTimeMs(), newList, null)));
     flush();
     logger.trace("{}: Split current cycle into two lists: {} and {}", file, updatedList, newList);
@@ -344,45 +545,19 @@ class CompactionLog implements Closeable {
    * Flushes all changes to the file backing this compaction log.
    */
   private void flush() {
-    /*
-        Description of serialized format
-        Version 0:
-          version
-          startTime
-          index of current cycle's log
-          size of cycle log list
-          cycleLog1 (see CycleLog#toBytes())
-          cycleLog2
-          ...
-          crc
-         Version 1:
-          version
-          startTime
-          byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
-          startOffsetOfLastIndexSegmentForDeleteCheck if not null
-          index of current cycle's log
-          size of cycle log list
-          cycleLog1 (see CycleLog#toBytes())
-          cycleLog2
-          ...
-          crc
-       */
     File tempFile = new File(file.getAbsolutePath() + ".tmp");
     try (FileOutputStream fileOutputStream = new FileOutputStream(tempFile)) {
       CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
       DataOutputStream stream = new DataOutputStream(crcOutputStream);
-      stream.writeShort(CURRENT_VERSION);
-      stream.writeLong(startTime);
-      if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
-        stream.writeByte(0);
-      } else {
-        stream.writeByte(1);
-        stream.write(startOffsetOfLastIndexSegmentForDeleteCheck.toBytes());
-      }
-      stream.writeInt(currentIdx);
-      stream.writeInt(cycleLogs.size());
-      for (CycleLog cycleLog : cycleLogs) {
-        stream.write(cycleLog.toBytes());
+      stream.writeShort(version); // If we read this log from file, then keep this the same version.
+      switch (version) {
+        case VERSION_0:
+          flushVersion0(stream);
+          break;
+        case VERSION_1:
+        case VERSION_2:
+          flushVersion1And2(stream);
+          break;
       }
       stream.writeLong(crcOutputStream.getValue());
       fileOutputStream.getChannel().force(true);
@@ -391,6 +566,84 @@ class CompactionLog implements Closeable {
     }
     if (!tempFile.renameTo(file)) {
       throw new IllegalStateException("Newly written compaction log could not be saved");
+    }
+  }
+
+  /**
+   * Flush the CompactionLog following the version 0 format.
+   * Version 0:
+   *    version
+   *    startTime
+   *    index of current cycle's log
+   *    size of cycle log list
+   *    cycleLog1 (see CycleLog#toBytes())
+   *    cycleLog2
+   *    ...
+   *    crc
+   * @param stream The output stream to write bytes to
+   * @throws IOException
+   */
+  private void flushVersion0(DataOutputStream stream) throws IOException {
+    stream.writeLong(startTime);
+    stream.writeInt(currentIdx);
+    stream.writeInt(cycleLogs.size());
+    for (CycleLog cycleLog : cycleLogs) {
+      stream.write(cycleLog.toBytes());
+    }
+  }
+
+  /**
+   * Flush the CompactionLog following the version 1 or 2 format.
+   * Version 1:
+   *     version
+   *     startTime
+   *     byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
+   *     startOffsetOfLastIndexSegmentForDeleteCheck if not null
+   *     index of current cycle's log
+   *     size of cycle log list
+   *     cycleLog1 (see CycleLog#toBytes())
+   *     cycleLog2
+   *     ...
+   *     crc
+   *
+   * Version 2:
+   *     version
+   *     startTime
+   *     byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
+   *     startOffsetOfLastIndexSegmentForDeleteCheck if not null
+   *     index of current cycle's log
+   *     size of cycle log list
+   *     cycleLog1 (see CycleLog#toBytes())
+   *     cycleLog2
+   *     ...
+   *     size of beforeAndAfterIndexSegmentOffsetsMap
+   *     beforeOffset1, afterOffset1
+   *     beforeOffset2, afterOffset2
+   *     ...
+   *     crc
+   * @param stream The output stream to write bytes to
+   * @throws IOException
+   */
+  private void flushVersion1And2(DataOutputStream stream) throws IOException {
+    stream.writeLong(startTime);
+    if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
+      stream.writeByte(0);
+    } else {
+      stream.writeByte(1);
+      stream.write(startOffsetOfLastIndexSegmentForDeleteCheck.toBytes());
+    }
+    stream.writeInt(currentIdx);
+    stream.writeInt(cycleLogs.size());
+    for (CycleLog cycleLog : cycleLogs) {
+      stream.write(cycleLog.toBytes());
+    }
+    if (version >= VERSION_2) {
+      stream.writeInt(beforeAndAfterIndexSegmentOffsets.size());
+      // BeforeAndAfterIndexSegmentOffsets is a tree map that would return offset in order
+      for (Map.Entry<Offset, Offset> entry : beforeAndAfterIndexSegmentOffsets.entrySet()) {
+        stream.write(entry.getKey().toBytes());
+        stream.write(entry.getValue().toBytes());
+      }
     }
   }
 
