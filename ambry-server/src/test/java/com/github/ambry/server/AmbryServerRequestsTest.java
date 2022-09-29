@@ -169,7 +169,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
     super(ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6);
     this.validateRequestOnStoreState = validateRequestOnStoreState;
-    clusterMap = new MockClusterMap();
+    // Each DataNodeId uses unique host name.
+    clusterMap = new MockClusterMap(false, true, 9, 3, 3, false, false, null, true);
     localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     Properties properties = createProperties(validateRequestOnStoreState, true);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);

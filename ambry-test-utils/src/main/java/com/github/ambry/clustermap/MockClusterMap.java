@@ -70,6 +70,8 @@ public class MockClusterMap implements ClusterMap {
   public String cloudDatacenterName;
   // allow this to be changed to support some tests
   private String localDatacenterName;
+  // if true, each DataNode will use unique host name.
+  private boolean uniqueNodeName;
 
   private final MockPartitionId specialPartition;
   private ClusterMapChangeListener clusterMapChangeListener = null;
@@ -87,7 +89,30 @@ public class MockClusterMap implements ClusterMap {
    * on the test machine.
    */
   public MockClusterMap() throws IOException {
-    this(false, true, 9, 3, 3, false, false, null);
+    this(false, true, 9, 3, 3, false, false, null, false);
+  }
+
+  /**
+   * Creates and returns a mock cluster map.
+   * @param enableSSLPorts whether to enable SSL ports.
+   * @param enableHttp2Ports whether to enable Http2 ports.
+   * @param numNodes number of mock datanodes that will be created (every 3 of which will be put in a separate
+   *                 datacenter).
+   * @param numMountPointsPerNode number of mount points (mocking disks) that will be created in each datanode.
+   * @param numDefaultStoresPerMountPoint the number of stores that will be created on each mount point.
+   * @param createOnlyDefaultPartitionClass if {@code true}, does not attempt to create the "special" partition. If
+   *                                        {@code false}, attempts to do so. See javadoc of function for more details
+   * @param includeCloudDc {@code true} to make DC1 a "cloud" DC: one with a single {@link ReplicaType#CLOUD_BACKED}
+   *                       replica for each partition in the cluster map. The virtual datanode created for the cloud DC
+   *                       does not count against {@code numNodes}.
+   * @param localDcName name of the local data center
+   */
+  public MockClusterMap(boolean enableSSLPorts, boolean enableHttp2Ports, int numNodes, int numMountPointsPerNode,
+      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc,
+      String localDcName)
+      throws IOException {
+    this(enableSSLPorts, enableHttp2Ports, numNodes, numMountPointsPerNode, numDefaultStoresPerMountPoint,
+        createOnlyDefaultPartitionClass, includeCloudDc, localDcName, false);
   }
 
   /**
@@ -123,13 +148,16 @@ public class MockClusterMap implements ClusterMap {
    *                       replica for each partition in the cluster map. The virtual datanode created for the cloud DC
    *                       does not count against {@code numNodes}.
    * @param localDcName name of the local data center
+   * @param uniqueNodeName if true, each DataNode will have unique host name
    */
   public MockClusterMap(boolean enableSSLPorts, boolean enableHttp2Ports, int numNodes, int numMountPointsPerNode,
-      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc, String localDcName)
+      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass, boolean includeCloudDc,
+      String localDcName, boolean uniqueNodeName)
       throws IOException {
     this.enableSSLPorts = enableSSLPorts;
     this.enableHttp2Ports = enableHttp2Ports;
     this.numMountPointsPerNode = numMountPointsPerNode;
+    this.uniqueNodeName = uniqueNodeName;
     dataNodes = new ArrayList<>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
@@ -139,7 +167,7 @@ public class MockClusterMap implements ClusterMap {
       dcIndex++;
       dcName = "DC" + dcIndex;
       dataCentersInClusterMap.add(dcName);
-      MockDataNodeId virtualNode = createDataNode(getListOfPorts(DataNodeId.UNKNOWN_PORT, null, null), dcName, 0);
+      MockDataNodeId virtualNode = createDataNode(getListOfPorts(DataNodeId.UNKNOWN_PORT, null, null), dcName, 0, uniqueNodeName);
       dataNodes.add(virtualNode);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(virtualNode);
       cloudDatacenterName = dcName;
@@ -156,11 +184,11 @@ public class MockClusterMap implements ClusterMap {
       if (enableSSLPorts) {
         dataNodeId = createDataNode(
             getListOfPorts(currentPlainTextPort++, currentSSLPort++, enableHttp2Ports ? currentHttp2Port++ : null),
-            dcName, numMountPointsPerNode);
+            dcName, numMountPointsPerNode, uniqueNodeName);
       } else {
         dataNodeId =
             createDataNode(getListOfPorts(currentPlainTextPort++, null, enableHttp2Ports ? currentHttp2Port++ : null),
-                dcName, numMountPointsPerNode);
+                dcName, numMountPointsPerNode, uniqueNodeName);
       }
       dataNodes.add(dataNodeId);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
@@ -307,7 +335,7 @@ public class MockClusterMap implements ClusterMap {
     throw new IllegalArgumentException("No PlainText port found ");
   }
 
-  public static MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter, int numMountPointsPerNode)
+  public static MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter, int numMountPointsPerNode, boolean uniqueName)
       throws IOException {
     File f = null;
     int port = getPlainTextPort(ports);
@@ -320,7 +348,7 @@ public class MockClusterMap implements ClusterMap {
         mountFile.mkdir();
         mountPaths.add(mountFile.getAbsolutePath());
       }
-      return new MockDataNodeId(ports, mountPaths, datacenter);
+      return new MockDataNodeId(ports, mountPaths, datacenter, uniqueName);
     } finally {
       if (f != null) {
         f.delete();
@@ -339,7 +367,7 @@ public class MockClusterMap implements ClusterMap {
     for (int i = 0; i < numNewNodes; ++i) {
       MockDataNodeId dataNodeId =
           createDataNode(getListOfPorts(currentPlainTextPort++, null, currentHttp2Port++), dcName,
-              numMountPointsPerNode);
+              numMountPointsPerNode, uniqueNodeName);
       dataNodes.add(dataNodeId);
       dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
       createdNodes.add(dataNodeId);

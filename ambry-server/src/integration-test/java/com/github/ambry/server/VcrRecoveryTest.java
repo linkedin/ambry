@@ -111,7 +111,7 @@ public class VcrRecoveryTest {
     recoveryNodePort = new Port(12311, PortType.PLAINTEXT);
     ArrayList<Port> recoveryPortList = new ArrayList<>(2);
     recoveryPortList.add(recoveryNodePort);
-    recoveryNode = MockClusterMap.createDataNode(recoveryPortList, dcName, 1);
+    recoveryNode = MockClusterMap.createDataNode(recoveryPortList, dcName, 1, false);
 
     // create cluster for recovery
     recoveryCluster = MockCluster.createOneNodeRecoveryCluster(vcrNode, recoveryNode, dcName);
