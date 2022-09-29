@@ -107,6 +107,8 @@ public class AmbryRequests implements RequestAPI {
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
+  private static String ON_DEMAND_REPLICATION_CLIENTID_PREFIX = "replication-ondemand-fetch";
+
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
       NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
@@ -736,126 +738,128 @@ public class AmbryRequests implements RequestAPI {
     metrics.replicateBlobRequestRate.mark();
     ReplicateBlobResponse response = null;
 
-    // step 1: get the blob from the remote replica
     // Get the two parameters from the replicateBlobRequest: the blobId and the remoteHostName
     BlobId blobId = replicateBlobRequest.getBlobId();
     String remoteHostName = replicateBlobRequest.getSourceHostName();
-    Port remoteHostPort;
-    Optional<DataNodeId> remoteDataNode = blobId.getPartition().getReplicaIds().stream().map(ReplicaId::getDataNodeId)
-        .filter(node -> node.getHostname().equals(remoteHostName)).findFirst();
-    if (remoteDataNode.isPresent()) {
-      remoteHostPort = remoteDataNode.get().getPortToConnectTo();
-    } else {
-      logger.error("ReplicateBlobRequest {} couldn't find the remote host {} in the clustermap.", blobId, remoteHostName);
-      throw new IOException("ReplicateBlobRequest " + blobId + " couldn't find the remote host " + remoteHostName);
-    }
-    // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
-    final int connectionPoolCheckoutTimeoutMs = 1000;
-
-    List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-    List<BlobId> blobIds = new ArrayList<BlobId>();
-    blobIds.add(blobId);
-    PartitionRequestInfo partitionInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
-    partitionRequestInfoList.add(partitionInfo);
-    // Get the Blob including expired and deleted.
-    GetRequest getRequest = new GetRequest(replicateBlobRequest.getCorrelationId(),
-        replicateBlobRequest.getClientId(), MessageFormatFlags.All, partitionRequestInfoList,
-        GetOption.Include_All);
-    GetResponse getResponse = null;
     try {
+      Port remoteHostPort;
+      Optional<DataNodeId> remoteDataNode = blobId.getPartition().getReplicaIds().stream().map(ReplicaId::getDataNodeId)
+          .filter(node -> node.getHostname().equals(remoteHostName)).findFirst();
+      if (remoteDataNode.isPresent()) {
+        remoteHostPort = remoteDataNode.get().getPortToConnectTo();
+      } else {
+        logger.error("ReplicateBlobRequest {} couldn't find the remote host {} in the clustermap.", blobId, remoteHostName);
+        throw new IOException("ReplicateBlobRequest " + blobId + " couldn't find the remote host " + remoteHostName);
+      }
+      // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
+      final int connectionPoolCheckoutTimeoutMs = 1000;
+
+      List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      List<BlobId> blobIds = new ArrayList<BlobId>();
+      blobIds.add(blobId);
+      PartitionRequestInfo partitionInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
+      partitionRequestInfoList.add(partitionInfo);
+      // Get the Blob including expired and deleted.
+      final String clientId = ON_DEMAND_REPLICATION_CLIENTID_PREFIX + currentNode.getHostname();
+      GetRequest getRequest = new GetRequest(replicateBlobRequest.getCorrelationId(),
+          clientId, MessageFormatFlags.All, partitionRequestInfoList, GetOption.Include_All);
+
+      // step 1: get the blob from the remote replica
       ConnectedChannel connectedChannel = connectionPool.checkOutConnection(remoteHostName, remoteHostPort, connectionPoolCheckoutTimeoutMs);;
       ChannelOutput channelOutput = connectedChannel.sendAndReceive(getRequest);
-      getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
+      GetResponse getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
       if ((getResponse.getError() != ServerErrorCode.No_Error) || (getResponse.getPartitionResponseInfoList() == null)
           || (getResponse.getPartitionResponseInfoList().size() == 0)) {
         logger.error("ReplicateBlobRequest failed to get blob {} from the remote node {} {} {}",
             blobId, remoteHostName, remoteHostPort, getResponse.getError());
         response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
             ServerErrorCode.Unknown_Error);
-      }
-    } catch (Exception e) {
-      logger.error("ReplicateBlobRequest getBlob {} from the remote node {} {} hit exception ",
-          blobId, remoteHostName, remoteHostPort, e);
-      response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-          ServerErrorCode.Unknown_Error);
-    } finally {
-      if (response != null) {
-        long processingTime = SystemTime.getInstance().milliseconds() - startTime;
-        totalTimeSpent += processingTime;
-        publicAccessLogger.info("{} {} processingTime {}", replicateBlobRequest, response, processingTime);
-        metrics.replicateBlobProcessingTimeInMs.update(processingTime);
-        requestResponseChannel.sendResponse(response, request,
-            new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs, metrics.replicateBlobSendTimeInMs,
-                metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
-        return;
-      }
-    }
+      } else {
+        // step 2: get the blob message from the response and write to the store
+        // only have one partition. And checked at least it has one entry above.
+        PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
+        if (partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) {
+          try {
+            List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
+            if (messageInfoList == null || messageInfoList.size() != 1) {
+              logger.error(
+                  "ReplicateBlobRequest PartitionResponseInfo response from GetRequest {} {} {} {} {} returned null.",
+                  partitionResponseInfo, messageInfoList, remoteHostName, remoteHostPort, blobId);
+              response =
+                  new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                      ServerErrorCode.Blob_Not_Found);
+            } else {
+              MessageInfo orgMsgInfo = messageInfoList.get(0);
+              Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
+                  getResponse.getInputStream(), orgMsgInfo);
+              if (output == null || !output.getMessageInfo().getStoreKey().equals(blobId)) {
+                logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", orgMsgInfo,
+                    remoteHostName, remoteHostPort, blobId);
+                response =
+                    new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                        ServerErrorCode.Unknown_Error);
+              } else {
+                MessageFormatWriteSet writeset = new MessageFormatWriteSet(output.getStream(), Collections.singletonList(output.getMessageInfo()),
+                    false);
+                Store store = storeManager.getStore(blobId.getPartition());
+                store.put(writeset);
 
-    // step 2: get the blob message from the response and write to the store
-    // only have one partition. And checked at least it has one entry above.
-    PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
-    if (partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) {
-      try {
-        List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
-        if (messageInfoList == null || messageInfoList.size() != 1) {
-          logger.error("ReplicateBlobRequest PartitionResponseInfo response from GetRequest {} {} {} {} {} returned null.",
-              partitionResponseInfo, messageInfoList, remoteHostName, remoteHostPort, blobId);
-          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-              ServerErrorCode.Blob_Not_Found);
-        } else {
-          MessageInfo orgMsgInfo = messageInfoList.get(0);
-          Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
-              getResponse.getInputStream(), orgMsgInfo);
-          if (output == null || !output.getMessageInfo().getStoreKey().equals(blobId)) {
-            logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}",
-                orgMsgInfo, remoteHostName, remoteHostPort, blobId);
-            throw new StoreException("ReplicateBlobRequest " + replicateBlobRequest + " transferInputStream returned "
-                + output, StoreErrorCodes.Unknown_Error);
-          } else {
-            MessageFormatWriteSet writeset = new MessageFormatWriteSet(output.getStream(),
-                                            Collections.singletonList(output.getMessageInfo()), false);
-            Store store = storeManager.getStore(blobId.getPartition());
-            store.put(writeset);
-
-            // As ReplicateThread, we do applyTtlUpdate and also applyDelete.
-            if (orgMsgInfo.isTtlUpdated()) {
-              applyTtlUpdate(orgMsgInfo, replicateBlobRequest);
+                // As ReplicateThread, we do applyTtlUpdate and also applyDelete.
+                if (orgMsgInfo.isTtlUpdated()) {
+                  applyTtlUpdate(orgMsgInfo, replicateBlobRequest);
+                }
+                if (orgMsgInfo.isDeleted()) {
+                  applyDelete(orgMsgInfo, replicateBlobRequest);
+                }
+                logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName,
+                    remoteHostPort);
+                response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                    ServerErrorCode.No_Error);
+              } // if (output == null) {
+            } // if (messageInfoList == null || messageInfoList.size() != 1)
+          } catch (StoreException e) { // catch the store write exception
+            if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+              logger.info("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
+              response =
+                  new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                      ServerErrorCode.No_Error);
+            } else {
+              logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest,
+                  e);
+              response =
+                  new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                      ServerErrorCode.Unknown_Error);
             }
-            if (orgMsgInfo.isDeleted()) {
-              applyDelete(orgMsgInfo, replicateBlobRequest);
-            }
-            logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName, remoteHostPort);
-            response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-                ServerErrorCode.No_Error);
-          } // if (output == null) {
-        } // if (messageInfoList == null || messageInfoList.size() != 1)
-      } catch (StoreException e) {
-        if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
-          logger.info("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
-          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-              ServerErrorCode.No_Error);
+          }
+        } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Deleted) {
+          // Since GetOption is Include_All, even it's deleted on the remote replica, we'll still get the PutBlob.
+          // One exception is that because of compaction or other reasons, the PutRecord is gone.
+          logger.error("ReplicateBlobRequest Blob {} of {} is delete from the source replica", blobId,
+              replicateBlobRequest);
+          response =
+              new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                  ServerErrorCode.Blob_Not_Found);
+        } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Authorization_Failure) {
+          logger.error("ReplicateBlobRequest authorization failure for replicateBlobRequest {}", replicateBlobRequest);
+          response =
+              new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                  ServerErrorCode.Blob_Authorization_Failure);
         } else {
-          logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
-          response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-              ServerErrorCode.Unknown_Error);
+          logger.error("ReplicateBlobRequest unknown failure {} for replicateBlobRequest {}",
+              partitionResponseInfo.getErrorCode(), replicateBlobRequest);
+          response =
+              new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                  partitionResponseInfo.getErrorCode());
         }
-      }
-    } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Deleted) {
-      // Since GetOption is Include_All, even it's deleted on the remote replica, we'll still get the PutBlob.
-      // One exception is that because of compaction or other reasons, the PutRecord is gone.
-      logger.error("ReplicateBlobRequest Blob {} of {} is delete from the source replica", blobId, replicateBlobRequest);
-      response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-          ServerErrorCode.Blob_Not_Found);
-    } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Authorization_Failure) {
-      logger.error("ReplicateBlobRequest authorization failure for replicateBlobRequest {}", replicateBlobRequest);
-      response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-          ServerErrorCode.Blob_Authorization_Failure);
-    } else {
-      logger.error("ReplicateBlobRequest unknown failure {} for replicateBlobRequest {}",
-          partitionResponseInfo.getErrorCode(), replicateBlobRequest);
+      } // if ((getResponse.getError() != ServerErrorCode.No_Error) || (getResponse.getPartitionResponseInfoList() == null)
+
+      getResponse.release();
+
+    } catch (Exception e) { // catch the getBlob exception
+      logger.error("ReplicateBlobRequest getBlob {} from the remote node {} hit exception ", blobId, remoteHostName, e);
       response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
-    }
+    };
 
     long processingTime = SystemTime.getInstance().milliseconds() - startTime;
     totalTimeSpent += processingTime;
