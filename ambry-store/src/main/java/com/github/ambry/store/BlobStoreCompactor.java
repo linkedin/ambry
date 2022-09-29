@@ -488,33 +488,7 @@ class BlobStoreCompactor {
       // there were no valid entries copied, return any temp segments back to the pool
       logger.trace("Cleaning up temp segments in {} because no swap spaces were used", storeId);
       cleanupUnusedTempSegments();
-      // If we are here, there are several things we can be sure with current implementation.
-      // 1. There is no split cycle for this compaction.
-      // 2. All the log segments under compaction have no valid data to copy.
-      // The reason to create a split cycle is that the log segments under compaction has too much data to write to current target
-      // log segment. If there is a split cycle, the target log segment in next cycle would definitely have some leftover
-      // data from the previous cycle to write.
-      // And since there is no split cycle, this is the only cycle for this compaction. And there is no valid data. So
-      // all log segments have no valid data.
-      //
-      // This means there were no active index segment for target index, therefore the before and after pairs we put in the
-      // compaction log are not valid anymore since all the after offsets would be the start offset of the target log, which
-      // doesn't exist. In this case, we have to fix it.
-      Set<Offset> values = new HashSet<>(compactionLog.getIndexSegmentOffsets().values());
-      Offset startOffset = tgtLog.getEndOffset();
-      if (values.size() != 1 || !values.contains(startOffset)) {
-        logger.error("{}: Expecting one value {} in the compaction log for index segment offsets, but {}", storeId,
-            startOffset, values);
-      }
-      // We have to find a valid index segment and change all the after offsets to be this index segment's start offset.
-      // The last index segment of the closest log segment that are not under compaction should be the valid.
-      LogSegmentName logSegmentName = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().get(0);
-      LogSegment logSegment = srcLog.getSegment(logSegmentName);
-      Offset validOffset =
-          srcIndex.getIndexSegments().lowerKey(new Offset(logSegmentName, logSegment.getStartOffset()));
-      // The valid offset should be the last index segment of the previous log segment. But if it's null, then we would just
-      // clear the map.
-      compactionLog.updateIndexSegmentOffsetsWithValidOffset(validOffset);
+      fixAfterOffsetsInCompactionLogWhenTargetIndexIsEmpty();
     }
   }
 
@@ -1064,6 +1038,38 @@ class BlobStoreCompactor {
     } else {
       throw new StoreException("Could not list temp files in directory: " + dataDir, StoreErrorCodes.Unknown_Error);
     }
+  }
+
+  /**
+   * Fix the after offsets in the compaction log when there is no valid data being copied to the target index, therefore
+   * the target index is empty.
+   */
+  private void fixAfterOffsetsInCompactionLogWhenTargetIndexIsEmpty() {
+    // If we are here, there are several things we can be sure with current implementation.
+    // 1. There is no split cycle for this compaction.
+    // 2. All the log segments under compaction have no valid data to copy.
+    // The reason to create a split cycle is that the log segments under compaction has too much data to write to current
+    // target log segment. If there is a split cycle, the target log segment in next cycle would definitely have some
+    // leftover data from the previous cycle to write.
+    // And since there is no split cycle, this is the only cycle for this compaction. And there is no valid data. So
+    // all log segments have no valid data.
+    //
+    // This means there were no active index segment for target index, therefore the before and after pairs we put in the
+    // compaction log are not valid anymore since all the after offsets would be the start offset of the target log, which
+    // doesn't exist. In this case, we have to fix it.
+    Set<Offset> values = new HashSet<>(compactionLog.getIndexSegmentOffsets().values());
+    Offset startOffset = tgtLog.getEndOffset();
+    if (values.size() != 1 || !values.contains(startOffset)) {
+      logger.error("{}: Expecting one value {} in the compaction log for index segment offsets, but {}", storeId,
+          startOffset, values);
+    }
+    // We have to find a valid index segment and change all the after offsets to be this index segment's start offset.
+    // The last index segment of the closest log segment that are not under compaction should be the valid.
+    LogSegmentName logSegmentName = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().get(0);
+    Offset validOffset = srcIndex.getIndexSegments().lowerKey(new Offset(logSegmentName, 0));
+    // The valid offset should be the last index segment of the previous log segment. But if it's null, then we would just
+    // clear the map.
+    compactionLog.updateIndexSegmentOffsetsWithValidOffset(validOffset);
   }
 
   // commit() helpers

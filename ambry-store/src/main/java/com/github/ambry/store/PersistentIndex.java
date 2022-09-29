@@ -612,6 +612,7 @@ class PersistentIndex {
       Offset after = entry.getValue();
       if (validIndexSegments.get(before) != null) {
         logger.error("Index {}: Before Offset {} shouldn't be in the index segment map", dataDir, before);
+        metrics.beforeAndAfterOffsetSanityCheckFailureCount.inc();
         sanityCheckFailed = true;
         return;
       }
@@ -626,6 +627,7 @@ class PersistentIndex {
       }
       if (segment == null) {
         logger.error("Index {}: No path for Offset {} to reach a valid index segment", dataDir, before);
+        metrics.beforeAndAfterOffsetSanityCheckFailureCount.inc();
         sanityCheckFailed = true;
         return;
       }
@@ -648,6 +650,13 @@ class PersistentIndex {
    */
   Map<Long, Set<Offset>> getCompactionTimestampToIndexSegmentOffsets() {
     return Collections.unmodifiableMap(compactionTimestampToIndexSegmentOffsets);
+  }
+
+  /**
+   * @return {@link #sanityCheckFailed}. Only used in tests.
+   */
+  boolean isSanityCheckFailed() {
+    return sanityCheckFailed;
   }
 
   /**
