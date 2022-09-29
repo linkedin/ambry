@@ -588,7 +588,7 @@ class BlobStoreCompactor {
     }
     // We have index segment offsets from compaction log, every index segment whose offset exists in the compaction log
     // already has its content copied, with the last index segment as exception since it might be halfway through copying.
-    NavigableMap<Offset, Offset> indexSegmentOffsets = compactionLog.getIndexSegmentOffsets();
+    NavigableMap<Offset, Offset> indexSegmentOffsets = compactionLog.getBeforeAndAfterIndexSegmentOffsets();
     Map.Entry<Offset, Offset> lastEntry = indexSegmentOffsets.lastEntry();
     return lastEntry == null || lastEntry.getKey().compareTo(offset) < 0;
   }
@@ -659,7 +659,7 @@ class BlobStoreCompactor {
     // target. Even if there is no content from this index segment that would be preserved after compaction, we still want to
     // save this pair of index segment offsets since replication might be working on this index segment. And it also
     // indicates that last index segment finishes copying.
-    compactionLog.addIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),
+    compactionLog.addBeforeAndAfterIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),
         tgtIndex.getActiveIndexSegmentOffset());
 
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
@@ -1057,7 +1057,7 @@ class BlobStoreCompactor {
     // This means there were no active index segment for target index, therefore the before and after pairs we put in the
     // compaction log are not valid anymore since all the after offsets would be the start offset of the target log, which
     // doesn't exist. In this case, we have to fix it.
-    Set<Offset> values = new HashSet<>(compactionLog.getIndexSegmentOffsets().values());
+    Set<Offset> values = new HashSet<>(compactionLog.getBeforeAndAfterIndexSegmentOffsets().values());
     Offset startOffset = tgtLog.getEndOffset();
     if (values.size() != 1 || !values.contains(startOffset)) {
       logger.error("{}: Expecting one value {} in the compaction log for index segment offsets, but {}", storeId,
@@ -1069,7 +1069,7 @@ class BlobStoreCompactor {
     Offset validOffset = srcIndex.getIndexSegments().lowerKey(new Offset(logSegmentName, 0));
     // The valid offset should be the last index segment of the previous log segment. But if it's null, then we would just
     // clear the map.
-    compactionLog.updateIndexSegmentOffsetsWithValidOffset(validOffset);
+    compactionLog.updateBeforeAndAfterIndexSegmentOffsetsWithValidOffset(validOffset);
   }
 
   // commit() helpers
@@ -1160,7 +1160,7 @@ class BlobStoreCompactor {
 
     if (compactionLog.isIndexSegmentOffsetsPersisted()) {
       srcIndex.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
-          compactionLog.getIndexSegmentOffsetsForCurrentCycle(), true);
+          compactionLog.getBeforeAndAfterIndexSegmentOffsetsForCurrentCycle(), true);
     }
     // Update the index segments, this would remove some index segments and add others. We have to update the before and
     // after compaction index segment offsets before this method.

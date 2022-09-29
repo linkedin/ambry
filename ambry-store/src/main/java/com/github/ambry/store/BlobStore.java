@@ -1334,7 +1334,7 @@ public class BlobStore implements Store {
           logger.trace("Store {}: build compaction history by processing compaction log started at {}", storeId,
               compactionLog.getStartTime());
           index.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
-              compactionLog.getIndexSegmentOffsetsForCompletedCycles(), false);
+              compactionLog.getBeforeAndAfterIndexSegmentOffsetsForCompletedCycles(), false);
           count.incrementAndGet();
           startTime.compareAndSet(0, compactionLog.getStartTime());
           endTime.set(compactionLog.getStartTime());

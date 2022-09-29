@@ -335,7 +335,7 @@ public class BlobStoreCompactorTest {
     }
 
     CompactionLog latestLog = getLatestCompactionLog();
-    assertEquals(0, latestLog.getIndexSegmentOffsets().size());
+    assertEquals(0, latestLog.getBeforeAndAfterIndexSegmentOffsets().size());
 
     state.reloadIndex(true, false);
     // 0_0 is gone, now 1_0 is the first log segment
@@ -353,7 +353,7 @@ public class BlobStoreCompactorTest {
     Offset lastIndexSegmentOffsetForTarget =
         state.index.getIndexSegments().floorKey(new Offset(LogSegmentName.fromPositionAndGeneration(3, 0), 0));
     assertEquals(LogSegmentName.fromPositionAndGeneration(1, 1), lastIndexSegmentOffsetForTarget.getName());
-    for (Map.Entry<Offset, Offset> entry : latestLog.getIndexSegmentOffsets().entrySet()) {
+    for (Map.Entry<Offset, Offset> entry : latestLog.getBeforeAndAfterIndexSegmentOffsets().entrySet()) {
       if (entry.getKey().getName().equals(LogSegmentName.fromPositionAndGeneration(2, 0))) {
         assertEquals(lastIndexSegmentOffsetForTarget, entry.getValue());
       }
@@ -375,7 +375,7 @@ public class BlobStoreCompactorTest {
     Offset lastIndexSegmentOffsetFromSource =
         state.index.getIndexSegments().floorKey(new Offset(LogSegmentName.fromPositionAndGeneration(4, 0), 0));
     assertEquals(LogSegmentName.fromPositionAndGeneration(3, 0), lastIndexSegmentOffsetFromSource.getName());
-    for (Map.Entry<Offset, Offset> entry : latestLog.getIndexSegmentOffsets().entrySet()) {
+    for (Map.Entry<Offset, Offset> entry : latestLog.getBeforeAndAfterIndexSegmentOffsets().entrySet()) {
       assertEquals(lastIndexSegmentOffsetFromSource, entry.getValue());
     }
   }
@@ -1664,7 +1664,7 @@ public class BlobStoreCompactorTest {
         state.log.getSegment(compactedLogSegmentName).getEndOffset());
 
     CompactionLog cLog = getLatestCompactionLog();
-    Map<Offset, Offset> indexSegmentOffsets = cLog.getIndexSegmentOffsets();
+    Map<Offset, Offset> indexSegmentOffsets = cLog.getBeforeAndAfterIndexSegmentOffsets();
     Map<Offset, Offset> expectedIndexSegmentOffsets = new HashMap<>();
 
     LogSegment compactedLogSegment = state.log.getSegment(compactedLogSegmentName);
@@ -1799,7 +1799,7 @@ public class BlobStoreCompactorTest {
         state.log.getSegment(compactedLogSegmentName).getEndOffset());
 
     cLog = getLatestCompactionLog();
-    indexSegmentOffsets = cLog.getIndexSegmentOffsets();
+    indexSegmentOffsets = cLog.getBeforeAndAfterIndexSegmentOffsets();
 
     compactedLogSegment = state.log.getSegment(compactedLogSegmentName);
     indexSegments = state.index.getIndexSegments()
@@ -3325,7 +3325,7 @@ public class BlobStoreCompactorTest {
     // rebuild compaction history
     CompactionLog.processCompactionLogs(tempDirStr, STORE_ID, STORE_KEY_FACTORY, time, state.config, cLog -> {
       state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(cLog.getStartTime(),
-          cLog.getIndexSegmentOffsetsForCompletedCycles(), false);
+          cLog.getBeforeAndAfterIndexSegmentOffsetsForCompletedCycles(), false);
       return false;
     });
     state.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
@@ -3450,7 +3450,7 @@ public class BlobStoreCompactorTest {
   private void verifyIndexSegmentOffsetsBeforeAndAfterCompaction(Set<Offset> indexSegmentOffsetsUnderCompaction)
       throws Exception {
     CompactionLog latestLog = getLatestCompactionLog();
-    NavigableMap<Offset, Offset> indexSegmentOffsets = latestLog.getIndexSegmentOffsets();
+    NavigableMap<Offset, Offset> indexSegmentOffsets = latestLog.getBeforeAndAfterIndexSegmentOffsets();
     Map<Offset, Offset> indexSegmentOffsetsFromIndex = state.index.getBeforeAndAfterCompactionIndexSegmentOffsets();
     assertEquals(indexSegmentOffsetsFromIndex, indexSegmentOffsets);
     Map<Long, Set<Offset>> compactionTimestampToOffsets = state.index.getCompactionTimestampToIndexSegmentOffsets();
