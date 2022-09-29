@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ErrorMapping;
@@ -76,6 +77,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -735,11 +737,18 @@ public class AmbryRequests implements RequestAPI {
     ReplicateBlobResponse response = null;
 
     // step 1: get the blob from the remote replica
-    // Get the three parameters from the replicateBlobRequest: blobId, remoteHostName and remoteHostPort
+    // Get the two parameters from the replicateBlobRequest: the blobId and the remoteHostName
     BlobId blobId = replicateBlobRequest.getBlobId();
     String remoteHostName = replicateBlobRequest.getSourceHostName();
-    // ON_DEMAND_REPLICATION_TODO: Suppose the remote host should use the same type of port as currentNode. Any better way to choice the port?
-    Port remoteHostPort = currentNode.getPortToConnectTo();
+    Port remoteHostPort;
+    Optional<DataNodeId> remoteDataNode = blobId.getPartition().getReplicaIds().stream().map(ReplicaId::getDataNodeId)
+        .filter(node -> node.getHostname().equals(remoteHostName)).findFirst();
+    if (remoteDataNode.isPresent()) {
+      remoteHostPort = remoteDataNode.get().getPortToConnectTo();
+    } else {
+      logger.error("ReplicateBlobRequest {} couldn't find the remote host {} in the clustermap.", blobId, remoteHostName);
+      throw new IOException("ReplicateBlobRequest " + blobId + " couldn't find the remote host " + remoteHostName);
+    }
     // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
     final int connectionPoolCheckoutTimeoutMs = 1000;
 

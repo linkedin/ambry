@@ -65,17 +65,12 @@ public class MockConnectionPool implements ConnectionPool {
   private final ClusterMap clusterMap;
   private final int maxEntriesToReturn;
   private Map<DataNodeId, MockConnection> connections;
-  private final Map<String, Port> hostPorts;
 
   public MockConnectionPool(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int maxEntriesToReturn) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.maxEntriesToReturn = maxEntriesToReturn;
     this.connections = new HashMap<DataNodeId, MockConnection>();
-    this.hostPorts = new HashMap<String, Port>();
-    for (DataNodeId node : hosts.keySet()) {
-      hostPorts.put(node.getHostname(), new Port(node.getPort(), PortType.PLAINTEXT));
-    }
   }
 
   @Override
@@ -88,10 +83,6 @@ public class MockConnectionPool implements ConnectionPool {
 
   @Override
   public ConnectedChannel checkOutConnection(String host, Port port, long timeout) {
-    // For mock layer, we ignore the port provided.
-    // For mock layer, each replica is using incremental port number.
-    // When we send ReplicateBlobRequest, don't know the remote port number.
-    port = hostPorts.get(host);
     DataNodeId dataNodeId = clusterMap.getDataNodeId(host, port.getPort());
     MockHost hostObj = hosts.get(dataNodeId);
     if (!connections.containsKey(dataNodeId)) {
