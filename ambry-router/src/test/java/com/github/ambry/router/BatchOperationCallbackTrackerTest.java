@@ -104,7 +104,7 @@ public class BatchOperationCallbackTrackerTest extends NonBlockingRouterTestBase
   /**
    * Test that operation is completed only after the final blob is completed.
    */
-  @Ignore
+  @Ignore("Final operation count is 1 but expected 0 in after() method. Test owner to fix test.")
   @Test
   public void testOperationCompleteAfterFinalBlob() {
     BatchOperationCallbackTracker tracker =
