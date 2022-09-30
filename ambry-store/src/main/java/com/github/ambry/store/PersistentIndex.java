@@ -607,6 +607,7 @@ class PersistentIndex {
    * - All before offsets should have a valid path to an existing valid index segment.
    */
   void sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets() {
+    Set<Offset> seen = new HashSet<>();
     for (Map.Entry<Offset, Offset> entry : beforeAndAfterCompactionIndexSegmentOffsets.entrySet()) {
       // Before should not in the index segment map
       Offset before = entry.getKey();
@@ -617,12 +618,22 @@ class PersistentIndex {
         sanityCheckFailed = true;
         return;
       }
+      seen.clear();
+      seen.add(before);
+      seen.add(after);
       // There should be a path from before offset to the current valid index segment.
       IndexSegment segment = validIndexSegments.get(after);
       while (segment == null) {
         after = beforeAndAfterCompactionIndexSegmentOffsets.get(after);
         if (after == null) {
           break;
+        }
+        if (seen.contains(after)) {
+          logger.error("Index {}: loop in the before and after for Offset: {}", dataDir, before);
+          sanityCheckFailed = true;
+          return;
+        } else {
+          seen.add(after);
         }
         segment = validIndexSegments.get(after);
       }

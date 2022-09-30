@@ -770,11 +770,22 @@ public class IndexTest {
 
     state.reloadIndex(true, false);
     assertFalse(state.index.isSanityCheckFailed());
+    beforeAndAfter.clear();
     // Create two non-existing offsets
     Offset nonExistingBefore =
         new Offset(secondIndexSegmentOffset.getName().getNextGenerationName(), LogSegment.HEADER_SIZE);
     Offset nonExistingAfter = new Offset(nonExistingBefore.getName().getNextGenerationName(), LogSegment.HEADER_SIZE);
     beforeAndAfter.put(nonExistingBefore, nonExistingAfter);
+    state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(state.time.milliseconds(), beforeAndAfter, false);
+    state.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+    assertTrue(state.index.isSanityCheckFailed());
+
+    state.reloadIndex(true, false);
+    assertFalse(state.index.isSanityCheckFailed());
+    beforeAndAfter.clear();
+    // Create a loop
+    beforeAndAfter.put(nonExistingBefore, nonExistingAfter);
+    beforeAndAfter.put(nonExistingAfter, nonExistingBefore);
     state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(state.time.milliseconds(), beforeAndAfter, false);
     state.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
     assertTrue(state.index.isSanityCheckFailed());
