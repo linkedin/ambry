@@ -263,6 +263,8 @@ public class NonBlockingRouterMetrics {
 
   Map<Resource, CachedHistogram> putBlobResourceToLatency = new HashMap<>();
 
+  public final CompressionMetrics compressionMetrics;
+
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
   private final RouterConfig routerConfig;
@@ -602,6 +604,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollQuotaCompliantRequestTime"));
     pollExceedAllowedRequestTime =
         metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollExceedAllowedRequestTime"));
+
+    compressionMetrics = new CompressionMetrics(metricRegistry);
   }
 
   /**

@@ -638,6 +638,9 @@ public class RouterConfig {
   @Config(ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS)
   public final long routerUpdateOpMetadataRelianceTimestampInMs;
 
+  // Group compression-related configs in the CompressConfig class.
+  private final CompressionConfig compressionConfig;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -777,5 +780,15 @@ public class RouterConfig {
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
     routerUpdateOpMetadataRelianceTimestampInMs = verifiableProperties.getLong(
         ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS, DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
+
+    compressionConfig = new CompressionConfig(verifiableProperties);
+  }
+
+  /**
+   * Get the compression-related configs.
+   * @return The compression-related configs.
+   */
+  public CompressionConfig getCompressionConfig() {
+    return compressionConfig;
   }
 }
