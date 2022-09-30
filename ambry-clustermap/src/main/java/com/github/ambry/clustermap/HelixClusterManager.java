@@ -133,20 +133,6 @@ public class HelixClusterManager implements ClusterMap {
           initializationFailureMap.putIfAbsent(initializer.getDcName(), e);
         }
       }
-
-      for (DcInfo dcInfo : dcToDcInfo.values()) {
-        if (dcInfo.clusterChangeHandler instanceof ClusterMapChangeListener) {
-          ClusterMapChangeListener listener = (ClusterMapChangeListener) dcInfo.clusterChangeHandler;
-          registerClusterMapListener(listener);
-          // WARNING: currently this code is tailored to the CloudServiceClusterChangeHandler, which only needs to be
-          // provided one replica per partition. If this assumption is no longer valid, modify this logic.
-          List<ReplicaId> oneReplicaPerPartition = new ArrayList<>(ambryPartitionToAmbryReplicas.size());
-          for (Set<AmbryReplica> replicas : ambryPartitionToAmbryReplicas.values()) {
-            replicas.stream().findFirst().ifPresent(oneReplicaPerPartition::add);
-          }
-          listener.onReplicaAddedOrRemoved(oneReplicaPerPartition, Collections.emptyList());
-        }
-      }
     }
     Exception blockingException = initializationFailureMap.get(clusterMapConfig.clusterMapDatacenterName);
     if (blockingException != null) {

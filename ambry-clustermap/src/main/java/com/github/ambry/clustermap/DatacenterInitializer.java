@@ -102,15 +102,10 @@ class DatacenterInitializer {
     Utils.newThread(() -> {
       try {
         DcInfo dcInfo;
-        switch (dcZkInfo.getReplicaType()) {
-          case DISK_BACKED:
-            dcInfo = initializeHelixDatacenter();
-            break;
-          case CLOUD_BACKED:
-            dcInfo = initializeCloudDatacenter();
-            break;
-          default:
-            throw new UnsupportedOperationException("Unknown replica type: " + dcZkInfo.getReplicaType());
+        if (dcZkInfo.getReplicaType() == ReplicaType.DISK_BACKED) {
+          dcInfo = initializeHelixDatacenter();
+        } else {
+          throw new UnsupportedOperationException("Unknown replica type: " + dcZkInfo.getReplicaType());
         }
         initializationFuture.complete(dcInfo);
       } catch (Exception e) {
@@ -211,19 +206,5 @@ class DatacenterInitializer {
     }
 
     return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler, dataNodeConfigSource);
-  }
-
-  /**
-   * Currently, this does not connect to the VCR zookeeper and assumes that all partitions are supported in the cloud
-   * datacenter. This will be the case until the VCR and native storage clusters are unified under the same
-   * {@link ClusterMap}. Once this happens, we can use the VCR cluster as a source of truth for supported partitions
-   * in the cloud datacenter.
-   * @return the {@link DcInfo} for the cloud datacenter.
-   * @throws Exception if something went wrong during startup
-   */
-  private DcInfo initializeCloudDatacenter() throws Exception {
-    CloudServiceClusterChangeHandler clusterChangeHandler =
-        new CloudServiceClusterChangeHandler(dcName, clusterMapConfig, clusterChangeHandlerCallback);
-    return new DcInfo(dcName, dcZkInfo, clusterChangeHandler);
   }
 }
