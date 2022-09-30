@@ -448,12 +448,12 @@ public class IndexTest {
     // Back to first dataNode, missing several keys would clear the cache
     int numKeys = DEFAULT_NUMBER_CACHE_MISS_IN_FIND_MISSING_KEY_IN_BATCH_MODE;
     keys = new ArrayList<>(numKeys);
-    for (int i = 0; i < numKeys+1; i++) {
+    for (int i = 0; i < numKeys + 1; i++) {
       keys.add(state.getUniqueId());
     }
     keys.addAll(getRandomKeyFromIndexSegment(0, 1));
     long findKeyCallCountBefore = state.metrics.findTime.getCount();
-    Assert.assertEquals(numKeys+1, state.index.findMissingKeysInBatch(keys, dataNode).size());
+    Assert.assertEquals(numKeys + 1, state.index.findMissingKeysInBatch(keys, dataNode).size());
     long findKeyCallCountAfter = state.metrics.findTime.getCount();
     Assert.assertEquals(keys.size(), findKeyCallCountAfter - findKeyCallCountBefore);
     Assert.assertEquals(0, state.index.getCachedKeys().get(dataNode).size());
@@ -732,6 +732,52 @@ public class IndexTest {
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Undeleted, e.getErrorCode());
     }
+  }
+
+  /**
+   * Test the sanity check of the before and after index segment offsets.
+   */
+  @Test
+  public void testBeforeAndAfterOffsetSanityCheck() throws Exception {
+    assumeTrue(isLogSegmented && persistentIndexVersion >= PersistentIndex.VERSION_3);
+    // Adding valid before and after offsets for finished compaction
+    Map<Offset, Offset> beforeAndAfter = new HashMap<>();
+    Offset after = state.index.getIndexSegments().firstKey();
+    Offset before = new Offset(after.getName().getNextGenerationName(), LogSegment.HEADER_SIZE);
+    beforeAndAfter.put(before, after); // This is one redirection.
+    Offset beforeBefore = new Offset(before.getName().getNextGenerationName(), LogSegment.HEADER_SIZE);
+    beforeAndAfter.put(beforeBefore, before); // This is two redirections.
+    state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(state.time.milliseconds(), beforeAndAfter, false);
+    state.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+    assertFalse(state.index.isSanityCheckFailed());
+
+    // Adding invalid before and after offsets for inprogress compaction
+    try {
+      state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(state.time.milliseconds(), beforeAndAfter, true);
+      fail("Before and after offsets should be invalid for inprogress compaction");
+    } catch (Exception e) {
+    }
+
+    // Adding invalid before and after offset for finished compaction.
+    beforeAndAfter.clear();
+    Offset secondIndexSegmentOffset = state.index.getIndexSegments().higherKey(after);
+    // Before offset exist in the current index
+    beforeAndAfter.put(secondIndexSegmentOffset, after);
+    state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(state.time.milliseconds(), beforeAndAfter, false);
+    state.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+
+    assertTrue(state.index.isSanityCheckFailed());
+
+    state.reloadIndex(true, false);
+    assertFalse(state.index.isSanityCheckFailed());
+    // Create two non-existing offsets
+    Offset nonExistingBefore =
+        new Offset(secondIndexSegmentOffset.getName().getNextGenerationName(), LogSegment.HEADER_SIZE);
+    Offset nonExistingAfter = new Offset(nonExistingBefore.getName().getNextGenerationName(), LogSegment.HEADER_SIZE);
+    beforeAndAfter.put(nonExistingBefore, nonExistingAfter);
+    state.index.updateBeforeAndAfterCompactionIndexSegmentOffsets(state.time.milliseconds(), beforeAndAfter, false);
+    state.index.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
+    assertTrue(state.index.isSanityCheckFailed());
   }
 
   /**

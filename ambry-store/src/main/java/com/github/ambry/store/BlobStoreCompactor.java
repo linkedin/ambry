@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.SortedMap;
@@ -106,6 +107,7 @@ class BlobStoreCompactor {
   private final AtomicReference<CompactionDetails> currentCompactionDetails = new AtomicReference();
   private final AtomicInteger compactedLogCount = new AtomicInteger(0);
   private final AtomicInteger logSegmentCount = new AtomicInteger(0);
+  private volatile boolean shouldPersistIndexSegmentOffsets = false;
 
   /**
    * Constructs the compactor component.
@@ -217,7 +219,8 @@ class BlobStoreCompactor {
     checkSanity(details);
     logger.info("Compaction of {} started with details {}", storeId, details);
     currentCompactionDetails.set(details);
-    compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details, config);
+    short version = shouldPersistIndexSegmentOffsets ? CompactionLog.CURRENT_VERSION : CompactionLog.VERSION_1;
+    compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, version, time, details, config);
     resumeCompaction(bundleReadBuffer);
   }
 
@@ -227,6 +230,14 @@ class BlobStoreCompactor {
    */
   boolean closeLastLogSegmentIfQualified() throws StoreException {
     return srcLog.autoCloseLastLogSegmentIfQualified();
+  }
+
+  /**
+   * Enable persisting index segment offsets in CompactionLog
+   */
+  void enablePersistIndexSegmentOffsets() {
+    shouldPersistIndexSegmentOffsets = true;
+    logger.info("Store {} enables persisting index segment offsets", storeId);
   }
 
   /**
@@ -386,7 +397,7 @@ class BlobStoreCompactor {
     List<LogSegmentName> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
     // 1. all segments should be available
     // 2. all segments should be in order
-    // 3. all segments should be a list of continuous log segments without skipping any one in the middle
+    // 3. all segments should be a list of continuous log segments without skipping anyone in the middle
     // 4. all segments should not have anything in the journal
     LogSegmentName prevSegmentName = null;
     for (LogSegmentName segmentName : segmentsUnderCompaction) {
@@ -427,7 +438,7 @@ class BlobStoreCompactor {
         compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
-      // only records in the the very first log segment in the cycle could have been copied in a previous cycle
+      // only records in the very first log segment in the cycle could have been copied in a previous cycle
       logger.info("Continue compaction at cycle {} with {}", compactionLog.getCurrentIdx(), storeId);
       LogSegment firstLogSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
       LogSegment prevSegment = srcLog.getPrevSegment(firstLogSegment);
@@ -477,6 +488,7 @@ class BlobStoreCompactor {
       // there were no valid entries copied, return any temp segments back to the pool
       logger.trace("Cleaning up temp segments in {} because no swap spaces were used", storeId);
       cleanupUnusedTempSegments();
+      fixAfterOffsetsInCompactionLogWhenTargetIndexIsEmpty();
     }
   }
 
@@ -569,11 +581,21 @@ class BlobStoreCompactor {
    * @return {@code true} if copying is required. {@code false} otherwise.
    */
   private boolean needsCopying(Offset offset) {
-    return recoveryStartToken == null || recoveryStartToken.getOffset().compareTo(offset) < 0;
+    if (!compactionLog.isIndexSegmentOffsetsPersisted()) {
+      // If index segment offsets are not saved within compaction log, then just use recovery start token to decide if
+      // we should copy this index segment.
+      return recoveryStartToken == null || recoveryStartToken.getOffset().compareTo(offset) < 0;
+    }
+    // We have index segment offsets from compaction log, every index segment whose offset exists in the compaction log
+    // already has its content copied, with the last index segment as exception since it might be halfway through copying.
+    NavigableMap<Offset, Offset> indexSegmentOffsets = compactionLog.getBeforeAndAfterIndexSegmentOffsets();
+    Map.Entry<Offset, Offset> lastEntry = indexSegmentOffsets.lastEntry();
+    return lastEntry == null || lastEntry.getKey().compareTo(offset) < 0;
   }
 
   /**
-   * Return true if the index segment is under copy to target persistent index before crashing.
+   * Return true if the index segment is under copy to target persistent index before crashing. This is only used
+   * to check if there were a crash happened before compaction can finish.
    * @param indexSegmentStartOffset The start {@link Offset} of the {@link IndexSegment}.
    * @return {@code True} if the index segment is under copy to the target persistent index.
    */
@@ -626,6 +648,20 @@ class BlobStoreCompactor {
   private boolean copyDataByIndexSegment(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
       FileSpan duplicateSearchSpan) throws IOException, StoreException {
     logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
+
+    // Here we add the pair of before and after index segment offsets to the compaction log. This pair would be useful
+    // in replication thread. In replication thread, when a remote peer sends a replication token to resume replication,
+    // the token would have an offset to indicate which index segment this token is pointing to if it's index based token.
+    // However, this index segment would be removed if the log segment is under compaction. Here we save the pair of start
+    // offsets of index segments before and after compaction so in replication thread, we can just reset the token back to
+    // the after compaction index segment start offset when the before compaction index segment is removed.
+    // We are adding the offsets without knowing if any of the content from the current index segment would be copied to the
+    // target. Even if there is no content from this index segment that would be preserved after compaction, we still want to
+    // save this pair of index segment offsets since replication might be working on this index segment. And it also
+    // indicates that last index segment finishes copying.
+    compactionLog.addBeforeAndAfterIndexSegmentOffsetPair(indexSegmentToCopy.getStartOffset(),
+        tgtIndex.getActiveIndexSegmentOffset());
+
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
     boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
@@ -635,7 +671,7 @@ class BlobStoreCompactor {
     List<IndexEntry> indexEntriesToCopy =
         validEntryFilter.getValidEntry(indexSegmentToCopy, duplicateSearchSpan, checkAlreadyCopied);
     long dataSize = indexEntriesToCopy.stream().mapToLong(entry -> entry.getValue().getSize()).sum();
-    logger.info("{} entries/{} bytes need to be copied in {} with {}", indexEntriesToCopy.size(), dataSize,
+    logger.trace("{} entries/{} bytes need to be copied in {} with {}", indexEntriesToCopy.size(), dataSize,
         indexSegmentToCopy.getFile(), storeId);
 
     if (indexEntriesToCopy.isEmpty()) {
@@ -680,7 +716,7 @@ class BlobStoreCompactor {
     // 1. Duplicates in src: These can occur because compaction creates temporary duplicates
     // Consider the following situation
     // Segments 0_0, 1_0 and 2_0 are being compacted. All the data in 0_0 and half the data in 1_0 fit in 0_1 and the
-    // rest in 1_1. When 0_1 is full and is put into the "main" log, there will be some duplicated data in 0_1 and 1_0.
+    // rest in 1_1. When 0_1 is full and put into the "main" log, there will be some duplicated data in 0_1 and 1_0.
     // If a shutdown occurs after this point, then the code has to make sure not to copy any of the data already copied
     // 2. Duplicates in tgt: the checkpointing logic during copying works at the IndexSegment level
     // This means that a crash/shutdown could occur in the middle of copying the data represented by an IndexSegment and
@@ -1004,6 +1040,38 @@ class BlobStoreCompactor {
     }
   }
 
+  /**
+   * Fix the after offsets in the compaction log when there is no valid data being copied to the target index, therefore
+   * the target index is empty.
+   */
+  private void fixAfterOffsetsInCompactionLogWhenTargetIndexIsEmpty() {
+    // If we are here, there are several things we can be sure with current implementation.
+    // 1. There is no split cycle for this compaction.
+    // 2. All the log segments under compaction have no valid data to copy.
+    // The reason to create a split cycle is that the log segments under compaction has too much data to write to current
+    // target log segment. If there is a split cycle, the target log segment in next cycle would definitely have some
+    // leftover data from the previous cycle to write.
+    // And since there is no split cycle, this is the only cycle for this compaction. And there is no valid data. So
+    // all log segments have no valid data.
+    //
+    // This means there were no active index segment for target index, therefore the before and after pairs we put in the
+    // compaction log are not valid anymore since all the after offsets would be the start offset of the target log, which
+    // doesn't exist. In this case, we have to fix it.
+    Set<Offset> values = new HashSet<>(compactionLog.getBeforeAndAfterIndexSegmentOffsets().values());
+    Offset startOffset = tgtLog.getEndOffset();
+    if (values.size() != 1 || !values.contains(startOffset)) {
+      logger.error("{}: Expecting one value {} in the compaction log for index segment offsets, but {}", storeId,
+          startOffset, values);
+    }
+    // We have to find a valid index segment and change all the after offsets to be this index segment's start offset.
+    // The last index segment of the closest log segment that are not under compaction should be the valid.
+    LogSegmentName logSegmentName = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().get(0);
+    Offset validOffset = srcIndex.getIndexSegments().lowerKey(new Offset(logSegmentName, 0));
+    // The valid offset should be the last index segment of the previous log segment. But if it's null, then we would just
+    // clear the map.
+    compactionLog.updateBeforeAndAfterIndexSegmentOffsetsWithValidOffset(validOffset);
+  }
+
   // commit() helpers
 
   /**
@@ -1089,7 +1157,15 @@ class BlobStoreCompactor {
     }
     logger.debug("Adding {} to the application index and removing {} from the application index in {}",
         indexSegmentFilesToAdd, indexSegmentsToRemove, storeId);
+
+    if (compactionLog.isIndexSegmentOffsetsPersisted()) {
+      srcIndex.updateBeforeAndAfterCompactionIndexSegmentOffsets(compactionLog.getStartTime(),
+          compactionLog.getBeforeAndAfterIndexSegmentOffsetsForCurrentCycle(), true);
+    }
+    // Update the index segments, this would remove some index segments and add others. We have to update the before and
+    // after compaction index segment offsets before this method.
     srcIndex.changeIndexSegments(indexSegmentFilesToAdd, indexSegmentsToRemove);
+    srcIndex.sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets();
   }
 
   /**
@@ -1216,11 +1292,10 @@ class BlobStoreCompactor {
         PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir.getAbsolutePath(), logSegmentName);
     for (File indexSegmentFile : indexSegmentFiles) {
       Offset indexOffset = IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName());
-      // Only add index offset that has same log segment name with the given log segment name.
-      // This is because we have to deal with filename filter issue in getIndexSegmentFilesForLogSegment.
-      // If we have log segment 0_1 and 0_10, and we are only looking for index segment files for 0_1, the above method
-      // would return the index segment files for 0_10 as well, since they start with the same string and ends with the
-      // same string in filename.
+      // We don't have to check if the IndexSegment's log segment name is the same as the input log segment name
+      // since now getIndexSegmentFilesForLogSegment would match exactly the log segment name we provided so that
+      // when given 0_1, 0_10's index segment files will never get matched.
+      // But leave this here for sanity check.
       if (indexOffset.getName().equals(logSegmentName)) {
         indexSegmentStartOffsetToFile.put(indexOffset, indexSegmentFile);
       }

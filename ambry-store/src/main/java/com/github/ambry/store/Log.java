@@ -256,6 +256,13 @@ class Log implements Write {
   }
 
   /**
+   * @return All log segmant names.
+   */
+  List<LogSegmentName> getAllLogSegmentNames() {
+    return new ArrayList<>(segmentsByName.keySet());
+  }
+
+  /**
    * Returns the {@link LogSegment} that is logically after the given {@code segment}.
    * @param segment the {@link LogSegment} whose "next" segment is required.
    * @return the {@link LogSegment} that is logically after the given {@code segment}.

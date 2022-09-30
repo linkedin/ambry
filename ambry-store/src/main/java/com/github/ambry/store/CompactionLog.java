@@ -318,7 +318,7 @@ class CompactionLog implements Closeable {
    * @param before The index segment start offset before compaction
    * @param after The index segment start offset after compaction
    */
-  void addIndexSegmentOffsetPair(Offset before, Offset after) {
+  void addBeforeAndAfterIndexSegmentOffsetPair(Offset before, Offset after) {
     if (!isIndexSegmentOffsetsPersisted()) {
       return;
     }
@@ -340,11 +340,11 @@ class CompactionLog implements Closeable {
   }
 
   /**
-   * Update all the index segment offset values added through method {@link #addIndexSegmentOffsetPair}. If the input is
+   * Update all the index segment offset values added through method {@link #addBeforeAndAfterIndexSegmentOffsetPair}. If the input is
    * null, the index segment offsets map would be cleared.
    * @param validOffset The valid {@link Offset} to replace all the previous invalid {@link Offset}.
    */
-  void updateIndexSegmentOffsetsWithValidOffset(Offset validOffset) {
+  void updateBeforeAndAfterIndexSegmentOffsetsWithValidOffset(Offset validOffset) {
     if (!isIndexSegmentOffsetsPersisted()) {
       return;
     }
@@ -360,16 +360,16 @@ class CompactionLog implements Closeable {
   }
 
   /**
-   * @return The index segment offset map. Each key and value is before and after pair passed to {@link #addIndexSegmentOffsetPair}.
+   * @return The index segment offset map. Each key and value is before and after pair passed to {@link #addBeforeAndAfterIndexSegmentOffsetPair}.
    */
-  NavigableMap<Offset, Offset> getIndexSegmentOffsets() {
+  NavigableMap<Offset, Offset> getBeforeAndAfterIndexSegmentOffsets() {
     return Collections.unmodifiableNavigableMap(beforeAndAfterIndexSegmentOffsets);
   }
 
   /**
    * Return index segment offset map for completed cycles. Each key offset's LogSegmentName has to finish the compaction.
    */
-  SortedMap<Offset, Offset> getIndexSegmentOffsetsForCompletedCycles() {
+  SortedMap<Offset, Offset> getBeforeAndAfterIndexSegmentOffsetsForCompletedCycles() {
     if (beforeAndAfterIndexSegmentOffsets.size() == 0 || currentIdx >= cycleLogs.size()) {
       return beforeAndAfterIndexSegmentOffsets;
     }
@@ -382,20 +382,22 @@ class CompactionLog implements Closeable {
     List<LogSegmentName> completedLogSegmentNames = cycles.stream()
         .flatMap(cycleLog -> cycleLog.compactionDetails.getLogSegmentsUnderCompaction().stream())
         .collect(Collectors.toList());
-    return getIndexSegmentOffsetsForLogSegments(completedLogSegmentNames);
+    return getBeforeAndAfterIndexSegmentOffsetsForLogSegments(completedLogSegmentNames);
   }
 
   /**
    * Return index segment offset map for current cycle. Each key offset's LogSegmentName has to be in current cycle.
    */
-  SortedMap<Offset, Offset> getIndexSegmentOffsetsForCurrentCycle() {
+  SortedMap<Offset, Offset> getBeforeAndAfterIndexSegmentOffsetsForCurrentCycle() {
     if (currentIdx == -1) {
       throw new IllegalArgumentException(file.getName() + "Current Index is -1, no current cycle");
     }
-    return getIndexSegmentOffsetsForLogSegments(getCurrentCycleLog().compactionDetails.getLogSegmentsUnderCompaction());
+    return getBeforeAndAfterIndexSegmentOffsetsForLogSegments(
+        getCurrentCycleLog().compactionDetails.getLogSegmentsUnderCompaction());
   }
 
-  private SortedMap<Offset, Offset> getIndexSegmentOffsetsForLogSegments(List<LogSegmentName> logSegmentNames) {
+  private SortedMap<Offset, Offset> getBeforeAndAfterIndexSegmentOffsetsForLogSegments(
+      List<LogSegmentName> logSegmentNames) {
     if (logSegmentNames.size() == 0) {
       return new TreeMap<>();
     }
