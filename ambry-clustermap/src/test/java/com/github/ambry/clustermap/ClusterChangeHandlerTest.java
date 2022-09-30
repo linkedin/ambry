@@ -145,8 +145,6 @@ public class ClusterChangeHandlerTest {
    * 1. test static initialization success case
    * 2. verify live instance change is able to make node HardwareState.AVAILABLE
    * 3. verify partition override behaves correctly (if enabled)
-   * 4. verify equivalence between {@link SimpleClusterChangeHandler} and {@link DynamicClusterChangeHandler} in terms of
-   *    in-memory cluster info.
    * @throws Exception
    */
   @Test
@@ -156,52 +154,23 @@ public class ClusterChangeHandlerTest {
     // all instances in this case should be initialized to UNAVAILABLE. Until they have participated into cluster, the
     // subsequent live instance changes will make them up.
     helixCluster.bringAllInstancesDown();
-    ClusterMapConfig clusterMapConfig1 = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixClusterManager managerWithSimpleHandler =
-        new HelixClusterManager(clusterMapConfig1, selfInstanceName, helixManagerFactory, new MetricRegistry());
     Properties properties = new Properties();
     properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig clusterMapConfig2 = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager managerWithDynamicHandler =
         new HelixClusterManager(clusterMapConfig2, selfInstanceName, helixManagerFactory, new MetricRegistry());
     Set<String> partitionsInStaticMap = new HashSet<>(testPartitionLayout.getPartitionLayout().getAllPartitionNames());
-    Set<String> partitionsInSimpleHandler = managerWithSimpleHandler.getAllPartitionIds(null)
-        .stream()
-        .map(PartitionId::toPathString)
-        .collect(Collectors.toSet());
     Set<String> partitionsInDynamicHandler = managerWithDynamicHandler.getAllPartitionIds(null)
         .stream()
         .map(PartitionId::toPathString)
         .collect(Collectors.toSet());
     assertEquals("Partitions from dynamic change handler don't match those in static layout", partitionsInStaticMap,
         partitionsInDynamicHandler);
-    assertEquals("Partitions from two HelixClusterManagers don't match", partitionsInSimpleHandler,
-        partitionsInDynamicHandler);
-    // verify metrics in managers with simple/dynamic handler are same
     HelixClusterManager.HelixClusterManagerCallback dynamicHandlerCallback =
         managerWithDynamicHandler.getManagerCallback();
-    HelixClusterManager.HelixClusterManagerCallback simpleHandlerCallback =
-        managerWithSimpleHandler.getManagerCallback();
-    assertEquals("Datacenter count doesn't match", simpleHandlerCallback.getDatacenterCount(),
-        dynamicHandlerCallback.getDatacenterCount());
-    assertEquals("Node count doesn't match", simpleHandlerCallback.getDatanodeCount(),
-        dynamicHandlerCallback.getDatanodeCount());
-    assertEquals("Disk count doesn't match", simpleHandlerCallback.getDiskCount(),
-        dynamicHandlerCallback.getDiskCount());
-    assertEquals("Sealed count doesn't match", simpleHandlerCallback.getPartitionSealedCount(),
-        dynamicHandlerCallback.getPartitionSealedCount());
-    assertEquals("Raw capacity doesn't match", simpleHandlerCallback.getRawCapacity(),
-        dynamicHandlerCallback.getRawCapacity());
-    assertEquals("Allocated raw capacity doesn't match", simpleHandlerCallback.getAllocatedRawCapacity(),
-        dynamicHandlerCallback.getAllocatedRawCapacity());
-    assertEquals("Allocated usable capacity doesn't match", simpleHandlerCallback.getAllocatedUsableCapacity(),
-        dynamicHandlerCallback.getAllocatedUsableCapacity());
-
     // verify that all nodes (except for current node) are down in HelixClusterManager with dynamic cluster change handler
     assertEquals("All nodes (except for self node) should be down", helixCluster.getDownInstances().size() - 1,
         dynamicHandlerCallback.getDownDatanodesCount());
-
     // then we bring all instances up and trigger live instance change again
     helixCluster.bringAllInstancesUp();
     // verify all nodes are up now up
@@ -212,7 +181,6 @@ public class ClusterChangeHandlerTest {
         dynamicHandlerCallback.getPartitionReadWriteCount());
     // close helix cluster managers
     managerWithDynamicHandler.close();
-    managerWithSimpleHandler.close();
   }
 
   /**
@@ -228,7 +196,6 @@ public class ClusterChangeHandlerTest {
     Properties properties = new Properties();
     properties.putAll(props);
     properties.setProperty("clustermap.dcs.zk.connect.strings", invalidZkJson.toString(2));
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     try {
@@ -253,7 +220,6 @@ public class ClusterChangeHandlerTest {
   public void instanceConfigInvalidInfoEntryTest() {
     Properties properties = new Properties();
     properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager.HelixClusterManagerCallback mockManagerCallback =
         Mockito.mock(HelixClusterManager.HelixClusterManagerCallback.class);
@@ -308,25 +274,6 @@ public class ClusterChangeHandlerTest {
   }
 
   /**
-   * Test that invalid cluster change handler type will cause instantiation failure.
-   */
-  @Test
-  public void invalidClusterChangeHandlerTest() {
-    Properties properties = new Properties();
-    properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "InvalidClusterChangeHandler");
-    ClusterMapConfig invalidConfig = new ClusterMapConfig(new VerifiableProperties(properties));
-    MetricRegistry metricRegistry = new MetricRegistry();
-    try {
-      new HelixClusterManager(invalidConfig, selfInstanceName, helixManagerFactory, metricRegistry);
-      fail("Should fail because the cluster change handler type is invalid.");
-    } catch (IOException e) {
-      assertEquals(1L,
-          metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
-    }
-  }
-
-  /**
    * Test new instances/partitions are added to cluster dynamically. {@link HelixClusterManager} with
    * {@link DynamicClusterChangeHandler} should absorb the change and update in-mem cluster map.
    * 1. add new instance
@@ -338,7 +285,6 @@ public class ClusterChangeHandlerTest {
     // create a HelixClusterManager with DynamicClusterChangeHandler
     Properties properties = new Properties();
     properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
@@ -447,7 +393,6 @@ public class ClusterChangeHandlerTest {
     // create a HelixClusterManager with DynamicClusterChangeHandler
     Properties properties = new Properties();
     properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
@@ -520,7 +465,6 @@ public class ClusterChangeHandlerTest {
     // create a HelixClusterManager with DynamicClusterChangeHandler
     Properties properties = new Properties();
     properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
@@ -595,7 +539,6 @@ public class ClusterChangeHandlerTest {
     // create a HelixClusterManager with DynamicClusterChangeHandler
     Properties properties = new Properties();
     properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
@@ -696,7 +639,6 @@ public class ClusterChangeHandlerTest {
     // create a HelixClusterManager with DynamicClusterChangeHandler
     Properties properties = new Properties();
     properties.putAll(props);
-    properties.setProperty("clustermap.cluster.change.handler.type", "DynamicClusterChangeHandler");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());

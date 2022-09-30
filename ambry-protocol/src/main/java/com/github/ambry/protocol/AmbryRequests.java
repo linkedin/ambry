@@ -145,6 +145,9 @@ public class AmbryRequests implements RequestAPI {
         case UndeleteRequest:
           handleUndeleteRequest(networkRequest);
           break;
+        case ReplicateBlobRequest:
+          handleReplicateBlobRequest(networkRequest);
+          break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
@@ -676,6 +679,11 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.replicaMetadataResponseQueueTimeInMs,
             metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  @Override
+  public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
+    throw new UnsupportedOperationException("Request type not supported");
   }
 
   @Override
