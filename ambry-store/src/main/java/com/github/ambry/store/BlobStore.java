@@ -257,6 +257,7 @@ public class BlobStore implements Store {
             && config.storePartitionsToRebuildTokenBasedOnCompactionHistory.contains(
             replicaId.getPartitionId().getId())) {
           compactor.enablePersistIndexSegmentOffsets();
+          index.enableRebuildTokenBasedOnCompactionHistory();
           buildCompactionHistory();
         }
         if (blobStoreStats == null) {
