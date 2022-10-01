@@ -297,7 +297,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     // create a new node and place a peer of existing replica on it.
     MockDataNodeId remoteNode = createDataNode(
         getListOfPorts(PLAIN_TEXT_PORT_START_NUMBER + 10, SSL_PORT_START_NUMBER + 10, HTTP2_PORT_START_NUMBER + 10),
-        clusterMap.getDatacenterName((byte) 0), 3, false);
+        clusterMap.getDatacenterName((byte) 0), 3);
     ReplicaId addedReplica =
         new MockReplicaId(remoteNode.getPort(), (MockPartitionId) existingReplica.getPartitionId(), remoteNode, 0);
     // populate added replica and removed replica lists

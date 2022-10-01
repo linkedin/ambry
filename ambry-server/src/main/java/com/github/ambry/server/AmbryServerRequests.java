@@ -98,8 +98,8 @@ public class AmbryServerRequests extends AmbryRequests {
       ServerConfig serverConfig, DiskManagerConfig diskManagerConfig, StoreKeyConverterFactory storeKeyConverterFactory,
       StatsManager statsManager, ClusterParticipant clusterParticipant) {
     this(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
-        operationNotification, replicationEngine, storeKeyFactory, serverConfig, diskManagerConfig, storeKeyConverterFactory,
-        statsManager, clusterParticipant, null);
+        operationNotification, replicationEngine, storeKeyFactory, serverConfig, diskManagerConfig,
+        storeKeyConverterFactory, statsManager, clusterParticipant, null);
   }
 
   AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
@@ -108,7 +108,8 @@ public class AmbryServerRequests extends AmbryRequests {
       ServerConfig serverConfig, DiskManagerConfig diskManagerConfig, StoreKeyConverterFactory storeKeyConverterFactory,
       StatsManager statsManager, ClusterParticipant clusterParticipant, ConnectionPool connectionPool) {
     super(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
-        operationNotification, replicationEngine, storeKeyFactory, storeKeyConverterFactory, connectionPool, serverConfig);
+        operationNotification, replicationEngine, storeKeyFactory, storeKeyConverterFactory, connectionPool,
+        serverConfig);
     this.diskManagerConfig = diskManagerConfig;
     this.statsManager = statsManager;
     this.clusterParticipant = clusterParticipant;

@@ -35,7 +35,7 @@ public class MockDataNodeId implements DataNodeId {
   private boolean enableHttp2Replication = false;
   private int portNum;
   private AtomicBoolean isTimedout = new AtomicBoolean(false);
-  private static int count = 0;
+
   /**
    * Create a {@link MockDataNodeId} object for disk based datanode.
    * @param hostname Hostname of the node.
@@ -58,19 +58,7 @@ public class MockDataNodeId implements DataNodeId {
    * @param dataCenter Name of datacenter.
    */
   public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter) {
-    this(ports, mountPaths, dataCenter, false);
-  }
-
-  /**
-   * Create a {@link MockDataNodeId} object from given {@code ports}, {@code mountPaths}, {@code dataCenter}.
-   * @param ports Ports associated with server on node.
-   * @param mountPaths Mount paths for replicas on node.
-   * @param dataCenter Name of datacenter.
-   * @param uniqueName true if want to have unique host name. false, host name is the same.
-   */
-  public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter, boolean uniqueName) {
-    this(uniqueName? "localhost" + count : "localhost", ports, mountPaths, dataCenter);
-    count++;
+    this("localhost", ports, mountPaths, dataCenter);
   }
 
   private void populatePorts(List<Port> ports) {

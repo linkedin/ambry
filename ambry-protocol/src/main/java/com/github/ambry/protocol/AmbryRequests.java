@@ -19,7 +19,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ErrorMapping;
@@ -40,7 +39,6 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.LocalRequestResponseChannel.LocalChannelRequest;
 import com.github.ambry.network.NetworkRequest;
-import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
@@ -66,6 +64,7 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufInputStream;
@@ -77,7 +76,6 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,7 +105,7 @@ public class AmbryRequests implements RequestAPI {
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
-  private static String ON_DEMAND_REPLICATION_CLIENTID_PREFIX = "replication-ondemand-fetch";
+  private static String ON_DEMAND_REPLICATION_CLIENTID_PREFIX = "replication-ondemand-fetch-";
 
   public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
@@ -741,15 +739,16 @@ public class AmbryRequests implements RequestAPI {
     // Get the two parameters from the replicateBlobRequest: the blobId and the remoteHostName
     BlobId blobId = replicateBlobRequest.getBlobId();
     String remoteHostName = replicateBlobRequest.getSourceHostName();
+    int remoteHostPort = replicateBlobRequest.getSourceHostPort();
+    DataNodeId remoteDataNode = clusterMap.getDataNodeId(remoteHostName, remoteHostPort);
+    GetResponse getResponse = null;
     try {
-      Port remoteHostPort;
-      Optional<DataNodeId> remoteDataNode = blobId.getPartition().getReplicaIds().stream().map(ReplicaId::getDataNodeId)
-          .filter(node -> node.getHostname().equals(remoteHostName)).findFirst();
-      if (remoteDataNode.isPresent()) {
-        remoteHostPort = remoteDataNode.get().getPortToConnectTo();
-      } else {
-        logger.error("ReplicateBlobRequest {} couldn't find the remote host {} in the clustermap.", blobId, remoteHostName);
-        throw new IOException("ReplicateBlobRequest " + blobId + " couldn't find the remote host " + remoteHostName);
+      if (remoteDataNode == null) {
+        logger.error("ReplicateBlobRequest {} couldn't find the remote host {} {} in the clustermap.", blobId,
+            remoteHostName, remoteHostPort);
+        throw new IOException(
+            "ReplicateBlobRequest " + blobId + " couldn't find the remote host " + remoteHostName + " port "
+                + remoteHostPort);
       }
       // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
       final int connectionPoolCheckoutTimeoutMs = 1000;
@@ -761,19 +760,22 @@ public class AmbryRequests implements RequestAPI {
       partitionRequestInfoList.add(partitionInfo);
       // Get the Blob including expired and deleted.
       final String clientId = ON_DEMAND_REPLICATION_CLIENTID_PREFIX + currentNode.getHostname();
-      GetRequest getRequest = new GetRequest(replicateBlobRequest.getCorrelationId(),
-          clientId, MessageFormatFlags.All, partitionRequestInfoList, GetOption.Include_All);
+      GetRequest getRequest = new GetRequest(replicateBlobRequest.getCorrelationId(), clientId, MessageFormatFlags.All,
+          partitionRequestInfoList, GetOption.Include_All);
 
       // step 1: get the blob from the remote replica
-      ConnectedChannel connectedChannel = connectionPool.checkOutConnection(remoteHostName, remoteHostPort, connectionPoolCheckoutTimeoutMs);;
+      ConnectedChannel connectedChannel =
+          connectionPool.checkOutConnection(remoteHostName, remoteDataNode.getPortToConnectTo(),
+              connectionPoolCheckoutTimeoutMs);
       ChannelOutput channelOutput = connectedChannel.sendAndReceive(getRequest);
-      GetResponse getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
+      getResponse = GetResponse.readFrom(channelOutput.getInputStream(), clusterMap);
       if ((getResponse.getError() != ServerErrorCode.No_Error) || (getResponse.getPartitionResponseInfoList() == null)
           || (getResponse.getPartitionResponseInfoList().size() == 0)) {
-        logger.error("ReplicateBlobRequest failed to get blob {} from the remote node {} {} {}",
-            blobId, remoteHostName, remoteHostPort, getResponse.getError());
-        response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-            ServerErrorCode.Unknown_Error);
+        logger.error("ReplicateBlobRequest failed to get blob {} from the remote node {} {} {}", blobId, remoteHostName,
+            remoteHostPort, getResponse.getError());
+        response =
+            new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+                ServerErrorCode.Unknown_Error);
       } else {
         // step 2: get the blob message from the response and write to the store
         // only have one partition. And checked at least it has one entry above.
@@ -792,15 +794,15 @@ public class AmbryRequests implements RequestAPI {
               MessageInfo orgMsgInfo = messageInfoList.get(0);
               Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
                   getResponse.getInputStream(), orgMsgInfo);
-              if (output == null || !output.getMessageInfo().getStoreKey().equals(blobId)) {
+              if (output == null) {
                 logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", orgMsgInfo,
                     remoteHostName, remoteHostPort, blobId);
-                response =
-                    new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-                        ServerErrorCode.Unknown_Error);
+                response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(),
+                    replicateBlobRequest.getClientId(), ServerErrorCode.Unknown_Error);
               } else {
-                MessageFormatWriteSet writeset = new MessageFormatWriteSet(output.getStream(), Collections.singletonList(output.getMessageInfo()),
-                    false);
+                MessageFormatWriteSet writeset =
+                    new MessageFormatWriteSet(output.getStream(), Collections.singletonList(output.getMessageInfo()),
+                        false);
                 Store store = storeManager.getStore(blobId.getPartition());
                 store.put(writeset);
 
@@ -813,8 +815,8 @@ public class AmbryRequests implements RequestAPI {
                 }
                 logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName,
                     remoteHostPort);
-                response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
-                    ServerErrorCode.No_Error);
+                response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(),
+                    replicateBlobRequest.getClientId(), ServerErrorCode.No_Error);
               } // if (output == null) {
             } // if (messageInfoList == null || messageInfoList.size() != 1)
           } catch (StoreException e) { // catch the store write exception
@@ -852,14 +854,16 @@ public class AmbryRequests implements RequestAPI {
                   partitionResponseInfo.getErrorCode());
         }
       } // if ((getResponse.getError() != ServerErrorCode.No_Error) || (getResponse.getPartitionResponseInfoList() == null)
-
-      getResponse.release();
-
     } catch (Exception e) { // catch the getBlob exception
       logger.error("ReplicateBlobRequest getBlob {} from the remote node {} hit exception ", blobId, remoteHostName, e);
       response = new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
-    };
+    } finally {
+      if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
+        // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+        ((NettyByteBufDataInputStream) (getResponse.getInputStream())).getBuffer().release();
+      }
+    }
 
     long processingTime = SystemTime.getInstance().milliseconds() - startTime;
     totalTimeSpent += processingTime;
@@ -1144,7 +1148,8 @@ public class AmbryRequests implements RequestAPI {
    * @param replicateBlobRequest the {@link ReplicateBlobRequest}
    * @throws StoreException
    */
-  private void applyTtlUpdate(MessageInfo messageInfo, ReplicateBlobRequest replicateBlobRequest) throws StoreException {
+  private void applyTtlUpdate(MessageInfo messageInfo, ReplicateBlobRequest replicateBlobRequest)
+      throws StoreException {
     BlobId blobId = replicateBlobRequest.getBlobId();
     Store store = storeManager.getStore(blobId.getPartition());
     try {

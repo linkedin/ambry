@@ -167,10 +167,10 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
   public AmbryServerRequestsTest(boolean validateRequestOnStoreState)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
-    super(ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6);
+    super(ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2,
+        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6);
     this.validateRequestOnStoreState = validateRequestOnStoreState;
-    // Each DataNodeId uses unique host name.
-    clusterMap = new MockClusterMap(false, true, 9, 3, 3, false, false, null, true);
+    clusterMap = new MockClusterMap();
     localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     Properties properties = createProperties(validateRequestOnStoreState, true);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -196,8 +196,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
             statsManagerConfig, null);
     serverMetrics = new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory, serverConfig,
-        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
     storageManager.start();
     Mockito.when(mockDelegate.unseal(any())).thenReturn(true);
     Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
@@ -929,7 +929,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   @Test
   public void testReplicateBlobSuccess() throws Exception {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
-    MockPartitionId partitionId = (MockPartitionId)clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MockHost remoteHost = null;
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
@@ -942,16 +943,18 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory, serverConfig,
-        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
 
     Assume.assumeTrue(
         MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
-    BlobId blobId = (BlobId)storeKey;
+    BlobId blobId = (BlobId) storeKey;
 
-    ReplicateBlobRequest request = new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname());
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
 
     storageManager.resetStore();
     RequestOrResponseType requestType = request.getRequestType();
@@ -959,7 +962,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     assertEquals("Operation received at the store not as expected", RequestOrResponseType.PutRequest,
         MockStorageManager.operationReceived);
     ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
-    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(), ServerErrorCode.No_Error);
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
   }
 
   /**
@@ -969,7 +973,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   @Test
   public void testReplicateBlobWhenSourceIsDeleted() throws Exception {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
-    MockPartitionId partitionId = (MockPartitionId)clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MockHost remoteHost = null;
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
@@ -984,16 +989,18 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory, serverConfig,
-        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
 
     Assume.assumeTrue(
         MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
-    BlobId blobId = (BlobId)storeKey;
+    BlobId blobId = (BlobId) storeKey;
 
-    ReplicateBlobRequest request = new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname());
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
     storageManager.resetStore();
     validKeysInStore.add(blobId);
     RequestOrResponseType requestType = request.getRequestType();
@@ -1001,7 +1008,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     assertEquals("Operation received at the store not as expected", RequestOrResponseType.DeleteRequest,
         MockStorageManager.operationReceived);
     ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
-    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(), ServerErrorCode.No_Error);
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
   }
 
   /**
@@ -1011,7 +1019,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   @Test
   public void testReplicateBlobWhenSourceTtlUpdated() throws Exception {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
-    MockPartitionId partitionId = (MockPartitionId)clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MockHost remoteHost = null;
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
@@ -1026,16 +1035,18 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory, serverConfig,
-        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
 
     Assume.assumeTrue(
         MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
-    BlobId blobId = (BlobId)storeKey;
+    BlobId blobId = (BlobId) storeKey;
 
-    ReplicateBlobRequest request = new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname());
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
     storageManager.resetStore();
     validKeysInStore.add(blobId);
     RequestOrResponseType requestType = request.getRequestType();
@@ -1043,7 +1054,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     assertEquals("Operation received at the store not as expected", RequestOrResponseType.TtlUpdateRequest,
         MockStorageManager.operationReceived);
     ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
-    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(), ServerErrorCode.No_Error);
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
   }
 
   /**
@@ -1053,7 +1065,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   @Test
   public void testReplicateBlobWhenSourceIsExpired() throws Exception {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
-    MockPartitionId partitionId = (MockPartitionId)clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MockHost remoteHost = null;
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
@@ -1064,20 +1077,23 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     }
     StoreKey storeKey = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1).get(0);
     // add TtlUpdate to the remote host and make the blob expired.
-    addTtlUpdateMessagesToReplicasOfPartition(partitionId, storeKey, Arrays.asList(remoteHost), SystemTime.getInstance().milliseconds());
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, storeKey, Arrays.asList(remoteHost),
+        SystemTime.getInstance().milliseconds());
 
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory, serverConfig,
-        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
 
     Assume.assumeTrue(
         MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
-    BlobId blobId = (BlobId)storeKey;
+    BlobId blobId = (BlobId) storeKey;
 
-    ReplicateBlobRequest request = new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname());
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
     storageManager.resetStore();
     validKeysInStore.add(blobId);
     RequestOrResponseType requestType = request.getRequestType();
@@ -1085,7 +1101,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     assertEquals("Operation received at the store not as expected", RequestOrResponseType.TtlUpdateRequest,
         MockStorageManager.operationReceived);
     ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
-    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(), ServerErrorCode.No_Error);
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
   }
 
   /**
@@ -1094,7 +1111,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   @Test
   public void testReplicateBlobWhenSourceNotExist() throws Exception {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
-    MockPartitionId partitionId = (MockPartitionId)clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MockHost remoteHost = null;
     MockHost randomHost = null;
     for (ReplicaId replica : partitionId.getReplicaIds()) {
@@ -1114,22 +1132,25 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory, serverConfig,
-        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
 
     Assume.assumeTrue(
         MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = TestUtils.getRandomString(10);
-    BlobId blobId = (BlobId)storeKeyNotExist;
+    BlobId blobId = (BlobId) storeKeyNotExist;
 
-    ReplicateBlobRequest request = new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname());
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
     storageManager.resetStore();
     RequestOrResponseType requestType = request.getRequestType();
     Response response = sendRequestGetResponse(request, ServerErrorCode.Blob_Not_Found);
     assertEquals("Operation received at the store not as expected", null, MockStorageManager.operationReceived);
     ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
-    assertEquals("expect ReplicateBlobRequest fails with Blob_Not_Found.", replicateBlobResponse.getError(), ServerErrorCode.Blob_Not_Found);
+    assertEquals("expect ReplicateBlobRequest fails with Blob_Not_Found.", replicateBlobResponse.getError(),
+        ServerErrorCode.Blob_Not_Found);
   }
 
   @Test
