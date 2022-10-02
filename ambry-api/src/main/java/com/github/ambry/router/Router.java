@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.messageformat.BlobInfo;
@@ -57,6 +58,18 @@ public interface Router extends Closeable {
    */
   Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
+
+  /**
+   * Requests to on-demand replicate one specific blob asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request.
+   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
@@ -170,6 +183,20 @@ public interface Router extends Closeable {
       ReadableStreamChannel channel, PutBlobOptions options) {
     CompletableFuture<String> future = new CompletableFuture<>();
     putBlob(blobProperties, userMetadata, channel, options, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
+  }
+
+  /**
+   * Requests for a blob to be replicated asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  default CompletableFuture<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode) {
+    CompletableFuture<Void> future = new CompletableFuture<>();
+    replicateBlob(blobId, serviceId, sourceDataNode, CallbackUtils.fromCompletableFuture(future), null);
     return future;
   }
 

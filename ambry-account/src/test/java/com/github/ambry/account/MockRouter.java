@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.messageformat.BlobInfo;
@@ -160,6 +161,12 @@ public class MockRouter implements Router {
     } finally {
       lock.unlock();
     }
+  }
+
+  @Override
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    throw new UnsupportedOperationException("replicateBlob is not supported by this mock");
   }
 
   @Override

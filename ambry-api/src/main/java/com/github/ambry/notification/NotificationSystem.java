@@ -15,6 +15,7 @@ package com.github.ambry.notification;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.store.MessageInfo;
 import java.io.Closeable;
@@ -65,6 +66,18 @@ public interface NotificationSystem extends Closeable {
    * @param container The {@link Container} for the blob
    */
   default void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
+  }
+
+  /**
+   * Notifies the underlying system when the blob is replicated on-demand.
+   * @param blobId The id of the blob that was replicated to the local store.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param account The {@link Account} for the blob
+   * @param container The {@link Container} for the blob
+   * @param sourceHost The source {@link DataNodeId} to replicate the blob from
+   */
+  default void onBlobReplicated(String blobId, String serviceId, Account account, Container container,
+      DataNodeId sourceHost) {
   }
 
   /**

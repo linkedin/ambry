@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -1162,6 +1163,48 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         assertTtl(router, Collections.singleton(blobIdCheck), Utils.Infinite_Time);
       });
     } finally {
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * Test for ReplicateBlob not supported.
+   * @throws Exception
+   */
+  @Test
+  public void testReplicateBlobNotSupported() throws Exception {
+    try {
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      String serviceId = "replicate-blob-service";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      // PutBlob to the three local replicas
+      String blobIdStr =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // ReplicateBlob from the local replica to some remote replicas.
+      BlobId blobId = new BlobId(blobIdStr, mockClusterMap);
+      PartitionId partitionId = blobId.getPartition();
+      DataNodeId sourceDataNode = null;
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        if (replicaId.getDataNodeId().getDatacenterName().equals(localDcName)) {
+          if (sourceDataNode == null) {
+            sourceDataNode = replicaId.getDataNodeId();
+            break;
+          }
+        }
+      }
+      router.replicateBlob(blobIdStr, serviceId, sourceDataNode).get();
+      Assert.fail("ReplicatedBlob is not supported yet.");
+    } catch (Exception e) {
+      assertTrue(e instanceof UnsupportedOperationException);
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
       if (router != null) {
         router.close();
       }
