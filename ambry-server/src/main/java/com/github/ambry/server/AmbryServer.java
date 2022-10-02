@@ -303,7 +303,7 @@ public class AmbryServer {
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
                 findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
-                diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0));
+                diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0), connectionPool);
         requestHandlerPoolForHttp2 =
             new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
                 ambryServerRequestsForHttp2);

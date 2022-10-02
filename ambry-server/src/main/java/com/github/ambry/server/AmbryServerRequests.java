@@ -28,6 +28,7 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ServerConfig;
+import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
@@ -85,7 +86,6 @@ public class AmbryServerRequests extends AmbryRequests {
       EnumSet.of(RequestOrResponseType.DeleteRequest, RequestOrResponseType.TtlUpdateRequest,
           RequestOrResponseType.UndeleteRequest);
   private static final Logger logger = LoggerFactory.getLogger(AmbryServerRequests.class);
-  private final ServerConfig serverConfig;
   private final DiskManagerConfig diskManagerConfig;
   private final StatsManager statsManager;
   private final ClusterParticipant clusterParticipant;
@@ -97,10 +97,20 @@ public class AmbryServerRequests extends AmbryRequests {
       NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
       ServerConfig serverConfig, DiskManagerConfig diskManagerConfig, StoreKeyConverterFactory storeKeyConverterFactory,
       StatsManager statsManager, ClusterParticipant clusterParticipant) {
+    this(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
+        operationNotification, replicationEngine, storeKeyFactory, serverConfig, diskManagerConfig,
+        storeKeyConverterFactory, statsManager, clusterParticipant, null);
+  }
+
+  AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
+      DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
+      NotificationSystem operationNotification, ReplicationAPI replicationEngine, StoreKeyFactory storeKeyFactory,
+      ServerConfig serverConfig, DiskManagerConfig diskManagerConfig, StoreKeyConverterFactory storeKeyConverterFactory,
+      StatsManager statsManager, ClusterParticipant clusterParticipant, ConnectionPool connectionPool) {
     super(storeManager, requestResponseChannel, clusterMap, nodeId, registry, serverMetrics, findTokenHelper,
-        operationNotification, replicationEngine, storeKeyFactory, storeKeyConverterFactory);
+        operationNotification, replicationEngine, storeKeyFactory, storeKeyConverterFactory, connectionPool,
+        serverConfig);
     this.diskManagerConfig = diskManagerConfig;
-    this.serverConfig = serverConfig;
     this.statsManager = statsManager;
     this.clusterParticipant = clusterParticipant;
 
