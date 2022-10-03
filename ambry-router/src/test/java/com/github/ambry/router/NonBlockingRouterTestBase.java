@@ -147,6 +147,7 @@ public class NonBlockingRouterTestBase {
   public void after() {
     if (router != null) {
       Assert.assertEquals("Current operations count should be 0", 0, router.currentOperationsCount.get());
+      assertCloseCleanup(router);
     }
     nettyByteBufLeakHelper.afterTest();
     nettyByteBufLeakHelper.setDisabled(false);
