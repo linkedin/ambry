@@ -123,7 +123,6 @@ public class CompressionServiceTest {
     config.minimalSourceDataSizeInBytes = 1;
 
     // Test: Compression skipped because compression ratio is too low.
-    metrics = new CompressionMetrics(new MetricRegistry());
     LZ4Compression mockCompression = Mockito.mock(LZ4Compression.class);
     Mockito.when(mockCompression.compress(Mockito.any(), Mockito.anyInt(), Mockito.anyInt())).thenReturn(new Pair<>(sourceBuffer.length, sourceBuffer));
     CompressionService testService = new CompressionService(config, metrics);
@@ -147,7 +146,6 @@ public class CompressionServiceTest {
     config.minimalCompressRatio = 1.0;
     config.minimalSourceDataSizeInBytes = 1;
     config.algorithmName = "BAD"; // algorithm not found, will fall back to Zstd.
-    metrics = new CompressionMetrics(new MetricRegistry());
 
     CompressionService service = new CompressionService(config, metrics);
     ByteBuf compressedBuffer = service.compressChunk(sourceByteBuf, false);

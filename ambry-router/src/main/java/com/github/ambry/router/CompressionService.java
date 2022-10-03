@@ -39,7 +39,7 @@ public class CompressionService {
   private static final Logger logger = LoggerFactory.getLogger(CompressionService.class);
 
   // MB/sec = (byte/microsecond * MB/1024*1024bytes * 1000000Microseconds/sec) = 1 MB/1.048576 sec
-  private static final double BytePerMicrosecondToMBToSec = 1/1.048576;
+  private static final double BytePerMicrosecondToMBPerSec = 1/1.048576;
 
   private final CompressionConfig compressionConfig;
   private final CompressionMetrics compressionMetrics;
@@ -79,7 +79,6 @@ public class CompressionService {
 
     // Return false if compression is disabled.  No need to emit metrics.
     if (!compressionConfig.isCompressionEnabled) {
-      logger.info("No compression applied because compression is disabled.");
       return false;
     }
 
@@ -176,7 +175,7 @@ public class CompressionService {
       long durationMicroseconds = (System.nanoTime() - startTime)/1000;
 
       // Compress succeeded, emit metrics. MB/sec = (#bytes/#microseconds) x BytesPerMicroSecondsToMBToSec
-      long speedInMBPerSec = (long) (BytePerMicrosecondToMBToSec * sourceDataSize / (double) durationMicroseconds);
+      long speedInMBPerSec = (long) (BytePerMicrosecondToMBPerSec * sourceDataSize / (double) durationMicroseconds);
       if (isFullChunk) {
         algorithmMetrics.fullSizeCompressTimeInMicroseconds.update(durationMicroseconds);
         algorithmMetrics.fullSizeCompressSpeedMBPerSec.update(speedInMBPerSec);
@@ -221,6 +220,7 @@ public class CompressionService {
    * Decompress the specified compressed buffer.
    *
    * @param compressedBuffer The compressed buffer.
+   * @param fullChunkSize The size of a full chunk.  It is used to select metrics to emit.
    * @return The decompressor used and the decompressed buffer.
    * @throws CompressionException This exception is thrown when internal compression error or cannot find decompressor.
    */
@@ -271,7 +271,7 @@ public class CompressionService {
       decompressedBuffer = decompressor.decompress(buffer, bufferOffset, dataSize);
       long durationMicroseconds = (System.nanoTime() - startTime)/1000;
 
-      long speedInMBPerSec = (long) (BytePerMicrosecondToMBToSec * decompressedBuffer.length / (double) durationMicroseconds);
+      long speedInMBPerSec = (long) (BytePerMicrosecondToMBPerSec * decompressedBuffer.length / (double) durationMicroseconds);
       if (decompressedBuffer.length == fullChunkSize) {
         algorithmMetrics.fullSizeDecompressTimeInMicroseconds.update(durationMicroseconds);
         algorithmMetrics.fullSizeDecompressSpeedMBPerSec.update(speedInMBPerSec);
