@@ -82,7 +82,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.router.RouterTestHelpers.*;
 import static org.junit.Assert.*;
 
 
@@ -168,7 +167,9 @@ public class PutManagerTest {
   @After
   public void postCheck() {
     if (router != null) {
-      assertCloseCleanup();
+      if (router.isOpen()) {
+        router.close();
+      }
     }
     nettyByteBufLeakHelper.afterTest();
   }
