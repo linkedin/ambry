@@ -101,14 +101,14 @@ public class CompressionServiceTest {
 
     // Test: Disable compression due to compression failed.
     // Create a test CompressionService and replace the compressor with a mock.
-    config.algorithmName = LZ4Compression.ALGORITHM_NAME;
     config.minimalSourceDataSizeInBytes = 1;
-    CompressionService testService = new CompressionService(config, metrics);
+    CompressionService compressionService = new CompressionService(config, metrics);
     LZ4Compression mockCompression = Mockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     Mockito.doThrow(new RuntimeException("Compress failed.")).when(mockCompression).compress(
         Mockito.any(), Mockito.anyInt(), Mockito.anyInt(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt());
-    testService.getAllCompressions().put(LZ4Compression.ALGORITHM_NAME, mockCompression);
-    ByteBuf compressedBuffer = testService.compressChunk(sourceByteBuf, true);
+    compressionService.setDefaultCompressor(mockCompression);
+    Assert.assertEquals(mockCompression, compressionService.getDefaultCompressor());
+    ByteBuf compressedBuffer = compressionService.compressChunk(sourceByteBuf, true);
     Assert.assertNull(compressedBuffer);
     Assert.assertEquals(1, metrics.compressErrorRate.getCount());
     Assert.assertEquals(1, metrics.compressErrorCompressFailed.getCount());
@@ -160,6 +160,8 @@ public class CompressionServiceTest {
 
     // Happy case - compression succeed full chunk.
     config.algorithmName = LZ4Compression.ALGORITHM_NAME;
+    service = new CompressionService(config, metrics);
+    Assert.assertEquals(LZ4Compression.ALGORITHM_NAME, service.getDefaultCompressor().getAlgorithmName());
     compressedBuffer = service.compressChunk(sourceByteBuf, true);
     Assert.assertNotEquals(sourceByteBuf.readableBytes(), compressedBuffer.readableBytes());
     Assert.assertEquals(2, metrics.compressAcceptRate.getCount());

@@ -43,6 +43,7 @@ public class CompressionService {
 
   private final CompressionConfig compressionConfig;
   private final CompressionMetrics compressionMetrics;
+  private Compression defaultCompressor;
 
   // When a new compression algorithm is introduced, add the new algorithm here.
   // WARNING: Do not remove compression algorithms from this list.  See {@code Compression} interface for detail.
@@ -57,6 +58,18 @@ public class CompressionService {
   public CompressionService(CompressionConfig config, CompressionMetrics metrics) {
     compressionConfig = config;
     compressionMetrics = metrics;
+
+    // Check whether the default compressor name is valid in the config.  If not, fall back to Zstd.
+    Compression compressor = allCompressions.get(compressionConfig.algorithmName);
+    if (compressor == null) {
+      compressor = allCompressions.get(ZstdCompression.ALGORITHM_NAME);
+
+      // Emit metrics for default compressor name in config does not exist.
+      compressionMetrics.compressErrorConfigInvalidCompressorName.inc();
+      logger.error("The default compressor algorithm, " + compressionConfig.algorithmName
+          + ", specified in config does not exist.  This default has changed to " + ZstdCompression.ALGORITHM_NAME);
+    }
+    defaultCompressor = compressor;
   }
 
   /**
@@ -65,6 +78,23 @@ public class CompressionService {
    */
   public CompressionMap getAllCompressions() {
     return allCompressions;
+  }
+
+  /**
+   * Get the default compressor.
+   * @return The default compressor.
+   */
+  public Compression getDefaultCompressor() {
+    return defaultCompressor;
+  }
+
+  /**
+   * Set the default compressor to use.
+   * @param newDefaultCompressor The new default compressor.
+   */
+  public void setDefaultCompressor(Compression newDefaultCompressor) {
+    Objects.requireNonNull(newDefaultCompressor, "newDefaultCompressor");
+    defaultCompressor = newDefaultCompressor;
   }
 
   /**
@@ -150,20 +180,8 @@ public class CompressionService {
       return null;
     }
 
-    // Get default compressor.  If config missing, fallback to Zstandard.
-    String algorithmName = compressionConfig.algorithmName;
-    Compression defaultCompressor = allCompressions.get(algorithmName);
-    if (defaultCompressor == null) {
-      // Emit metrics for default compressor name does not exist.
-      compressionMetrics.compressErrorConfigInvalidCompressorName.inc();
-      logger.error("The default compressor algorithm, " + algorithmName
-          + ", specified in config does not exist.  This config is ignored.");
-      algorithmName = ZstdCompression.ALGORITHM_NAME;
-      defaultCompressor = allCompressions.get(algorithmName);
-    }
-
     // Apply compression.
-    CompressionMetrics.AlgorithmMetrics algorithmMetrics = compressionMetrics.getAlgorithmMetrics(algorithmName);
+    CompressionMetrics.AlgorithmMetrics algorithmMetrics = compressionMetrics.getAlgorithmMetrics(defaultCompressor.getAlgorithmName());
     Pair<Integer, byte[]> compressResult;
     try {
       algorithmMetrics.compressRate.mark();
@@ -265,7 +283,8 @@ public class CompressionService {
       decompressedBuffer = decompressor.decompress(buffer, bufferOffset, dataSize);
       long durationMicroseconds = (System.nanoTime() - startTime)/1000;
 
-      long speedInMBPerSec = (long) (BytePerMicrosecondToMBPerSec * decompressedBuffer.length / (double) durationMicroseconds);
+      long speedInMBPerSec = durationMicroseconds == 0 ? 0 :
+          (long) (BytePerMicrosecondToMBPerSec * decompressedBuffer.length / (double) durationMicroseconds);
       if (decompressedBuffer.length == fullChunkSize) {
         algorithmMetrics.fullSizeDecompressTimeInMicroseconds.update(durationMicroseconds);
         algorithmMetrics.fullSizeDecompressSpeedMBPerSec.update(speedInMBPerSec);
