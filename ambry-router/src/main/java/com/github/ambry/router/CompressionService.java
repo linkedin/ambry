@@ -82,21 +82,20 @@ public class CompressionService {
       return false;
     }
 
-    // Check content-encoding. BlobProperty.ContentEncoding contains a string, do not apply compression.
-    // Note: Calling getBlobProperties() throws if blob properties is null, so it never returns null.
+    // Check content-encoding. If BlobProperty.ContentEncoding contains a string, do not apply compression.
     String contentEncoding = blobProperties.getContentEncoding();
     if (compressionConfig.isSkipWithContentEncoding && !Utils.isNullOrEmpty(contentEncoding)) {
-      logger.info("No compression applied because compression content is encoded with " + contentEncoding);
+      logger.trace("No compression applied because blob is encoded with " + contentEncoding);
       // Emit metrics to count how many compressions skipped due to encoded data.
       compressionMetrics.compressSkipRate.mark();
       compressionMetrics.compressSkipContentEncoding.inc();
       return false;
     }
 
-    // Check the content-type.
+    // Check the content-type.  If content type is incompressible based on config, skip compression.
     String contentType = blobProperties.getContentType();
     if (!compressionConfig.isCompressibleContentType(contentType)) {
-      logger.info("No compression applied because content-type " + contentType + " is incompressible.");
+      logger.trace("No compression applied because content-type " + contentType + " is incompressible.");
       // Emit metrics to count how many compressions skipped due to incompressible chunks based on content-type.
       compressionMetrics.compressSkipRate.mark();
       compressionMetrics.compressSkipContentTypeFiltering.inc();
@@ -113,8 +112,6 @@ public class CompressionService {
    * For example, if the compressed data size is smaller than original data by certain % (exceeds threshold),
    * the compressed data is accepted and return compressed data; otherwise, compression is discarded.
    * This method emits metrics along the process.  It returns null if failed instead of throwing exceptions.
-   * This method is typically called for the first chunk to determine whether to compress the entire blob or not.
-   * Subsequent data chunks are compressed using compressChunk().
    *
    * @param chunkBuffer The PutChunk buffer to compress.
    * @param isFullChunk Whether this is a full size chunk (4MB) or smaller.
@@ -126,7 +123,7 @@ public class CompressionService {
     // Check the blob size.  If it's too small, do not compress.
     int sourceDataSize = chunkBuffer.readableBytes();
     if (sourceDataSize < compressionConfig.minimalSourceDataSizeInBytes) {
-      logger.info("No compression applied because source data size " + sourceDataSize + " is smaller than minimal size "
+      logger.trace("No compression applied because source data size " + sourceDataSize + " is smaller than minimal size "
           + compressionConfig.minimalSourceDataSizeInBytes);
       // Emit metrics to count how many compressions skipped due to small size.
       compressionMetrics.compressSkipRate.mark();
@@ -184,8 +181,7 @@ public class CompressionService {
         algorithmMetrics.smallSizeCompressSpeedMBPerSec.update(speedInMBPerSec);
       }
       algorithmMetrics.compressRatioPercent.update((long) (100.0 * sourceDataSize / compressResult.getFirst()));
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       logger.error(String.format("Compress failed.  sourceBuffer.Length = %d, offset = %d, size = %d.",
           sourceBuffer.length, sourceBufferOffset, sourceDataSize), ex);
 
@@ -200,7 +196,7 @@ public class CompressionService {
     int compressedDataSize = compressResult.getFirst();
     double compressionRatio = sourceDataSize / (double) compressedDataSize;
     if (compressionRatio < compressionConfig.minimalCompressRatio) {
-      logger.info("Compression discarded because compression ratio " + compressionRatio
+      logger.trace("Compression discarded because compression ratio " + compressionRatio
           + " is smaller than config's minimal ratio " + compressionConfig.minimalCompressRatio
           + ".  Source content size is " + sourceDataSize + " and compressed data size is " + compressedDataSize);
 
@@ -231,8 +227,7 @@ public class CompressionService {
     Triple<byte[], Integer, Integer> bufferInfo;
     try {
       bufferInfo = convertByteBufToByteArray(compressedBuffer);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       logger.error("Cannot decompress buffer.  Unable to convert ByteBuf to byte[].", ex);
       compressionMetrics.decompressErrorRate.mark();
       compressionMetrics.decompressErrorBufferConversion.inc();
@@ -245,8 +240,7 @@ public class CompressionService {
     String algorithmName;
     try {
       algorithmName = allCompressions.getAlgorithmName(buffer, bufferOffset, dataSize);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       logger.error("Cannot decompress buffer.  Unable to convert get compression algorithm name in buffer.", ex);
       compressionMetrics.decompressErrorRate.mark();
       compressionMetrics.decompressErrorBufferTooSmall.inc();
@@ -279,8 +273,7 @@ public class CompressionService {
         algorithmMetrics.smallSizeDecompressTimeInMicroseconds.update(durationMicroseconds);
         algorithmMetrics.smallSizeDecompressSpeedMBPerSec.update(speedInMBPerSec);
       }
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       logger.error("Decompression failed.  Algorithm name " + algorithmName + ", compressed size = " + dataSize, ex);
       compressionMetrics.decompressErrorRate.mark();
       compressionMetrics.decompressErrorDecompressFailed.inc();

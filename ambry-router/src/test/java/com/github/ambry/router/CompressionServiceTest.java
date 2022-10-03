@@ -314,7 +314,7 @@ public class CompressionServiceTest {
         + "Test Message for testing purpose.  The Message is part of the testing message."
         + "Test Message for testing purpose.  The Message is part of the testing message.").getBytes();
 
-    // Decompressed full chunk.
+    // Decompressed full chunk.  Note: algorithm is not specified in config.  It would use the Zstd as default.
     CompressionConfig config = new CompressionConfig();
     config.minimalSourceDataSizeInBytes = 1;
     config.minimalCompressRatio = 1.0;
