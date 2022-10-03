@@ -162,7 +162,8 @@ public class CompressionService {
       compressionMetrics.compressErrorConfigInvalidCompressorName.inc();
       logger.error("The default compressor algorithm, " + algorithmName
           + ", specified in config does not exist.  This config is ignored.");
-      defaultCompressor = allCompressions.get(ZstdCompression.ALGORITHM_NAME);
+      algorithmName = ZstdCompression.ALGORITHM_NAME;
+      defaultCompressor = allCompressions.get(algorithmName);
     }
 
     // Apply compression.

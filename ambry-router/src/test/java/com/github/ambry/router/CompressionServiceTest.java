@@ -59,6 +59,11 @@ public class CompressionServiceTest {
     Assert.assertFalse(service.isBlobCompressible(blobProperties));
     Assert.assertEquals(2, metrics.compressSkipRate.getCount());
     Assert.assertEquals(1, metrics.compressSkipContentTypeFiltering.getCount());
+
+    // Test: success case.
+    blobProperties = new BlobProperties(1234L, "testServiceID", "2222", "text/123", true, 12345L, (short) 111, (short) 222, true,
+        "testTag", null, "testFileName");
+    Assert.assertTrue(service.isBlobCompressible(blobProperties));
   }
 
   @Test
@@ -74,7 +79,7 @@ public class CompressionServiceTest {
     config.minimalSourceDataSizeInBytes = 1000;
     ByteBuf compressedBuffer = service.compressChunk(sourceByteBuf, true);
     Assert.assertNull(compressedBuffer);
-    Assert.assertEquals(3, metrics.compressSkipRate.getCount());
+    Assert.assertEquals(1, metrics.compressSkipRate.getCount());
     Assert.assertEquals(1, metrics.compressSkipSizeTooSmall.getCount());
     config.minimalSourceDataSizeInBytes = 1;
 
@@ -141,7 +146,9 @@ public class CompressionServiceTest {
     // Test: Happy case - compression succeed partial full.
     config.minimalCompressRatio = 1.0;
     config.minimalSourceDataSizeInBytes = 1;
+    config.algorithmName = "BAD"; // algorithm not found, will fall back to Zstd.
     metrics = new CompressionMetrics(new MetricRegistry());
+
     CompressionService service = new CompressionService(config, metrics);
     ByteBuf compressedBuffer = service.compressChunk(sourceByteBuf, false);
     Assert.assertNotEquals(sourceByteBuf.readableBytes(), compressedBuffer.readableBytes());
@@ -154,13 +161,14 @@ public class CompressionServiceTest {
     Assert.assertTrue(algorithmMetrics.smallSizeCompressSpeedMBPerSec.getCount() > 0);
 
     // Happy case - compression succeed full chunk.
+    config.algorithmName = LZ4Compression.ALGORITHM_NAME;
     compressedBuffer = service.compressChunk(sourceByteBuf, true);
     Assert.assertNotEquals(sourceByteBuf.readableBytes(), compressedBuffer.readableBytes());
     Assert.assertEquals(2, metrics.compressAcceptRate.getCount());
 
-    algorithmMetrics = metrics.getAlgorithmMetrics(ZstdCompression.ALGORITHM_NAME);
+    algorithmMetrics = metrics.getAlgorithmMetrics(LZ4Compression.ALGORITHM_NAME);
     Assert.assertTrue(algorithmMetrics.compressRatioPercent.getCount() > 0);
-    Assert.assertEquals(2, algorithmMetrics.compressRate.getCount());
+    Assert.assertEquals(1, algorithmMetrics.compressRate.getCount());
     Assert.assertTrue(algorithmMetrics.fullSizeCompressTimeInMicroseconds.getCount() > 0);
     Assert.assertTrue(algorithmMetrics.fullSizeCompressSpeedMBPerSec.getCount() > 0);
   }
