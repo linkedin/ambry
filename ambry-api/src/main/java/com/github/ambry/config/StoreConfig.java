@@ -16,7 +16,11 @@ package com.github.ambry.config;
 import com.github.ambry.store.IndexMemState;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 /**
@@ -490,6 +494,33 @@ public class StoreConfig {
   public static final String storeNumOfCacheMissForFindMissingKeysInBatchModeName =
       "store.num.of.cache.miss.for.find.missing.keys.in.batch.mode";
 
+  /**
+   * How many days of compactionlogs we have to read from disk to build the compaction history
+   */
+  @Config(storeCompactionHistoryInDayName)
+  @Default("21")
+  public final int storeCompactionHistoryInDay;
+  public static final String storeCompactionHistoryInDayName = "store.compaction.history.in.day";
+
+  /**
+   * True to enable rebuilding replication token based on compaction history.
+   */
+  @Config(storeRebuildTokenBasedOnCompactionHistoryName)
+  @Default("false")
+  public final boolean storeRebuildTokenBasedOnCompactionHistory;
+  public static final String storeRebuildTokenBasedOnCompactionHistoryName =
+      "store.rebuild.token.based.on.compaction.history";
+
+  /**
+   * Partition id to enable rebuild token based on compaction history. In order to enable this feature, we have to enable
+   * the storeRebuildTokenBasedOnCompactionHistory and add partition id here. This is a comma separated list.
+   */
+  @Config(storePartitionsToRebuildTokenBasedOnCompactionHistoryName)
+  @Default("")
+  public List<Long> storePartitionsToRebuildTokenBasedOnCompactionHistory;
+  public static final String storePartitionsToRebuildTokenBasedOnCompactionHistoryName =
+      "store.partitions.to.rebuild.token.based.on.compaction.history";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -609,5 +640,16 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeCacheSizeForFindMissingKeysInBatchModeName, 3, 1, 100);
     storeNumOfCacheMissForFindMissingKeysInBatchMode =
         verifiableProperties.getIntInRange(storeNumOfCacheMissForFindMissingKeysInBatchModeName, 5, 3, 100);
+    storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 21, 1, 365);
+    storeRebuildTokenBasedOnCompactionHistory =
+        verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
+    String partitions =
+        verifiableProperties.getString(storePartitionsToRebuildTokenBasedOnCompactionHistoryName, "").trim();
+    if (partitions.isEmpty()) {
+      storePartitionsToRebuildTokenBasedOnCompactionHistory = Collections.EMPTY_LIST;
+    } else {
+      storePartitionsToRebuildTokenBasedOnCompactionHistory =
+          Stream.of(partitions.split(",")).map(Long::parseLong).collect(Collectors.toList());
+    }
   }
 }

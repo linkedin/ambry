@@ -25,6 +25,7 @@ import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -37,6 +38,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Random;
 import java.util.Set;
@@ -160,6 +162,15 @@ class PersistentIndex {
   // the result of the compaction already, it will not point to any old log segment.
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
   private Runnable getBlobReadInfoTestCallback = null;
+
+  private volatile boolean sanityCheckFailed = false;
+  // A map from index segment start offset before compaction to index segment start offset after compaction.
+  // This map will only be modified in the compaction thread and accessed in the replication threads.
+  private final NavigableMap<Offset, Offset> beforeAndAfterCompactionIndexSegmentOffsets =
+      new ConcurrentSkipListMap<>();
+  // A map from the compaction start timestamp to the set of offsets in the before and after compaction index segment
+  // offset map. This map will only be accessed in the compaction thread after startup.
+  private final TreeMap<Long, Set<Offset>> compactionTimestampToIndexSegmentOffsets = new TreeMap<>();
 
   private ConcurrentHashMap<String, LinkedList<Pair<Offset, Set<StoreKey>>>> cachedKeys = new ConcurrentHashMap<>();
 
@@ -550,8 +561,107 @@ class PersistentIndex {
   }
 
   /**
+   * Update the before and after compaction index segment offsets.
+   * @param compactionStartTime The compaction start time in milliseconds.
+   * @param offsets The map from index segment offsets before compaction to index segment offsets after compaction.
+   * @param fromInProgressCompaction True if this update is from an in progress compaction.
+   */
+  void updateBeforeAndAfterCompactionIndexSegmentOffsets(long compactionStartTime, Map<Offset, Offset> offsets,
+      boolean fromInProgressCompaction) {
+    if (offsets.size() == 0) {
+      return;
+    }
+    if (fromInProgressCompaction) {
+      // Sanity checking
+      for (Offset before : offsets.keySet()) {
+        if (validIndexSegments.get(before) == null) {
+          String message =
+              String.format("Index %s: Before offset %s is missing from the index segment map", dataDir, before);
+          throw new IllegalStateException(message);
+        }
+      }
+    }
+    compactionTimestampToIndexSegmentOffsets.computeIfAbsent(compactionStartTime, k -> new HashSet<>())
+        .addAll(offsets.keySet());
+    beforeAndAfterCompactionIndexSegmentOffsets.putAll(offsets);
+    long now = time.milliseconds();
+    long cutoffTime = now - Duration.ofDays(config.storeCompactionHistoryInDay).toMillis();
+    // Any compaction history before this cutoff timestamp would be removed
+    // compactionTimestampToIndexSegmentOffsets is a tree map order by time
+    Iterator<Map.Entry<Long, Set<Offset>>> iterator = compactionTimestampToIndexSegmentOffsets.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<Long, Set<Offset>> entry = iterator.next();
+      if (entry.getKey() > cutoffTime) {
+        break;
+      }
+      Set<Offset> offsetsToRemove = entry.getValue();
+      beforeAndAfterCompactionIndexSegmentOffsets.keySet().removeAll(offsetsToRemove);
+      iterator.remove();
+    }
+  }
+
+  /**
+   * Sanity check the before and after compaction index segment offsets.
+   * - All before offsets shouldn't point to any existing valid index segment
+   * - All before offsets should have a valid path to an existing valid index segment.
+   */
+  void sanityCheckBeforeAndAfterCompactionIndexSegmentOffsets() {
+    for (Map.Entry<Offset, Offset> entry : beforeAndAfterCompactionIndexSegmentOffsets.entrySet()) {
+      // Before should not in the index segment map
+      Offset before = entry.getKey();
+      Offset after = entry.getValue();
+      if (validIndexSegments.get(before) != null) {
+        logger.error("Index {}: Before Offset {} shouldn't be in the index segment map", dataDir, before);
+        metrics.beforeAndAfterOffsetSanityCheckFailureCount.inc();
+        sanityCheckFailed = true;
+        return;
+      }
+      // There should be a path from before offset to the current valid index segment.
+      IndexSegment segment = validIndexSegments.get(after);
+      while (segment == null) {
+        after = beforeAndAfterCompactionIndexSegmentOffsets.get(after);
+        if (after == null) {
+          break;
+        }
+        segment = validIndexSegments.get(after);
+      }
+      if (segment == null) {
+        logger.error("Index {}: No path for Offset {} to reach a valid index segment", dataDir, before);
+        metrics.beforeAndAfterOffsetSanityCheckFailureCount.inc();
+        sanityCheckFailed = true;
+        return;
+      }
+    }
+    logger.info("Index {}: Sanity check for before and after compaction index segment offsets succeeded", dataDir);
+    sanityCheckFailed = false;
+  }
+
+  /**
+   * Return the before and after compaction index segment offsets map, this should only be used for tests.
+   * @return
+   */
+  Map<Offset, Offset> getBeforeAndAfterCompactionIndexSegmentOffsets() {
+    return Collections.unmodifiableMap(beforeAndAfterCompactionIndexSegmentOffsets);
+  }
+
+  /**
+   * Return the compaction timestamp to index segment offsets map, this should only be used for tests.
+   * @return
+   */
+  Map<Long, Set<Offset>> getCompactionTimestampToIndexSegmentOffsets() {
+    return Collections.unmodifiableMap(compactionTimestampToIndexSegmentOffsets);
+  }
+
+  /**
+   * @return {@link #sanityCheckFailed}. Only used in tests.
+   */
+  boolean isSanityCheckFailed() {
+    return sanityCheckFailed;
+  }
+
+  /**
    * Adds a new entry to the index. For recovery, only the index segments belongs to last log segment should be put into
-   * journal, other wise it won't be compacted and we will facing the issue when last log segment is empty but journal size
+   * journal, otherwise it won't be compacted. And we will face the issue when last log segment is empty but journal size
    * is non-zero.
    * @param entry The entry to be added to the index
    * @param fileSpan The file span that this entry represents in the log
@@ -587,6 +697,24 @@ class PersistentIndex {
       Offset startOffset = entry.getValue().getOffset();
       Offset endOffset = new Offset(startOffset.getName(), startOffset.getOffset() + entry.getValue().getSize());
       addToIndex(entry, new FileSpan(startOffset, endOffset));
+    }
+  }
+
+  /**
+   * Return the start offset of the active index segment. If there is no index segment at all, just return the beginning
+   * offset of the entire log.
+   * @return
+   */
+  Offset getActiveIndexSegmentOffset() {
+    Offset logEndOffset = log.getEndOffset();
+    Map.Entry<Offset, IndexSegment> lastEntry = validIndexSegments.lastEntry();
+    // Fetch the log end offset before last key in the map
+    if (lastEntry != null) {
+      return lastEntry.getKey();
+    } else {
+      // No index segment in the map, then this log is empty. End offset is the start offset.
+      logger.trace("Index {}: returning log end offset as the active index segment offset: {}", dataDir, logEndOffset);
+      return logEndOffset;
     }
   }
 
@@ -2502,9 +2630,11 @@ class PersistentIndex {
         // nothing to do.
         break;
       case JournalBased:
-        // A journal based token, but the previous index segment doesn't belong to the same log segment, might be caused
-        // by compaction, or blob stored added to many records so that the offset in the token is now pointing to the
-        // previous log segment.
+        // A journal based token. The offset in journal based token is pointing to an IndexValue[IV], this IndexValue belongs
+        // to an IndexSegment[IS]. And the offset should always be greater than or equal to IS's start offset. Calling
+        // floorKey should return the IS's start offset. Since IV belongs to IS, the IS's start offset should have the
+        // same LogSegmentName as the offset's LogSegmentName. But if floorKey is null or these two LogSegmentNames are
+        // not the same, it means LogSegment is removed by compaction.
         Offset floorOffset = indexSegments.floorKey(offset);
         if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
           if (ignoreResetKey || token.getResetKey() == null) {
@@ -2514,20 +2644,20 @@ class PersistentIndex {
             revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
           }
           metrics.journalBasedTokenResetCount.inc();
-          logger.info("Revalidated token {} because it is invalid for the index segment map", token);
+          logger.info("Index {}: Revalidated token {} because it is invalid for the index segment map", dataDir, token);
         }
         break;
       case IndexBased:
         // An index based token, but the offset is not in the segments, might be caused by the compaction
         if (!indexSegments.containsKey(offset)) {
-          if (ignoreResetKey || token.getResetKey() == null) {
-            revalidatedToken = new StoreFindToken();
-          } else {
+          if (!ignoreResetKey && token.getResetKey() != null) {
             // reset key is present in the token
             revalidatedToken = generateTokenBasedOnResetKey(token, indexSegments);
+          } else {
+            revalidatedToken = new StoreFindToken();
           }
           metrics.indexBasedTokenResetCount.inc();
-          logger.info("Revalidated token {} because it is invalid for the index segment map", token);
+          logger.info("Index {}: Revalidated token {} because it is invalid for the index segment map", dataDir, token);
         }
         break;
       default:
@@ -2560,7 +2690,8 @@ class PersistentIndex {
     StoreFindToken newToken = new StoreFindToken();
     if (resetKeyIndexValue == null) {
       // reset key is not found in current valid index segments, reset it to very beginning
-      logger.info("Reset key {} is not found in current index, token is reset to the beginning of whole log", resetKey);
+      logger.info("Index {}: Reset key {} is not found in current index, token is reset to the beginning of whole log",
+          dataDir, resetKey);
     } else {
       if (config.storeRebuildTokenBasedOnResetKey) {
         IndexSegment targetIndexSegment = indexSegments.floorEntry(resetKeyIndexValue.getOffset()).getValue();

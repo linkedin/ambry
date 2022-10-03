@@ -49,6 +49,7 @@ import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -1050,7 +1051,9 @@ public class HelixClusterManagerTest {
   /**
    * Tests that if the xid of an InstanceConfig change is greater than the current xid of the cluster manager, then that
    * change is ignored - both during initialization as well as with post-initialization InstanceConfig changes.
+   * TODO: Remove this test when we remove xid. Xid is no longer used.
    */
+  @Ignore
   @Test
   public void xidTest() throws Exception {
     assumeTrue(!useComposite && listenCrossColo);

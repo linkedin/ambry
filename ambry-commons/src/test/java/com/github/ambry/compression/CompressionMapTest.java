@@ -44,20 +44,29 @@ public class CompressionMapTest {
   }
 
   @Test
+  public void testGetAlgorithmName() throws CompressionException {
+    Compression lz4 = new LZ4Compression();
+    Compression zstd = new ZstdCompression();
+    CompressionMap map = CompressionMap.of(lz4, zstd);
+
+    // Test: Invalid argument
+    Exception ex = TestUtils.getException(() -> map.getByName(null));
+    Assert.assertTrue(ex instanceof NullPointerException);
+
+    Assert.assertEquals(lz4, map.getByName(lz4.getAlgorithmName()));
+    Assert.assertEquals(zstd, map.getByName(zstd.getAlgorithmName()));
+  }
+
+  @Test
   public void testGetDecompressor() throws CompressionException {
     Compression lz4 = new LZ4Compression();
     Compression zstd = new ZstdCompression();
 
-    CompressionMap map = new CompressionMap();
-    map.add(lz4);
-    map.add(zstd);
+    CompressionMap map = CompressionMap.of(lz4, zstd);
 
     // Test: Invalid argument
-    Exception ex = TestUtils.getException(() -> map.getByCompressedData(null));
+    Exception ex = TestUtils.getException(() -> map.getByName(null));
     Assert.assertTrue(ex instanceof NullPointerException);
-
-    ex = TestUtils.getException(() -> map.getByCompressedData(new byte[0]));
-    Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     // Test: Compress the string using LZ4 and decompress using factory.
     String testMessage = "Ambry rocks.  Ambry again.  Ambry again.";
@@ -78,7 +87,8 @@ public class CompressionMapTest {
     byte[] compressedBuffer = new byte[bufferSize];
     System.arraycopy(compressionResult.getSecond(), 0, compressedBuffer, 0, compressedBuffer.length);
 
-    Compression decompressor = factory.getByCompressedData(compressedBuffer);
+    String algorithmName = factory.getAlgorithmName(compressedBuffer, 0, compressedBuffer.length);
+    Compression decompressor = factory.getByName(algorithmName);
     return decompressor.decompress(compressedBuffer);
   }
 }

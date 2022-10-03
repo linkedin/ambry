@@ -60,6 +60,7 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
@@ -87,7 +88,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -107,6 +110,7 @@ import static org.mockito.Mockito.*;
  */
 @RunWith(Parameterized.class)
 public class ReplicationTest extends ReplicationTestHelper {
+  private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   /**
    * Constructor to set the configs
@@ -115,6 +119,15 @@ public class ReplicationTest extends ReplicationTestHelper {
     super(requestVersion, responseVersion);
   }
 
+  @Before
+  public void before() {
+    nettyByteBufLeakHelper.beforeTest();
+  }
+
+  @After
+  public void after() {
+    nettyByteBufLeakHelper.afterTest();
+  }
   /**
    * Tests add/remove replicaInfo to {@link ReplicaThread}
    * @throws Exception
