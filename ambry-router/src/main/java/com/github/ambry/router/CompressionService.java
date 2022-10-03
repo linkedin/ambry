@@ -25,7 +25,10 @@ import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.commons.lang3.tuple.Triple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,68 +36,94 @@ import org.slf4j.LoggerFactory;
 /**
  * Compression service is thread-safe singleton that apply compression and decompression.
  * Its implementation is backed by the CompressionMap in the common library.
+ * The compression service class is self-contained that contains all properties for controlling compression/decompression.
+ * The properties are initialized using a specific or default compression config.
  */
 public class CompressionService {
 
-  private static final Logger logger = LoggerFactory.getLogger(CompressionService.class);
-
   // MB/sec = (byte/microsecond * MB/1024*1024bytes * 1000000Microseconds/sec) = 1 MB/1.048576 sec
   private static final double BytePerMicrosecondToMBPerSec = 1/1.048576;
+  private static final Logger logger = LoggerFactory.getLogger(CompressionService.class);
 
-  private final CompressionConfig compressionConfig;
+  // Emit all compression metrics here.
   private final CompressionMetrics compressionMetrics;
-  private Compression defaultCompressor;
 
   // When a new compression algorithm is introduced, add the new algorithm here.
   // WARNING: Do not remove compression algorithms from this list.  See {@code Compression} interface for detail.
-  private final CompressionMap allCompressions = CompressionMap.of(new ZstdCompression(), new LZ4Compression());
+  public final CompressionMap allCompressions = CompressionMap.of(new ZstdCompression(), new LZ4Compression());
+
+  // Properties that controls the behavior of this service.
+  // For now, those properties are public fields.  With Lombok support, they should be private with Getter and Setter.
 
   /**
-   * Create an instance of the compression service using the compression config and metrics.
-   * The default compressor is loaded from config, if available.  If not available, ZStd is the default.
-   * @param config Compression config.
-   * @param metrics Compression metrics.
+   * The default compressor use by compress().
    */
-  public CompressionService(CompressionConfig config, CompressionMetrics metrics) {
-    compressionConfig = config;
-    compressionMetrics = metrics;
+  public Compression defaultCompressor;
 
-    // Check whether the default compressor name is valid in the config.  If not, fall back to Zstd.
-    Compression compressor = allCompressions.get(compressionConfig.algorithmName);
+  /**
+   * Whether compression is enabled.
+   */
+  public boolean isCompressionEnabled;
+
+  /**
+   * Whether compression is skipped when the content-encoding is present in the request.
+   */
+  public boolean isSkipWithContentEncoding;
+
+  /**
+   * The minimal source/chunk size in bytes in order to qualify for compression.
+   * Chunk size smaller than this size will not be compressed.
+   */
+  public int minimalSourceDataSizeInBytes;
+
+  /**
+   * The minimal compression ratio in order to keep compressed content.
+   * If the size of compressed content is almost the same size as original content, discard the compressed content.
+   * Compression ratio is defined as OriginalSize/CompressedSize.  Normally, higher is better.
+   */
+  public double minimalCompressRatio;
+
+  /**
+   * The set contains a list of compressible content-types and content-prefixes.
+   * The key (content type) must be lower-case only.
+   * This set is generated from the compressibleContentTypesCSV property.
+   */
+  public final Set<String> compressibleContentTypes;
+
+    /**
+     * Create an instance of the compression service using the compression config and metrics.
+     * Initialize the compressor properties using config.  If the default compressor in config is invalid or missing,
+     * it falls back to ZStdCompression.
+     * @param config Compression config.  If null, the default compression config is used.
+     * @param metrics Compression metrics.  Cannot be null.
+     */
+  public CompressionService(CompressionConfig config, CompressionMetrics metrics) {
+    Objects.requireNonNull(metrics, "metrics");
+    compressionMetrics = metrics;
+    if (config == null) config = new CompressionConfig();
+
+    // Initialize the properties using the config.
+    isCompressionEnabled = config.isCompressionEnabled;
+    isSkipWithContentEncoding = config.isSkipWithContentEncoding;;
+    minimalSourceDataSizeInBytes = config.minimalSourceDataSizeInBytes;
+    minimalCompressRatio = config.minimalCompressRatio;
+    compressibleContentTypes = new HashSet<>();
+
+    // Split the content-type list by comma, then convert them all to lower-case.
+    Utils.splitString(config.compressibleContentTypesCSV, ",", item -> item.trim().toLowerCase(Locale.US),
+        compressibleContentTypes);
+
+    // Set the default compressor based on the config's selected algorithm name.  If nam eis invalid, fall back to Zstd.
+    Compression compressor = allCompressions.get(config.algorithmName);
     if (compressor == null) {
       compressor = allCompressions.get(ZstdCompression.ALGORITHM_NAME);
 
       // Emit metrics for default compressor name in config does not exist.
       compressionMetrics.compressErrorConfigInvalidCompressorName.inc();
-      logger.error("The default compressor algorithm, " + compressionConfig.algorithmName
-          + ", specified in config does not exist.  This default has changed to " + ZstdCompression.ALGORITHM_NAME);
+      logger.error("The default compressor algorithm, " + config.algorithmName
+          + ", specified in config does not exist.  This default has changed to " + compressor.getAlgorithmName());
     }
     defaultCompressor = compressor;
-  }
-
-  /**
-   * Get the compression map that contains all compression algorithms.
-   * @return The compression map.
-   */
-  public CompressionMap getAllCompressions() {
-    return allCompressions;
-  }
-
-  /**
-   * Get the default compressor.
-   * @return The default compressor.
-   */
-  public Compression getDefaultCompressor() {
-    return defaultCompressor;
-  }
-
-  /**
-   * Set the default compressor to use.
-   * @param newDefaultCompressor The new default compressor.
-   */
-  public void setDefaultCompressor(Compression newDefaultCompressor) {
-    Objects.requireNonNull(newDefaultCompressor, "newDefaultCompressor");
-    defaultCompressor = newDefaultCompressor;
   }
 
   /**
@@ -108,13 +137,13 @@ public class CompressionService {
     Objects.requireNonNull(blobProperties, "blobProperties cannot be null.");
 
     // Return false if compression is disabled.  No need to emit metrics.
-    if (!compressionConfig.isCompressionEnabled) {
+    if (!isCompressionEnabled) {
       return false;
     }
 
     // Check content-encoding. If BlobProperty.ContentEncoding contains a string, do not apply compression.
     String contentEncoding = blobProperties.getContentEncoding();
-    if (compressionConfig.isSkipWithContentEncoding && !Utils.isNullOrEmpty(contentEncoding)) {
+    if (isSkipWithContentEncoding && !Utils.isNullOrEmpty(contentEncoding)) {
       logger.trace("No compression applied because blob is encoded with " + contentEncoding);
       // Emit metrics to count how many compressions skipped due to encoded data.
       compressionMetrics.compressSkipRate.mark();
@@ -124,7 +153,7 @@ public class CompressionService {
 
     // Check the content-type.  If content type is incompressible based on config, skip compression.
     String contentType = blobProperties.getContentType();
-    if (!compressionConfig.isCompressibleContentType(contentType)) {
+    if (!isCompressibleContentType(contentType)) {
       logger.trace("No compression applied because content-type " + contentType + " is incompressible.");
       // Emit metrics to count how many compressions skipped due to incompressible chunks based on content-type.
       compressionMetrics.compressSkipRate.mark();
@@ -134,6 +163,59 @@ public class CompressionService {
 
     // For all other case, compression should be enabled.
     return true;
+  }
+
+  /**
+   * Check whether compression should be applied to the specified content type.
+   * Support format of content-type (3 variations):
+   * See <a href="https://www.geeksforgeeks.org/http-headers-content-type/">Content-Type spec</a> for detail.
+   *   - text/html
+   *   - text/html; charset=UTF-8
+   *   - multipart/form-data; boundary=something
+   * <p>
+   * Content type format is "prefix/specific; option=value".
+   * Content check is applied in this order.  If not in the list, it's not compressible.
+   * 1. Check whether the full contentType parameter is specified in content-type set.  Example "text/html"
+   * 2. If contentType parameter contains option (separated by ";"), remove the option and check again.
+   *    For example, parameter content-type "text/html; charset=UTF-8", check config by content-type "text/html".
+   * 3. Get the content-type prefix (the string before the "/" separator) and lookup prefix again.
+   *    For example, parameter content-type "text/html; charset=UTF-8", check config by content-prefix "text".
+   * @param contentType The HTTP content type.
+   * @return TRUE if compression allowed; FALSE if compression not allowed.
+   */
+  boolean isCompressibleContentType(String contentType) {
+    // If there is no content-type, assume it's other content-type.
+    if (Utils.isNullOrEmpty(contentType)) {
+      return false;
+    }
+
+    // If an exact match by the full content-type is found, it's compressible.
+    String contentTypeLower = contentType.trim().toLowerCase();
+    if (compressibleContentTypes.contains(contentTypeLower)) {
+      return true;
+    }
+
+    // Check whether the content-type contains options separated by ";"
+    int mimeSeparatorIndex = contentTypeLower.indexOf(';');
+    if (mimeSeparatorIndex > 0) {
+      String contentTypeWithoutOption = contentTypeLower.substring(0, mimeSeparatorIndex);
+      if (compressibleContentTypes.contains(contentTypeWithoutOption)) {
+        return true;
+      }
+    }
+
+    // Check whether there's a match by content-type prefix.
+    // For example, if input content-type is "text/csv", check whether "text" is compressible.
+    int prefixSeparatorIndex = contentTypeLower.indexOf('/');
+    if (prefixSeparatorIndex > 0) {
+      String prefix = contentTypeLower.substring(0, prefixSeparatorIndex);
+      if (compressibleContentTypes.contains(prefix)) {
+        return true;
+      }
+    }
+
+    // Content-type is not found in the allowed list, assume it's not compressible.
+    return false;
   }
 
   /**
@@ -152,9 +234,9 @@ public class CompressionService {
 
     // Check the blob size.  If it's too small, do not compress.
     int sourceDataSize = chunkBuffer.readableBytes();
-    if (sourceDataSize < compressionConfig.minimalSourceDataSizeInBytes) {
+    if (sourceDataSize < minimalSourceDataSizeInBytes) {
       logger.trace("No compression applied because source data size " + sourceDataSize + " is smaller than minimal size "
-          + compressionConfig.minimalSourceDataSizeInBytes);
+          + minimalSourceDataSizeInBytes);
       // Emit metrics to count how many compressions skipped due to small size.
       compressionMetrics.compressSkipRate.mark();
       compressionMetrics.compressSkipSizeTooSmall.inc();
@@ -213,9 +295,9 @@ public class CompressionService {
     // Check whether the compression ratio is greater than threshold.
     int compressedDataSize = compressResult.getFirst();
     double compressionRatio = sourceDataSize / (double) compressedDataSize;
-    if (compressionRatio < compressionConfig.minimalCompressRatio) {
+    if (compressionRatio < minimalCompressRatio) {
       logger.trace("Compression discarded because compression ratio " + compressionRatio
-          + " is smaller than config's minimal ratio " + compressionConfig.minimalCompressRatio
+          + " is smaller than config's minimal ratio " + minimalCompressRatio
           + ".  Source content size is " + sourceDataSize + " and compressed data size is " + compressedDataSize);
 
       // Emit metrics to count how many compressions skipped due to compression ratio too small.

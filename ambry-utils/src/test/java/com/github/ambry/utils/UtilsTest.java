@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -690,6 +691,20 @@ public class UtilsTest {
         Utils.splitString("", ",", ArrayList::new));
     assertEquals("Empty segments should be ignored", new ArrayList<>(Arrays.asList("a", "b-extra", "c")),
         Utils.splitString(",a,,b-extra,c,,", ",", ArrayList::new));
+  }
+
+  /**
+   * Tests for {@link Utils#splitString(String, String)}.
+   */
+  @Test
+  public void splitStringWithFilterTest() {
+    ArrayList<String> result = new ArrayList<>();
+    Utils.splitString("a,b,c", ",", null, result);
+    assertEquals(Arrays.asList("a", "b", "c"), result);
+
+    result.clear();
+    Utils.splitString(" A, B , C  ", ",", (item -> item.toLowerCase(Locale.ROOT).trim()), result);
+    assertEquals(Arrays.asList("a", "b", "c"), result);
   }
 
   @Test

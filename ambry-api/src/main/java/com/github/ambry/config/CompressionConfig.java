@@ -13,11 +13,6 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.utils.Utils;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Set;
-
 /**
  * Configuration parameters required by a CompressionService.
  * Configurations are read-only.  The only way to alter the values is by modifying the config files.
@@ -58,26 +53,26 @@ public class CompressionConfig {
    * Whether compression is enabled.
    */
   @Config(COMPRESSION_ENABLED)
-  public boolean isCompressionEnabled;
+  public final boolean isCompressionEnabled;
 
   /**
    * Whether compression is skipped when the content-encoding is present in the request.
    */
   @Config(SKIP_IF_CONTENT_ENCODED)
-  public boolean isSkipWithContentEncoding;
+  public final boolean isSkipWithContentEncoding;
 
   /**
    * The string that contains the list of comma-separated compressible full content-types.
    */
   @Config(COMPRESS_CONTENT_TYPES)
-  public String compressibleContentTypesCSV;
+  public final String compressibleContentTypesCSV;
 
   /**
    * The minimal source/chunk size in bytes in order to qualify for compression.
    * Chunk size smaller than this size will not be compressed.
    */
   @Config(MINIMAL_DATA_SIZE_IN_BYTES)
-  public int minimalSourceDataSizeInBytes;
+  public final int minimalSourceDataSizeInBytes;
 
   /**
    * The minimal compression ratio in order to keep compressed content.
@@ -85,20 +80,13 @@ public class CompressionConfig {
    * Compression ratio is defined as OriginalSize/CompressedSize.  Normally, higher is better.
    */
   @Config(MINIMAL_COMPRESS_RATIO)
-  public double minimalCompressRatio;
+  public final double minimalCompressRatio;
 
   /**
    * The name of the compression to use in PUT operation.
    */
   @Config(ALGORITHM_NAME)
-  public String algorithmName;
-
-  /**
-   * The set contains a list of compressible content-types and content-prefixes.
-   * The key (content type) must be lower-case only.
-   * This set is generated from the compressibleContentTypesCSV property.
-   */
-  public Set<String> compressibleContentTypes;
+  public final String algorithmName;
 
   /**
    * Create an instance of CompressionConfig using the default values.
@@ -110,7 +98,6 @@ public class CompressionConfig {
     compressibleContentTypesCSV = DEFAULT_COMPRESS_CONTENT_TYPES;
     minimalSourceDataSizeInBytes = DEFAULT_MINIMAL_DATA_SIZE_IN_BYTES;
     minimalCompressRatio = DEFAULT_MINIMAL_COMPRESS_RATIO;
-    compressibleContentTypes = parseContentTypes(compressibleContentTypesCSV);
   }
 
   /**
@@ -126,79 +113,5 @@ public class CompressionConfig {
         DEFAULT_MINIMAL_DATA_SIZE_IN_BYTES);
     minimalCompressRatio = verifiableProperties.getDouble(MINIMAL_COMPRESS_RATIO,
         DEFAULT_MINIMAL_COMPRESS_RATIO);
-
-    // Build the content-type set.
-    compressibleContentTypes = parseContentTypes(compressibleContentTypesCSV);
-  }
-
-  /**
-   * Parse the comma-separated list of content-types and prefixes into a set.
-   *
-   * @param compressibleContentTypesCSV Comma-separated list of compressible content-types and content prefixes.
-   * @return A set of compressible content-type and content-type prefixes.
-   */
-  private Set<String> parseContentTypes(String compressibleContentTypesCSV) {
-    Set<String> contentTypes = new HashSet<>();
-    if (compressibleContentTypesCSV != null && compressibleContentTypesCSV.length() > 0) {
-      for (String contentType : compressibleContentTypesCSV.split(",")) {
-        String loweredContentType = contentType.trim().toLowerCase(Locale.ENGLISH);
-        contentTypes.add(loweredContentType);
-      }
-    }
-
-    return contentTypes;
-  }
-
-  /**
-   * Check whether compression should be applied to the specified content type.
-   * Support format of content-type (3 variations):
-   * See <a href="https://www.geeksforgeeks.org/http-headers-content-type/">Content-Type spec</a> for detail.
-   *   - text/html
-   *   - text/html; charset=UTF-8
-   *   - multipart/form-data; boundary=something
-   * <p>
-   * Content type format is "prefix/specific; option=value".
-   * Content check is applied in this order.  If not in the list, it's not compressible.
-   * 1. Check whether the full contentType parameter is specified in content-type set.  Example "text/html"
-   * 2. If contentType parameter contains option (separated by ";"), remove the option and check again.
-   *    For example, parameter content-type "text/html; charset=UTF-8", check config by content-type "text/html".
-   * 3. Get the content-type prefix (the string before the "/" separator) and lookup prefix again.
-   *    For example, parameter content-type "text/html; charset=UTF-8", check config by content-prefix "text".
-   * @param contentType The HTTP content type.
-   * @return TRUE if compression allowed; FALSE if compression not allowed.
-   */
-  public boolean isCompressibleContentType(String contentType) {
-    // If there is no content-type, assume it's other content-type.
-    if (Utils.isNullOrEmpty(contentType)) {
-      return false;
-    }
-
-    // If an exact match by the full content-type is found, it's compressible.
-    String contentTypeLower = contentType.trim().toLowerCase();
-    if (compressibleContentTypes.contains(contentTypeLower)) {
-      return true;
-    }
-
-    // Check whether the content-type contains options separated by ";"
-    int mimeSeparatorIndex = contentTypeLower.indexOf(';');
-    if (mimeSeparatorIndex > 0) {
-      String contentTypeWithoutOption = contentTypeLower.substring(0, mimeSeparatorIndex);
-      if (compressibleContentTypes.contains(contentTypeWithoutOption)) {
-        return true;
-      }
-    }
-
-    // Check whether there's a match by content-type prefix.
-    // For example, if input content-type is "text/csv", check whether "text" is compressible.
-    int prefixSeparatorIndex = contentTypeLower.indexOf('/');
-    if (prefixSeparatorIndex > 0) {
-      String prefix = contentTypeLower.substring(0, prefixSeparatorIndex);
-      if (compressibleContentTypes.contains(prefix)) {
-        return true;
-      }
-    }
-
-    // Content-type is not found in the allowed list, assume it's not compressible.
-    return false;
   }
 }

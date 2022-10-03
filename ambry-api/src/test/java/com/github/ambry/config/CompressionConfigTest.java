@@ -42,20 +42,5 @@ public class CompressionConfigTest {
     Assert.assertEquals("LZ4", config.algorithmName);
     Assert.assertEquals(100, config.minimalSourceDataSizeInBytes);
     Assert.assertEquals(1.5, config.minimalCompressRatio, 0);
-
-    // Test content-type specified in compressible content-type.
-    Assert.assertTrue(config.isCompressibleContentType("text/111"));
-    Assert.assertTrue(config.isCompressibleContentType("TEXT/222"));
-    Assert.assertTrue(config.isCompressibleContentType("Text/222; charset=UTF8"));
-
-    // Test content-type specified in compressible context-type prefix.
-    Assert.assertTrue(config.isCompressibleContentType("comp1/111"));
-    Assert.assertTrue(config.isCompressibleContentType("Comp2/222"));
-    Assert.assertTrue(config.isCompressibleContentType("COMP3/222; charset=UTF8"));
-
-    // Test unknown content-type.
-    Assert.assertFalse(config.isCompressibleContentType("image/111"));
-    Assert.assertFalse(config.isCompressibleContentType("unknown/111"));
-    Assert.assertFalse(config.isCompressibleContentType(""));
   }
 }
