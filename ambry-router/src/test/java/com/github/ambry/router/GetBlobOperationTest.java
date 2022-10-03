@@ -162,7 +162,7 @@ public class GetBlobOperationTest {
   private final QuotaTestUtils.TestQuotaChargeCallback quotaChargeCallback;
 
   /**
-   * A checker that either asserts that a get operation succeeds or returns the specified error code.
+   * A checker that either asserts that a get operation succeeds or returns the specified error code.P
    */
   private final ErrorCodeChecker getErrorCodeChecker = new ErrorCodeChecker() {
     @Override
