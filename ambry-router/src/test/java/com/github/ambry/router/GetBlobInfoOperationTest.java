@@ -65,6 +65,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.PutManagerTest.*;
+import static com.github.ambry.router.RouterTestHelpers.*;
 import static org.junit.Assume.*;
 
 
@@ -192,6 +193,7 @@ public class GetBlobInfoOperationTest {
       cryptoJobHandler.close();
     }
     nettyByteBufLeakHelper.afterTest();
+    assertCloseCleanup(router);
   }
 
   /**

@@ -183,9 +183,9 @@ public class GetBlobOperationTest {
 
   @After
   public void after() {
-    router.close();
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
     nettyByteBufLeakHelper.afterTest();
+    assertCloseCleanup(router);
   }
 
   /**
