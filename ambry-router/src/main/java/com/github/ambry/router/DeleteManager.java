@@ -52,7 +52,7 @@ class DeleteManager {
   private final ClusterMap clusterMap;
   private final RouterConfig routerConfig;
   private final RouterCallback routerCallback;
-
+  private final NonBlockingRouter nonBlockingRouter;
   private static final Logger logger = LoggerFactory.getLogger(DeleteManager.class);
 
   private final RequestRegistrationCallback<DeleteOperation> requestRegistrationCallback;
@@ -67,10 +67,11 @@ class DeleteManager {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time The {@link Time} instance to use.
+   * @param nonBlockingRouter The non-blocking router object
    */
   DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, AccountService accountService,
       NotificationSystem notificationSystem, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      RouterCallback routerCallback, Time time) {
+      RouterCallback routerCallback, Time time, NonBlockingRouter nonBlockingRouter) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.accountService = accountService;
@@ -82,6 +83,7 @@ class DeleteManager {
     deleteOperations = ConcurrentHashMap.newKeySet();
     correlationIdToDeleteOperation = new HashMap<>();
     requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToDeleteOperation);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -187,7 +189,7 @@ class DeleteManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
+    nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
         op.getOperationException());
   }
 
@@ -205,7 +207,7 @@ class DeleteManager {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
         routerMetrics.onDeleteBlobError(e);
-        NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
+        nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
       }
     }
   }

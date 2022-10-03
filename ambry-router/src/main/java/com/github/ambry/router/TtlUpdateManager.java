@@ -57,6 +57,7 @@ class TtlUpdateManager {
   private final Map<Integer, TtlUpdateOperation> correlationIdToTtlUpdateOperation = new HashMap<>();
   private final RequestRegistrationCallback<TtlUpdateOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToTtlUpdateOperation);
+  private final NonBlockingRouter nonBlockingRouter;
 
   /**
    * Creates a TtlUpdateManager.
@@ -67,9 +68,11 @@ class TtlUpdateManager {
    * @param routerConfig The {@link RouterConfig} containing the configs for the TtlUpdateManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param time The {@link Time} instance to use.
+   * @param nonBlockingRouter The non-blocking router object
    */
   TtlUpdateManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-      AccountService accountService, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
+      AccountService accountService, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time,
+      NonBlockingRouter nonBlockingRouter) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.accountService = accountService;
@@ -77,6 +80,7 @@ class TtlUpdateManager {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.time = time;
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -130,7 +134,7 @@ class TtlUpdateManager {
                       time.milliseconds(), callBack, time, BatchOperationCallbackTracker.DUMMY_FUTURE,
                       quotaChargeCallback);
               ttlUpdateOperations.add(ttlUpdateOperation);
-            });
+            }, nonBlockingRouter);
     long operationTimeMs = time.milliseconds();
     for (BlobId chunkId : chunkIds) {
       TtlUpdateOperation ttlUpdateOperation =
@@ -228,7 +232,7 @@ class TtlUpdateManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.updateBlobTtlOperationLatencyMs.update(time.milliseconds() - op.getOperationTimeMs());
-    NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
+    nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
         op.getOperationException());
   }
 
@@ -246,7 +250,7 @@ class TtlUpdateManager {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
         routerMetrics.onUpdateBlobTtlError(e);
-        NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
+        nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
       }
     }
   }

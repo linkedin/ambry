@@ -58,7 +58,7 @@ public class UndeleteManager {
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
   private final RequestRegistrationCallback<UndeleteOperation> requestRegistrationCallback =
       new RequestRegistrationCallback<>(correlationIdToUndeleteOperation);
-
+  private final NonBlockingRouter nonBlockingRouter;
   /**
    * Creates a UndeleteManager.
    * @param clusterMap The {@link ClusterMap} of the cluster.
@@ -68,9 +68,11 @@ public class UndeleteManager {
    * @param routerConfig The {@link RouterConfig} containing the configs for the UndeleteManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param time The {@link Time} instance to use.
+   * @param nonBlockingRouter The non-blocking router object
    */
   UndeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-      AccountService accountService, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
+      AccountService accountService, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time,
+      NonBlockingRouter nonBlockingRouter) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
@@ -78,6 +80,7 @@ public class UndeleteManager {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.time = time;
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -134,7 +137,7 @@ public class UndeleteManager {
                   new UndeleteOperation(clusterMap, routerConfig, routerMetrics, bId, serviceId, time.milliseconds(),
                       callBack, time, futureResult, quotaChargeCallback);
               undeleteOperations.add(undeleteOperation);
-            });
+            }, nonBlockingRouter);
     long operationTimeMs = time.milliseconds();
     for (BlobId chunkId : chunkIds) {
       UndeleteOperation undeleteOperation =
@@ -226,7 +229,7 @@ public class UndeleteManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.undeleteBlobOperationLatencyMs.update(time.milliseconds() - op.getOperationTimeMs());
-    NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
+    nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
         op.getOperationException());
   }
 
@@ -253,7 +256,7 @@ public class UndeleteManager {
           routerMetrics.operationDequeuingRate.mark();
           routerMetrics.operationAbortCount.inc();
           routerMetrics.onUndeleteBlobError(e);
-          NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
+          nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
         }
       }
     }

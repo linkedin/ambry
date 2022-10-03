@@ -136,18 +136,18 @@ public class OperationController implements Runnable {
     routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
     putManager =
         new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
-            suffix, kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
+            suffix, kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, nonBlockingRouter);
     getManager =
         new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
-            cryptoJobHandler, time, nonBlockingRouter.getBlobMetadataCache());
+            cryptoJobHandler, time, nonBlockingRouter.getBlobMetadataCache(), nonBlockingRouter);
     deleteManager =
         new DeleteManager(clusterMap, responseHandler, accountService, notificationSystem, routerConfig, routerMetrics,
-            routerCallback, time);
+            routerCallback, time, nonBlockingRouter);
     ttlUpdateManager =
         new TtlUpdateManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
-            routerMetrics, time);
+            routerMetrics, time, nonBlockingRouter);
     undeleteManager = new UndeleteManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
-        routerMetrics, time);
+        routerMetrics, time, nonBlockingRouter);
     requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);
   }
 
@@ -247,7 +247,7 @@ public class OperationController implements Runnable {
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onDeleteBlobError(e);
-      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
+      nonBlockingRouter.completeOperation(futureResult, callback, null, e);
     }
     routerCallback.onPollReady();
   }
@@ -308,12 +308,12 @@ public class OperationController implements Runnable {
     if (NonBlockingRouter.isMaybeMetadataBlob(blobIdStr)) {
       Callback<GetBlobResult> internalCallback = (GetBlobResult result, Exception exception) -> {
         if (exception != null) {
-          NonBlockingRouter.completeOperation(futureResult, callback, null, exception, false);
+          nonBlockingRouter.completeOperation(futureResult, callback, null, exception, false);
         } else if (result != null && result.getBlobDataChannel() != null) {
           exception = new RouterException(
               String.format("GET blob call returned the blob instead of just the store keys (before {} )",
                   helper.getOpName()), RouterErrorCode.UnexpectedInternalError);
-          NonBlockingRouter.completeOperation(futureResult, callback, null, exception, false);
+          nonBlockingRouter.completeOperation(futureResult, callback, null, exception, false);
         } else if (result.getBlobInfo() != null && helper.getAlreadyUpdated().apply(result.getBlobInfo())
             && canRelyOnMetadataForUpdate(result.getBlobInfo())) {
           // If we are here then we can rely that the metadata chunk was updated only after all data chunks were updated.
@@ -441,7 +441,7 @@ public class OperationController implements Runnable {
         new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), stitchOperation);
-    NonBlockingRouter.completeOperation(futureResult, callback, null, routerException);
+    nonBlockingRouter.completeOperation(futureResult, callback, null, routerException);
     // Close so that any existing operations are also disposed off.
     nonBlockingRouter.close();
   }
@@ -642,7 +642,7 @@ class BackgroundDeleter extends OperationController {
         RouterErrorCode.UnexpectedInternalError);
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted(), false);
-    NonBlockingRouter.completeOperation(futureResult, callback, null, routerException);
+    nonBlockingRouter.completeOperation(futureResult, callback, null, routerException);
   }
 
   /**
@@ -655,7 +655,7 @@ class BackgroundDeleter extends OperationController {
         RouterErrorCode.UnexpectedInternalError);
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted(), true);
-    NonBlockingRouter.completeOperation(futureResult, callback, null, routerException);
+    nonBlockingRouter.completeOperation(futureResult, callback, null, routerException);
   }
 
   /**

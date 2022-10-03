@@ -131,7 +131,7 @@ public class DeleteManagerTest {
     blobIdString = blobId.getID();
     deleteManager =
         new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem,
-            routerConfig, routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime);
+            routerConfig, routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime);
@@ -392,7 +392,7 @@ public class DeleteManagerTest {
         new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
     deleteManager =
         new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
-            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime);
+            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
       if (mockServer.getDataCenter().equals(LOCAL_DC)) {

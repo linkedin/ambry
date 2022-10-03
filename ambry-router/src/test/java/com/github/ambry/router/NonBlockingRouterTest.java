@@ -1225,7 +1225,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
    */
   @Test
   public void testResponseWithNullRequestInfo() throws Exception {
-    NonBlockingRouter testRouter = null;
     try {
       Properties props = getNonBlockingRouterProperties("DC1");
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
@@ -1246,15 +1245,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }).when(mockNetworkClient).sendAndPoll(anyList(), anySet(), anyInt());
       NetworkClientFactory networkClientFactory = Mockito.mock(NetworkClientFactory.class);
       Mockito.when(networkClientFactory.getNetworkClient()).thenReturn(mockNetworkClient);
-      testRouter =
+      router =
           new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
               mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
       assertTrue("Invocation latch didn't count to 0 within 10 seconds", invocationLatch.await(10, TimeUnit.SECONDS));
       // verify the test node is considered timeout
       assertTrue("The node should be considered timeout", testDataNode.isTimedOut());
     } finally {
-      if (testRouter != null) {
-        testRouter.close();
+      if (router != null) {
+        router.close();
       }
     }
   }
@@ -1308,7 +1307,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
       putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(), new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
           new RouterCallback(networkClient, new ArrayList<>()), "0", localKMS, cryptoService, cryptoJobHandler,
-          accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+          accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, router);
       OperationHelper opHelper = new OperationHelper(OperationType.PUT);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
           invalidResponse, -1);
@@ -1324,7 +1323,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       opHelper = new OperationHelper(OperationType.GET);
       getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
           new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService,
-          cryptoJobHandler, mockTime, null);
+          cryptoJobHandler, mockTime, null, router);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
           invalidResponse, -1);
       // Test that if a failed response comes before the operation is completed, failure detector is notified.
@@ -1339,7 +1338,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       opHelper = new OperationHelper(OperationType.DELETE);
       deleteManager =
           new DeleteManager(mockClusterMap, mockResponseHandler, accountService, new LoggingNotificationSystem(), new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
-              new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime);
+              new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime, router);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
           invalidResponse, -1);
       // Test that if a failed response comes before the operation is completed, failure detector is notified.

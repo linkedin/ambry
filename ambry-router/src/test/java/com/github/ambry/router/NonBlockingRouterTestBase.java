@@ -130,7 +130,6 @@ public class NonBlockingRouterTestBase {
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc, null);
     mockServerLayout = new MockServerLayout(mockClusterMap);
-    NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
     kms = new MockKeyManagementService(new KMSConfig(vProps), singleKeyForKMS);
@@ -146,7 +145,10 @@ public class NonBlockingRouterTestBase {
 
   @After
   public void after() {
-    Assert.assertEquals("Current operations count should be 0", 0, NonBlockingRouter.currentOperationsCount.get());
+    if (router != null) {
+      Assert.assertEquals("Current operations count should be 0", 0, router.currentOperationsCount.get());
+      assertCloseCleanup(router);
+    }
     nettyByteBufLeakHelper.afterTest();
     nettyByteBufLeakHelper.setDisabled(false);
   }
@@ -667,7 +669,7 @@ public class NonBlockingRouterTestBase {
           deleteManager.submitDeleteBlobOperation(blobId.getID(), null, futureResult, null, null);
           break;
       }
-      NonBlockingRouter.currentOperationsCount.incrementAndGet();
+      router.currentOperationsCount.incrementAndGet();
       return futureResult;
     }
 
