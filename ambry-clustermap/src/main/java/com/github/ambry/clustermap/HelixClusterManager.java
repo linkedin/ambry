@@ -82,7 +82,7 @@ public class HelixClusterManager implements ClusterMap {
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
   private final Map<String, ConcurrentHashMap<String, String>> partitionToResourceNameByDc = new ConcurrentHashMap<>();
-  private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef = new HashMap<>();
+  private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
@@ -514,7 +514,7 @@ public class HelixClusterManager implements ClusterMap {
    * @return a map of data center to its {@link RoutingTableSnapshot}
    */
   Map<String, RoutingTableSnapshot> getRoutingTableSnapshots() {
-    Map<String, RoutingTableSnapshot> dcToRoutingTableSnapshot = new HashMap<>();
+    Map<String, RoutingTableSnapshot> dcToRoutingTableSnapshot = new ConcurrentHashMap<>();
     for (DcInfo dcInfo : dcToDcInfo.values()) {
       dcToRoutingTableSnapshot.put(dcInfo.dcName, dcToRoutingTableSnapshotRef.get(dcInfo.dcName).get());
     }
@@ -848,7 +848,7 @@ public class HelixClusterManager implements ClusterMap {
     private volatile boolean liveStateInitialized = false;
     private volatile boolean idealStateInitialized = false;
 
-    final Set<String> allInstances = new HashSet<>();
+    final Set<String> allInstances = ConcurrentHashMap.newKeySet();
 
     /**
      * @param dcName the name of data center this handler is associated with.
@@ -1182,7 +1182,7 @@ public class HelixClusterManager implements ClusterMap {
       }
       List<ReplicaId> addedReplicas = initializeDisksAndReplicasOnNode(datanode, dataNodeConfig);
       instanceNameToAmbryDataNode.put(instanceName, datanode);
-      dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> new HashSet<>()).add(datanode);
+      dcToNodes.computeIfAbsent(datanode.getDatacenterName(), s -> ConcurrentHashMap.newKeySet()).add(datanode);
       allInstances.add(instanceName);
       return addedReplicas;
     }
@@ -1202,7 +1202,7 @@ public class HelixClusterManager implements ClusterMap {
       Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
       Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
       ambryDataNodeToAmbryReplicas.put(datanode, new ConcurrentHashMap<>());
-      ambryDataNodeToAmbryDisks.put(datanode, new HashSet<>());
+      ambryDataNodeToAmbryDisks.put(datanode, ConcurrentHashMap.newKeySet());
       for (Map.Entry<String, DataNodeConfig.DiskConfig> diskEntry : dataNodeConfig.getDiskConfigs().entrySet()) {
         String mountPath = diskEntry.getKey();
         DataNodeConfig.DiskConfig diskConfig = diskEntry.getValue();
