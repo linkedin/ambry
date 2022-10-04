@@ -164,7 +164,7 @@ public class ClusterChangeHandlerTest {
         .collect(Collectors.toSet());
     assertEquals("Partitions from dynamic change handler don't match those in static layout", partitionsInStaticMap,
         partitionsInDynamicHandler);
-    HelixClusterManagerQueryHelper dynamicHandlerCallback = managerWithDynamicHandler.getManagerCallback();
+    HelixClusterManagerQueryHelper dynamicHandlerCallback = managerWithDynamicHandler.getManagerQueryHelper();
     // verify that all nodes (except for current node) are down in HelixClusterManager with dynamic cluster change handler
     assertEquals("All nodes (except for self node) should be down", helixCluster.getDownInstances().size() - 1,
         dynamicHandlerCallback.getDownDatanodesCount());
@@ -329,7 +329,7 @@ public class ClusterChangeHandlerTest {
         helixClusterManager.getWritablePartitionIds(null).size());
 
     // verify capacity stats are updated
-    HelixClusterManagerQueryHelper clusterManagerCallback = helixClusterManager.getManagerCallback();
+    HelixClusterManagerQueryHelper clusterManagerCallback = helixClusterManager.getManagerQueryHelper();
     // note that we add one node to each dc, so the raw capacity = (# of nodes) * (# of disks) * (disk capacity)
     long rawCapacityInStaticLayout =
         testHardwareLayout.getAllExistingDataNodes().size() * testHardwareLayout.getDiskCount()

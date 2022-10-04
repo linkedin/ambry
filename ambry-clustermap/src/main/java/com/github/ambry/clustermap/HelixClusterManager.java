@@ -88,7 +88,7 @@ public class HelixClusterManager implements ClusterMap {
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
   private final AtomicLong clusterWideAllocatedRawCapacityBytes = new AtomicLong(0);
   private final AtomicLong clusterWideAllocatedUsableCapacityBytes = new AtomicLong(0);
-  private final HelixClusterManagerQueryHelper helixClusterManagerCallback;
+  private final HelixClusterManagerQueryHelper helixClusterManagerQueryHelper;
   private final byte localDatacenterId;
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   private final PartitionSelectionHelper partitionSelectionHelper;
@@ -117,8 +117,8 @@ public class HelixClusterManager implements ClusterMap {
     this.metricRegistry = metricRegistry;
     clusterName = clusterMapConfig.clusterMapClusterName;
     selfInstanceName = instanceName;
-    helixClusterManagerCallback = new HelixClusterManagerQueryHelper();
-    helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
+    helixClusterManagerQueryHelper = new HelixClusterManagerQueryHelper();
+    helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerQueryHelper);
     Map<String, DcZkInfo> dataCenterToZkAddress = null;
     HelixManager localManager = null;
     Map<String, Exception> initializationFailureMap = new HashMap<>();
@@ -175,7 +175,7 @@ public class HelixClusterManager implements ClusterMap {
     }
     localDatacenterId = dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
-        new PartitionSelectionHelper(helixClusterManagerCallback, clusterMapConfig.clusterMapDatacenterName,
+        new PartitionSelectionHelper(helixClusterManagerQueryHelper, clusterMapConfig.clusterMapDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
             clusterMapConfig.clusterMapDefaultPartitionClass);
     // register partition selection helper as a listener of cluster map changes.
@@ -403,7 +403,7 @@ public class HelixClusterManager implements ClusterMap {
     long replicaCapacity = Long.parseLong(replicaInfos.get(REPLICAS_CAPACITY_STR));
     String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
     AmbryPartition mappedPartition =
-        new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerCallback);
+        new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerQueryHelper);
     AmbryPartition currentPartition =
         partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
     if (currentPartition == null) {
@@ -532,8 +532,8 @@ public class HelixClusterManager implements ClusterMap {
   /**
    * @return {@link HelixClusterManagerQueryHelper} associated with this cluster manager.
    */
-  HelixClusterManagerQueryHelper getManagerCallback() {
-    return helixClusterManagerCallback;
+  HelixClusterManagerQueryHelper getManagerQueryHelper() {
+    return helixClusterManagerQueryHelper;
   }
 
   /**
@@ -1090,7 +1090,7 @@ public class HelixClusterManager implements ClusterMap {
             // this can be a brand new partition that is added to an existing node
             AmbryPartition mappedPartition =
                 new AmbryPartition(Long.parseLong(partitionName), replicaConfig.getPartitionClass(),
-                    helixClusterManagerCallback);
+                    helixClusterManagerQueryHelper);
             // Ensure only one AmbryPartition instance exists for specific partition.
             mappedPartition = addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacityInBytes());
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, dataNode,
@@ -1175,7 +1175,7 @@ public class HelixClusterManager implements ClusterMap {
       AmbryDataNode datanode =
           new AmbryServerDataNode(dataNodeConfig.getDatacenterName(), clusterMapConfig, dataNodeConfig.getHostName(),
               dataNodeConfig.getPort(), dataNodeConfig.getRackId(), dataNodeConfig.getSslPort(),
-              dataNodeConfig.getHttp2Port(), DEFAULT_XID, helixClusterManagerCallback);
+              dataNodeConfig.getHttp2Port(), DEFAULT_XID, helixClusterManagerQueryHelper);
       // for new instance, we first set it to unavailable and rely on its participation to update its liveness
       if (!instanceName.equals(selfInstanceName)) {
         datanode.setState(HardwareState.UNAVAILABLE);
@@ -1219,7 +1219,7 @@ public class HelixClusterManager implements ClusterMap {
 
           AmbryPartition mappedPartition =
               new AmbryPartition(Long.parseLong(partitionName), replicaConfig.getPartitionClass(),
-                  helixClusterManagerCallback);
+                  helixClusterManagerQueryHelper);
           // Ensure only one AmbryPartition instance exists for specific partition.
           mappedPartition = addPartitionIfAbsent(mappedPartition, replicaConfig.getReplicaCapacityInBytes());
           ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode,
