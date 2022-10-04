@@ -15,6 +15,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import java.io.Closeable;
 
 
@@ -24,15 +25,15 @@ import java.io.Closeable;
 class DcInfo implements Closeable {
   final String dcName;
   final ClusterMapUtils.DcZkInfo dcZkInfo;
-  final ClusterChangeHandler clusterChangeHandler;
+  final HelixClusterChangeHandler clusterChangeHandler;
 
   /**
    * Construct a DcInfo object with the given parameters.
    * @param dcName the associated datacenter name.
    * @param dcZkInfo the {@link ClusterMapUtils.DcZkInfo} associated with the DC.
-   * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
+   * @param clusterChangeHandler the associated {@link HelixClusterChangeHandler} for this datacenter.
    */
-  DcInfo(String dcName, ClusterMapUtils.DcZkInfo dcZkInfo, ClusterChangeHandler clusterChangeHandler) {
+  DcInfo(String dcName, ClusterMapUtils.DcZkInfo dcZkInfo, HelixClusterChangeHandler clusterChangeHandler) {
     this.dcName = dcName;
     this.dcZkInfo = dcZkInfo;
     this.clusterChangeHandler = clusterChangeHandler;

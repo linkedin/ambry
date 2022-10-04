@@ -20,10 +20,11 @@ import java.util.Set;
 
 
 /**
- * A callback that needs to be implemented by different implementations of the cluster manager. External components may
- * get resources (i.e. {@link ReplicaId}, {@link PartitionId}, {@link DiskId}, {@link DataNodeId}) via this callback.
+ * A cluster manager helper class that needs to be implemented by different implementations of the cluster manager.
+ * External components may get resources (i.e. {@link ReplicaId}, {@link PartitionId}, {@link DiskId}, {@link DataNodeId})
+ * via this helper class.
  */
-interface ClusterManagerCallback<R extends ReplicaId, D extends DiskId, P extends PartitionId, N extends DataNodeId> {
+interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P extends PartitionId, N extends DataNodeId> {
   /**
    * Get all replica ids associated with the given {@link AmbryPartition}
    * @param partition the {@link PartitionId} for which to get the list of replicas.

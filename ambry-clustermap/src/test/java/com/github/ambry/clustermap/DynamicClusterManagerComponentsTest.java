@@ -68,7 +68,7 @@ public class DynamicClusterManagerComponentsTest {
    */
   @Test
   public void helixClusterManagerComponentsTest() throws Exception {
-    MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
+    MockClusterManagerQueryHelper mockClusterManagerCallback = new MockClusterManagerQueryHelper();
     // AmbryDataNode test
     try {
       new AmbryServerDataNode("DC1", clusterMapConfig2, HOST_NAME, PORT_NUM1, RACK_ID, null, null, XID,
@@ -259,7 +259,7 @@ public class DynamicClusterManagerComponentsTest {
 
   @Test
   public void cloudServiceClusterManagerComponentsTest() throws Exception {
-    MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
+    MockClusterManagerQueryHelper mockClusterManagerCallback = new MockClusterManagerQueryHelper();
     AmbryPartition partition = new AmbryPartition(1, "abc", mockClusterManagerCallback);
 
     String dcName = "cloud-dc";
@@ -288,11 +288,11 @@ public class DynamicClusterManagerComponentsTest {
   }
 
   /**
-   * A helper class that mocks the {@link ClusterManagerCallback} and stores partition to replicas mapping internally
+   * A helper class that mocks the {@link ClusterManagerQueryHelper} and stores partition to replicas mapping internally
    * as told.
    */
-  private class MockClusterManagerCallback
-      implements ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
+  private class MockClusterManagerQueryHelper
+      implements ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
     Map<AmbryPartition, List<AmbryReplica>> partitionToReplicas = new HashMap<>();
     Map<AmbryDataNode, Set<AmbryDisk>> dataNodeToDisks = new HashMap<>();
 

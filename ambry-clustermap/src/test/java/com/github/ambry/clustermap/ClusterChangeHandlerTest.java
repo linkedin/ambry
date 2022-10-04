@@ -15,6 +15,8 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterManagerQueryHelper;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
@@ -32,7 +34,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -41,19 +42,16 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.HelixClusterManagerTest.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
-import static org.mockito.AdditionalAnswers.*;
-import static org.mockito.Mockito.*;
 
 
 /**
- * Test {@link DynamicClusterChangeHandler} to verify its behavior is expected when handling cluster changes.
+ * Test {@link HelixClusterChangeHandler} to verify its behavior is expected when handling cluster changes.
  */
 @RunWith(Parameterized.class)
 public class ClusterChangeHandlerTest {
@@ -166,8 +164,7 @@ public class ClusterChangeHandlerTest {
         .collect(Collectors.toSet());
     assertEquals("Partitions from dynamic change handler don't match those in static layout", partitionsInStaticMap,
         partitionsInDynamicHandler);
-    HelixClusterManager.HelixClusterManagerCallback dynamicHandlerCallback =
-        managerWithDynamicHandler.getManagerCallback();
+    HelixClusterManagerQueryHelper dynamicHandlerCallback = managerWithDynamicHandler.getManagerQueryHelper();
     // verify that all nodes (except for current node) are down in HelixClusterManager with dynamic cluster change handler
     assertEquals("All nodes (except for self node) should be down", helixCluster.getDownInstances().size() - 1,
         dynamicHandlerCallback.getDownDatanodesCount());
@@ -213,26 +210,20 @@ public class ClusterChangeHandlerTest {
   }
 
   /**
-   * Test that {@link DynamicClusterChangeHandler} is able to handle invalid info entry in the InstanceConfig at runtime
+   * Test that {@link HelixClusterChangeHandler} is able to handle invalid info entry in the InstanceConfig at runtime
    * or during initialization.
    */
   @Test
-  public void instanceConfigInvalidInfoEntryTest() {
+  public void instanceConfigInvalidInfoEntryTest() throws IOException {
     Properties properties = new Properties();
     properties.putAll(props);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
-    HelixClusterManager.HelixClusterManagerCallback mockManagerCallback =
-        Mockito.mock(HelixClusterManager.HelixClusterManagerCallback.class);
-    HelixClusterManager.ClusterChangeHandlerCallback mockHandlerCallback =
-        Mockito.mock(HelixClusterManager.ClusterChangeHandlerCallback.class);
-    doAnswer(returnsFirstArg()).when(mockHandlerCallback).addPartitionIfAbsent(any(), anyLong());
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
 
     Counter initFailureCount = new Counter();
-    DynamicClusterChangeHandler dynamicChangeHandler =
-        new DynamicClusterChangeHandler(clusterMapConfig, localDc, selfInstanceName, Collections.emptyMap(),
-            mockManagerCallback, mockHandlerCallback,
-            new HelixClusterManagerMetrics(new MetricRegistry(), mockManagerCallback), e -> initFailureCount.inc(),
-            new AtomicLong());
+    HelixClusterChangeHandler helixClusterChangeHandler =
+        helixClusterManager.new HelixClusterChangeHandler(localDc, e -> initFailureCount.inc());
     // create an InstanceConfig with invalid entry that mocks error info added by Helix controller
     PartitionId selectedPartition = testPartitionLayout.getPartitionLayout().getPartitions(null).get(0);
     Replica testReplica = (Replica) selectedPartition.getReplicaIds().get(0);
@@ -267,15 +258,15 @@ public class ClusterChangeHandlerTest {
     InstanceConfigToDataNodeConfigAdapter.Converter converter =
         new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig);
     // 1st call, to verify initialization code path
-    dynamicChangeHandler.onDataNodeConfigChange(Collections.singleton(converter.convert(instanceConfig)));
+    helixClusterChangeHandler.onDataNodeConfigChange(Collections.singleton(converter.convert(instanceConfig)));
     // 2nd call, to verify dynamic update code path
-    dynamicChangeHandler.onDataNodeConfigChange(Collections.singletonList(converter.convert(instanceConfig)));
+    helixClusterChangeHandler.onDataNodeConfigChange(Collections.singletonList(converter.convert(instanceConfig)));
     assertEquals("There shouldn't be initialization errors", 0, initFailureCount.getCount());
   }
 
   /**
    * Test new instances/partitions are added to cluster dynamically. {@link HelixClusterManager} with
-   * {@link DynamicClusterChangeHandler} should absorb the change and update in-mem cluster map.
+   * {@link HelixClusterChangeHandler} should absorb the change and update in-mem cluster map.
    * 1. add new instance
    * 2. add new partition onto new instance
    * 3. add new partition onto existing instance
@@ -338,7 +329,7 @@ public class ClusterChangeHandlerTest {
         helixClusterManager.getWritablePartitionIds(null).size());
 
     // verify capacity stats are updated
-    HelixClusterManager.HelixClusterManagerCallback clusterManagerCallback = helixClusterManager.getManagerCallback();
+    HelixClusterManagerQueryHelper clusterManagerCallback = helixClusterManager.getManagerQueryHelper();
     // note that we add one node to each dc, so the raw capacity = (# of nodes) * (# of disks) * (disk capacity)
     long rawCapacityInStaticLayout =
         testHardwareLayout.getAllExistingDataNodes().size() * testHardwareLayout.getDiskCount()
@@ -531,7 +522,7 @@ public class ClusterChangeHandlerTest {
 
   /**
    * Test the case where current node receives InstanceConfig change triggered by itself due to replica addition. We need
-   * to verify {@link DynamicClusterChangeHandler} will check if new replica from InstanceConfig exists in bootstrap
+   * to verify {@link HelixClusterChangeHandler} will check if new replica from InstanceConfig exists in bootstrap
    * replica map. The intention here is to avoid creating a second instance of replica on current node.
    */
   @Test
@@ -644,13 +635,15 @@ public class ClusterChangeHandlerTest {
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
     // disk capacity after initialization should equal to original value (100L * 1024 * 1024 * 1024)
     PartitionId partitionId = helixClusterManager.getAllPartitionIds(null).get(0);
-    assertEquals("Mismatch in disk capacity", 100L * 1024 * 1024 * 1024, partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
+    assertEquals("Mismatch in disk capacity", 100L * 1024 * 1024 * 1024,
+        partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
     // update disk capacity
     testHardwareLayout.updateDiskCapacity(500L * 1024 * 1024 * 1024);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
     partitionId = helixClusterManager.getAllPartitionIds(null).get(0);
-    assertEquals("Mismatch in disk capacity", 500L * 1024 * 1024 * 1024, partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
+    assertEquals("Mismatch in disk capacity", 500L * 1024 * 1024 * 1024,
+        partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
     helixClusterManager.close();
   }
 
