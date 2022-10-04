@@ -36,7 +36,8 @@ class AmbryServerDataNode extends AmbryDataNode {
   private final long xid;
   private final List<String> sslEnabledDataCenters;
   private final boolean enableHttp2Replication;
-  private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
+  private final ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
+      clusterManagerQueryHelper;
 
   /**
    * Instantiate an {@link AmbryServerDataNode}.
@@ -48,19 +49,19 @@ class AmbryServerDataNode extends AmbryDataNode {
    * @param sslPortNum the ssl port associated with this data node (may be null).
    * @param http2PortNumber the http2 ssl port associated with this data node (may be null).
    * @param xid the xid associated with this data node.
-   * @param clusterManagerCallback the {@link ClusterManagerCallback} to use
+   * @param clusterManagerQueryHelper the {@link ClusterManagerQueryHelper} to use
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
   AmbryServerDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum,
       String rackId, Integer sslPortNum, Integer http2PortNumber, long xid,
-      ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback)
+      ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerQueryHelper)
       throws Exception {
     super(dataCenterName, clusterMapConfig, hostName, portNum, sslPortNum, http2PortNumber);
     this.rackId = rackId;
     this.xid = xid;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     this.enableHttp2Replication = clusterMapConfig.clusterMapEnableHttp2Replication;
-    this.clusterManagerCallback = clusterManagerCallback;
+    this.clusterManagerQueryHelper = clusterManagerQueryHelper;
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
     validatePorts(plainTextPort, sslPort, http2Port, sslEnabledDataCenters.contains(dataCenterName));
   }
@@ -103,7 +104,7 @@ class AmbryServerDataNode extends AmbryDataNode {
     snapshot.put(DATA_NODE_XID, getXid());
     snapshot.put(LIVENESS, getLiveness());
     JSONArray disksJson = new JSONArray();
-    clusterManagerCallback.getDisks(this).forEach(disk -> disksJson.put(disk.getSnapshot()));
+    clusterManagerQueryHelper.getDisks(this).forEach(disk -> disksJson.put(disk.getSnapshot()));
     snapshot.put(DATA_NODE_DISKS, disksJson);
     return snapshot;
   }

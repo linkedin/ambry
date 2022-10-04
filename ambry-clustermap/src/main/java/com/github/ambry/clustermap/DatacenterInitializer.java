@@ -15,6 +15,7 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.util.Objects;
@@ -43,7 +44,6 @@ class DatacenterInitializer {
   private final String dcName;
   private final HelixClusterManager helixClusterManager;
   private final String selfInstanceName;
-  private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
   private final DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics;
 
   /**
@@ -52,20 +52,17 @@ class DatacenterInitializer {
    * @param helixFactory the {@link HelixFactory} instance to construct managers.
    * @param dcZkInfo info about the DC, like connection string, name, and replica type
    * @param selfInstanceName the name of instance on which {@link HelixClusterManager} resides.
-   * @param helixClusterManagerCallback a help class to get cluster state from all DCs.
    * @param dataNodeConfigSourceMetrics metrics related to {@link DataNodeConfigSource}.
-   * @param helixClusterManager
+   * @param helixClusterManager {@link HelixClusterManager} instance that manages and stores the cluster information.
    */
   DatacenterInitializer(ClusterMapConfig clusterMapConfig, HelixManager localManager, HelixFactory helixFactory,
       ClusterMapUtils.DcZkInfo dcZkInfo, String selfInstanceName,
-      HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
       DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics, HelixClusterManager helixClusterManager) {
     this.clusterMapConfig = clusterMapConfig;
     this.localManager = localManager;
     this.helixFactory = helixFactory;
     this.dcZkInfo = dcZkInfo;
     this.selfInstanceName = selfInstanceName;
-    this.helixClusterManagerCallback = helixClusterManagerCallback;
     this.dataNodeConfigSourceMetrics = dataNodeConfigSourceMetrics;
     dcName = dcZkInfo.getDcName();
     this.helixClusterManager = helixClusterManager;
@@ -135,9 +132,8 @@ class DatacenterInitializer {
       manager = helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
           InstanceType.SPECTATOR, zkConnectStr);
     }
-    HelixClusterManager.HelixClusterChangeHandler clusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(dcName, helixClusterManagerCallback,
-            this::onInitializationFailure);
+    HelixClusterChangeHandler clusterChangeHandler =
+        helixClusterManager.new HelixClusterChangeHandler(dcName, this::onInitializationFailure);
     // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
     // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
     logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
@@ -168,7 +164,7 @@ class DatacenterInitializer {
     clusterChangeHandler.setRoutingTableSnapshot(routingTableProvider.getRoutingTableSnapshot());
     // the initial routing table change should populate the instanceConfigs. If it's empty that means initial
     // change didn't come and thread should wait on the init latch to ensure routing table snapshot is non-empty
-    if (helixClusterManagerCallback.getRoutingTableSnapshot(dcName).getInstanceConfigs().isEmpty()) {
+    if (clusterChangeHandler.getRoutingTableSnapshot(dcName).getInstanceConfigs().isEmpty()) {
       // Periodic refresh in routing table provider is enabled by default. In worst case, routerUpdater should
       // trigger routing table change within 5 minutes
       logger.info("Routing table snapshot in {} is currently empty. Waiting for initial notification.", dcName);

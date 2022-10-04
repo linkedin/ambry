@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterManagerQueryHelper;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -35,7 +36,8 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 public class AmbryPartition implements PartitionId {
   private final long id;
   private final String partitionClass;
-  private final ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback;
+  private final ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
+      clusterManagerQueryHelper;
   private final Lock stateChangeLock = new ReentrantLock();
 
   private volatile PartitionState state;
@@ -49,15 +51,14 @@ public class AmbryPartition implements PartitionId {
    * Instantiate an AmbryPartition instance.
    * @param id the id associated with this partition.
    * @param partitionClass the partition class that this partition belongs to
-   * @param clusterManagerCallback the {@link HelixClusterManager.HelixClusterManagerCallback} to use to make callbacks
-   *                               to the {@link HelixClusterManager}
-   * The initial state defaults to {@link PartitionState#READ_WRITE}.
+   * @param clusterManagerQueryHelper {@link HelixClusterManagerQueryHelper} to query cluster information.
    */
   AmbryPartition(long id, String partitionClass,
-      ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerCallback) {
+      ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> clusterManagerQueryHelper) {
     this.id = id;
     this.partitionClass = partitionClass;
-    this.clusterManagerCallback = clusterManagerCallback;
+    this.clusterManagerQueryHelper = clusterManagerQueryHelper;
+    // The initial state defaults to READ_WRITE.
     this.state = PartitionState.READ_WRITE;
   }
 
@@ -73,18 +74,18 @@ public class AmbryPartition implements PartitionId {
 
   @Override
   public List<AmbryReplica> getReplicaIds() {
-    return clusterManagerCallback.getReplicaIdsForPartition(this);
+    return clusterManagerQueryHelper.getReplicaIdsForPartition(this);
   }
 
   @Override
   public List<AmbryReplica> getReplicaIdsByState(ReplicaState state, String dcName) {
-    return clusterManagerCallback.getReplicaIdsByState(this, state, dcName);
+    return clusterManagerQueryHelper.getReplicaIdsByState(this, state, dcName);
   }
 
   @Override
   public Map<ReplicaState, List<AmbryReplica>> getReplicaIdsByStates(Set<ReplicaState> states, String dcName) {
     Map<ReplicaState, List<AmbryReplica>> replicasByStates = new HashMap<>();
-    clusterManagerCallback.getReplicaIdsByStates(replicasByStates, this, states, dcName);
+    clusterManagerQueryHelper.getReplicaIdsByStates(replicasByStates, this, states, dcName);
     return replicasByStates;
   }
 
@@ -154,7 +155,7 @@ public class AmbryPartition implements PartitionId {
 
   @Override
   public String getResourceName() {
-    return clusterManagerCallback.getResourceNameForPartition(this);
+    return clusterManagerQueryHelper.getResourceNameForPartition(this);
   }
 
   @Override
@@ -185,14 +186,14 @@ public class AmbryPartition implements PartitionId {
     // If there was a change to the sealed state of replicas in the cluster manager since the last check, refresh the
     // state of this partition. We do this to avoid querying every time this method is called, considering how
     // update to sealed states of replicas are relatively rare.
-    long currentCounterValue = clusterManagerCallback.getSealedStateChangeCounter();
+    long currentCounterValue = clusterManagerQueryHelper.getSealedStateChangeCounter();
     // if the lock could not be taken, that means the state is being updated in another thread. Avoid updating the
     // state in that case.
     if (currentCounterValue > lastUpdatedSealedStateChangeCounter && stateChangeLock.tryLock()) {
       try {
         lastUpdatedSealedStateChangeCounter = currentCounterValue;
         boolean isSealed = false;
-        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
+        for (AmbryReplica replica : clusterManagerQueryHelper.getReplicaIdsForPartition(this)) {
           if (replica.isSealed()) {
             isSealed = true;
             break;

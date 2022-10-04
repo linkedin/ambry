@@ -37,7 +37,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -89,7 +88,7 @@ public class HelixClusterManager implements ClusterMap {
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
   private final AtomicLong clusterWideAllocatedRawCapacityBytes = new AtomicLong(0);
   private final AtomicLong clusterWideAllocatedUsableCapacityBytes = new AtomicLong(0);
-  private final HelixClusterManagerCallback helixClusterManagerCallback;
+  private final HelixClusterManagerQueryHelper helixClusterManagerCallback;
   private final byte localDatacenterId;
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   private final PartitionSelectionHelper partitionSelectionHelper;
@@ -118,7 +117,7 @@ public class HelixClusterManager implements ClusterMap {
     this.metricRegistry = metricRegistry;
     clusterName = clusterMapConfig.clusterMapClusterName;
     selfInstanceName = instanceName;
-    helixClusterManagerCallback = new HelixClusterManagerCallback();
+    helixClusterManagerCallback = new HelixClusterManagerQueryHelper();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     Map<String, DcZkInfo> dataCenterToZkAddress = null;
     HelixManager localManager = null;
@@ -138,7 +137,7 @@ public class HelixClusterManager implements ClusterMap {
         // Initialize from every remote datacenter in a separate thread to speed things up.
         DatacenterInitializer initializer =
             new DatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
-                helixClusterManagerCallback, dataNodeConfigSourceMetrics, this);
+                dataNodeConfigSourceMetrics, this);
         initializer.start();
         initializers.add(initializer);
       }
@@ -531,9 +530,9 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * @return {@link HelixClusterManagerCallback} associated with this cluster manager.
+   * @return {@link HelixClusterManagerQueryHelper} associated with this cluster manager.
    */
-  HelixClusterManagerCallback getManagerCallback() {
+  HelixClusterManagerQueryHelper getManagerCallback() {
     return helixClusterManagerCallback;
   }
 
@@ -616,10 +615,11 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * A callback class used to query information from the {@link HelixClusterManager}
+   * A helper class used by components of cluster to query information from the {@link HelixClusterManager}. This helps
+   * avoid circular dependency between classes like {@link HelixClusterManager} and {@link AmbryPartition}.
    */
-  class HelixClusterManagerCallback
-      implements ClusterManagerCallback<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
+  class HelixClusterManagerQueryHelper
+      implements ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
     /**
      * Get all replica ids associated with the given {@link AmbryPartition}
      * @param partition the {@link AmbryPartition} for which to get the list of replicas.
@@ -830,16 +830,6 @@ public class HelixClusterManager implements ClusterMap {
     long getAllocatedUsableCapacity() {
       return clusterWideAllocatedUsableCapacityBytes.get();
     }
-
-    /**
-     * Gets the {@link RoutingTableSnapshot} for a given data center or entire cluster.
-     * @param dcName data center name.
-     * @return {@link RoutingTableSnapshot} for a given data center. If the input data center name is null or if using
-     * aggregated view, returns the routing table snapshot of entire cluster.
-     */
-    public RoutingTableSnapshot getRoutingTableSnapshot(String dcName) {
-      return dcToRoutingTableSnapshotRef.get(dcName).get();
-    }
   }
 
   /**
@@ -852,7 +842,6 @@ public class HelixClusterManager implements ClusterMap {
     private final String dcName;
     private final Object notificationLock = new Object();
     private final Consumer<Exception> onInitializationFailure;
-    private final HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback;
     private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
     private final List<ClusterMapChangeListener> clusterMapChangeListeners = new ArrayList<>();
     private volatile boolean instanceConfigInitialized = false;
@@ -863,14 +852,10 @@ public class HelixClusterManager implements ClusterMap {
 
     /**
      * @param dcName the name of data center this handler is associated with.
-     * @param helixClusterManagerCallback a call back used to query cluster-wide info.
      * @param onInitializationFailure callback to be called if initialization fails in a listener call.
      */
-    HelixClusterChangeHandler(String dcName,
-        HelixClusterManager.HelixClusterManagerCallback helixClusterManagerCallback,
-        Consumer<Exception> onInitializationFailure) {
+    HelixClusterChangeHandler(String dcName, Consumer<Exception> onInitializationFailure) {
       this.dcName = dcName;
-      this.helixClusterManagerCallback = helixClusterManagerCallback;
       this.onInitializationFailure = onInitializationFailure;
     }
 
@@ -983,8 +968,8 @@ public class HelixClusterManager implements ClusterMap {
         logger.info("Routing table change triggered from {}", dcName);
       }
 
-      //we should notify routing table change indication to different cluster map change listeners (i.e replication manager, partition selection helper, etc). However, only replication manager handles this callback now.
-      //On receiving this notification, listeners can query the latest state information of replicas by querying APIs provided in class RoutingTableSnapshot
+      // We should notify routing table change indication to different cluster map change listeners like replication
+      // manager, etc.
       for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
         listener.onRoutingTableChange();
       }
@@ -993,11 +978,20 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     /**
-     * Sets the helix {@link RoutingTableSnapshot} for entire cluster or a given data center.
+     * Sets the helix {@link RoutingTableSnapshot} for a given data center.
      * @param routingTableSnapshot snapshot of cluster mappings.
      */
     public void setRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot) {
       dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>()).getAndSet(routingTableSnapshot);
+    }
+
+    /**
+     * Gets the helix {@link RoutingTableSnapshot} for a given data center.
+     * @param dcName data center name.
+     * @return the helix {@link RoutingTableSnapshot} for a given data center.
+     */
+    public RoutingTableSnapshot getRoutingTableSnapshot(String dcName) {
+      return dcToRoutingTableSnapshotRef.get(dcName).get();
     }
 
     public void waitForInitNotification() throws InterruptedException {
@@ -1277,7 +1271,7 @@ public class HelixClusterManager implements ClusterMap {
      */
     private void ensurePartitionAbsenceOnNodeAndValidateCapacity(AmbryPartition partition, AmbryDataNode datanode,
         long expectedReplicaCapacity) {
-      for (AmbryReplica replica : helixClusterManagerCallback.getReplicaIdsForPartition(partition)) {
+      for (AmbryReplica replica : ambryPartitionToAmbryReplicas.get(partition)) {
         if (replica.getDataNodeId().equals(datanode)) {
           throw new IllegalStateException("Replica already exists on " + datanode + " for " + partition);
         } else if (replica.getCapacityInBytes() != expectedReplicaCapacity) {

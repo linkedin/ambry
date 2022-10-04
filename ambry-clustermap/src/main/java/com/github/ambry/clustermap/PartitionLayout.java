@@ -73,7 +73,7 @@ public class PartitionLayout {
 
     validate();
     partitionSelectionHelper =
-        new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerCallback(), localDatacenterName,
+        new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerQueryHelper(), localDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
             clusterMapConfig.clusterMapDefaultPartitionClass);
   }
@@ -95,7 +95,7 @@ public class PartitionLayout {
     this.partitionMap = new HashMap<>();
     validate();
     partitionSelectionHelper =
-        new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerCallback(), localDatacenterName,
+        new ClusterMapUtils.PartitionSelectionHelper(new StaticClusterManagerQueryHelper(), localDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
             clusterMapConfig.clusterMapDefaultPartitionClass);
   }
@@ -313,9 +313,9 @@ public class PartitionLayout {
   }
 
   /**
-   * An implementation of {@link ClusterManagerCallback} that supports getting resource from static clustermap.
+   * An implementation of {@link ClusterManagerQueryHelper} that supports getting resource from static clustermap.
    */
-  class StaticClusterManagerCallback implements ClusterManagerCallback<Replica, Disk, Partition, DataNode> {
+  class StaticClusterManagerQueryHelper implements ClusterManagerQueryHelper<Replica, Disk, Partition, DataNode> {
 
     @Override
     public List<Replica> getReplicaIdsForPartition(Partition partition) {
