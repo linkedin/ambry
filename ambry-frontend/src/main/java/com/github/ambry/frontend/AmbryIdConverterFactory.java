@@ -24,6 +24,7 @@ import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -175,7 +176,13 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
-        conversionFuture = getNamedBlobDb().put(record).thenApply(result -> result.getInsertedRecord().getBlobId());
+        NamedBlobState state;
+        if (RestUtils.isUpsert(restRequest.getArgs()) && properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+          state = NamedBlobState.IN_PROGRESS;
+        } else {
+          state = NamedBlobState.READY;
+        }
+        conversionFuture = getNamedBlobDb().put(record, state).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);

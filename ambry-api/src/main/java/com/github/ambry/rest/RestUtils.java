@@ -125,6 +125,11 @@ public class RestUtils {
      */
     public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
     /**
+     * Header to be set by clients during a Put blob call to clearly specify that the client is aware of the
+     * UPDATE feature of named blob, and client wants to update when the named blob already exist.
+     */
+    public static final String PUT_UPDATE = "x-ambry-update";
+    /**
      * Header that is set in the response of OPTIONS request that specifies the allowed methods.
      */
     public static final String ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
@@ -804,6 +809,16 @@ public class RestUtils {
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
+  }
+
+  /**
+   * Determine if {@link Headers#PUT_UPDATE} is set in the request args.
+   * @param args The request arguments.
+   * @return {@code true} if {@link Headers#PUT_UPDATE} is set.
+   * @throws RestServiceException if exception occurs during parsing the arg.
+   */
+  public static boolean isUpsert(Map<String, Object> args) throws RestServiceException {
+    return getBooleanHeader(args, Headers.PUT_UPDATE, false);
   }
 
   /**
