@@ -730,10 +730,9 @@ public class AmbryRequests implements RequestAPI {
     } else {
       replicateBlobRequest = ReplicateBlobRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     }
-    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
-    long totalTimeSpent = requestQueueTime;
+    long totalTimeSpent = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long startTime = SystemTime.getInstance().milliseconds();
-    metrics.replicateBlobRequestQueueTimeInMs.update(requestQueueTime);
+    metrics.replicateBlobRequestQueueTimeInMs.update(totalTimeSpent);
     metrics.replicateBlobRequestRate.mark();
 
     // Get the two parameters from the replicateBlobRequest: the blobId and the remoteHostName
@@ -744,8 +743,7 @@ public class AmbryRequests implements RequestAPI {
     ServerErrorCode errorCode;
     try {
       // get the Blob from the remote replica.
-      Pair<ServerErrorCode, GetResponse> getResult =
-          getBlobFromRemoteReplicate(replicateBlobRequest, blobId, remoteHostName, remoteHostPort);
+      Pair<ServerErrorCode, GetResponse> getResult = getBlobFromRemoteReplicate(replicateBlobRequest);
       errorCode = getResult.getFirst();
       getResponse = getResult.getSecond();
 
@@ -811,13 +809,12 @@ public class AmbryRequests implements RequestAPI {
   /**
    * to get the Blob from the remote replica
    * @param replicateBlobRequest the {@link ReplicateBlobRequest}
-   * @param blobId blobId of the ReplicateBlob request
-   * @param remoteHostName the name of the remote host to get the blob from
-   * @param remoteHostPort the port of the remote host to get the blob from
    * @return a pair of the {@link ServerErrorCode} and the {@link GetResponse}.
    */
-  private Pair<ServerErrorCode, GetResponse> getBlobFromRemoteReplicate(ReplicateBlobRequest replicateBlobRequest,
-      BlobId blobId, String remoteHostName, int remoteHostPort) {
+  private Pair<ServerErrorCode, GetResponse> getBlobFromRemoteReplicate(ReplicateBlobRequest replicateBlobRequest) {
+    BlobId blobId = replicateBlobRequest.getBlobId();
+    String remoteHostName = replicateBlobRequest.getSourceHostName();
+    int remoteHostPort = replicateBlobRequest.getSourceHostPort();
     DataNodeId remoteDataNode = clusterMap.getDataNodeId(remoteHostName, remoteHostPort);
     if (remoteDataNode == null) {
       logger.error("ReplicateBlobRequest {} couldn't find the remote host {} {} in the clustermap.", blobId,
@@ -852,38 +849,30 @@ public class AmbryRequests implements RequestAPI {
       }
       if ((getResponse.getPartitionResponseInfoList() == null) || (getResponse.getPartitionResponseInfoList().size()
           == 0)) {
-        logger.error("ReplicateBlobRequest {} returned empty list from the remote node {} {} {}", blobId, remoteHostName,
-            remoteHostPort, getResponse.getError());
+        logger.error("ReplicateBlobRequest {} returned empty list from the remote node {} {} {}", blobId,
+            remoteHostName, remoteHostPort, getResponse.getError());
         return new Pair(ServerErrorCode.Unknown_Error, getResponse);
       }
 
       // only have one partition. And checked at least it has one entry above.
       PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
-      switch (partitionResponseInfo.getErrorCode()) {
-        case No_Error:
-          List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
-          if (messageInfoList == null || messageInfoList.size() != 1) {
-            logger.error(
-                "ReplicateBlobRequest PartitionResponseInfo response from GetRequest {} {} {} {} {} returned null.",
-                partitionResponseInfo, messageInfoList, remoteHostName, remoteHostPort, blobId);
-            return new Pair(ServerErrorCode.Blob_Not_Found, getResponse);
-          } else {
-            return new Pair(ServerErrorCode.No_Error, getResponse);
-          }
-        case Blob_Deleted:
-          // Since GetOption is Include_All, even it's deleted on the remote replica, we'll still get the PutBlob.
-          // One exception is that because of compaction or other reasons, the PutRecord is gone.
-          logger.error("ReplicateBlobRequest Blob {} of {} is deleted on the source replica", blobId,
-              replicateBlobRequest);
-          return new Pair(ServerErrorCode.Blob_Deleted, getResponse);
-        case Blob_Authorization_Failure:
-          logger.error("ReplicateBlobRequest authorization failure for replicateBlobRequest {}", replicateBlobRequest);
-          return new Pair(ServerErrorCode.Blob_Authorization_Failure, getResponse);
-        default:
-          logger.error("ReplicateBlobRequest unknown failure {} for replicateBlobRequest {}",
-              partitionResponseInfo.getErrorCode(), replicateBlobRequest);
-          return new Pair(partitionResponseInfo.getErrorCode(), getResponse);
+      if (partitionResponseInfo.getErrorCode() != ServerErrorCode.No_Error) {
+        // the status can be Blob_Deleted or others
+        // Since GetOption is Include_All, even it's deleted on the remote replica, we'll still get the PutBlob.
+        // One exception is that because of compaction or other reasons, the PutRecord is gone and it returns Blob_Deleted.
+        logger.error("ReplicateBlobRequest Blob {} of {} failed with error code {}", blobId, replicateBlobRequest,
+            partitionResponseInfo.getErrorCode());
+        return new Pair(partitionResponseInfo.getErrorCode(), getResponse);
       }
+      List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
+      if (messageInfoList == null || messageInfoList.size() != 1) {
+        logger.error(
+            "ReplicateBlobRequest PartitionResponseInfo response from GetRequest {} {} {} {} {} returned null.",
+            partitionResponseInfo, messageInfoList, remoteHostName, remoteHostPort, blobId);
+        return new Pair(ServerErrorCode.Blob_Not_Found, getResponse);
+      }
+
+      return new Pair(ServerErrorCode.No_Error, getResponse);
     } catch (Exception e) { // catch the getBlob exception
       logger.error("ReplicateBlobRequest getBlob {} from the remote node {} hit exception ", blobId, remoteHostName, e);
       return new Pair(ServerErrorCode.Unknown_Error, null);
