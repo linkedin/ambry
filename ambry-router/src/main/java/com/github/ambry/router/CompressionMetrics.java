@@ -17,7 +17,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.compression.Compression;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,11 +24,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * Metrics for both compression service and compression algorithm.
  * The compression service metrics counts why compression is skip due to configuration and its error rate.
  * The algorithm-specific metrics measure the time and speed of the algorithm.
- * The service metric names use the format [Owner].[MetricName].
- * These algorithm-specific metric names use the format [Owner].[AlgorithmName].[MetricName].
+ * The service metric names use the format [MetricNamePrefix].[MetricName].
+ * These algorithm-specific metric names use the format [MetricNamePrefix].[AlgorithmName].[MetricName].
  * Example algorithm names include "LZ4" and "ZSTD".
  */
 public class CompressionMetrics {
+  // The prefix of all compression metric names.
+  // Using constant string prefix rather than class name is safer because dashboard
+  // and alarms are based on the class name.  That means the class cannot be refactored.
+  // Code is supposed to improve over time and refactor as needed without impacting external system.
+  public final static String MetricNamePrefix = "com.github.ambry.compression";
+
+  /**
+   * Algorithm-specific metrics.  There will be one set per algorithm.
+   */
   public static class AlgorithmMetrics {
 
     // Algorithm's compress() metrics.
@@ -64,35 +72,36 @@ public class CompressionMetrics {
      */
     public AlgorithmMetrics(String algorithmName, MetricRegistry registry) {
       // Compression metrics
-      compressRate = registry.meter(MetricRegistry.name(ownerClass, algorithmName, "CompressRate"));
-      compressError = registry.counter(MetricRegistry.name(ownerClass, algorithmName, "CompressError"));
-      compressRatioPercent = registry.histogram(MetricRegistry.name(ownerClass, algorithmName, "CompressRatioPercent"));
-      fullSizeCompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      compressRate = registry.meter(MetricRegistry.name(MetricNamePrefix, algorithmName, "CompressRate"));
+      compressError = registry.counter(MetricRegistry.name(MetricNamePrefix, algorithmName, "CompressError"));
+      compressRatioPercent = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName, "CompressRatioPercent"));
+      fullSizeCompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "FullSizeCompressTimeInMicroseconds"));
-      fullSizeCompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      fullSizeCompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "FullSizeCompressSpeedMBPerSec"));
-      smallSizeCompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      smallSizeCompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "SmallSizeCompressTimeInMicroseconds"));
-      smallSizeCompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      smallSizeCompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "SmallSizeCompressSpeedMBPerSec"));
 
       // Decompression metrics.
-      decompressRate = registry.meter(MetricRegistry.name(ownerClass, algorithmName, "DecompressRate"));
-      decompressError = registry.counter(MetricRegistry.name(ownerClass, algorithmName, "DecompressError"));
-      fullSizeDecompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      decompressRate = registry.meter(MetricRegistry.name(MetricNamePrefix, algorithmName, "DecompressRate"));
+      decompressError = registry.counter(MetricRegistry.name(MetricNamePrefix, algorithmName, "DecompressError"));
+      fullSizeDecompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "FullSizeDecompressTimeInMicroseconds"));
-      fullSizeDecompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      fullSizeDecompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "FullSizeDecompressSpeedMBPerSec"));
-      smallSizeDecompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      smallSizeDecompressTimeInMicroseconds = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "SmallSizeDecompressTimeInMicroseconds"));
-      smallSizeDecompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(ownerClass, algorithmName,
+      smallSizeDecompressSpeedMBPerSec = registry.histogram(MetricRegistry.name(MetricNamePrefix, algorithmName,
           "SmallSizeDecompressSpeedMBPerSec"));
     }
   }
 
-  // Group all compression related metrics under one owner "Compression".
+  // The prefix of all compression metrics.
+  // It is not a good idea to use class name because if class refactored or moved, all their metrics name changed it
+  // will break inGraph dashboard and possibly alarms.  Instead, it should be a constant string that doesn't change.
   // These metrics are per chunk, not per operation.
-  private final static Class<?> ownerClass = Compression.class;
   private final MetricRegistry metricsRegistry;
   private final Map<String, AlgorithmMetrics> algorithmToMetricsMap = new ConcurrentHashMap<>();
 
@@ -131,29 +140,29 @@ public class CompressionMetrics {
     metricsRegistry = registry;
 
     // Compression metrics.
-    compressSkipRate = registry.meter(MetricRegistry.name(ownerClass,"CompressSkipRate"));
-    compressErrorRate = registry.meter(MetricRegistry.name(ownerClass,"CompressErrorRate"));
-    compressAcceptRate = registry.meter(MetricRegistry.name(ownerClass,"CompressAcceptRate"));
-    compressReduceSizeBytes = registry.counter(MetricRegistry.name(ownerClass, "CompressReduceSizeBytes"));
-    compressErrorBufferConversion = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorBufferConversion"));
-    compressErrorConfigInvalidCompressorName = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorInvalidCompressorName"));
-    compressErrorCompressFailed = registry.counter(MetricRegistry.name(ownerClass,"CompressErrorCompressFailed"));
-    compressSkipContentEncoding = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipContentEncoding"));
-    compressSkipContentTypeFiltering = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipContentTypeFiltering"));
-    compressSkipSizeTooSmall = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipSizeTooSmall"));
-    compressSkipRatioTooSmall = registry.counter(MetricRegistry.name(ownerClass,"CompressSkipRatioTooSmall"));
+    compressSkipRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"CompressSkipRate"));
+    compressErrorRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"CompressErrorRate"));
+    compressAcceptRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"CompressAcceptRate"));
+    compressReduceSizeBytes = registry.counter(MetricRegistry.name(MetricNamePrefix, "CompressReduceSizeBytes"));
+    compressErrorBufferConversion = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressErrorBufferConversion"));
+    compressErrorConfigInvalidCompressorName = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressErrorInvalidCompressorName"));
+    compressErrorCompressFailed = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressErrorCompressFailed"));
+    compressSkipContentEncoding = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressSkipContentEncoding"));
+    compressSkipContentTypeFiltering = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressSkipContentTypeFiltering"));
+    compressSkipSizeTooSmall = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressSkipSizeTooSmall"));
+    compressSkipRatioTooSmall = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressSkipRatioTooSmall"));
 
     // Decompression metrics.
-    decompressSuccessRate = registry.meter(MetricRegistry.name(ownerClass,"DecompressSuccessRate"));
-    decompressErrorRate = registry.meter(MetricRegistry.name(ownerClass,"DecompressErrorRate"));
-    decompressExpandSizeBytes = registry.counter(MetricRegistry.name(ownerClass,"DecompressExpandSizeBytes"));
-    decompressErrorBufferConversion = registry.counter(MetricRegistry.name(ownerClass,
+    decompressSuccessRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"DecompressSuccessRate"));
+    decompressErrorRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"DecompressErrorRate"));
+    decompressExpandSizeBytes = registry.counter(MetricRegistry.name(MetricNamePrefix,"DecompressExpandSizeBytes"));
+    decompressErrorBufferConversion = registry.counter(MetricRegistry.name(MetricNamePrefix,
         "DecompressErrorBufferConversion"));
-    decompressErrorBufferTooSmall = registry.counter(MetricRegistry.name(ownerClass,
+    decompressErrorBufferTooSmall = registry.counter(MetricRegistry.name(MetricNamePrefix,
         "DecompressErrorBufferTooSmall"));
-    decompressErrorUnknownAlgorithmName = registry.counter(MetricRegistry.name(ownerClass,
+    decompressErrorUnknownAlgorithmName = registry.counter(MetricRegistry.name(MetricNamePrefix,
         "DecompressErrorUnknownAlgorithmName"));
-    decompressErrorDecompressFailed = registry.counter(MetricRegistry.name(ownerClass,
+    decompressErrorDecompressFailed = registry.counter(MetricRegistry.name(MetricNamePrefix,
         "DecompressErrorDecompressFailed"));
   }
 
