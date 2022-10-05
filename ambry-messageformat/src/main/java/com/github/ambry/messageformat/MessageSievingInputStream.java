@@ -170,6 +170,7 @@ public class MessageSievingInputStream extends InputStream {
       }
       msg = output.getMsg();
     }
+
     if (output.getException() != null) {
       if (output.getException() instanceof MessageFormatException) {
         logger.error("Error validating/transforming the message {} and hence skipping the message", msgInfo,
@@ -178,15 +179,15 @@ public class MessageSievingInputStream extends InputStream {
       } else {
         throw new IOException("Encountered exception during transformation", output.getException());
       }
-    } else if (output.getMsg() == null) {
+    }
+    if (output.getMsg() == null) {
       logger.info("Transformation is on, and the message with id {} does not have a replacement and was discarded.",
           msgInfo.getStoreKey());
       return null;
-    } else {
-      logger.trace("Original message length {}, transformed bytes read {}", msgInfo.getSize(),
-          output.getMsg().getMessageInfo().getSize());
-      return output.getMsg();
     }
+    logger.trace("Original message length {}, transformed bytes read {}", msgInfo.getSize(),
+        output.getMsg().getMessageInfo().getSize());
+    return output.getMsg();
   }
 
   /**
