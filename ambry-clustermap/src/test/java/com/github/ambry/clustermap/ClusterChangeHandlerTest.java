@@ -223,7 +223,7 @@ public class ClusterChangeHandlerTest {
 
     Counter initFailureCount = new Counter();
     HelixClusterChangeHandler helixClusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(localDc, e -> initFailureCount.inc());
+        helixClusterManager.new HelixClusterChangeHandler(localDc, e -> initFailureCount.inc(), false);
     // create an InstanceConfig with invalid entry that mocks error info added by Helix controller
     PartitionId selectedPartition = testPartitionLayout.getPartitionLayout().getPartitions(null).get(0);
     Replica testReplica = (Replica) selectedPartition.getReplicaIds().get(0);

@@ -34,8 +34,8 @@ import org.slf4j.LoggerFactory;
  * procedure in a background thread. Calling the {@link #join} method let's the main thread wait for startup of a
  * datacenter to either succeed or fail.
  */
-class DatacenterInitializer {
-  private static final Logger logger = LoggerFactory.getLogger(DatacenterInitializer.class);
+class HelixDatacenterInitializer {
+  private static final Logger logger = LoggerFactory.getLogger(HelixDatacenterInitializer.class);
   private final CompletableFuture<DcInfo> initializationFuture = new CompletableFuture<>();
   private final ClusterMapConfig clusterMapConfig;
   private final HelixManager localManager;
@@ -55,7 +55,7 @@ class DatacenterInitializer {
    * @param dataNodeConfigSourceMetrics metrics related to {@link DataNodeConfigSource}.
    * @param helixClusterManager {@link HelixClusterManager} instance that manages and stores the cluster information.
    */
-  DatacenterInitializer(ClusterMapConfig clusterMapConfig, HelixManager localManager, HelixFactory helixFactory,
+  HelixDatacenterInitializer(ClusterMapConfig clusterMapConfig, HelixManager localManager, HelixFactory helixFactory,
       ClusterMapUtils.DcZkInfo dcZkInfo, String selfInstanceName,
       DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics, HelixClusterManager helixClusterManager) {
     this.clusterMapConfig = clusterMapConfig;
@@ -133,7 +133,7 @@ class DatacenterInitializer {
           InstanceType.SPECTATOR, zkConnectStr);
     }
     HelixClusterChangeHandler clusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(dcName, this::onInitializationFailure);
+        helixClusterManager.new HelixClusterChangeHandler(dcName, this::onInitializationFailure, false);
     // Create RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use current
     // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
     logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
