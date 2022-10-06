@@ -1024,9 +1024,11 @@ public class RequestResponseTest {
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
     final String sourceHostName = "datacenter1_host1";
+    final int sourceHostPort = 15058;
     final int correlationId = TestUtils.RANDOM.nextInt();
 
-    final ReplicateBlobRequest replicateBlobRequest = new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName);
+    final ReplicateBlobRequest replicateBlobRequest =
+        new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName, sourceHostPort);
     DataInputStream requestStream = serAndPrepForRead(replicateBlobRequest, -1, true);
     final ReplicateBlobRequest deserializedReplicateBlobRequest = ReplicateBlobRequest.readFrom(requestStream, clusterMap);
     verifyReplicateBlobRequest(replicateBlobRequest, deserializedReplicateBlobRequest);
@@ -1051,6 +1053,7 @@ public class RequestResponseTest {
     Assert.assertEquals(orgReq.getClientId(), deserializedReq.getClientId());
     Assert.assertEquals(orgReq.getBlobId(), deserializedReq.getBlobId());
     Assert.assertEquals(orgReq.getSourceHostName(), deserializedReq.getSourceHostName());
+    Assert.assertEquals(orgReq.getSourceHostPort(), deserializedReq.getSourceHostPort());
   }
 
   /**

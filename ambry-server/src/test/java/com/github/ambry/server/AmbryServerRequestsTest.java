@@ -67,6 +67,8 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.ReplicateBlobRequest;
+import com.github.ambry.protocol.ReplicateBlobResponse;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -75,10 +77,13 @@ import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindTokenHelper;
+import com.github.ambry.replication.MockHost;
 import com.github.ambry.replication.MockReplicationManager;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.replication.ReplicationTestHelper;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.MessageInfo;
@@ -135,7 +140,7 @@ import static org.mockito.Mockito.*;
  * Tests for {@link AmbryServerRequests}.
  */
 @RunWith(Parameterized.class)
-public class AmbryServerRequestsTest {
+public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
   private final FindTokenHelper findTokenHelper;
   private final MockClusterMap clusterMap;
@@ -158,9 +163,12 @@ public class AmbryServerRequestsTest {
   private MockStorageManager storageManager;
   private MockHelixParticipant helixParticipant;
   private AmbryServerRequests ambryRequests;
+  private final StoreKeyFactory storeKeyFactory;
 
   public AmbryServerRequestsTest(boolean validateRequestOnStoreState)
       throws IOException, ReplicationException, StoreException, InterruptedException, ReflectiveOperationException {
+    super(ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2,
+        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6);
     this.validateRequestOnStoreState = validateRequestOnStoreState;
     clusterMap = new MockClusterMap();
     localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
@@ -173,7 +181,7 @@ public class AmbryServerRequestsTest {
     StatsManagerConfig statsManagerConfig = new StatsManagerConfig(verifiableProperties);
     dataNodeId =
         clusterMap.getDataNodeIds().stream().filter(node -> node.getDatacenterName().equals(localDc)).findFirst().get();
-    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     MockHelixParticipant.metricRegistry = new MetricRegistry();
     helixParticipant = new MockHelixParticipant(clusterMapConfig);
@@ -188,8 +196,8 @@ public class AmbryServerRequestsTest {
             statsManagerConfig, null);
     serverMetrics = new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
-        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
     storageManager.start();
     Mockito.when(mockDelegate.unseal(any())).thenReturn(true);
     Mockito.when(mockDelegate.unmarkStopped(anyList())).thenReturn(true);
@@ -912,6 +920,196 @@ public class AmbryServerRequestsTest {
     changePartitionState(id, false);
 
     miscUndeleteFailuresTest();
+  }
+
+  /**
+   * Tests success case for ReplicateBlobRequest.
+   * Should replicate the PutBlob from the remote host.
+   */
+  @Test
+  public void testReplicateBlobSuccess() throws Exception {
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockHost remoteHost = null;
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
+      if (dataNodeId != host.dataNodeId && remoteHost == null) {
+        remoteHost = host;
+      }
+      hosts.put(host.dataNodeId, host);
+    }
+    StoreKey storeKey = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1).get(0);
+
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = (BlobId) storeKey;
+
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
+
+    storageManager.resetStore();
+    Response response = sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("Operation received at the store not as expected", RequestOrResponseType.PutRequest,
+        MockStorageManager.operationReceived);
+    ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
+  }
+
+  /**
+   * Tests ReplicateBlobRequest when the Blob on the source host is deleted.
+   * Should replicate both the PutBlob and the DELETE.
+   */
+  @Test
+  public void testReplicateBlobWhenSourceIsDeleted() throws Exception {
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockHost remoteHost = null;
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
+      if (dataNodeId != host.dataNodeId && remoteHost == null) {
+        remoteHost = host;
+      }
+      hosts.put(host.dataNodeId, host);
+    }
+    StoreKey storeKey = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1).get(0);
+    // add delete to the remote host
+    addDeleteMessagesToReplicasOfPartition(partitionId, storeKey, Arrays.asList(remoteHost));
+
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = (BlobId) storeKey;
+
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
+    storageManager.resetStore();
+    validKeysInStore.add(blobId);
+    Response response = sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("Operation received at the store not as expected", RequestOrResponseType.DeleteRequest,
+        MockStorageManager.operationReceived);
+    ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
+  }
+
+  /**
+   * Tests ReplicateBlobRequest when the Blob on the source host is updated.
+   * Should replicate both the PutBlob and the TtlUpdate.
+   */
+  @Test
+  public void testReplicateBlobWhenSourceTtlUpdated() throws Exception {
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockHost remoteHost = null;
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
+      if (dataNodeId != host.dataNodeId && remoteHost == null) {
+        remoteHost = host;
+      }
+      hosts.put(host.dataNodeId, host);
+    }
+    StoreKey storeKey = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1).get(0);
+    // add TtlUpdate to the remote host
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, storeKey, Arrays.asList(remoteHost), -1);
+
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = (BlobId) storeKey;
+
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
+    storageManager.resetStore();
+    validKeysInStore.add(blobId);
+    Response response = sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("Operation received at the store not as expected", RequestOrResponseType.TtlUpdateRequest,
+        MockStorageManager.operationReceived);
+    ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
+  }
+
+  /**
+   * Tests ReplicateBlobRequest when the Blob on the source host doesn't exist.
+   */
+  @Test
+  public void testReplicateBlobWhenSourceNotExist() throws Exception {
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockHost remoteHost = null;
+    MockHost randomHost = null;
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
+      if (dataNodeId != host.dataNodeId) {
+        if (remoteHost == null) {
+          remoteHost = host;
+        } else {
+          randomHost = host;
+        }
+      }
+      hosts.put(host.dataNodeId, host);
+    }
+    // remoteHost has the Blob with "storeKey" key but doesn't have the BLob with "storeKeyNotExist" key
+    StoreKey storeKey = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1).get(0);
+    StoreKey storeKeyNotExist = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(randomHost), 1).get(0);
+
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = (BlobId) storeKeyNotExist;
+
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
+    storageManager.resetStore();
+    Response response = sendRequestGetResponse(request, ServerErrorCode.Blob_Not_Found);
+    assertEquals("Operation received at the store not as expected", null, MockStorageManager.operationReceived);
+    ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
+    assertEquals("expect ReplicateBlobRequest fails with Blob_Not_Found.", replicateBlobResponse.getError(),
+        ServerErrorCode.Blob_Not_Found);
+  }
+
+  @Test
+  public void testReplicateBlobWhenTargetConditions() throws Exception {
+    // ON_DEMAND_REPLICATION_TODO: test cases
+    // Besides the above test cases to test the different conditions on the source host, need verify the different cases on the local store.
+    // But seems doesn't have a good way to simulate these local store errors with unit test yet.
+    // test PutBlob but StoreErrorCodes.Already_Exist
+    // test PutBlob and applyTTLUpdate but hit StoreErrorCodes.Already_Updated or StoreErrorCodes.ID_Deleted
+    // test PutBlob and applyDelete but hit StoreErrorCodes.ID_Deleted or StoreErrorCodes.Life_Version_Conflict
   }
 
   /**
