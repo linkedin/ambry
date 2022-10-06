@@ -743,7 +743,7 @@ public class AmbryRequests implements RequestAPI {
     ServerErrorCode errorCode;
     try {
       // get the Blob from the remote replica.
-      Pair<ServerErrorCode, GetResponse> getResult = getBlobFromRemoteReplicate(replicateBlobRequest);
+      Pair<ServerErrorCode, GetResponse> getResult = getBlobFromRemoteReplica(replicateBlobRequest);
       errorCode = getResult.getFirst();
       getResponse = getResult.getSecond();
 
@@ -807,11 +807,11 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   * to get the Blob from the remote replica
+   * Get the Blob from the remote replica
    * @param replicateBlobRequest the {@link ReplicateBlobRequest}
    * @return a pair of the {@link ServerErrorCode} and the {@link GetResponse}.
    */
-  private Pair<ServerErrorCode, GetResponse> getBlobFromRemoteReplicate(ReplicateBlobRequest replicateBlobRequest) {
+  private Pair<ServerErrorCode, GetResponse> getBlobFromRemoteReplica(ReplicateBlobRequest replicateBlobRequest) {
     BlobId blobId = replicateBlobRequest.getBlobId();
     String remoteHostName = replicateBlobRequest.getSourceHostName();
     int remoteHostPort = replicateBlobRequest.getSourceHostPort();
