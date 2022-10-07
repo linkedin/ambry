@@ -193,6 +193,7 @@ public class NonBlockingRouterTestBase {
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(128));
     properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
     properties.setProperty("router.not.found.cache.ttl.in.ms", String.valueOf(NOT_FOUND_CACHE_TTL_MS));
+    properties.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
     return properties;
   }
 

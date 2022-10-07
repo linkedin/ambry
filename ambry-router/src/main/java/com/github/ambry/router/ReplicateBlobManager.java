@@ -66,6 +66,7 @@ class ReplicateBlobManager {
    * @param routerConfig The {@link RouterConfig} containing the configs for the ReplicateBlobManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param time The {@link Time} instance to use.
+   * @param nonBlockingRouter The non-blocking router object
    */
   ReplicateBlobManager(ClusterMap clusterMap, ResponseHandler responseHandler, AccountService accountService,
       NotificationSystem notificationSystem, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
@@ -90,16 +91,15 @@ class ReplicateBlobManager {
    * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
-   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @throws RouterException if blob replication failed.
    */
   void submitReplicateBlobOperation(String blobIdStr, String serviceId, DataNodeId sourceDataNode,
-      FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback)
+      FutureResult<Void> futureResult, Callback<Void> callback)
       throws RouterException {
     final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     ReplicateBlobOperation replicateBlobOperation =
         new ReplicateBlobOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId,
-            sourceDataNode, callback, time, futureResult, quotaChargeCallback);
+            sourceDataNode, callback, time, futureResult);
     replicateBlobOperations.add(replicateBlobOperation);
   }
 

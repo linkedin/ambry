@@ -250,14 +250,15 @@ class SimpleOperationTracker implements OperationTracker {
         break;
       case ReplicateBlobOperation:
         // Replicate one blob. Use the same "success target" and "request parallelism" config settings as PutOperation.
-        // Only difference is for ReplicateBlobOperation, crossColoEnabled is true.
+        // But ReplicateBlobOperation sets crossColoEnabled to true.
         // ON_DEMAND_REPLICATION_TODO: we may consider add its own configure setting if needed.
-        eligibleReplicas = getEligibleReplicas(datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
-        replicaSuccessTarget =
-            routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
-                routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
-        replicaParallelism = routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.min(eligibleReplicas.size(),
-            routerConfig.routerPutRequestParallelism) : routerConfig.routerPutRequestParallelism;
+        // ON_DEMAND_REPLICATION_TODO: may tune the order of the replica pool. Currently still local first and then remote.
+        // a. right now source HostNode is included. Probably will exclude it.
+        // b. right now we pick local replicas first for simplicity.
+        // c. Among the remote replicas, we randomly pick one. We don't pick the replication leader.
+        eligibleReplicas = getEligibleReplicas(null, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.BOOTSTRAP));
+        replicaSuccessTarget = routerConfig.routerPutSuccessTarget;
+        replicaParallelism = routerConfig.routerPutRequestParallelism;
         crossColoEnabled = true;
         break;
       default:

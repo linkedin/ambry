@@ -305,13 +305,11 @@ public class OperationController implements Runnable {
    * @param sourceDataNode The source {@link DataNodeId} where to get the Blob.
    * @param futureResult A future that would contain the BlobId eventually.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
-   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    */
   protected void replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode,
-      FutureResult<Void> futureResult, Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) {
+      FutureResult<Void> futureResult, Callback<Void> callback) {
     try {
-      replicateBlobManager.submitReplicateBlobOperation(blobId, serviceId, sourceDataNode, futureResult, callback,
-          quotaChargeCallback);
+      replicateBlobManager.submitReplicateBlobOperation(blobId, serviceId, sourceDataNode, futureResult, callback);
       routerCallback.onPollReady();
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();

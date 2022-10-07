@@ -25,9 +25,6 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.ReplicateBlobRequest;
 import com.github.ambry.protocol.ReplicateBlobResponse;
-import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.quota.QuotaException;
-import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -58,15 +55,12 @@ class ReplicateBlobOperation {
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final Map<Integer, RequestInfo> ReplicateBlobRequestInfos;
+  private final Map<Integer, RequestInfo> replicateBlobRequestInfos;
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
-  private final QuotaChargeCallback quotaChargeCallback;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
-  // Quota charger for this operation.
-  private final OperationQuotaCharger operationQuotaCharger;
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
 
@@ -82,11 +76,10 @@ class ReplicateBlobOperation {
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
-   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
    */
   ReplicateBlobOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       ResponseHandler responsehandler, BlobId blobId, String serviceId, DataNodeId sourceDataNode,
-      Callback<Void> callback, Time time, FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
+      Callback<Void> callback, Time time, FutureResult<Void> futureResult) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -97,15 +90,12 @@ class ReplicateBlobOperation {
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
-    this.quotaChargeCallback = quotaChargeCallback;
-    this.ReplicateBlobRequestInfos = new LinkedHashMap<>();
+    this.replicateBlobRequestInfos = new LinkedHashMap<>();
     byte blobDcId = blobId.getDatacenterId();
     String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.ReplicateBlobOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics, blobId);
-    operationQuotaCharger =
-        new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
   }
 
   /**
@@ -133,9 +123,9 @@ class ReplicateBlobOperation {
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       ReplicateBlobRequest replicateBlobRequest = createReplicateBlobRequest();
       RequestInfo requestInfo =
-          new RequestInfo(hostname, port, replicateBlobRequest, replica, operationQuotaCharger, time.milliseconds(),
+          new RequestInfo(hostname, port, replicateBlobRequest, replica, null, time.milliseconds(),
               routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
-      ReplicateBlobRequestInfos.put(replicateBlobRequest.getCorrelationId(), requestInfo);
+      replicateBlobRequestInfos.put(replicateBlobRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
@@ -171,17 +161,13 @@ class ReplicateBlobOperation {
    */
   void handleResponse(ResponseInfo responseInfo, ReplicateBlobResponse replicateBlobResponse) {
     ReplicateBlobRequest replicateBlobRequest = (ReplicateBlobRequest) responseInfo.getRequestInfo().getRequest();
-    RequestInfo replicateBlobRequestInfo = ReplicateBlobRequestInfos.remove(replicateBlobRequest.getCorrelationId());
+    RequestInfo replicateBlobRequestInfo = replicateBlobRequestInfos.remove(replicateBlobRequest.getCorrelationId());
     // ReplicateBlobRequestInfo can be null if this request was timed out before this response is received. No
     // metric is updated here, as corresponding metrics have been updated when the request was timed out.
     if (replicateBlobRequestInfo == null) {
       return;
     }
     ReplicaId replica = replicateBlobRequestInfo.getReplicaId();
-    if (responseInfo.isQuotaRejected()) {
-      processQuotaRejectedResponse(replicateBlobRequest.getCorrelationId(), replica);
-      return;
-    }
     // Track the over all time taken for the response since the creation of the request.
     long requestLatencyMs = time.milliseconds() - replicateBlobRequestInfo.getRequestCreateTime();
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
@@ -248,25 +234,13 @@ class ReplicateBlobOperation {
   }
 
   /**
-   * Process response if it was rejected due to quota compliance.
-   * @param correlationId correlation id of the request.
-   * @param replicaId {@link ReplicaId} of the request.
-   */
-  private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
-    logger.trace("ReplicateBlobRequest with response correlationId {} was rejected because quota was exceeded.",
-        correlationId);
-    onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
-    checkAndMaybeComplete();
-  }
-
-  /**
    * Goes through the inflight request list of this {@code ReplicateBlobOperation} and remove those that
    * have been timed out.
    * @param requestRegistrationCallback The callback to use to notify the networking layer of dropped requests.
    */
   private void cleanupExpiredInflightRequests(
       RequestRegistrationCallback<ReplicateBlobOperation> requestRegistrationCallback) {
-    Iterator<Map.Entry<Integer, RequestInfo>> itr = ReplicateBlobRequestInfos.entrySet().iterator();
+    Iterator<Map.Entry<Integer, RequestInfo>> itr = replicateBlobRequestInfos.entrySet().iterator();
     while (itr.hasNext()) {
       Map.Entry<Integer, RequestInfo> entry = itr.next();
       int correlationId = entry.getKey();
@@ -357,21 +331,6 @@ class ReplicateBlobOperation {
     if (operationTracker.isDone() || operationCompleted) {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
-      } else if (operationTracker.maybeFailedDueToOfflineReplicas()) {
-        operationException.set(
-            new RouterException("ReplicateBlobOperation failed possibly because some replicas are unavailable",
-                RouterErrorCode.AmbryUnavailable));
-      } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(new RouterException("ReplicateBlobOperation failed because of BlobNotFound",
-            RouterErrorCode.BlobDoesNotExist));
-      }
-      if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
-        try {
-          quotaChargeCallback.checkAndCharge(false, true);
-        } catch (QuotaException quotaException) {
-          logger.error("Exception  {} in quota charge event listener during ReplicateBlob operation",
-              quotaException.toString());
-        }
       }
       operationCompleted = true;
     }

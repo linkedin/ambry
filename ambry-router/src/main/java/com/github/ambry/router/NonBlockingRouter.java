@@ -335,7 +335,7 @@ class NonBlockingRouter implements Router {
    */
   public CompletableFuture<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode) {
     CompletableFuture<Void> future = new CompletableFuture<>();
-    replicateBlob(blobId, serviceId, sourceDataNode, CallbackUtils.fromCompletableFuture(future), null);
+    replicateBlob(blobId, serviceId, sourceDataNode, CallbackUtils.fromCompletableFuture(future));
     return future;
   }
 
@@ -345,11 +345,9 @@ class NonBlockingRouter implements Router {
    * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
    * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
    * @param callback The {@link Callback} which will be invoked on the completion of the request.
-   * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
    */
-  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback,
-      QuotaChargeCallback quotaChargeCallback) {
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback) {
     if (blobId == null || sourceDataNode == null) {
       throw new IllegalArgumentException("blobId or sourceHost must not be null");
     }
@@ -360,8 +358,7 @@ class NonBlockingRouter implements Router {
 
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().replicateBlob(blobId, serviceId, sourceDataNode, futureResult, callback,
-          quotaChargeCallback);
+      getOperationController().replicateBlob(blobId, serviceId, sourceDataNode, futureResult, callback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
