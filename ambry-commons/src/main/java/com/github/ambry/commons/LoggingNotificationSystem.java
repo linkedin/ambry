@@ -15,6 +15,7 @@ package com.github.ambry.commons;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationBlobType;
@@ -69,7 +70,16 @@ public class LoggingNotificationSystem implements NotificationSystem {
         ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
             account == null ? null : account.getId()) + ", containerName " + (container == null ? null
             : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
+  }
 
+  @Override
+  public void onBlobReplicated(String blobId, String serviceId, Account account, Container container,
+      DataNodeId sourceHost) {
+    logger.debug("onBlobReplicated {}", blobId,
+        ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
+            account == null ? null : account.getId()) + ", containerName " + (container == null ? null
+            : container.getName()) + ", containerId " + (container == null ? null : container.getId())
+            + ", sourceHostName " + sourceHost.getHostname() + ", sourceHostPort " + sourceHost.getPort());
   }
 
   @Override

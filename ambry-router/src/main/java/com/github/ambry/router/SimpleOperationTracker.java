@@ -248,6 +248,18 @@ class SimpleOperationTracker implements OperationTracker {
         // Here set the success target to the number of eligible replicas.
         replicaSuccessTarget = eligibleReplicas.size();
         break;
+      case ReplicateBlobOperation:
+        // Replicate one blob. Use the same "success target" and "request parallelism" config settings as PutOperation.
+        // Only difference is for ReplicateBlobOperation, crossColoEnabled is true.
+        // ON_DEMAND_REPLICATION_TODO: we may consider add its own configure setting if needed.
+        eligibleReplicas = getEligibleReplicas(datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
+        replicaSuccessTarget =
+            routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.max(eligibleReplicas.size() - 1,
+                routerConfig.routerPutSuccessTarget) : routerConfig.routerPutSuccessTarget;
+        replicaParallelism = routerConfig.routerGetEligibleReplicasByStateEnabled ? Math.min(eligibleReplicas.size(),
+            routerConfig.routerPutRequestParallelism) : routerConfig.routerPutRequestParallelism;
+        crossColoEnabled = true;
+        break;
       default:
         throw new IllegalArgumentException("Unsupported operation: " + routerOperation);
     }
