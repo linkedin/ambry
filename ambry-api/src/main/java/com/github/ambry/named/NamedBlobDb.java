@@ -16,6 +16,7 @@ package com.github.ambry.named;
 
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.NamedBlobState;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -65,10 +66,21 @@ public interface NamedBlobDb {
   /**
    * Persist a {@link NamedBlobRecord} in the database.
    * @param record the {@link NamedBlobRecord}
+   * @param state the {@link NamedBlobState}
    * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
    *         occurred.
    */
-  CompletableFuture<PutResult> put(NamedBlobRecord record);
+  CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state);
+
+  /**
+   * Persist a {@link NamedBlobRecord} in the database.
+   * @param record the {@link NamedBlobRecord}
+   * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
+   *         occurred.
+   */
+  default CompletableFuture<PutResult> put(NamedBlobRecord record) {
+    return put(record, NamedBlobState.READY);
+  }
 
   /**
    * Delete a record for a blob in the database.

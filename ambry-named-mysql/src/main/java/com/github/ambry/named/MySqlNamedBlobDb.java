@@ -29,6 +29,7 @@ import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
@@ -119,15 +120,15 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   // @formatter:off
   private static final String LIST_QUERY_V2 = String.format(""
-          + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
-          + "FROM named_blobs_v2 t1 "
-          + "INNER JOIN "
-          + "(SELECT account_id, container_id, blob_name, max(version) as version "
-          + "FROM named_blobs_v2 "
-          + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-          + "        GROUP BY account_id, container_id, blob_name) t2 "
-          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH);
+      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
+      + "FROM named_blobs_v2 t1 "
+      + "INNER JOIN "
+      + "(SELECT account_id, container_id, blob_name, max(version) as version "
+      + "FROM named_blobs_v2 "
+      + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+      + "        GROUP BY account_id, container_id, blob_name) t2 "
+      + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+      + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH);
   // @formatter:on
 
   /**
@@ -256,9 +257,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = System.currentTimeMillis();
-      NamedBlobRecord record, recordV2;
+      NamedBlobRecord record, recordV2 = null;
       record = run_get(accountName, containerName, blobName, option, accountId, containerId, connection);
-      if (config.dbTransition) {
+      if (config.dbTransition || config.dbNewtable) {
         try {
           recordV2 = run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
           if (!record.equals(recordV2)) {
@@ -276,6 +277,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             metricsRecoder.namedDataErrorGetCount.inc();
           }
         }
+        if (config.dbNewtable) {
+          return recordV2;
+        }
       }
       metricsRecoder.namedBlobGetTimeInMs.update(System.currentTimeMillis() - startTime);
       return record;
@@ -289,7 +293,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       long startTime = System.currentTimeMillis();
       Page<NamedBlobRecord> recordPage, recordPageV2=null;
       recordPage = run_list(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
-      if (config.dbTransition) {
+      if (config.dbTransition || config.dbNewtable) {
         try {
           recordPageV2 = run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
         } catch (Exception e) {
@@ -301,6 +305,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               accountId, containerId, blobNamePrefix, pageToken);
           metricsRecoder.namedDataInconsistentListCount.inc();
         }
+        if (config.dbNewtable) {
+          return recordPageV2;
+        }
       }
       metricsRecoder.namedBlobListTimeInMs.update(System.currentTimeMillis() - startTime);
       return recordPage;
@@ -308,18 +315,21 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();
-          PutResult putResult;
+          PutResult putResult, putResult2 = null;
           putResult = run_put(record, accountId, containerId, connection);
-          if (config.dbTransition) {
+          if (config.dbTransition || config.dbNewtable) {
             try {
-              run_put_v2(record, accountId, containerId, connection);
+              putResult2 = run_put_v2(record, state, accountId, containerId, connection);
             } catch (Exception e) {
               logger.error("NAMED PUT: Data Error: old table succeed while new table failed: ", e);
               metricsRecoder.namedDataErrorPutCount.inc();
+            }
+            if (config.dbNewtable) {
+              return putResult2;
             }
           }
           metricsRecoder.namedBlobPutTimeInMs.update(System.currentTimeMillis() - startTime);
@@ -331,9 +341,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
       long startTime = System.currentTimeMillis();
-      DeleteResult deleteResult, deleteResultV2;
+      DeleteResult deleteResult, deleteResultV2 = null;
       deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
-      if (config.dbTransition) {
+      if (config.dbTransition || config.dbNewtable) {
         try {
           deleteResultV2 = run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
           if (!deleteResult.equals(deleteResultV2)) {
@@ -348,6 +358,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             logger.error("NAMED DELETE: Data Error: old table succeed while new table failed: ", e);
             metricsRecoder.namedDataErrorDeleteCount.inc();
           }
+        }
+        if (config.dbNewtable) {
+          return deleteResultV2;
         }
       }
       metricsRecoder.namedBlobDeleteTimeInMs.update(System.currentTimeMillis() - startTime);
@@ -632,7 +645,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return new PutResult(record);
   }
 
-  private PutResult run_put_v2(NamedBlobRecord record, short accountId, short containerId, Connection connection)
+  private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId, Connection connection)
       throws Exception {
     // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
     try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
@@ -646,7 +659,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setTimestamp(5, null);
       }
       statement.setLong(6, buildVersion());
-      statement.setInt(7, NamedBlobState.READY.ordinal());
+      statement.setInt(7, state.ordinal());
       statement.executeUpdate();
     }
     return new PutResult(record);
