@@ -94,8 +94,7 @@ class ReplicateBlobManager {
    * @throws RouterException if blob replication failed.
    */
   void submitReplicateBlobOperation(String blobIdStr, String serviceId, DataNodeId sourceDataNode,
-      FutureResult<Void> futureResult, Callback<Void> callback)
-      throws RouterException {
+      FutureResult<Void> futureResult, Callback<Void> callback) throws RouterException {
     final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     ReplicateBlobOperation replicateBlobOperation =
         new ReplicateBlobOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId,

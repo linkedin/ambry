@@ -521,7 +521,8 @@ class MockServer {
         if (remoteBlobs.containsKey(blobId.getID())) {
           // write to the local store
           this.blobs.put(blobId.getID(), remoteBlobs.get(blobId.getID()));
-        } break;
+        }
+        break;
       }
     }
   }

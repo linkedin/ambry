@@ -58,28 +58,26 @@ public class LoggingNotificationSystem implements NotificationSystem {
 
   @Override
   public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
-    logger.debug("onBlobDeleted {}", blobId,
-        ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
-            account == null ? null : account.getId()) + ", containerName " + (container == null ? null
-            : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
+    logger.debug("onBlobDeleted {}, serviceId {}, accountName {}, accountId {}, containerName {}, containerId {}",
+        blobId, serviceId, account == null ? null : account.getName(), account == null ? null : account.getId(),
+        container == null ? null : container.getName(), container == null ? null : container.getId());
   }
 
   @Override
   public void onBlobUndeleted(String blobId, String serviceId, Account account, Container container) {
-    logger.debug("onBlobUndeleted {}", blobId,
-        ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
-            account == null ? null : account.getId()) + ", containerName " + (container == null ? null
-            : container.getName()) + ", containerId " + (container == null ? null : container.getId()));
+    logger.debug("onBlobUndeleted {}, serviceId {}, accountName {}, accountId {}, containerName {}, containerId {}",
+        blobId, serviceId, account == null ? null : account.getName(), account == null ? null : account.getId(),
+        container == null ? null : container.getName(), container == null ? null : container.getId());
   }
 
   @Override
   public void onBlobReplicated(String blobId, String serviceId, Account account, Container container,
       DataNodeId sourceHost) {
-    logger.debug("onBlobReplicated {}", blobId,
-        ", " + serviceId + ", accountName " + (account == null ? null : account.getName()) + ", accountId" + (
-            account == null ? null : account.getId()) + ", containerName " + (container == null ? null
-            : container.getName()) + ", containerId " + (container == null ? null : container.getId())
-            + ", sourceHostName " + sourceHost.getHostname() + ", sourceHostPort " + sourceHost.getPort());
+    logger.debug(
+        "onBlobReplicated {}, serviceId {}, accountName {}, accountId {}, containerName {}, containerId {}, host {} {}",
+        blobId, serviceId, account == null ? null : account.getName(), account == null ? null : account.getId(),
+        container == null ? null : container.getName(), container == null ? null : container.getId(),
+        sourceHost.getHostname(), sourceHost.getPort());
   }
 
   @Override

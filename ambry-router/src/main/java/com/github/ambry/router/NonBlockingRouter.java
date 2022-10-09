@@ -347,7 +347,8 @@ class NonBlockingRouter implements Router {
    * @param callback The {@link Callback} which will be invoked on the completion of the request.
    * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
    */
-  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback) {
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode,
+      Callback<Void> callback) {
     if (blobId == null || sourceDataNode == null) {
       throw new IllegalArgumentException("blobId or sourceHost must not be null");
     }

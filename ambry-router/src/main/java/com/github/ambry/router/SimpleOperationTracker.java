@@ -256,7 +256,8 @@ class SimpleOperationTracker implements OperationTracker {
         // a. right now source HostNode is included. Probably will exclude it.
         // b. right now we pick local replicas first for simplicity.
         // c. Among the remote replicas, we randomly pick one. We don't pick the replication leader.
-        eligibleReplicas = getEligibleReplicas(null, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.BOOTSTRAP));
+        eligibleReplicas =
+            getEligibleReplicas(null, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.BOOTSTRAP));
         replicaSuccessTarget = routerConfig.routerPutSuccessTarget;
         replicaParallelism = routerConfig.routerPutRequestParallelism;
         crossColoEnabled = true;
