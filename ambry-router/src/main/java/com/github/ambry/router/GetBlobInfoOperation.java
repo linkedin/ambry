@@ -94,10 +94,10 @@ class GetBlobInfoOperation extends GetOperation {
    * @param nonBlockingRouter The non-blocking router object
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
-      Callback<GetBlobResult> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted,
-      QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResult> callback,
+      RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
+      CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted, QuotaChargeCallback quotaChargeCallback,
+      NonBlockingRouter nonBlockingRouter) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -300,6 +300,7 @@ class GetBlobInfoOperation extends GetOperation {
   private void processGetBlobInfoResponse(RequestInfo getRequestInfo, GetResponse getResponse)
       throws IOException, MessageFormatException {
     ServerErrorCode getError = getResponse.getError();
+    responseHandler.onEvent(getRequestInfo.getReplicaId(), getError);
     if (getError == ServerErrorCode.No_Error) {
       int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
       // Each get request issued by the router is for a single blob.

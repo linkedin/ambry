@@ -1183,6 +1183,7 @@ class GetBlobOperation extends GetOperation {
               RouterErrorCode.UnexpectedInternalError));
         } else {
           getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
+          responseHandler.onEvent(getRequestInfo.getReplicaId(), getError);
           if (getError == ServerErrorCode.No_Error) {
             PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
             int objectsInPartitionResponse = partitionResponseInfo.getMessageInfoList().size();
