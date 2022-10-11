@@ -56,7 +56,7 @@ public class MySqlNamedBlobDbConfig {
    * A flag on whether to turn on DB Transition run
    */
   @Config(DB_TRANSITION)
-  @Default("true")
+  @Default("false")
   public final boolean dbTransition;
 
   /**
@@ -64,7 +64,7 @@ public class MySqlNamedBlobDbConfig {
    */
   @Config(DB_RELY_ON_NEW_TABLE)
   @Default("false")
-  public final boolean dbRelyOnNewtable;
+  public final boolean dbRelyOnNewTable;
 
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
@@ -72,6 +72,6 @@ public class MySqlNamedBlobDbConfig {
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
     this.dbTransition = verifiableProperties.getBoolean(DB_TRANSITION, false);
-    this.dbRelyOnNewtable = verifiableProperties.getBoolean(DB_RELY_ON_NEW_TABLE, false);
+    this.dbRelyOnNewTable = verifiableProperties.getBoolean(DB_RELY_ON_NEW_TABLE, false);
   }
 }

@@ -261,7 +261,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       try {
         record = run_get(accountName, containerName, blobName, option, accountId, containerId, connection);
       } catch (Exception eOld) {
-        if (!config.dbRelyOnNewtable) {
+        if (!config.dbRelyOnNewTable) {
           throw eOld;
         }
         logger.error("NAMED GET: Failed in pulling data from old table: ", eOld);
@@ -275,7 +275,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             metricsRecoder.namedDataInconsistentGetCount.inc();
           }
         } catch (Exception e) {
-          if (config.dbRelyOnNewtable) {
+          if (config.dbRelyOnNewTable) {
             throw e;
           }
           if (e instanceof RestServiceException &&
@@ -290,7 +290,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         }
       }
       metricsRecoder.namedBlobGetTimeInMs.update(System.currentTimeMillis() - startTime);
-      return config.dbRelyOnNewtable ? recordV2: record;
+      return config.dbRelyOnNewTable ? recordV2: record;
     }, transactionStateTracker);
   }
 
@@ -303,7 +303,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       try {
         recordPage = run_list(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
       } catch (Exception eOld) {
-        if (!config.dbRelyOnNewtable) {
+        if (!config.dbRelyOnNewTable) {
           throw eOld;
         }
         logger.error("NAMED LIST: Failed in pulling data from old table: ", eOld);
@@ -312,7 +312,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         try {
           recordPageV2 = run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
         } catch (Exception e) {
-          if (config.dbRelyOnNewtable) {
+          if (config.dbRelyOnNewTable) {
             throw e;
           }
           logger.error("NAMED LIST: Data Error: old table succeed while new table failed: ", e);
@@ -325,7 +325,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         }
       }
       metricsRecoder.namedBlobListTimeInMs.update(System.currentTimeMillis() - startTime);
-      return config.dbRelyOnNewtable ? recordPageV2: recordPage;
+      return config.dbRelyOnNewTable ? recordPageV2: recordPage;
     }, null);
   }
 
@@ -338,7 +338,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           try {
             putResult = run_put(record, accountId, containerId, connection);
           } catch (Exception eOld) {
-            if (!config.dbRelyOnNewtable) {
+            if (!config.dbRelyOnNewTable) {
               throw eOld;
             }
             logger.error("NAMED PUT: Failed in saving data to old table: ", eOld);
@@ -348,7 +348,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             try {
               putResultV2 = run_put_v2(record, state, accountId, containerId, connection);
             } catch (Exception e) {
-              if (config.dbRelyOnNewtable) {
+              if (config.dbRelyOnNewTable) {
                 throw e;
               }
               logger.error("NAMED PUT: Data Error: old table succeed while new table failed: ", e);
@@ -356,7 +356,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             }
           }
           metricsRecoder.namedBlobPutTimeInMs.update(System.currentTimeMillis() - startTime);
-          return config.dbRelyOnNewtable ? putResultV2: putResult;
+          return config.dbRelyOnNewTable ? putResultV2: putResult;
         }, null);
   }
 
@@ -368,7 +368,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       try {
         deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
       } catch (Exception eOld) {
-        if (!config.dbRelyOnNewtable) {
+        if (!config.dbRelyOnNewTable) {
           throw eOld;
         }
         logger.error("NAMED DELETE: Failed in deleting data in the old table: ", eOld);
@@ -381,7 +381,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             metricsRecoder.namedDataInconsistentDeleteCount.inc();
           }
         } catch (Exception e) {
-          if (config.dbRelyOnNewtable) {
+          if (config.dbRelyOnNewTable) {
             throw e;
           }
           if (e instanceof RestServiceException &&
@@ -394,7 +394,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         }
       }
       metricsRecoder.namedBlobDeleteTimeInMs.update(System.currentTimeMillis() - startTime);
-      return config.dbRelyOnNewtable ? deleteResultV2: deleteResult;
+      return config.dbRelyOnNewTable ? deleteResultV2: deleteResult;
     }, null);
   }
 
