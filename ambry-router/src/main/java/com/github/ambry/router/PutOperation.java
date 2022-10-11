@@ -314,6 +314,8 @@ class PutOperation {
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
+
+    // TODO - use dependency injection when available.
     compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
   }
 

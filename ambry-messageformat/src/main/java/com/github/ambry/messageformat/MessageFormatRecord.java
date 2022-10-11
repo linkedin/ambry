@@ -1779,7 +1779,7 @@ public class MessageFormatRecord {
     public static final int Blob_Type_Field_In_Bytes = 2;
     public static final int Is_Compressed_In_Bytes = 1;
 
-    private static Logger logger = LoggerFactory.getLogger(Blob_Format_V3.class);
+    private static final Logger logger = LoggerFactory.getLogger(Blob_Format_V3.class);
 
     public static long getBlobRecordSize(long blobSize) {
       return Version_Field_Size_In_Bytes + Blob_Type_Field_In_Bytes + Blob_Size_Field_In_Bytes + blobSize + Crc_Size

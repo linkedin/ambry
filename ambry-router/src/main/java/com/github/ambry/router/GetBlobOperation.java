@@ -166,6 +166,7 @@ class GetBlobOperation extends GetOperation {
         shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
     firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
     this.nonBlockingRouter = nonBlockingRouter;
+    // TODO - use dependency injection.
     decompressionService = new CompressionService(routerConfig.getCompressionConfig(),
         routerMetrics.compressionMetrics);
   }
@@ -892,7 +893,7 @@ class GetBlobOperation extends GetOperation {
      */
     protected ByteBuf decompressContent(ByteBuf sourceBuffer) {
       if (!isChunkCompressed) {
-        logger.info("Blob is not compressed.  Return source buffer.");
+        // Blob is not compressed.  Return source buffer.
         return sourceBuffer;
       }
 
@@ -1599,7 +1600,7 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         isChunkCompressed = blobData.isCompressed();
-        logger.trace("In FirstGetChunk.handleBody(), is Chunk compressed = " + isChunkCompressed);
+        logger.trace("In FirstGetChunk.handleBody(), is Chunk compressed = " + isChunkCompressed + " for blob ID = " + blobId);
         chunkIndexToBuf = new ConcurrentHashMap<>();
         chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
         if (rawMode) {

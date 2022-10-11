@@ -442,7 +442,7 @@ public class PutRequest extends RequestOrResponse {
 
   /**
    * Get whether the data blob is compressed.
-   * @return TRUE if compressed; FALSE if not.
+   * @return {@code true} if compressed; {@code false} if not.
    */
   public boolean isCompressed() {
     return isCompressed;

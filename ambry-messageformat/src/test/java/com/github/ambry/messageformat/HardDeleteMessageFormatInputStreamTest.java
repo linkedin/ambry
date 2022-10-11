@@ -17,8 +17,15 @@ import java.io.IOException;
 import org.junit.Assert;
 import org.junit.Test;
 
+
+/**
+ * Test hard-delete input stream message format.
+ */
 public class HardDeleteMessageFormatInputStreamTest {
 
+  /**
+   * Majority of the logic resides in the constructor. Test constructor to make sure it does not throw.
+   */
   @Test
   public void testConstructor() throws MessageFormatException, IOException {
     HardDeleteMessageFormatInputStream inputStream = new HardDeleteMessageFormatInputStream(1000,
