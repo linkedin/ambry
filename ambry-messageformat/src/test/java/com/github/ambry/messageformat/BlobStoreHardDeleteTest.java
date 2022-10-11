@@ -211,7 +211,7 @@ public class BlobStoreHardDeleteTest {
     private MessageFormatInputStream getPutMessage(StoreKey key, ByteBuffer encryptionKey,
         BlobProperties blobProperties, byte[] usermetadata, byte[] blob, int blobSize, short blobVersion,
         BlobType blobType) throws MessageFormatException {
-      if (blobVersion == MessageFormatRecord.Blob_Version_V2) {
+      if (blobVersion >= MessageFormatRecord.Blob_Version_V2) {
         return new PutMessageFormatInputStream(key, encryptionKey, blobProperties, ByteBuffer.wrap(usermetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
       } else {
@@ -338,18 +338,18 @@ public class BlobStoreHardDeleteTest {
     short[] blobVersions = new short[5];
     BlobType[] blobTypes = new BlobType[5];
     for (int i = 0; i < 5; i++) {
-      blobVersions[i] = MessageFormatRecord.Blob_Version_V2;
+      blobVersions[i] = MessageFormatRecord.Blob_Version_V3;
       blobTypes[i] = BlobType.DataBlob;
     }
-    // all blobs V2 with Data blob
+    // all blobs V3 with Data blob
     blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
     blobVersions = new short[5];
     blobTypes = new BlobType[5];
     for (int i = 0; i < 5; i++) {
-      blobVersions[i] = MessageFormatRecord.Blob_Version_V2;
+      blobVersions[i] = MessageFormatRecord.Blob_Version_V3;
       blobTypes[i] = BlobType.MetadataBlob;
     }
-    // all blobs V2 with Metadata blob
+    // all blobs V3 with Metadata blob
     blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
   }
 
@@ -362,16 +362,16 @@ public class BlobStoreHardDeleteTest {
     blobVersions[0] = MessageFormatRecord.Blob_Version_V1;
     blobTypes[0] = BlobType.DataBlob;
 
-    blobVersions[1] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[1] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[1] = BlobType.MetadataBlob;
 
-    blobVersions[2] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[2] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[2] = BlobType.DataBlob;
 
-    blobVersions[3] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[3] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[3] = BlobType.MetadataBlob;
 
-    blobVersions[4] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[4] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[4] = BlobType.DataBlob;
 
     blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
@@ -381,16 +381,16 @@ public class BlobStoreHardDeleteTest {
     blobVersions[0] = MessageFormatRecord.Blob_Version_V1;
     blobTypes[0] = BlobType.DataBlob;
 
-    blobVersions[1] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[1] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[1] = BlobType.DataBlob;
 
-    blobVersions[2] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[2] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[2] = BlobType.MetadataBlob;
 
-    blobVersions[3] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[3] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[3] = BlobType.DataBlob;
 
-    blobVersions[4] = MessageFormatRecord.Blob_Version_V2;
+    blobVersions[4] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[4] = BlobType.MetadataBlob;
 
     blobStoreHardDeleteTestUtil(blobVersions, blobTypes);

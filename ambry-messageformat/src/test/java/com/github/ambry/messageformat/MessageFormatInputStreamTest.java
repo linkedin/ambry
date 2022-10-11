@@ -70,22 +70,22 @@ public class MessageFormatInputStreamTest {
   @Test
   public void messageFormatPutRecordsTest() throws IOException, MessageFormatException {
     messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob,
-        MessageFormatRecord.Message_Header_Version_V1);
-    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
-        MessageFormatRecord.Message_Header_Version_V1);
-    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
-        MessageFormatRecord.Message_Header_Version_V1);
-    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
-        MessageFormatRecord.Message_Header_Version_V2);
-    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
-        MessageFormatRecord.Message_Header_Version_V2);
-    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob,
-        MessageFormatRecord.Message_Header_Version_V3);
-    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob,
-        MessageFormatRecord.Message_Header_Version_V3);
+        MessageFormatRecord.Message_Header_Version_V1, false);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V1, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V1, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V2, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V2, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob,
+        MessageFormatRecord.Message_Header_Version_V3, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob,
+        MessageFormatRecord.Message_Header_Version_V3, true);
   }
 
-  private void messageFormatPutRecordsTest(short blobVersion, BlobType blobType, short headerVersion)
+  private void messageFormatPutRecordsTest(short blobVersion, BlobType blobType, short headerVersion, boolean isCompressed)
       throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     StoreKeyFactory keyFactory = new MockIdFactory();
@@ -104,21 +104,21 @@ public class MessageFormatInputStreamTest {
     MessageFormatRecord.headerVersionToUse = headerVersion;
     if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
       blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobContentSize);
-    } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
-      blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
-    } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    } else if (blobVersion == MessageFormatRecord.Blob_Version_V3 && blobType == BlobType.DataBlob) {
+      blobSize = (int) MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blobContentSize);
+    } else if (blobVersion == MessageFormatRecord.Blob_Version_V3 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data = byteBufferBlob.array();
       blobContentSize = data.length;
-      blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
+      blobSize = (int) MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blobContentSize);
     }
 
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
 
     MessageFormatInputStream messageFormatStream =
-        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key,
+        (blobVersion == MessageFormatRecord.Blob_Version_V3) ? new PutMessageFormatInputStream(key,
             ByteBuffer.wrap(encryptionKey), prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize, blobType,
-            lifeVersion)
+            lifeVersion, isCompressed)
             : new PutMessageFormatBlobV1InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
                 blobType);
 
@@ -222,8 +222,11 @@ public class MessageFormatInputStreamTest {
     CrcInputStream crcstream = new CrcInputStream(messageFormatStream);
     DataInputStream streamData = new DataInputStream(crcstream);
     Assert.assertEquals(streamData.readShort(), blobVersion);
-    if (blobVersion == MessageFormatRecord.Blob_Version_V2) {
+    if (blobVersion >= MessageFormatRecord.Blob_Version_V2) {
       Assert.assertEquals(streamData.readShort(), blobType.ordinal());
+    }
+    if (blobVersion >= MessageFormatRecord.Blob_Version_V3) {
+      Assert.assertEquals(streamData.readByte(), isCompressed ? 1 : 0);
     }
     Assert.assertEquals(streamData.readLong(), blobContentSize);
     for (int i = 0; i < blobContentSize; i++) {
@@ -235,7 +238,7 @@ public class MessageFormatInputStreamTest {
     // Verify Blob All
     stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
 
-    messageFormatStream = (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key,
+    messageFormatStream = (blobVersion == MessageFormatRecord.Blob_Version_V3) ? new PutMessageFormatInputStream(key,
         ByteBuffer.wrap(encryptionKey), prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize, blobType)
         : new PutMessageFormatBlobV1InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
             blobType);

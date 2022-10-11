@@ -230,7 +230,7 @@ public class MessageFormatSendTest {
     // get blob
     send = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
     long blobRecordSize = putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())
-        ? MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blob.length)
+        ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blob.length)
         : MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blob.length);
     Assert.assertEquals(send.sizeInBytes(), blobRecordSize);
     bufresult.clear();
@@ -463,7 +463,7 @@ public class MessageFormatSendTest {
     int blobRecordSizes[] = new int[5];
     for (int i = 0; i < 5; i++) {
       blobRecordSizes[i] = (int) (putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName())
-          ? MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blob[i].length)
+          ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blob[i].length)
           : MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blob[i].length));
     }
     Assert.assertEquals(send.sizeInBytes(), (long) Arrays.stream(blobRecordSizes).sum());
@@ -478,7 +478,7 @@ public class MessageFormatSendTest {
       DeserializedBlob deserializedBlob = MessageFormatRecord.deserializeAndGetBlobWithVersion(
           new ByteArrayInputStream(bufresult.array(), startOffset, blobRecordSizes[i]));
       Assert.assertEquals(
-          putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName()) ? MessageFormatRecord.Blob_Version_V2
+          putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName()) ? MessageFormatRecord.Blob_Version_V3
               : MessageFormatRecord.Blob_Version_V1, deserializedBlob.getVersion());
       Assert.assertEquals(BlobType.DataBlob, deserializedBlob.getBlobData().getBlobType());
       Assert.assertEquals(blob[i].length, deserializedBlob.getBlobData().getSize());

@@ -233,7 +233,7 @@ class HardDeleteRecoveryMetadata {
     userMetadataVersion = stream.readShort();
     userMetadataSize = stream.readInt();
     blobRecordVersion = stream.readShort();
-    if (blobRecordVersion == Blob_Version_V2) {
+    if (blobRecordVersion >= Blob_Version_V2) {
       blobType = BlobType.values()[stream.readShort()];
     } else {
       blobType = BlobType.DataBlob;
@@ -280,7 +280,7 @@ class HardDeleteRecoveryMetadata {
     // create a byte array to hold the headerVersion + userMetadataVersion + userMetadataSize + blobRecordVersion +
     // blobType + blobRecordSize + storeKey.
     byte[] bytes = new byte[Version_Field_Size_In_Bytes + Version_Field_Size_In_Bytes + Integer.SIZE / 8
-        + Version_Field_Size_In_Bytes + (blobRecordVersion == Blob_Version_V2 ? (Short.SIZE / 8) : 0) + Long.SIZE / 8
+        + Version_Field_Size_In_Bytes + (blobRecordVersion >= Blob_Version_V2 ? (Short.SIZE / 8) : 0) + Long.SIZE / 8
         + storeKey.sizeInBytes()];
 
     ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
@@ -288,7 +288,7 @@ class HardDeleteRecoveryMetadata {
     bufWrap.putShort(userMetadataVersion);
     bufWrap.putInt(userMetadataSize);
     bufWrap.putShort(blobRecordVersion);
-    if (blobRecordVersion == Blob_Version_V2) {
+    if (blobRecordVersion >= Blob_Version_V2) {
       bufWrap.putShort((short) blobType.ordinal());
     }
     bufWrap.putLong(blobStreamSize);

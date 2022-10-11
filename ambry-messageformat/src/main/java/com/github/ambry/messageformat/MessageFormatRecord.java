@@ -55,6 +55,7 @@ public class MessageFormatRecord {
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Blob_Version_V1 = 1;
   public static final short Blob_Version_V2 = 2;
+  public static final short Blob_Version_V3 = 3;
   public static final short Metadata_Content_Version_V2 = 2;
   public static final short Metadata_Content_Version_V3 = 3;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
@@ -232,20 +233,17 @@ public class MessageFormatRecord {
         return new DeserializedBlob(Blob_Version_V1, Blob_Format_V1.deserializeBlobRecord(crcStream));
       case Blob_Version_V2:
         return new DeserializedBlob(Blob_Version_V2, Blob_Format_V2.deserializeBlobRecord(crcStream));
+      case Blob_Version_V3:
+        return new DeserializedBlob(Blob_Version_V3, Blob_Format_V3.deserializeBlobRecord(crcStream));
       default:
         throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
 
   static boolean isValidBlobRecordVersion(short blobRecordVersion) {
-    switch (blobRecordVersion) {
-      case Blob_Version_V1:
-        return true;
-      case Blob_Version_V2:
-        return true;
-      default:
-        return false;
-    }
+    return blobRecordVersion == Blob_Version_V1 ||
+        blobRecordVersion == Blob_Version_V2 ||
+        blobRecordVersion == Blob_Version_V3;
   }
 
   /**
@@ -1753,6 +1751,78 @@ public class MessageFormatRecord {
             MessageFormatErrorCodes.Data_Corrupt);
       }
       return new BlobData(blobContentType, dataSize, byteBuf);
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * |         |           |              |            |            |            |
+   * | version | blobType  | isCompressed |    size    |  content   |     Crc    |
+   * |(2 bytes)| (2 bytes) | (1 byte)     |  (8 bytes) |  (n bytes) |  (8 bytes) |
+   * |         |           |              |            |            |            |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  version    - The version of the blob record
+   *
+   *  blobType   - The type of the blob
+   *
+   *  isCompressed - Whether the content is compressed.
+   *
+   *  size       - The size of the blob content
+   *
+   *  content    - The actual content that represents the blob
+   *
+   *  crc        - The crc of the blob record
+   *
+   */
+  public static class Blob_Format_V3 {
+    public static final int Blob_Size_Field_In_Bytes = 8;
+    public static final int Blob_Type_Field_In_Bytes = 2;
+    public static final int Is_Compressed_In_Bytes = 1;
+
+    private static Logger logger = LoggerFactory.getLogger(Blob_Format_V3.class);
+
+    public static long getBlobRecordSize(long blobSize) {
+      return Version_Field_Size_In_Bytes + Blob_Type_Field_In_Bytes + Blob_Size_Field_In_Bytes + blobSize + Crc_Size
+          + Is_Compressed_In_Bytes;
+    }
+
+    public static void serializePartialBlobRecord(ByteBuffer outputBuffer, long blobContentSize, BlobType blobType,
+        boolean isCompressed) {
+      outputBuffer.putShort(Blob_Version_V3);
+      outputBuffer.putShort((short) blobType.ordinal());
+      outputBuffer.put(isCompressed ? (byte) 1 : 0);
+      outputBuffer.putLong(blobContentSize);
+    }
+
+    public static BlobData deserializeBlobRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      // Get the BlobType.
+      short blobTypeOrdinal = dataStream.readShort();
+      if (blobTypeOrdinal > BlobType.values().length) {
+        logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
+        throw new MessageFormatException("corrupt data while parsing blob content",
+            MessageFormatErrorCodes.Data_Corrupt);
+      }
+      BlobType blobContentType = BlobType.values()[blobTypeOrdinal];
+
+      // Get whether the blob is compressed.
+      boolean isCompressed = dataStream.readByte() == 1;
+
+      // Get the blob binary.
+      long dataSize = dataStream.readLong();
+      if (dataSize > Integer.MAX_VALUE) {
+        throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
+      }
+      ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
+      long crc = crcStream.getValue();
+      long streamCrc = dataStream.readLong();
+      if (crc != streamCrc) {
+        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
+        throw new MessageFormatException("corrupt data while parsing blob content",
+            MessageFormatErrorCodes.Data_Corrupt);
+      }
+
+      return new BlobData(blobContentType, dataSize, byteBuf, isCompressed);
     }
   }
 

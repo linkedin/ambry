@@ -309,7 +309,7 @@ public class CompressionService {
     // Compression is accepted, emit metrics.
     compressionMetrics.compressAcceptRate.mark();
     compressionMetrics.compressReduceSizeBytes.inc(sourceDataSize - compressedDataSize);
-    return Unpooled.wrappedBuffer(ByteBuffer.wrap(compressResult.getSecond(), 0, compressedDataSize));
+    return Unpooled.wrappedBuffer(compressResult.getSecond(), 0, compressedDataSize);
   }
 
   /**
@@ -392,7 +392,7 @@ public class CompressionService {
     // Decompress succeeded, emit metrics.
     compressionMetrics.decompressSuccessRate.mark();
     compressionMetrics.decompressExpandSizeBytes.inc(decompressedBuffer.length - dataSize);
-    return Unpooled.wrappedBuffer(ByteBuffer.wrap(decompressedBuffer));
+    return Unpooled.wrappedBuffer(decompressedBuffer);
   }
 
   /**

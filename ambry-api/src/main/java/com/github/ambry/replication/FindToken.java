@@ -27,17 +27,17 @@ public interface FindToken {
    *  Returns the total bytes read so far until this token
    * @return The total bytes read so far until this token
    */
-  public long getBytesRead();
+  long getBytesRead();
 
   /**
    * Returns the type of {@code FindToken}
    * @return the type of the token
    */
-  public FindTokenType getType();
+  FindTokenType getType();
 
   /**
    * Returns the version of the {@link FindToken}
    * @return the version of the {@link FindToken}
    */
-  public short getVersion();
+  short getVersion();
 }

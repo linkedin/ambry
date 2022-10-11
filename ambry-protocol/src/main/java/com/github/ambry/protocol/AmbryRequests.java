@@ -984,7 +984,7 @@ public class AmbryRequests implements RequestAPI {
     MessageFormatInputStream stream =
         new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobEncryptionKey(),
             receivedRequest.getBlobProperties(), receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(),
-            receivedRequest.getBlobSize(), receivedRequest.getBlobType());
+            receivedRequest.getBlobSize(), receivedRequest.getBlobType(), (short) 0, receivedRequest.isCompressed);
     BlobProperties properties = receivedRequest.getBlobProperties();
     long expirationTime = Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
         properties.getTimeToLiveInSeconds());

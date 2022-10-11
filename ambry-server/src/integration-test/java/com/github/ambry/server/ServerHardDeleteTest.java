@@ -197,7 +197,7 @@ public class ServerHardDeleteTest {
             short userMetadataVersion = stream.readShort();
             int userMetadataSize = stream.readInt();
             short blobRecordVersion = stream.readShort();
-            if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+            if (blobRecordVersion >= MessageFormatRecord.Blob_Version_V2) {
               short blobType = stream.readShort();
             }
             long blobStreamSize = stream.readLong();

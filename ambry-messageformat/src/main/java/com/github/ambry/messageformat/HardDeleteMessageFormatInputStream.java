@@ -96,6 +96,14 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
             blobType);
         serializedBlobPartialRecord.flip();
         break;
+      case MessageFormatRecord.Blob_Version_V3:
+        blobRecordSize = MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blobStreamSize);
+        serializedBlobPartialRecord =
+            ByteBuffer.allocate((int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
+        MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize,
+            blobType, false);
+        serializedBlobPartialRecord.flip();
+        break;
       default:
         throw new MessageFormatException("Unknown version encountered when creating hard delete stream",
             MessageFormatErrorCodes.Unknown_Format_Version);
