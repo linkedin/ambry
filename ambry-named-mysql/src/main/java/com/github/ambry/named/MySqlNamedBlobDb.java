@@ -257,16 +257,26 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = System.currentTimeMillis();
-      NamedBlobRecord record, recordV2 = null;
-      record = run_get(accountName, containerName, blobName, option, accountId, containerId, connection);
-      if (config.dbTransition || config.dbNewtable) {
+      NamedBlobRecord record = null, recordV2 = null;
+      try {
+        record = run_get(accountName, containerName, blobName, option, accountId, containerId, connection);
+      } catch (Exception eOld) {
+        if (!config.dbNewtable) {
+          throw eOld;
+        }
+      }
+
+      if (config.dbTransition) {
         try {
           recordV2 = run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
-          if (!record.equals(recordV2)) {
+          if (record != null && !recordV2.equals(record)) {
             logger.warn("NAMED GET: Data Inconsistence: old record='{}', new record='{}'", record, recordV2);
             metricsRecoder.namedDataInconsistentGetCount.inc();
           }
         } catch (Exception e) {
+          if (config.dbNewtable) {
+            throw e;
+          }
           if (e instanceof RestServiceException &&
               ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
             logger.trace("NAMED GET: Data NotFound in new table. accountId='{}', containerId='{}', blobName='{}'.",
@@ -277,12 +287,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             metricsRecoder.namedDataErrorGetCount.inc();
           }
         }
-        if (config.dbNewtable) {
-          return recordV2;
-        }
       }
       metricsRecoder.namedBlobGetTimeInMs.update(System.currentTimeMillis() - startTime);
-      return record;
+      return config.dbNewtable? recordV2: record;
     }, transactionStateTracker);
   }
 
@@ -291,26 +298,32 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String pageToken) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = System.currentTimeMillis();
-      Page<NamedBlobRecord> recordPage, recordPageV2=null;
-      recordPage = run_list(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
-      if (config.dbTransition || config.dbNewtable) {
+      Page<NamedBlobRecord> recordPage = null, recordPageV2 = null;
+      try {
+        recordPage = run_list(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
+      } catch (Exception eOld) {
+        if (!config.dbNewtable) {
+          throw eOld;
+        }
+      }
+      if (config.dbTransition) {
         try {
           recordPageV2 = run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
         } catch (Exception e) {
+          if (config.dbNewtable) {
+            throw e;
+          }
           logger.error("NAMED LIST: Data Error: old table succeed while new table failed: ", e);
         }
-        if (!Objects.equals(recordPage.getEntries(), recordPageV2.getEntries())) {
+        if (recordPage != null && !Objects.equals(recordPage.getEntries(), recordPageV2.getEntries())) {
           logger.trace(
               "NAMED LIST: Data Inconsistent. accountId='{}', containerId='{}', blobNamePrefix='{}', pageToken='{}'.",
               accountId, containerId, blobNamePrefix, pageToken);
           metricsRecoder.namedDataInconsistentListCount.inc();
         }
-        if (config.dbNewtable) {
-          return recordPageV2;
-        }
       }
       metricsRecoder.namedBlobListTimeInMs.update(System.currentTimeMillis() - startTime);
-      return recordPage;
+      return config.dbNewtable? recordPageV2: recordPage;
     }, null);
   }
 
@@ -319,21 +332,28 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();
-          PutResult putResult, putResult2 = null;
-          putResult = run_put(record, accountId, containerId, connection);
-          if (config.dbTransition || config.dbNewtable) {
+          PutResult putResult = null, putResultV2 = null;
+          try {
+            putResult = run_put(record, accountId, containerId, connection);
+          } catch (Exception eOld) {
+            if (!config.dbNewtable) {
+              throw eOld;
+            }
+          }
+
+          if (config.dbTransition) {
             try {
-              putResult2 = run_put_v2(record, state, accountId, containerId, connection);
+              putResultV2 = run_put_v2(record, state, accountId, containerId, connection);
             } catch (Exception e) {
+              if (config.dbNewtable) {
+                throw e;
+              }
               logger.error("NAMED PUT: Data Error: old table succeed while new table failed: ", e);
               metricsRecoder.namedDataErrorPutCount.inc();
             }
-            if (config.dbNewtable) {
-              return putResult2;
-            }
           }
           metricsRecoder.namedBlobPutTimeInMs.update(System.currentTimeMillis() - startTime);
-          return putResult;
+          return config.dbNewtable? putResultV2: putResult;
         }, null);
   }
 
@@ -341,16 +361,25 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
       long startTime = System.currentTimeMillis();
-      DeleteResult deleteResult, deleteResultV2 = null;
-      deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
-      if (config.dbTransition || config.dbNewtable) {
+      DeleteResult deleteResult = null, deleteResultV2 = null;
+      try {
+        deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
+      } catch (Exception eOld) {
+        if (!config.dbNewtable) {
+          throw eOld;
+        }
+      }
+      if (config.dbTransition) {
         try {
           deleteResultV2 = run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
-          if (!deleteResult.equals(deleteResultV2)) {
+          if (deleteResult != null && !deleteResultV2.equals(deleteResult)) {
             logger.warn("NAMED DELETE: Data Inconsistence: old record='{}', new record='{}'", deleteResult, deleteResultV2);
             metricsRecoder.namedDataInconsistentDeleteCount.inc();
           }
         } catch (Exception e) {
+          if (config.dbNewtable) {
+            throw e;
+          }
           if (e instanceof RestServiceException &&
               ((RestServiceException) e).getErrorCode() == RestServiceErrorCode.NotFound) {
             metricsRecoder.namedDataNotFoundDeleteCount.inc();
@@ -359,12 +388,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             metricsRecoder.namedDataErrorDeleteCount.inc();
           }
         }
-        if (config.dbNewtable) {
-          return deleteResultV2;
-        }
       }
       metricsRecoder.namedBlobDeleteTimeInMs.update(System.currentTimeMillis() - startTime);
-      return deleteResult;
+      return config.dbNewtable? deleteResultV2: deleteResult;
     }, null);
   }
 

@@ -19,7 +19,7 @@ public class MySqlNamedBlobDbConfig {
   private static final String PREFIX = "mysql.named.blob.";
   public static final String DB_INFO = PREFIX + "db.info";
   public static final String DB_TRANSITION = PREFIX + "db.transition";
-  public static final String DB_NEW_TABLE = PREFIX + "db.newtable";
+  public static final String DB_NEW_TABLE = PREFIX + "db.read.from.new.table";
   public static final String LOCAL_POOL_SIZE = PREFIX + "local.pool.size";
   public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
   public static final String  LIST_MAX_RESULTS = PREFIX + "list.max.results";
