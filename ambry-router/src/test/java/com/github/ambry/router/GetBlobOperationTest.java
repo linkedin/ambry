@@ -1457,7 +1457,7 @@ public class GetBlobOperationTest {
     // Create GetBlobOperation instance and get the FirstChunk instance.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         options, null, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-        quotaChargeCallback, this.blobMetadataCache);
+        quotaChargeCallback, this.blobMetadataCache, router);
     Object firstChunk = FieldUtils.readField(op, "firstChunk", true);
     FieldUtils.writeField(firstChunk, "isChunkCompressed", true, true);
 
