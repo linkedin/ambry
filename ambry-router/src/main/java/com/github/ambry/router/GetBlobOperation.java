@@ -901,8 +901,7 @@ class GetBlobOperation extends GetOperation {
         ByteBuf result = decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes);
         sourceBuffer.release();
         return result;
-      }
-      catch (Exception ex) {
+      } catch (Exception ex) {
         logger.error("Failed to decompress chunk data for chunkBlobId " + chunkBlobId + " due to exception.", ex);
         setOperationException(buildChunkException("Exception thrown on decompressing the data chunk", ex,
             RouterErrorCode.UnexpectedInternalError));

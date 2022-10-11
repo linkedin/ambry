@@ -523,8 +523,7 @@ public class TestUtils {
     catch (InvocationTargetException ex) {
       // Return the exception that was thrown.
       return ex.getCause();
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       throw new ExecutionException("Error invoking the method.", ex);
     }
   }
@@ -545,8 +544,7 @@ public class TestUtils {
     try {
       function.run();
       return null;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       return ex;
     }
   }

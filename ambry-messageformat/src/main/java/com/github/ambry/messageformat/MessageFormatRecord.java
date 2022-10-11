@@ -1732,7 +1732,7 @@ public class MessageFormatRecord {
     public static BlobData deserializeBlobRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       short blobTypeOrdinal = dataStream.readShort();
-      if (blobTypeOrdinal > BlobType.values().length) {
+      if (blobTypeOrdinal >= BlobType.values().length) {
         logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
@@ -1798,7 +1798,7 @@ public class MessageFormatRecord {
       DataInputStream dataStream = new DataInputStream(crcStream);
       // Get the BlobType.
       short blobTypeOrdinal = dataStream.readShort();
-      if (blobTypeOrdinal > BlobType.values().length) {
+      if (blobTypeOrdinal >= BlobType.values().length) {
         logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);

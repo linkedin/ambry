@@ -188,9 +188,9 @@ public class VcrRecoveryTest {
     for (PartitionResponseInfo partitionResponseInfo : getResponse.getPartitionResponseInfoList()) {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
           partitionResponseInfo.getErrorCode());
-      //old value is 272. Adding 8 Bytes due to the two fields added 4 + 4 Blob Property BYTE.
+      //old value is 272. Adding 9 Bytes due to the two fields added 4 + 4 Blob Property BYTE, + 1 for compression.
       for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
-        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 280, messageInfo.getSize());
+        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 281, messageInfo.getSize());
       }
     }
   }
