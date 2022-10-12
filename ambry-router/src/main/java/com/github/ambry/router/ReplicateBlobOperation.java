@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
-import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
@@ -42,7 +41,6 @@ class ReplicateBlobOperation {
   private static final Logger logger = LoggerFactory.getLogger(ReplicateBlobOperation.class);
   //Operation arguments
   private final RouterConfig routerConfig;
-  private final ResponseHandler responseHandler;
   private final BlobId blobId;
   private final String serviceId;
   private final DataNodeId sourceDataNode;
@@ -69,7 +67,6 @@ class ReplicateBlobOperation {
    * @param clusterMap the {@link ClusterMap} to use.
    * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
-   * @param responsehandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param blobId The {@link BlobId} that is to be replicated by this {@code ReplicateBlobOperation}.
    * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
    * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
@@ -78,12 +75,11 @@ class ReplicateBlobOperation {
    * @param futureResult The {@link FutureResult} that is returned to the caller.
    */
   ReplicateBlobOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      ResponseHandler responsehandler, BlobId blobId, String serviceId, DataNodeId sourceDataNode,
-      Callback<Void> callback, Time time, FutureResult<Void> futureResult) {
+      BlobId blobId, String serviceId, DataNodeId sourceDataNode, Callback<Void> callback, Time time,
+      FutureResult<Void> futureResult) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.responseHandler = responsehandler;
     this.blobId = blobId;
     this.serviceId = serviceId;
     this.sourceDataNode = sourceDataNode;

@@ -26,15 +26,12 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.ReplicateBlobResponse;
-import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -52,8 +49,6 @@ class ReplicateBlobManager {
   private final ClusterMap clusterMap;
   private final RouterConfig routerConfig;
   private final NonBlockingRouter nonBlockingRouter;
-
-  private static final Logger logger = LoggerFactory.getLogger(ReplicateBlobManager.class);
 
   private final RequestRegistrationCallback<ReplicateBlobOperation> requestRegistrationCallback;
 
@@ -97,8 +92,8 @@ class ReplicateBlobManager {
       FutureResult<Void> futureResult, Callback<Void> callback) throws RouterException {
     final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     ReplicateBlobOperation replicateBlobOperation =
-        new ReplicateBlobOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId,
-            sourceDataNode, callback, time, futureResult);
+        new ReplicateBlobOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, sourceDataNode, callback,
+            time, futureResult);
     replicateBlobOperations.add(replicateBlobOperation);
   }
 
