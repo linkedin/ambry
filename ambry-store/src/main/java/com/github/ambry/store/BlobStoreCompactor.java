@@ -1430,23 +1430,6 @@ class BlobStoreCompactor {
       copyCandidates.removeIf(copyCandidate ->
           isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
               config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
-      if (duplicateSearchSpan != null && validEntriesSize == copyCandidates.size()) {
-        // When duplicate search span is not null, which mean it's highly likely that we would see duplicates from
-        // source. If we are here, then there is no duplicate at all, this might be an error.
-        logger.trace(
-            "Processing IndexSegment {} with duplicate search span {} in {}, we probably should have duplicates.",
-            indexSegment.toString(), duplicateSearchSpan, storeId);
-        logger.trace("IndexSegments in source persistent index with {}", storeId);
-        srcIndex.getIndexSegments().values().forEach(seg -> logger.info("{}", seg.getFile()));
-        Map<PersistentIndex.IndexEntryType, Long> collect = copyCandidates.stream()
-            .collect(Collectors.groupingBy(entry -> entry.getValue().getIndexValueType(), Collectors.counting()));
-        logger.trace("{} with {}", collect.entrySet()
-            .stream()
-            .map(ent -> ent.getValue().toString() + " " + String.valueOf(ent.getKey()))
-            .collect(Collectors.joining(",")), storeId);
-        logger.trace("Valid entry size {}, number of keys found: {}", validEntriesSize,
-            numKeysFoundInDuplicateChecking);
-      }
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
