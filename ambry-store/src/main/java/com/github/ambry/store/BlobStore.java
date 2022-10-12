@@ -254,7 +254,7 @@ public class BlobStore implements Store {
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         if (config.storeRebuildTokenBasedOnCompactionHistory
-            && config.storePartitionsToRebuildTokenBasedOnCompactionHistory.contains(
+            || config.storePartitionsToRebuildTokenBasedOnCompactionHistory.contains(
             replicaId.getPartitionId().getId())) {
           compactor.enablePersistIndexSegmentOffsets();
           index.enableRebuildTokenBasedOnCompactionHistory();
