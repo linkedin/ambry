@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -162,6 +163,43 @@ public class MessageInfoTest {
     info = new MessageInfo.Builder(newKey, newSize, newAccountId, newContainerId, newOperationTime).build();
     checkGetters(info, newKey, newSize, false, false, false, Utils.Infinite_Time, null, newAccountId, newContainerId,
         newOperationTime, (short) 0);
+  }
+
+  /**
+   * Test for serialize and deserialize {@link MessageInfo} using jackson library.
+   * @throws Exception
+   */
+  @Test
+  public void testJsonSerialization() throws Exception {
+    ObjectMapper objectMapper = new ObjectMapper();
+    StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new MockIdFactory());
+    short accountId = 100, containerId = 1000;
+    StoreKey key = new MockId(TestUtils.getRandomString(10), accountId, containerId);
+    long size = 12345;
+    long expirationTime = SystemTime.getInstance().milliseconds() - 1;
+    long operationTime = SystemTime.getInstance().milliseconds() + 300;
+    Long crc = 1000L;
+    short lifeVersion = 5;
+    MessageInfo origin =
+        new MessageInfo(key, size, false, false, false, expirationTime, crc, accountId, containerId, operationTime,
+            lifeVersion);
+
+    String jsonString = objectMapper.writeValueAsString(origin);
+    MessageInfo deserialized = objectMapper.readValue(jsonString, MessageInfo.class);
+
+    checkGetters(deserialized, origin.getStoreKey(), origin.getSize(), origin.isDeleted(), origin.isTtlUpdated(),
+        origin.isUndeleted(), origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(),
+        origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
+
+    origin = new MessageInfo(key, size, true, true, true, expirationTime, crc, accountId, containerId, operationTime,
+        lifeVersion);
+
+    jsonString = objectMapper.writeValueAsString(origin);
+    deserialized = objectMapper.readValue(jsonString, MessageInfo.class);
+
+    checkGetters(deserialized, origin.getStoreKey(), origin.getSize(), origin.isDeleted(), origin.isTtlUpdated(),
+        origin.isUndeleted(), origin.getExpirationTimeInMs(), origin.getCrc(), origin.getAccountId(),
+        origin.getContainerId(), origin.getOperationTimeMs(), origin.getLifeVersion());
   }
 
   /**
