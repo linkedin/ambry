@@ -77,7 +77,7 @@ public class StorageManager implements StoreManager {
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final List<ClusterParticipant> clusterParticipants;
-  private final ClusterParticipant primaryParticipant;
+  private final ClusterParticipant primaryClusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
@@ -118,9 +118,10 @@ public class StorageManager implements StoreManager {
     this.clusterParticipants = clusterParticipants;
     // The first participant (if there are multiple) in clusterParticipants list is considered primary participant by default.
     // Only primary participant should take actions in storage manager when state transition is invoked by Helix controller.
-    primaryParticipant =
+    primaryClusterParticipant =
         clusterParticipants == null || clusterParticipants.isEmpty() ? null : clusterParticipants.get(0);
-    replicaSyncUpManager = primaryParticipant == null ? null : primaryParticipant.getReplicaSyncUpManager();
+    replicaSyncUpManager =
+        primaryClusterParticipant == null ? null : primaryClusterParticipant.getReplicaSyncUpManager();
     currentNode = dataNodeId;
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
@@ -202,10 +203,10 @@ public class StorageManager implements StoreManager {
       }
       metrics.initializeCompactionThreadsTracker(this, diskToDiskManager.size());
       if (clusterParticipants != null) {
-        clusterParticipants.forEach(participant -> {
-          participant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
-              new PartitionStateChangeListenerImpl(participant == primaryParticipant));
-          participant.setInitialLocalPartitions(partitionNameToReplicaId.keySet());
+        clusterParticipants.forEach(clusterParticipant -> {
+          clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
+              new PartitionStateChangeListenerImpl(clusterParticipant == primaryClusterParticipant));
+          clusterParticipant.setInitialLocalPartitions(partitionNameToReplicaId.keySet());
         });
       }
       diskToDiskManager.values().forEach(diskManager -> unexpectedDirs.addAll(diskManager.getUnexpectedDirs()));
@@ -474,19 +475,20 @@ public class StorageManager implements StoreManager {
     // another. Ideally, the actions in Storage manager for state changes (such as offline -> bootstrap, etc) should be
     // taken only for primary participant. But, in order to detect store failures and mark ERROR in helix state on both
     // helix clusters, we let the listener logic to be executed for both participants (PR: https://github.com/linkedin/ambry/pull/1550).
-    // However, we need to make sure the internal state of store is only updated by primary participant since
+    // However, we need to make sure the internal state of store is only updated by primary cluster participant since
     // Replication Manager which only listens to primary participant also updates the internal store states. For such
     // needs, use this boolean.
-    private final boolean isPrimaryParticipantListener;
+    private final boolean isPrimaryClusterParticipantListener;
     PartitionStateChangeListener replicationManagerListener = null;
     PartitionStateChangeListener statsManagerListener = null;
 
     /**
      * Constructor
-     * @param isPrimaryParticipantListener true if this listener for primary ZK participant
+     * @param isPrimaryClusterParticipantListener true if this is a listener for state changes coming for primary ZK
+     *                                            cluster participant.
      */
-    PartitionStateChangeListenerImpl(boolean isPrimaryParticipantListener) {
-      this.isPrimaryParticipantListener = isPrimaryParticipantListener;
+    PartitionStateChangeListenerImpl(boolean isPrimaryClusterParticipantListener) {
+      this.isPrimaryClusterParticipantListener = isPrimaryClusterParticipantListener;
     }
 
     @Override
@@ -513,10 +515,10 @@ public class StorageManager implements StoreManager {
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
               ReplicaOperationFailure);
         }
-        if (primaryParticipant != null) {
+        if (primaryClusterParticipant != null) {
           // update InstanceConfig in Helix
           try {
-            if (!primaryParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
+            if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replicaToAdd, true)) {
               logger.error("Failed to add partition {} into InstanceConfig of current node", partitionName);
               throw new StateTransitionException("Failed to add partition " + partitionName + " into InstanceConfig",
                   StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
@@ -565,7 +567,7 @@ public class StorageManager implements StoreManager {
           }
         }
       }
-      if (isPrimaryParticipantListener) {
+      if (isPrimaryClusterParticipantListener) {
         // Only update store state if this is a state transition for primary participant. Since replication Manager
         // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
         // stuck in BOOTSTRAP if this is updated by second participant listener too
@@ -622,7 +624,7 @@ public class StorageManager implements StoreManager {
         }
         if (localStore.isStarted()) {
           // 1. set state to INACTIVE
-          if (isPrimaryParticipantListener) {
+          if (isPrimaryClusterParticipantListener) {
             localStore.setCurrentState(ReplicaState.INACTIVE);
             logger.info("Store {} is set to INACTIVE", partitionName);
           }
@@ -653,10 +655,10 @@ public class StorageManager implements StoreManager {
         throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
       }
       logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
-      if (primaryParticipant != null) {
+      if (primaryClusterParticipant != null) {
         // update InstanceConfig in Helix
         try {
-          if (!primaryParticipant.updateDataNodeInfoInCluster(replica, false)) {
+          if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replica, false)) {
             logger.error("Failed to remove partition {} from InstanceConfig of current node", partitionName);
             throw new StateTransitionException("Failed to remove partition " + partitionName + " from InstanceConfig",
                 StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
@@ -688,7 +690,8 @@ public class StorageManager implements StoreManager {
         return;
       }
       Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
-          primaryParticipant == null ? new HashMap<>() : primaryParticipant.getPartitionStateChangeListeners();
+          primaryClusterParticipant == null ? new HashMap<>()
+              : primaryClusterParticipant.getPartitionStateChangeListeners();
       replicationManagerListener = partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
       statsManagerListener = partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
       // get the store (skip the state check here, because probably the store is stopped in previous transition. Also,
