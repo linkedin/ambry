@@ -478,17 +478,28 @@ public class StorageManager implements StoreManager {
     // However, we need to make sure the internal state of store is only updated by primary cluster participant since
     // Replication Manager which only listens to primary participant also updates the internal store states. For such
     // needs, use this boolean.
-    private final boolean isPrimaryClusterParticipantListener;
+
+    /**
+     * Indicates whether it's a listener object for primary helix cluster-manager. Used to respond to state transition
+     * messages from primary helix cluster, which is simply the first string in zkConnectStr separated by commas.
+     * The usage of "participant" is being used to refer to both ambry-server node and helix at some places in the
+     * code which is wrong. We don't want to fix all usages retroactively at this point,
+     * but going forward please follow this convention below.
+     * <p>
+     * participant = ambry-server node that _participates_ in cluster management done by helix cluster-manager service
+     * participant = _NOT_ helix cluster-manager service
+     * <p>
+     */
+    private final boolean isPrimaryClusterManagerListener;
     PartitionStateChangeListener replicationManagerListener = null;
     PartitionStateChangeListener statsManagerListener = null;
 
     /**
      * Constructor
-     * @param isPrimaryClusterParticipantListener true if this is a listener for state changes coming for primary ZK
-     *                                            cluster participant.
+     * @param isPrimaryClusterManagerListener Indicates whether it's a listener object for primary helix cluster-manager
      */
-    PartitionStateChangeListenerImpl(boolean isPrimaryClusterParticipantListener) {
-      this.isPrimaryClusterParticipantListener = isPrimaryClusterParticipantListener;
+    PartitionStateChangeListenerImpl(boolean isPrimaryClusterManagerListener) {
+      this.isPrimaryClusterManagerListener = isPrimaryClusterManagerListener;
     }
 
     @Override
@@ -551,6 +562,12 @@ public class StorageManager implements StoreManager {
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
               StoreNotStarted);
         }
+
+        if (!isPrimaryClusterManagerListener) {
+          logger.info("Not changing replica state from OFFLINE to BOOTSTRAP since this is not the primary cluster-manager listener");
+          return;
+        }
+
         // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
         // it to stay in BOOTSTRAP state when catching up with peers.
         long storeUsedCapacity = store.getSizeInBytes();
@@ -567,12 +584,7 @@ public class StorageManager implements StoreManager {
           }
         }
       }
-      if (isPrimaryClusterParticipantListener) {
-        // Only update store state if this is a state transition for primary participant. Since replication Manager
-        // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
-        // stuck in BOOTSTRAP if this is updated by second participant listener too
-        store.setCurrentState(ReplicaState.BOOTSTRAP);
-      }
+      store.setCurrentState(ReplicaState.BOOTSTRAP);
     }
 
     @Override
@@ -609,6 +621,12 @@ public class StorageManager implements StoreManager {
               "Store " + partitionName + " is already disabled due to I/O error or by " + "admin operation",
               ReplicaOperationFailure);
         }
+
+        if (!isPrimaryClusterManagerListener) {
+          logger.info("Not changing replica state from STANDBY to INACTIVE since this is not the primary cluster-manager listener");
+          return;
+        }
+
         // 0. as long as local replica exists, we create a decommission file in its dir
         File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
         try {
@@ -624,10 +642,8 @@ public class StorageManager implements StoreManager {
         }
         if (localStore.isStarted()) {
           // 1. set state to INACTIVE
-          if (isPrimaryClusterParticipantListener) {
-            localStore.setCurrentState(ReplicaState.INACTIVE);
-            logger.info("Store {} is set to INACTIVE", partitionName);
-          }
+          localStore.setCurrentState(ReplicaState.INACTIVE);
+          logger.info("Store {} is set to INACTIVE", partitionName);
           // 2. disable compaction on this store
           if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
             logger.error("Failed to disable compaction on store {}", partitionName);
