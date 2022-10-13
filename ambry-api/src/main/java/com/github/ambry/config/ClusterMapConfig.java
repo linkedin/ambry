@@ -160,14 +160,12 @@ public class ClusterMapConfig {
    * The name of the associated aggregated view cluster for this node.
    */
   @Config(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME)
-  @Default("")
   public final String clusterMapAggregatedViewClusterName;
 
   /**
    * To indicate if we should use helix aggregated cluster view.
    */
   @Config(CLUSTERMAP_USE_AGGREGATED_VIEW)
-  @Default("false")
   public final boolean clusterMapUseAggregatedView;
 
   /**

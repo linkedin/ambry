@@ -684,71 +684,32 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
-      List<AmbryReplica> replicas = new ArrayList<>();
-      if (clusterMapConfig.clusterMapUseAggregatedView) {
-        String resourceName = dcName != null ? partitionToResourceNameByDc.get(dcName).get(partition.toPathString())
-            : getResourceNameForPartition(partition);
-        globalRoutingTableSnapshotRef.get()
-            .getInstancesForResource(resourceName, partition.toPathString(), state.name())
-            .stream()
-            .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-            .filter(dataNode -> dcName == null || dataNode.getDatacenterName().equals(dcName))
-            .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-            .filter(Objects::nonNull)
-            .forEach(replicas::add);
-      } else {
-        for (DcInfo dcInfo : dcToDcInfo.values()) {
-          String dc = dcInfo.dcName;
-          if (dcName == null || dcName.equals(dc)) {
-            String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
-            dcToRoutingTableSnapshotRef.get(dcInfo.dcName)
-                .get()
-                .getInstancesForResource(resourceName, partition.toPathString(), state.name())
-                .stream()
-                .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-                .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-                .filter(Objects::nonNull)
-                .forEach(replicas::add);
-          }
+      Set<AmbryReplica> replicas = new HashSet<>();
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        String dc = dcInfo.dcName;
+        if (dcName == null || dcName.equals(dc)) {
+          String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
+          RoutingTableSnapshot routingTableSnapshot =
+              clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
+                  : dcToRoutingTableSnapshotRef.get(dc).get();
+          String partitionPath = partition.toPathString();
+          routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
+              .stream()
+              .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
+              .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
+              .filter(Objects::nonNull)
+              .forEach(replicas::add);
         }
       }
-      return replicas;
+      return new ArrayList<>(replicas);
     }
 
     @Override
     public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, AmbryPartition partition,
         Set<ReplicaState> states, String dcName) {
-      if (clusterMapConfig.clusterMapUseAggregatedView) {
-        String resourceName = dcName != null ? partitionToResourceNameByDc.get(dcName).get(partition.toPathString())
-            : getResourceNameForPartition(partition);
-        for (ReplicaState state : states) {
-          List<AmbryReplica> list = replicasByState.computeIfAbsent(state, k -> new ArrayList<>());
-          globalRoutingTableSnapshotRef.get()
-              .getInstancesForResource(resourceName, partition.toPathString(), state.name())
-              .stream()
-              .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-              .filter(dataNode -> dcName == null || dataNode.getDatacenterName().equals(dcName))
-              .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-              .filter(Objects::nonNull)
-              .forEach(list::add);
-        }
-      } else {
-        for (DcInfo dcInfo : dcToDcInfo.values()) {
-          String dc = dcInfo.dcName;
-          if (dcName == null || dcName.equals(dc)) {
-            String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
-            RoutingTableSnapshot snapshot = dcToRoutingTableSnapshotRef.get(dc).get();
-            for (ReplicaState state : states) {
-              List<AmbryReplica> list = replicasByState.computeIfAbsent(state, k -> new ArrayList<>());
-              snapshot.getInstancesForResource(resourceName, partition.toPathString(), state.name())
-                  .stream()
-                  .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-                  .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-                  .filter(Objects::nonNull)
-                  .forEach(list::add);
-            }
-          }
-        }
+      for (ReplicaState state : states) {
+        List<AmbryReplica> replicas = getReplicaIdsByState(partition, state, dcName);
+        replicasByState.put(state, replicas);
       }
     }
 

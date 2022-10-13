@@ -72,6 +72,7 @@ class HelixAggregatedViewClusterInitializer {
 
   /**
    * Begin the startup procedure in a background thread.
+   * TODO: We don't need to run this in background thread since there is only {@link HelixAggregatedViewClusterInitializer}.
    */
   public void start() {
     Utils.newThread(() -> {
@@ -119,10 +120,10 @@ class HelixAggregatedViewClusterInitializer {
     // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default for initialization.
     // Note that, Ambry currently doesn't support multiple spectators, because there should be only one source of truth.
     String localZkConnectStr = localDcZkInfo.getZkConnectStrs().get(0);
-    HelixManager aggregatedViewManager =
+    HelixManager helixManager =
         helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapAggregatedViewClusterName, selfInstanceName,
             InstanceType.SPECTATOR, localZkConnectStr);
-    logger.info("Helix cluster name {}", aggregatedViewManager.getClusterName());
+    logger.info("Helix cluster name {}", helixManager.getClusterName());
 
     HelixClusterChangeHandler clusterChangeHandler =
         helixClusterManager.new HelixClusterChangeHandler(clusterMapConfig.clusterMapClusterName,
@@ -148,8 +149,7 @@ class HelixAggregatedViewClusterInitializer {
     // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
     logger.info("Creating routing table provider for entire cluster associated with Helix manager at {}",
         localZkConnectStr);
-    RoutingTableProvider routingTableProvider =
-        new RoutingTableProvider(aggregatedViewManager, PropertyType.CURRENTSTATES);
+    RoutingTableProvider routingTableProvider = new RoutingTableProvider(helixManager, PropertyType.CURRENTSTATES);
     logger.info("Routing table provider is created for entire cluster");
     routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
     logger.info("Registered routing table change listeners for entire cluster");
@@ -176,7 +176,7 @@ class HelixAggregatedViewClusterInitializer {
     }
 
     // 3. Register aggregate cluster change handler to get notified on live instance changes in entire cluster.
-    aggregatedViewManager.addLiveInstanceChangeListener(clusterChangeHandler);
+    helixManager.addLiveInstanceChangeListener(clusterChangeHandler);
     logger.info("Registered live instance change listeners for entire cluster via Helix manager at {}",
         localZkConnectStr);
 
@@ -193,6 +193,6 @@ class HelixAggregatedViewClusterInitializer {
       clusterChangeHandler.waitForInitNotification();
     }
 
-    return new HelixAggregatedViewClusterInfo(aggregatedViewManager, clusterChangeHandler, dataNodeConfigSources);
+    return new HelixAggregatedViewClusterInfo(helixManager, clusterChangeHandler, dataNodeConfigSources);
   }
 }
