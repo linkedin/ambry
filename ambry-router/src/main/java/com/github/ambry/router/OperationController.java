@@ -65,6 +65,7 @@ public class OperationController implements Runnable {
   final DeleteManager deleteManager;
   final TtlUpdateManager ttlUpdateManager;
   final UndeleteManager undeleteManager;
+  final ReplicateBlobManager replicateBlobManager;
   private final NetworkClient networkClient;
   private final ResponseHandler responseHandler;
   private final RouterConfig routerConfig;
@@ -145,6 +146,9 @@ public class OperationController implements Runnable {
             routerCallback, time, nonBlockingRouter);
     ttlUpdateManager =
         new TtlUpdateManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
+            routerMetrics, time, nonBlockingRouter);
+    replicateBlobManager =
+        new ReplicateBlobManager(clusterMap, responseHandler, accountService, notificationSystem, routerConfig,
             routerMetrics, time, nonBlockingRouter);
     undeleteManager = new UndeleteManager(clusterMap, responseHandler, notificationSystem, accountService, routerConfig,
         routerMetrics, time, nonBlockingRouter);
@@ -291,6 +295,27 @@ public class OperationController implements Runnable {
             }, (blobInfo -> isBlobTtlUpdated(blobInfo)), (exception) -> {
           nonBlockingRouter.completeUpdateBlobTtlOperation(exception, futureResult, callback);
         }), quotaChargeCallback);
+  }
+
+  /**
+   * Requests for a blob to be replicated asynchronously and invokes the {@link Callback} when the request
+   * completes.
+   * @param blobId ID of the blob that needs to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} where to get the Blob.
+   * @param futureResult A future that would contain the BlobId eventually.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   */
+  protected void replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode,
+      FutureResult<Void> futureResult, Callback<Void> callback) {
+    try {
+      replicateBlobManager.submitReplicateBlobOperation(blobId, serviceId, sourceDataNode, futureResult, callback);
+      routerCallback.onPollReady();
+    } catch (RouterException e) {
+      routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.onReplicateBlobError(e);
+      nonBlockingRouter.completeOperation(futureResult, callback, null, e);
+    }
   }
 
   /**
@@ -464,6 +489,7 @@ public class OperationController implements Runnable {
     deleteManager.close();
     ttlUpdateManager.close();
     undeleteManager.close();
+    replicateBlobManager.close();
   }
 
   /**
@@ -481,6 +507,7 @@ public class OperationController implements Runnable {
       deleteManager.poll(requestsToSend, requestsToDrop);
       ttlUpdateManager.poll(requestsToSend, requestsToDrop);
       undeleteManager.poll(requestsToSend, requestsToDrop);
+      replicateBlobManager.poll(requestsToSend, requestsToDrop);
     } catch (Exception e) {
       logger.error("Operation Manager poll received an unexpected error: ", e);
       routerMetrics.operationManagerPollErrorCount.inc();
@@ -526,6 +553,9 @@ public class OperationController implements Runnable {
               break;
             case UndeleteRequest:
               undeleteManager.handleResponse(responseInfo);
+              break;
+            case ReplicateBlobRequest:
+              replicateBlobManager.handleResponse(responseInfo);
               break;
             default:
               logger.error("Unexpected response type: {} received, discarding", type);

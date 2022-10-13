@@ -15,9 +15,11 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -36,6 +38,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -317,6 +320,50 @@ class NonBlockingRouter implements Router {
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), false);
+      completeOperation(futureResult, callback, null, routerException);
+    }
+    return futureResult;
+  }
+
+  /**
+   * Requests for a blob to be replicated asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  public CompletableFuture<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode) {
+    CompletableFuture<Void> future = new CompletableFuture<>();
+    replicateBlob(blobId, serviceId, sourceDataNode, CallbackUtils.fromCompletableFuture(future));
+    return future;
+  }
+
+  /**
+   * Requests for a new blob to be replicated on-demand asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode,
+      Callback<Void> callback) {
+    if (blobId == null || sourceDataNode == null) {
+      throw new IllegalArgumentException("blobId or sourceHost must not be null");
+    }
+
+    currentOperationsCount.incrementAndGet();
+    routerMetrics.replicateBlobOperationRate.mark();
+    routerMetrics.operationQueuingRate.mark();
+
+    FutureResult<Void> futureResult = new FutureResult<>();
+    if (isOpen.get()) {
+      getOperationController().replicateBlob(blobId, serviceId, sourceDataNode, futureResult, callback);
+    } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+      routerMetrics.operationDequeuingRate.mark();
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
