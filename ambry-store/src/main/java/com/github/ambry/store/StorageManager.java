@@ -204,7 +204,7 @@ public class StorageManager implements StoreManager {
       if (clusterParticipants != null) {
         clusterParticipants.forEach(participant -> {
           participant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
-              new PartitionStateChangeListenerImpl());
+              new PartitionStateChangeListenerImpl(participant == primaryParticipant));
           participant.setInitialLocalPartitions(partitionNameToReplicaId.keySet());
         });
       }
@@ -470,8 +470,24 @@ public class StorageManager implements StoreManager {
    * Implementation of {@link PartitionStateChangeListener} to capture state changes and take actions accordingly.
    */
   private class PartitionStateChangeListenerImpl implements PartitionStateChangeListener {
+    // We could be occasionally participating in multiple helix/zk clusters during migration from one ZK cluster to
+    // another. Ideally, the actions in Storage manager for state changes (such as offline -> bootstrap, etc) should be
+    // taken only for primary participant. But, in order to detect store failures and mark ERROR in helix state on both
+    // helix clusters, we let the listener logic to be executed for both participants (PR: https://github.com/linkedin/ambry/pull/1550).
+    // However, we need to make sure the internal state of store is only updated by primary participant since
+    // Replication Manager which only listens to primary participant also updates the internal store states. For such
+    // needs, use this boolean.
+    private final boolean isPrimaryParticipantListener;
     PartitionStateChangeListener replicationManagerListener = null;
     PartitionStateChangeListener statsManagerListener = null;
+
+    /**
+     * Constructor
+     * @param isPrimaryParticipantListener true if this listener for primary ZK participant
+     */
+    PartitionStateChangeListenerImpl(boolean isPrimaryParticipantListener) {
+      this.isPrimaryParticipantListener = isPrimaryParticipantListener;
+    }
 
     @Override
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
@@ -549,7 +565,12 @@ public class StorageManager implements StoreManager {
           }
         }
       }
-      store.setCurrentState(ReplicaState.BOOTSTRAP);
+      if (isPrimaryParticipantListener) {
+        // Only update store state if this is a state transition for primary participant. Since replication Manager
+        // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
+        // stuck in BOOTSTRAP if this is updated by second participant listener too
+        store.setCurrentState(ReplicaState.BOOTSTRAP);
+      }
     }
 
     @Override
@@ -601,8 +622,10 @@ public class StorageManager implements StoreManager {
         }
         if (localStore.isStarted()) {
           // 1. set state to INACTIVE
-          localStore.setCurrentState(ReplicaState.INACTIVE);
-          logger.info("Store {} is set to INACTIVE", partitionName);
+          if (isPrimaryParticipantListener) {
+            localStore.setCurrentState(ReplicaState.INACTIVE);
+            logger.info("Store {} is set to INACTIVE", partitionName);
+          }
           // 2. disable compaction on this store
           if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
             logger.error("Failed to disable compaction on store {}", partitionName);
