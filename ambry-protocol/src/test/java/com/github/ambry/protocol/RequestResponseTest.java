@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -952,8 +953,7 @@ public class RequestResponseTest {
     MockClusterMap clusterMap = new MockClusterMap();
     int correlationId = 1;
     String clientId = "ambry-healthchecker";
-    AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.RequestControl, null, correlationId, clientId);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.HealthCheck, null, correlationId, clientId);
     HealthCheckAdminRequest checkRequest = new HealthCheckAdminRequest(adminRequest);
     DataInputStream requestStream = serAndPrepForRead(checkRequest, -1, true);
     AdminRequest deserializedAdminRequest =
@@ -961,6 +961,32 @@ public class RequestResponseTest {
             AdminRequestOrResponseType.HealthCheck, null);
     HealthCheckAdminRequest.readFrom(requestStream, deserializedAdminRequest);
     checkRequest.release();
+  }
+
+  /**
+   * Tests the ser/de of {@link BlobIndexAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void blobIndexAdminRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    int correlationId = 1;
+    String clientId = "ambry-blobindexer";
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM),
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobIndex, null, correlationId, clientId);
+    BlobIndexAdminRequest blobIndexRequest = new BlobIndexAdminRequest(blobId, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(blobIndexRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.BlobIndex, null);
+    BlobIndexAdminRequest deserilized =
+        BlobIndexAdminRequest.readFrom(requestStream, deserializedAdminRequest, new BlobIdFactory(clusterMap));
+    Assert.assertEquals(blobId.getID(), deserilized.getStoreKey().getID());
+    blobIndexRequest.release();
   }
 
   /**
@@ -1030,7 +1056,8 @@ public class RequestResponseTest {
     final ReplicateBlobRequest replicateBlobRequest =
         new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName, sourceHostPort);
     DataInputStream requestStream = serAndPrepForRead(replicateBlobRequest, -1, true);
-    final ReplicateBlobRequest deserializedReplicateBlobRequest = ReplicateBlobRequest.readFrom(requestStream, clusterMap);
+    final ReplicateBlobRequest deserializedReplicateBlobRequest =
+        ReplicateBlobRequest.readFrom(requestStream, clusterMap);
     verifyReplicateBlobRequest(replicateBlobRequest, deserializedReplicateBlobRequest);
     replicateBlobRequest.release();
 
