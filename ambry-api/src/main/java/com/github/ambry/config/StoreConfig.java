@@ -491,23 +491,23 @@ public class StoreConfig {
   public static final String storeCompactionHistoryInDayName = "store.compaction.history.in.day";
 
   /**
-   * True to enable rebuilding replication token based on compaction history.
-   */
-  @Config(storeRebuildTokenBasedOnCompactionHistoryName)
-  @Default("false")
-  public final boolean storeRebuildTokenBasedOnCompactionHistory;
-  public static final String storeRebuildTokenBasedOnCompactionHistoryName =
-      "store.rebuild.token.based.on.compaction.history";
-
-  /**
-   * Partition id to enable rebuild token based on compaction history. In order to enable this feature, we have to enable
-   * the storeRebuildTokenBasedOnCompactionHistory and add partition id here. This is a comma separated list.
+   * Partition id to enable rebuild token based on compaction history. To enable this feature for all partitions in
+   * this host, use {@link #storeRebuildTokenBasedOnCompactionHistory}.
    */
   @Config(storePartitionsToRebuildTokenBasedOnCompactionHistoryName)
   @Default("")
   public List<Long> storePartitionsToRebuildTokenBasedOnCompactionHistory;
   public static final String storePartitionsToRebuildTokenBasedOnCompactionHistoryName =
       "store.partitions.to.rebuild.token.based.on.compaction.history";
+
+  /**
+   * True to enable rebuilding replication token based on compaction history for all partitions in this host.
+   */
+  @Config(storeRebuildTokenBasedOnCompactionHistoryName)
+  @Default("false")
+  public final boolean storeRebuildTokenBasedOnCompactionHistory;
+  public static final String storeRebuildTokenBasedOnCompactionHistoryName =
+      "store.rebuild.token.based.on.compaction.history";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
