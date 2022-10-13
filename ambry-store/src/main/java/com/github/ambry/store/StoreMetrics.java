@@ -42,6 +42,7 @@ public class StoreMetrics {
   public final Timer findEntriesSinceResponse;
   public final Timer findMissingKeysResponse;
   public final Timer findKeyResponse;
+  public final Timer findAllMessageInfosResponse;
   public final Timer isKeyDeletedResponse;
   public final Timer storeStartTime;
   public final Histogram storeShutdownTimeInMs;
@@ -140,6 +141,8 @@ public class StoreMetrics {
     findMissingKeysResponse =
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindMissingKeyResponse"));
     findKeyResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindKeyResponse"));
+    findAllMessageInfosResponse =
+        registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindAllMessageInfosResponse"));
     isKeyDeletedResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "IsKeyDeletedResponse"));
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreStartTime"));
     storeShutdownTimeInMs = registry.histogram(MetricRegistry.name(BlobStore.class, name + "StoreShutdownTimeInMs"));

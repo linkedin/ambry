@@ -17,7 +17,9 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.replication.FindToken;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 
@@ -90,7 +92,6 @@ public interface Store {
   FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname, String remoteReplicaPath)
       throws StoreException;
 
-
   /**
    * Finds all the keys that are not present in the store from the input keys
    * @param keys The list of keys that need to be checked for existence
@@ -118,6 +119,21 @@ public interface Store {
    * @throws StoreException
    */
   MessageInfo findKey(StoreKey key) throws StoreException;
+
+  /**
+   * Return all the MessageInfos associated with the given key in the store. The result is a map, whose key
+   * should be string that would indicated the internal order of each MessageInfo value, if there is any internal
+   * order.
+   * @param key The key of which blob to return {@link MessageInfo}.
+   * @return A map of {@link MessageInfo} as value and an ordered key.
+   * @throws StoreException
+   */
+  default Map<String, MessageInfo> findAllMessageInfosForKey(StoreKey key) throws StoreException {
+    MessageInfo info = findKey(key);
+    Map<String, MessageInfo> result = new HashMap<>();
+    result.put("0", info);
+    return result;
+  }
 
   /**
    * Get the corresponding {@link StoreStats} instance for this store.
