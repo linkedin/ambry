@@ -439,18 +439,6 @@ public class StoreConfig {
   public static final String storeEnableIndexDirectMemoryUsageMetricName =
       "store.enable.index.direct.memory.usage.metric";
 
-  @Config(storeAlwaysEnableTargetIndexDuplicateCheckingName)
-  @Default("false")
-  public final boolean storeAlwaysEnableTargetIndexDuplicateChecking;
-  public static final String storeAlwaysEnableTargetIndexDuplicateCheckingName =
-      "store.always.enable.target.index.duplicate.checking";
-
-  @Config(storeCompactionEnableBasicInfoOnMissingDuplicateName)
-  @Default("false")
-  public final boolean storeCompactionEnableBasicInfoOnMissingDuplicate;
-  public static final String storeCompactionEnableBasicInfoOnMissingDuplicateName =
-      "store.compaction.enable.basic.info.on.missing.duplicate";
-
   /**
    * A normalized disk IO read latency threshold(per MB). If actual normalized disk read latency is higher than the
    * threshold, we need to decrease compaction speed.
@@ -621,11 +609,7 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.enable.current.invalid.size.metric", false);
     storeEnableIndexDirectMemoryUsageMetric =
         verifiableProperties.getBoolean(storeEnableIndexDirectMemoryUsageMetricName, false);
-    storeAlwaysEnableTargetIndexDuplicateChecking =
-        verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
     storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);
-    storeCompactionEnableBasicInfoOnMissingDuplicate =
-        verifiableProperties.getBoolean(storeCompactionEnableBasicInfoOnMissingDuplicateName, false);
     storeCompactionIoPerMbReadLatencyThresholdMs =
         verifiableProperties.getIntInRange("store.compaction.io.per.mb.read.latency.threshold.ms", 20, 0,
             Integer.MAX_VALUE);

@@ -96,7 +96,6 @@ public class BlobStoreCompactorTest {
   private final boolean withUndelete;
   private final boolean purgeDeleteTombstone;
   private final StoreConfig config;
-  private boolean alwaysEnableTargetIndexDuplicateChecking = false;
   private final Time time = new MockTime();
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
   private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -727,12 +726,6 @@ public class BlobStoreCompactorTest {
   @Test
   public void testDuplicatePuts() throws Exception {
     testDuplicatePutsHelper();
-    alwaysEnableTargetIndexDuplicateChecking = true;
-    try {
-      testDuplicatePutsHelper();
-    } finally {
-      alwaysEnableTargetIndexDuplicateChecking = false;
-    }
   }
 
   /**
@@ -2914,19 +2907,12 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
 
     long duplicateCount = compactor.getTgtMetrics().compactionTargetIndexDuplicateOnNonRecoveryCount.getCount();
-    if (alwaysEnableTargetIndexDuplicateChecking) {
+    try {
       compactor.compact(details, bundleReadBuffer);
-      long duplicateCountAfterCompaction =
-          compactor.getTgtMetrics().compactionTargetIndexDuplicateOnNonRecoveryCount.getCount();
-      assertEquals(duplicateCountAfterCompaction - duplicateCount, 1);
-    } else {
-      try {
-        compactor.compact(details, bundleReadBuffer);
-        fail("Should fail with duplicate put");
-      } catch (StoreException e) {
-        assertEquals(StoreErrorCodes.Unknown_Error, e.getErrorCode());
-        assertTrue(e.getMessage().contains("duplicate PUT"));
-      }
+      fail("Should fail with duplicate put");
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Unknown_Error, e.getErrorCode());
+      assertTrue(e.getMessage().contains("duplicate PUT"));
     }
     compactor.close(0);
   }
@@ -2970,8 +2956,6 @@ public class BlobStoreCompactorTest {
       state.properties.put("store.container.deletion.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
     }
     state.properties.put("store.compaction.purge.delete.tombstone", Boolean.toString(purgeDeleteTombstone));
-    state.properties.put(StoreConfig.storeAlwaysEnableTargetIndexDuplicateCheckingName,
-        Boolean.toString(alwaysEnableTargetIndexDuplicateChecking));
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
