@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.Iterator;
+import java.util.List;
 
 
 /**
@@ -69,6 +70,20 @@ interface OperationTracker {
    * @return {@code true} if the operation failed because of {@link TrackedRequestFinalState#NOT_FOUND}.
    */
   boolean hasFailedOnNotFound();
+
+  /**
+   * Check if any replica returned NOT_FOUND response.
+   *
+   * Return {@code true} if any replica returned NOT_FOUND
+   */
+  boolean hasNotFound();
+
+  /**
+   * Get the list of replicas which returned successful response
+   *
+   * Return a list of {@link ReplicaId} which sent back successful response.
+   */
+  List<ReplicaId> getSuccessReplica();
 
   /**
    * Determines if an operation has completed (either succeeded or failed).

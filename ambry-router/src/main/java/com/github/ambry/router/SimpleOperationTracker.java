@@ -85,6 +85,7 @@ class SimpleOperationTracker implements OperationTracker {
   private final boolean crossColoEnabled;
   protected int inflightCount = 0;
   protected int replicaSuccessCount = 0;
+  protected List<ReplicaId> successReplica = new ArrayList<>();
   protected int replicaInPoolOrFlightCount = 0;
   protected int failedCount = 0;
   protected boolean quotaRejected = false;
@@ -485,6 +486,16 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
+  public boolean hasNotFound() {
+    return totalNotFoundCount > 0;
+  }
+
+  @Override
+  public List<ReplicaId> getSuccessReplica() {
+    return successReplica;
+  }
+
+  @Override
   public int getSuccessCount() {
     return replicaSuccessCount;
   }
@@ -501,6 +512,7 @@ class SimpleOperationTracker implements OperationTracker {
     modifyReplicasInPoolOrInFlightCount(-1);
     switch (trackedRequestFinalState) {
       case SUCCESS:
+        successReplica.add(replicaId);
         replicaSuccessCount++;
         break;
       // Request disabled may happen when PUT/DELETE/TTLUpdate requests attempt to perform on replicas that are being

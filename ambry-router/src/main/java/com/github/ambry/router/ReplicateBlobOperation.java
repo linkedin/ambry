@@ -171,16 +171,16 @@ class ReplicateBlobOperation {
         requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
-      logger.trace("ReplicateBlobRequest with response correlationId {} timed out for replica {} ",
-          replicateBlobRequest.getCorrelationId(), replica.getDataNodeId());
+      logger.info("ReplicateBlobRequest {} with response correlationId {} timed out for replica {} ",
+          replicateBlobRequest.getBlobId(), replicateBlobRequest.getCorrelationId(), replica.getDataNodeId());
       onErrorResponse(replica, new RouterException(
           "Operation to ReplicateBlob " + blobId + " timed out because of " + responseInfo.getError() + " at DataNode "
               + responseInfo.getDataNode(), RouterErrorCode.OperationTimedOut));
     } else {
       if (replicateBlobResponse == null) {
-        logger.trace(
-            "ReplicateBlobRequest with response correlationId {} received UnexpectedInternalError on response deserialization for replica {} ",
-            replicateBlobRequest.getCorrelationId(), replica.getDataNodeId());
+        logger.info(
+            "ReplicateBlobRequest {} with correlationId {} received UnexpectedInternalError on deserialization for replica {} ",
+            replicateBlobRequest.getBlobId(), replicateBlobRequest.getCorrelationId(), replica.getDataNodeId());
         onErrorResponse(replica, new RouterException("Response deserialization received an unexpected error",
             RouterErrorCode.UnexpectedInternalError));
       } else {
@@ -188,8 +188,9 @@ class ReplicateBlobOperation {
         // not for its original request. We will immediately fail this operation.
         if (replicateBlobResponse.getCorrelationId() != replicateBlobRequest.getCorrelationId()) {
           logger.error(
-              "The correlation id in the ReplicateBlobResponse {} is not the same as the correlation id in the associated ReplicateBlobRequest: {}",
-              replicateBlobResponse.getCorrelationId(), replicateBlobRequest.getCorrelationId());
+              "ReplicateBlobRequest {} the correlation id in the response {} is not the same as the id in the request: {}",
+              replicateBlobRequest.getBlobId(), replicateBlobResponse.getCorrelationId(),
+              replicateBlobRequest.getCorrelationId());
           routerMetrics.unknownReplicaResponseError.inc();
           onErrorResponse(replica,
               new RouterException("Received wrong response that is not for the corresponding request.",
@@ -198,22 +199,24 @@ class ReplicateBlobOperation {
           ServerErrorCode serverError = replicateBlobResponse.getError();
           if (serverError == ServerErrorCode.No_Error || serverError == ServerErrorCode.Blob_Already_Exists) {
             operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
+            logger.info("ReplicateBlob {} successful for replica {} in {} with correlationId {} ",
+                replicateBlobRequest.getBlobId(), replica.getDataNodeId(), replica.getDataNodeId().getDatacenterName(),
+                replicateBlobRequest.getCorrelationId());
             if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
-              logger.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
-                  replica.getDataNodeId().getDatacenterName());
               routerMetrics.crossColoSuccessCount.inc();
             }
           } else if (serverError == ServerErrorCode.Disk_Unavailable) {
-            logger.trace("Replica {} returned Disk_Unavailable for a ReplicateBlob request with correlationId : {} ",
-                replica.getDataNodeId(), replicateBlobRequest.getCorrelationId());
+            logger.info("Replica {} {} returned Disk_Unavailable for a ReplicateBlob request with correlationId : {} ",
+                replicateBlobRequest.getBlobId(), replica.getDataNodeId(), replicateBlobRequest.getCorrelationId());
             operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
             setOperationException(
                 new RouterException("Server returned: " + serverError, RouterErrorCode.AmbryUnavailable));
             routerMetrics.routerRequestErrorCount.inc();
             routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).replicateBlobRequestErrorCount.inc();
           } else {
-            logger.trace("Replica {} returned error {} for a ReplicateBlob request with response correlationId : {} ",
-                replica.getDataNodeId(), serverError, replicateBlobRequest.getCorrelationId());
+            logger.info("Replica {} {} returned error {} for a ReplicateBlob request with response correlationId : {} ",
+                replicateBlobRequest.getBlobId(), replica.getDataNodeId(), serverError,
+                replicateBlobRequest.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(serverError);
             if (serverError == ServerErrorCode.Blob_Authorization_Failure) {
               // this is a successful response and one that completes the operation regardless of whether the

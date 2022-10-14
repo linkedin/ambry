@@ -15,6 +15,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -31,6 +32,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -55,7 +57,7 @@ class TtlUpdateOperation {
   private final QuotaChargeCallback quotaChargeCallback;
   // Parameters associated with the state.
   // The operation tracker that tracks the state of this operation.
-  private final OperationTracker operationTracker;
+  private OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
   private final Map<Integer, RequestInfo> ttlUpdateRequestInfos = new LinkedHashMap<>();
   // The result of this operation to be set into FutureResult.
@@ -67,6 +69,9 @@ class TtlUpdateOperation {
   private boolean operationCompleted = false;
   // Quota charger for this operation.
   private final OperationQuotaCharger operationQuotaCharger;
+  private final NonBlockingRouter nonBlockingRouter;
+  private ReplicateBlobCallback replicateBlobCallback;
+  private final String originatingDcName;
 
   /**
    * Instantiates a {@link TtlUpdateOperation}.
@@ -81,10 +86,11 @@ class TtlUpdateOperation {
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
    * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
+   * @param nonBlockingRouter The non-blocking router object
    */
   TtlUpdateOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       BlobId blobId, String serviceId, long expiresAtMs, long operationTimeMs, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
@@ -95,13 +101,14 @@ class TtlUpdateOperation {
     this.expiresAtMs = expiresAtMs;
     this.operationTimeMs = operationTimeMs;
     byte blobDcId = blobId.getDatacenterId();
-    String originatingDcName = clusterMap.getDatacenterName(blobDcId);
+    this.originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics, blobId);
     this.quotaChargeCallback = quotaChargeCallback;
     this.operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -355,6 +362,15 @@ class TtlUpdateOperation {
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
     if (operationTracker.isDone() || operationCompleted) {
+      // JING TODO next revision, will add configuration for this feature
+      if (!operationTracker.hasSucceeded()) {
+        // the operation is failed, try to recover with ReplicateBlob
+        // if retryWithReplicateBlob returns true, it's under retry. operation is not completed yet.
+        if (retryWithReplicateBlob()) {
+          return;
+        }
+      }
+
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
       } else if (operationTracker.maybeFailedDueToOfflineReplicas()) {
@@ -385,6 +401,61 @@ class TtlUpdateOperation {
         }
       }
       operationCompleted = true;
+    }
+  }
+
+  /**
+   * Try to replicate the blob and then retry the TtlUpdate Request
+   * @return true if it's under retry. return false if cannot do retry or retry is finished.
+   */
+  private boolean retryWithReplicateBlob() {
+    // the conditions to trigger ReplicateBlob operation:
+    // 1. at least one replica returned successful status
+    // 2. and at least one replica returned NOT_FOUND status.
+    if (!operationTracker.hasNotFound() || operationTracker.getSuccessReplica().size() == 0) {
+      return false;
+    }
+
+    List<ReplicaId> successfulReplica = operationTracker.getSuccessReplica();
+    // it's the first time we hit the 503
+    if (replicateBlobCallback == null) {
+      DataNodeId sourceDataNode = successfulReplica.get(0).getDataNodeId();
+      replicateBlobCallback = new ReplicateBlobCallback(blobId, sourceDataNode);
+
+      nonBlockingRouter.replicateBlob(blobId.getID(), this.getClass().getSimpleName(), sourceDataNode,
+          replicateBlobCallback);
+      LOGGER.trace("Start the on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+          replicateBlobCallback.getSourceDataNode());
+      return true;
+    }
+
+    ReplicateBlobCallback.RetryState state = replicateBlobCallback.getState();
+    switch (state) {
+      case REPLICATING_BLOB:
+        LOGGER.trace("Running on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+            replicateBlobCallback.getSourceDataNode());
+        return true;
+      case REPLICATION_DONE:
+        if (replicateBlobCallback.getException() != null) {
+          LOGGER.error("on-demand replication {} {} failed.", replicateBlobCallback.getBlobId(),
+              replicateBlobCallback.getSourceDataNode(), replicateBlobCallback.getException());
+          return false;
+        } else {
+          LOGGER.info("On-demand replication {} {} is successful.", replicateBlobCallback.getBlobId(),
+              replicateBlobCallback.getSourceDataNode());
+          replicateBlobCallback.setState(ReplicateBlobCallback.RetryState.RETRYING);
+
+          // retry the TtlUpdate
+          operationException.set(null);
+          operationTracker =
+              new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
+                  originatingDcName, false, routerMetrics, blobId);
+          return true;
+        }
+      case RETRYING:
+      default:
+        // retry is done but still failed. Nothing else we can do.
+        return false;
     }
   }
 
