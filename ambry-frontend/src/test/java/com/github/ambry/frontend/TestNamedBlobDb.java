@@ -19,6 +19,7 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Pair;
@@ -121,7 +122,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state) {
     CompletableFuture<PutResult> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);

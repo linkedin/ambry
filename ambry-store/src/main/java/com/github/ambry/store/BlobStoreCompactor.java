@@ -664,8 +664,7 @@ class BlobStoreCompactor {
 
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
-    boolean checkAlreadyCopied = config.storeAlwaysEnableTargetIndexDuplicateChecking || isIndexSegmentUnderCopy(
-        indexSegmentToCopy.getStartOffset());
+    boolean checkAlreadyCopied = isIndexSegmentUnderCopy(indexSegmentToCopy.getStartOffset());
     logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
 
     List<IndexEntry> indexEntriesToCopy =
@@ -737,10 +736,6 @@ class BlobStoreCompactor {
         logger.trace("{} in segment with start offset {} in {} is a duplicate because it has already been copied",
             copyCandidate, indexSegmentStartOffset, storeId);
         isDuplicate = true;
-        if (!isIndexSegmentUnderCopy(indexSegmentStartOffset)) {
-          // This is not for recovery purpose, then it must be due to always checking target index duplicate.
-          tgtMetrics.compactionTargetIndexDuplicateOnNonRecoveryCount.inc();
-        }
       } else {
         // not a duplicate
         logger.trace("{} in index segment with start offset {} in {} is not a duplicate", copyCandidate,
@@ -1435,23 +1430,6 @@ class BlobStoreCompactor {
       copyCandidates.removeIf(copyCandidate ->
           isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
               config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
-      if (duplicateSearchSpan != null && validEntriesSize == copyCandidates.size()
-          && config.storeCompactionEnableBasicInfoOnMissingDuplicate) {
-        // When duplicate search span is not null, which mean it's highly likely that we would see duplicates from
-        // source. If we are here, then there is no duplicate at all, this might be an error.
-        logger.info(
-            "Processing IndexSegment {} with duplicate search span {} in {}, we probably should have duplicates.",
-            indexSegment.toString(), duplicateSearchSpan, storeId);
-        logger.info("IndexSegments in source persistent index with {}", storeId);
-        srcIndex.getIndexSegments().values().forEach(seg -> logger.info("{}", seg.getFile()));
-        Map<PersistentIndex.IndexEntryType, Long> collect = copyCandidates.stream()
-            .collect(Collectors.groupingBy(entry -> entry.getValue().getIndexValueType(), Collectors.counting()));
-        logger.info("{} with {}", collect.entrySet()
-            .stream()
-            .map(ent -> ent.getValue().toString() + " " + String.valueOf(ent.getKey()))
-            .collect(Collectors.joining(",")), storeId);
-        logger.info("Valid entry size {}, number of keys found: {}", validEntriesSize, numKeysFoundInDuplicateChecking);
-      }
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),

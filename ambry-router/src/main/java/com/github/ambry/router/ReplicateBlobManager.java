@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2022 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
@@ -24,26 +25,22 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.DeleteRequest;
-import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.protocol.ReplicateBlobResponse;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
- * Handles {@link DeleteOperation}. A {@code DeleteManager} keeps track of all the delete
+ * Handles {@link ReplicateBlobOperation}. A {@code ReplicateBlobManager} keeps track of all the ReplicateBlob
  * operations that are assigned to it, and manages their states and life cycles.
  */
-class DeleteManager {
-  private final Set<DeleteOperation> deleteOperations;
-  private final HashMap<Integer, DeleteOperation> correlationIdToDeleteOperation;
+class ReplicateBlobManager {
+  private final Set<ReplicateBlobOperation> replicateBlobOperations;
+  private final HashMap<Integer, ReplicateBlobOperation> correlationIdToReplicateBlobOperation;
   private final NotificationSystem notificationSystem;
   private final Time time;
   private final ResponseHandler responseHandler;
@@ -51,65 +48,58 @@ class DeleteManager {
   private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
   private final RouterConfig routerConfig;
-  private final RouterCallback routerCallback;
   private final NonBlockingRouter nonBlockingRouter;
-  private static final Logger logger = LoggerFactory.getLogger(DeleteManager.class);
 
-  private final RequestRegistrationCallback<DeleteOperation> requestRegistrationCallback;
+  private final RequestRegistrationCallback<ReplicateBlobOperation> requestRegistrationCallback;
 
   /**
-   * Creates a DeleteManager.
+   * Creates a ReplicateBlobManager.
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param accountService The {@link AccountService} used for account/container id and name mapping.
-   * @param notificationSystem The {@link NotificationSystem} used for notifying blob deletions.
-   * @param routerConfig The {@link RouterConfig} containing the configs for the DeleteManager.
+   * @param notificationSystem The {@link NotificationSystem} used for notifying blob replication.
+   * @param routerConfig The {@link RouterConfig} containing the configs for the ReplicateBlobManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time The {@link Time} instance to use.
    * @param nonBlockingRouter The non-blocking router object
    */
-  DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, AccountService accountService,
+  ReplicateBlobManager(ClusterMap clusterMap, ResponseHandler responseHandler, AccountService accountService,
       NotificationSystem notificationSystem, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      RouterCallback routerCallback, Time time, NonBlockingRouter nonBlockingRouter) {
+      Time time, NonBlockingRouter nonBlockingRouter) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.accountService = accountService;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.routerCallback = routerCallback;
     this.time = time;
-    deleteOperations = ConcurrentHashMap.newKeySet();
-    correlationIdToDeleteOperation = new HashMap<>();
-    requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToDeleteOperation);
     this.nonBlockingRouter = nonBlockingRouter;
+    replicateBlobOperations = ConcurrentHashMap.newKeySet();
+    correlationIdToReplicateBlobOperation = new HashMap<>();
+    requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToReplicateBlobOperation);
   }
 
   /**
-   * Submits a {@link DeleteOperation} to this {@code DeleteManager}.
+   * Submits a {@link ReplicateBlobOperation} to this {@code ReplicateBlobManager}.
    * @param blobIdStr The original blobId string for a {@link BlobId}.
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
-   * @throws RouterException if the blobIdStr is invalid.
+   * @throws RouterException if blob replication failed.
    */
-  void submitDeleteBlobOperation(String blobIdStr, String serviceId, FutureResult<Void> futureResult,
-      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback) throws RouterException {
+  void submitReplicateBlobOperation(String blobIdStr, String serviceId, DataNodeId sourceDataNode,
+      FutureResult<Void> futureResult, Callback<Void> callback) throws RouterException {
     final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-    if (blobId.getDatacenterId() != ClusterMap.UNKNOWN_DATACENTER_ID
-        && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
-      routerMetrics.deleteBlobNotOriginateLocalOperationRate.mark();
-    }
-    DeleteOperation deleteOperation =
-        new DeleteOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
-            futureResult, quotaChargeCallback);
-    deleteOperations.add(deleteOperation);
+    ReplicateBlobOperation replicateBlobOperation =
+        new ReplicateBlobOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, sourceDataNode, callback,
+            time, futureResult);
+    replicateBlobOperations.add(replicateBlobOperation);
   }
 
   /**
-   * Polls all delete operations and populates a list of {@link RequestInfo} to be sent to data nodes in order to
-   * complete delete operations.
+   * Polls all ReplicateBlob operations and populates a list of {@link RequestInfo} to be sent to data nodes in order to
+   * complete ReplicateBlob operations.
    * @param requestsToSend list to be filled with the requests created.
    * @param requestsToDrop list to be filled with the requests to drop.
    */
@@ -117,96 +107,96 @@ class DeleteManager {
     long startTime = time.milliseconds();
     requestRegistrationCallback.setRequestsToSend(requestsToSend);
     requestRegistrationCallback.setRequestsToDrop(requestsToDrop);
-    for (DeleteOperation op : deleteOperations) {
+    for (ReplicateBlobOperation op : replicateBlobOperations) {
       boolean exceptionEncountered = false;
       try {
         op.poll(requestRegistrationCallback);
       } catch (Exception e) {
         exceptionEncountered = true;
-        op.setOperationException(new RouterException("Delete poll encountered unexpected error", e,
+        op.setOperationException(new RouterException("ReplicateBlob poll encountered unexpected error", e,
             RouterErrorCode.UnexpectedInternalError));
       }
       if (exceptionEncountered || op.isOperationComplete()) {
-        if (deleteOperations.remove(op)) {
+        if (replicateBlobOperations.remove(op)) {
           // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
           // operation actually gets removed from the set of operations. See comment within close().
           onComplete(op);
         }
       }
     }
-    routerMetrics.deleteManagerPollTimeMs.update(time.milliseconds() - startTime);
+    routerMetrics.replicateBlobManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
   /**
-   * Handles responses received for each of the {@link DeleteOperation} within this delete manager.
+   * Handles responses received for each of the {@link ReplicateBlobOperation} within this ReplicateBlob manager.
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
-    DeleteResponse deleteResponse =
+    ReplicateBlobResponse replicateBlobResponse =
         RouterUtils.extractResponseAndNotifyResponseHandler(responseHandler, routerMetrics, responseInfo,
-            DeleteResponse::readFrom, DeleteResponse::getError);
+            ReplicateBlobResponse::readFrom, ReplicateBlobResponse::getError);
     RequestInfo routerRequestInfo = responseInfo.getRequestInfo();
-    int correlationId = ((DeleteRequest) routerRequestInfo.getRequest()).getCorrelationId();
-    DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);
+    int correlationId = routerRequestInfo.getRequest().getCorrelationId();
+    ReplicateBlobOperation replicateBlobOperation = correlationIdToReplicateBlobOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
-    if (deleteOperations.contains(deleteOperation)) {
+    if (replicateBlobOperations.contains(replicateBlobOperation)) {
       boolean exceptionEncountered = false;
       try {
-        deleteOperation.handleResponse(responseInfo, deleteResponse);
+        replicateBlobOperation.handleResponse(responseInfo, replicateBlobResponse);
       } catch (Exception e) {
         exceptionEncountered = true;
-        deleteOperation.setOperationException(
-            new RouterException("Delete handleResponse encountered unexpected error", e,
+        replicateBlobOperation.setOperationException(
+            new RouterException("ReplicateBlob handleResponse encountered unexpected error", e,
                 RouterErrorCode.UnexpectedInternalError));
       }
-      if (exceptionEncountered || deleteOperation.isOperationComplete()) {
-        if (deleteOperations.remove(deleteOperation)) {
-          onComplete(deleteOperation);
+      if (exceptionEncountered || replicateBlobOperation.isOperationComplete()) {
+        if (replicateBlobOperations.remove(replicateBlobOperation)) {
+          onComplete(replicateBlobOperation);
         }
       }
-      routerMetrics.deleteManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
+      routerMetrics.replicateBlobManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }
   }
 
   /**
-   * Called when the delete operation is completed. The {@code DeleteManager} also finishes the delete operation
+   * Called when the ReplicateBlob operation is completed. The {@code ReplicateBlobManager} also finishes the ReplicateBlob operation
    * by performing the callback and notification.
-   * @param op The {@link DeleteOperation} that has completed.
+   * @param op The {@link ReplicateBlobOperation} that has completed.
    */
-  void onComplete(DeleteOperation op) {
+  void onComplete(ReplicateBlobOperation op) {
     Exception e = op.getOperationException();
     if (e == null) {
       BlobId blobId = op.getBlobId();
       Pair<Account, Container> accountContainer =
           RouterUtils.getAccountContainer(accountService, blobId.getAccountId(), blobId.getContainerId());
-      notificationSystem.onBlobDeleted(blobId.getID(), op.getServiceId(), accountContainer.getFirst(),
-          accountContainer.getSecond());
+      notificationSystem.onBlobReplicated(blobId.getID(), op.getServiceId(), accountContainer.getFirst(),
+          accountContainer.getSecond(), op.getSourceDataNode());
     } else {
-      routerMetrics.onDeleteBlobError(e);
+      routerMetrics.onReplicateBlobError(e);
     }
     routerMetrics.operationDequeuingRate.mark();
-    routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
+    routerMetrics.replicateBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
     nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
         op.getOperationException());
   }
 
   /**
-   * Closes the {@code DeleteManager}. A {@code DeleteManager} can be closed for only once. Any further close action
+   * Closes the {@code ReplicateBlobManager}. A {@code ReplicateBlobManager} can be closed for only once. Any further close action
    * will have no effect.
    */
   void close() {
-    for (DeleteOperation op : deleteOperations) {
+    for (ReplicateBlobOperation op : replicateBlobOperations) {
       // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
-      if (deleteOperations.remove(op)) {
+      if (replicateBlobOperations.remove(op)) {
         Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
-        routerMetrics.onDeleteBlobError(e);
+        routerMetrics.onReplicateBlobError(e);
         nonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
       }
     }

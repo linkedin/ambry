@@ -18,7 +18,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -61,7 +60,7 @@ public class CompactionLogTest {
   private final String tempDirStr;
   private final StoreConfig config;
   // the time instance that will be used in the index
-  private final Time time = new MockTime();
+  private final MockTime time = new MockTime();
   private final Set<LogSegmentName> generatedSegmentNames = new HashSet<>();
 
   /**
@@ -375,7 +374,8 @@ public class CompactionLogTest {
       Offset expectedAfter = new Offset(name.getNextGenerationName(), LogSegment.HEADER_SIZE);
       Assert.assertEquals(expectedAfter, indexSegmentOffsets.get(before));
     }
-    SortedMap<Offset, Offset> indexSegmentOffsetsCompleted = cLog.getBeforeAndAfterIndexSegmentOffsetsForCompletedCycles();
+    SortedMap<Offset, Offset> indexSegmentOffsetsCompleted =
+        cLog.getBeforeAndAfterIndexSegmentOffsetsForCompletedCycles();
     // There is no completedCycle yet
     Assert.assertEquals(0, indexSegmentOffsetsCompleted.size());
     // All log segments are under compaction at current cycle.
@@ -441,6 +441,7 @@ public class CompactionLogTest {
   @Test
   public void testProcessCompactionLogs() throws Exception {
     // First create some compaction logs
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     String storeName = "store";
     List<CompactionDetails> detailsList = getCompactionDetailsList(10);
     List<Long> expectedStartTimes = new ArrayList<>();
@@ -456,7 +457,8 @@ public class CompactionLogTest {
       cLog.markCycleComplete();
       cLog.close();
       Assert.assertFalse(CompactionLog.isCompactionInProgress(tempDirStr, storeName));
-      time.sleep(10000);
+      long sleepTime = 3 * Integer.MAX_VALUE;
+      time.sleep(sleepTime);
     }
 
     CompactionDetails details = getCompactionDetailsList(1).get(0);

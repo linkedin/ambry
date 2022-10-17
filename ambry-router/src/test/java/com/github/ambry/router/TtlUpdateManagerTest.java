@@ -114,7 +114,7 @@ public class TtlUpdateManagerTest {
     }
     ttlUpdateManager =
         new TtlUpdateManager(clusterMap, new ResponseHandler(clusterMap), notificationSystem, accountService,
-            routerConfig, metrics, time);
+            routerConfig, metrics, time, router);
     networkClient = networkClientFactory.getNetworkClient();
   }
 
@@ -341,7 +341,7 @@ public class TtlUpdateManagerTest {
     TestCallback<Void> callback = new TestCallback<>();
     notificationSystem.reset();
     List<String> chunkIds = new ArrayList<>(ids);
-    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
+    router.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
     ttlUpdateManager.submitTtlUpdateOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UPDATE_SERVICE_ID,
         Utils.Infinite_Time, future, callback, quotaChargeCallback);
     sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests);

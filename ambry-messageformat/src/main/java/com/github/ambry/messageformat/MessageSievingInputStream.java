@@ -58,6 +58,7 @@ public class MessageSievingInputStream extends InputStream {
    * @param inStream The stream from which bytes need to be read. If the underlying stream is SocketInputStream, it needs
    *               to be blocking
    * @param messageInfoList List of MessageInfo which contains details about the messages in the stream
+   * @param transformers the list of the {@link Transformer} to use (in order).
    * @param metricRegistry Metric register to register metrics
    * @throws java.io.IOException
    */
@@ -143,6 +144,50 @@ public class MessageSievingInputStream extends InputStream {
     sievedStream = new SequenceInputStream(inputStreamEnumeration);
     this.sievedStreamSize = (int) sievedMessageInfoList.stream().mapToLong(MessageInfo::getSize).sum();
     logger.trace("Completed validation of message stream ");
+  }
+
+  /**
+   * Transfer one message with a list of {@link Transformer}
+   * @param inStream The stream from which bytes need to be read.
+   * @param msgInfo MessageInfo which contains details about the message in the stream
+   * @param transformers the list of the {@link Transformer} to use (in order).
+   * @throws java.io.IOException
+   */
+  public static Message transferInputStream(List<Transformer> transformers, InputStream inStream, MessageInfo msgInfo)
+      throws IOException {
+    Message msg = new Message(msgInfo, inStream);
+    if (transformers == null || transformers.isEmpty()) {
+      // Write the message without any transformations.
+      return msg;
+    }
+
+    logger.trace("transferInputStream for message {}", msgInfo);
+    TransformationOutput output = null;
+    for (Transformer transformer : transformers) {
+      output = transformer.transform(msg);
+      if (output.getException() != null || output.getMsg() == null) {
+        break;
+      }
+      msg = output.getMsg();
+    }
+
+    if (output.getException() != null) {
+      if (output.getException() instanceof MessageFormatException) {
+        logger.error("Error validating/transforming the message {} and hence skipping the message", msgInfo,
+            output.getException());
+        return null;
+      } else {
+        throw new IOException("Encountered exception during transformation", output.getException());
+      }
+    }
+    if (output.getMsg() == null) {
+      logger.info("Transformation is on, and the message with id {} does not have a replacement and was discarded.",
+          msgInfo.getStoreKey());
+      return null;
+    }
+    logger.trace("Original message length {}, transformed bytes read {}", msgInfo.getSize(),
+        output.getMsg().getMessageInfo().getSize());
+    return output.getMsg();
   }
 
   /**

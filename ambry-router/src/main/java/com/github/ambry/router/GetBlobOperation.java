@@ -127,6 +127,7 @@ class GetBlobOperation extends GetOperation {
   private CompositeBlobInfo compositeBlobInfo;
   // A cache for blob metadata of composite blobs
   private AmbryCache blobMetadataCache;
+  private NonBlockingRouter nonBlockingRouter;
 
   /**
    * Construct a GetBlobOperation
@@ -145,12 +146,14 @@ class GetBlobOperation extends GetOperation {
    * @param time the Time instance to use.
    * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
+   * @param nonBlockingRouter The non-blocking router object
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResult> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache) {
+      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache,
+      NonBlockingRouter nonBlockingRouter) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -160,6 +163,7 @@ class GetBlobOperation extends GetOperation {
     BlobMetadata blobMetadata =
         shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
     firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -275,7 +279,7 @@ class GetBlobOperation extends GetOperation {
   @Override
   void abort(Exception abortCause) {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
-      NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
+      nonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
     } else {
       setOperationException(abortCause);
       if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
@@ -345,7 +349,7 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.onGetBlobError(e, options, isEncrypted);
           }
         }
-        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
+        nonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
       }
     }
     chunk.postCompletionCleanup();

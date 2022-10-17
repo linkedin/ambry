@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterManagerQueryHelper;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -24,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Metrics for the {@link HelixClusterManager}
  */
 class HelixClusterManagerMetrics {
-  private final HelixClusterManager.HelixClusterManagerCallback clusterMapCallback;
+  private final HelixClusterManagerQueryHelper clusterMapCallback;
   private final MetricRegistry registry;
 
   public final Counter liveInstanceChangeTriggerCount;
@@ -49,11 +50,10 @@ class HelixClusterManagerMetrics {
   /**
    * Metrics for the {@link HelixClusterManager}
    * @param registry The {@link MetricRegistry} associated with the {@link HelixClusterManager}
-   * @param  clusterMapCallback The {@link HelixClusterManager.HelixClusterManagerCallback} used to query information
+   * @param  clusterMapCallback The {@link HelixClusterManagerQueryHelper} used to query information
    *                            from {@link HelixClusterManager}
    */
-  HelixClusterManagerMetrics(MetricRegistry registry,
-      final HelixClusterManager.HelixClusterManagerCallback clusterMapCallback) {
+  HelixClusterManagerMetrics(MetricRegistry registry, final HelixClusterManagerQueryHelper clusterMapCallback) {
     this.clusterMapCallback = clusterMapCallback;
     this.registry = registry;
     liveInstanceChangeTriggerCount =
