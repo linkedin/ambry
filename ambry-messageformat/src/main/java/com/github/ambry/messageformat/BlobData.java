@@ -22,8 +22,9 @@ import io.netty.buffer.ByteBuf;
  */
 public class BlobData extends AbstractByteBufHolder<BlobData> {
   private final BlobType blobType;
+  private final boolean isCompressed;
   private final long size;
-  private ByteBuf content;
+  private final ByteBuf content;
 
   /**
    * The blob data contains the stream and other required info
@@ -32,9 +33,21 @@ public class BlobData extends AbstractByteBufHolder<BlobData> {
    * @param content The content of this blob in a {@link ByteBuf}.
    */
   public BlobData(BlobType blobType, long size, ByteBuf content) {
+    this(blobType, size, content, false);
+  }
+
+  /**
+   * The blob data contains the stream and other required info
+   * @param blobType {@link BlobType} of the blob
+   * @param size The size of the blob content.
+   * @param content The content of this blob in a {@link ByteBuf}.
+   * @param isCompressed Whether the blob content is compressed.
+   */
+  public BlobData(BlobType blobType, long size, ByteBuf content, boolean isCompressed) {
     this.blobType = blobType;
     this.size = size;
     this.content = content;
+    this.isCompressed = isCompressed;
   }
 
   /**
@@ -51,6 +64,14 @@ public class BlobData extends AbstractByteBufHolder<BlobData> {
     return size;
   }
 
+  /**
+   * Get whether the content is compressed.  The algorithm name is stored inside the blob binary.
+   * @return TRUE if compressed; FALSE if not compressed.
+   */
+  public boolean isCompressed() {
+    return isCompressed;
+  }
+
   @Override
   public ByteBuf content() {
     return content;
@@ -58,6 +79,6 @@ public class BlobData extends AbstractByteBufHolder<BlobData> {
 
   @Override
   public BlobData replace(ByteBuf content) {
-    return new BlobData(blobType, size, content);
+    return new BlobData(blobType, size, content, isCompressed);
   }
 }

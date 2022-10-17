@@ -1465,8 +1465,7 @@ public class Utils {
   public static void ignoreException(RunnableThatThrow<Exception> function) {
     try {
       function.run();
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       // Exception is intentionally ignored.
     }
   }
