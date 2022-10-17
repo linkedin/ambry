@@ -377,6 +377,52 @@ public class RequestResponseTest {
   }
 
   @Test
+  public void testReadFromV5() throws IOException {
+    int correlationId = 1234;
+    String clientId = "client";
+    PartitionId partitionId = new MockPartitionId();
+    BlobId blobId = new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, (short) 1, (short) 1, partitionId, false,
+        BlobId.BlobDataType.DATACHUNK);
+    BlobProperties blobProperties = new BlobProperties(1234L, "testServiceID", (short) 2222, (short) 3333, true);
+    ByteBuffer userMetadata = ByteBuffer.wrap("testMetadata".getBytes());
+    ByteBuf blobData = Unpooled.wrappedBuffer("testBlobData".getBytes());
+    long blobSize = blobData.readableBytes();
+    BlobType blobType = BlobType.DataBlob;
+    byte[] encryptionKey = new byte[] { 1, 2, 3, 4, 5};
+
+    ByteBuf content;
+    short savedVersion = PutRequest.currentVersion;
+    try {
+      PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
+      // Compose and serialize the PutRequest with V5 enabled.
+      PutRequest request =
+          new PutRequest(correlationId, clientId, blobId, blobProperties, userMetadata, blobData, blobSize, blobType,
+              ByteBuffer.wrap(encryptionKey), Crc32Impl.getAmbryInstance(), true);
+      content = request.content();
+    } finally {
+      PutRequest.currentVersion = savedVersion;
+    }
+
+    // Read back binary.  The content binary contains extra fields(total size and operation type).
+    // Those extra fields must be read from the stream before calling readFrom().
+    try {
+      NettyByteBufDataInputStream inputStream = new NettyByteBufDataInputStream(content);
+      inputStream.readLong();   // Skip the total size.
+      inputStream.readShort();  // skip the operation type (PutOperation).
+      PutRequest newPutRequest = PutRequest.readFrom(inputStream, new MockClusterMap());
+
+      Assert.assertEquals(correlationId, newPutRequest.correlationId);
+      Assert.assertEquals(clientId, newPutRequest.clientId);
+      Assert.assertEquals(blobSize, newPutRequest.blobSize);
+      Assert.assertTrue(newPutRequest.isCompressed());
+      Assert.assertEquals("testServiceID", newPutRequest.getBlobProperties().getServiceId());
+    }
+    finally {
+      content.release();
+    }
+  }
+
+  @Test
   public void getRequestResponseTest() throws IOException {
     short oldGetResponseVersion = GetResponse.CURRENT_VERSION;
     short oldMessageInfoVersion = MessageInfoAndMetadataListSerde.AUTO_VERSION;
