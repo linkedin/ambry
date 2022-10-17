@@ -124,8 +124,7 @@ public class LZ4Compression extends BaseCompressionWithLevel {
     try {
       return getCompressor().compress(sourceData, sourceDataOffset, sourceDataSize,
           compressedBuffer, compressedBufferOffset, compressedBufferSize);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       throw new CompressionException(String.format("LZ4 compression failed. sourceData.length=%d, sourceDataOffset=%d, "
           + "sourceDataSize=%d, compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
           sourceData.length, sourceDataOffset, sourceDataSize,
@@ -153,8 +152,7 @@ public class LZ4Compression extends BaseCompressionWithLevel {
     try {
       getDecompressor().decompress(compressedBuffer, compressedBufferOffset,
           sourceDataBuffer, sourceDataOffset, sourceDataSize);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       throw new CompressionException(String.format("LZ4 decompression failed. "
               + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d, "
               + "sourceData.length=%d, sourceDataOffset=%d, sourceDataSize=%d",
