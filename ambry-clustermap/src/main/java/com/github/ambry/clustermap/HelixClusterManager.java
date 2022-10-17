@@ -140,8 +140,7 @@ public class HelixClusterManager implements ClusterMap {
           HelixAggregatedViewClusterInitializer helixAggregatedViewClusterInitializer =
               new HelixAggregatedViewClusterInitializer(clusterMapConfig, dataCenterToZkAddress, helixFactory,
                   selfInstanceName, dataNodeConfigSourceMetrics, this);
-          helixAggregatedViewClusterInitializer.start();
-          helixAggregatedViewClusterInfo = helixAggregatedViewClusterInitializer.join();
+          helixAggregatedViewClusterInfo = helixAggregatedViewClusterInitializer.start();
           // Populate dcToDCInfo and dcIdToDcName maps for all DCs if cluster initialization succeeds. The only thing to
           // note is DcInfo would have empty clusterChangeHandler associated with it.
           for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
@@ -486,13 +485,13 @@ public class HelixClusterManager implements ClusterMap {
    */
   @Override
   public void close() {
+    for (DcInfo dcInfo : dcToDcInfo.values()) {
+      dcInfo.close();
+    }
+    dcToDcInfo.clear();
+
     if (clusterMapConfig.clusterMapUseAggregatedView) {
       helixAggregatedViewClusterInfo.close();
-    } else {
-      for (DcInfo helixDcInfo : dcToDcInfo.values()) {
-        helixDcInfo.close();
-      }
-      dcToDcInfo.clear();
     }
   }
 
@@ -692,6 +691,32 @@ public class HelixClusterManager implements ClusterMap {
           RoutingTableSnapshot routingTableSnapshot =
               clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
                   : dcToRoutingTableSnapshotRef.get(dc).get();
+
+          // Note:
+          // Even when we are using helix aggregated view, we still need the 'for' loop to get the list of
+          // all replicas belonging to a partition. This is because the resource -> partition mapping can be different
+          // in each DC. So, helix API routingTableSnapshot.getInstancesForResource(resourceName, partitionName, replicaState)
+          // doesn't give complete list of replica hosts when queried with single resource name.
+
+          // For example, consider below example of resource to partition mapping in each DC.
+          // DC1:
+          // Resource 1 -> {Partition 1, Partition 2, Partition 3...}
+          // Resource 2 -> {Partition 4, ... }
+          // DC2:
+          // Resource 1 -> {Partition 2, Partition 3,...}
+          // Resource 2 -> {Partition 1, Partition 4, ...}
+          // DC3:
+          // Resource 1 -> {Partition 1, Partition 2, Partition 3...}
+          // Resource 2 -> {Partition 4, ... }
+
+          // Then, the resource to partition mapping in Aggregated view would be:
+          // Resource 1 -> {Partition 1 (contains replicas of DC1 and DC3) , Partition 2, Partition 3...}
+          // Resource 2 -> {Partition 1 (contains replicas of DC2), Partition 4, Partition 5,...}
+
+          // Due to above, for aggregation view:
+          // routingTableSnapshot.getInstancesForResource(resource1, partition1, standby) would give replicas of DC1 and DC3
+          // routingTableSnapshot.getInstancesForResource(resource2, partition1, standby) would give replicas of DC2
+
           String partitionPath = partition.toPathString();
           routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
               .stream()
@@ -951,16 +976,16 @@ public class HelixClusterManager implements ClusterMap {
       logger.debug("Detailed ideal states in {} are: {}", dcOrClusterName, idealState);
       // rebuild the entire partition-to-resource map in current dc
       ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
-      String dcName;
       for (IdealState state : idealState) {
         String resourceName = state.getResourceName();
         state.getPartitionSet().forEach(partitionName -> partitionToResourceMap.put(partitionName, resourceName));
       }
+      String dcName;
       if (isAggregatedViewHandler) {
-        // When using aggregated cluster, "dcOrClusterName" points to cluster name when using aggregated cluster and not
-        // the data center name. But, since ideal states are not aggregated and we register with ZK in each colo
-        // separately using the same handler, we need to find out the actual data center for which this ideal state
-        // change corresponds to.
+        // Since helix aggregated view service doesn't aggregate ideal states across colos, we register ideal state
+        // change listener with helix service in each colo separately. So, this callback would be invoked for each
+        // data center separately. In order to know which data center, this callback corresponds to, we try to get one
+        // of the host names from Ideal state and get its data center name.
         IdealState state = idealState.iterator().next();
         String partition = state.getPartitionSet().iterator().next();
         String instanceName = state.getInstanceSet(partition).iterator().next();

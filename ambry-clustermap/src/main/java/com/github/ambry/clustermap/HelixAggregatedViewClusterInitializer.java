@@ -18,12 +18,9 @@ package com.github.ambry.clustermap;
 import com.github.ambry.clustermap.ClusterMapUtils.DcZkInfo;
 import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.PropertyType;
@@ -34,22 +31,19 @@ import org.slf4j.LoggerFactory;
 
 /**
  * This class represents the startup procedure for registering with helix aggregated view cluster which contains the
- * cluster information of all colos. Calling the start method will begin the startup procedure in a background thread.
- * Calling the {@link #join} method let's the main thread wait for startup of this class to either succeed or fail.
- * This class and its logic is similar to {@link HelixDatacenterInitializer} except that this talks to Helix aggregated
- * view cluster ZK which has information about entire cluster. So, when {@link ClusterMapConfig#clusterMapUseAggregatedView}
- * is enabled, {@link HelixClusterManager} would only do cluster initialization once via
- * {@link HelixAggregatedViewClusterInitializer} instead of calling {@link HelixDatacenterInitializer}s multiple times.
+ * cluster information of all colos. Using the helix aggregation view cluster, we could get entire cluster information
+ * from one place instead of connecting to multiple helix ZK servers and getting individual data center information from
+ * each of them. The logic in this class is similar to {@link HelixDatacenterInitializer}.
  */
 class HelixAggregatedViewClusterInitializer {
   private static final Logger logger = LoggerFactory.getLogger(HelixAggregatedViewClusterInitializer.class);
-  private final CompletableFuture<HelixAggregatedViewClusterInfo> initializationFuture = new CompletableFuture<>();
   private final ClusterMapConfig clusterMapConfig;
   private final HelixFactory helixFactory;
   private final String selfInstanceName;
   private final DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics;
   private final HelixClusterManager helixClusterManager;
   private final Map<String, DcZkInfo> dataCenterToZkAddress;
+  private Exception exception = null;
 
   /**
    * @param clusterMapConfig {@link ClusterMapConfig} to help some admin operations
@@ -71,40 +65,24 @@ class HelixAggregatedViewClusterInitializer {
   }
 
   /**
-   * Begin the startup procedure in a background thread.
-   * TODO: We don't need to run this in background thread since there is only {@link HelixAggregatedViewClusterInitializer}.
+   * Begin the startup procedure for connecting (and registering listeners) for getting cluster information from helix
+   * service.
+   * @return {@link HelixAggregatedViewClusterInfo} containing the information associated with view cluster.
    */
-  public void start() {
-    Utils.newThread(() -> {
-      try {
-        HelixAggregatedViewClusterInfo clusterInfo = initializeHelixAggregatedViewCluster();
-        initializationFuture.complete(clusterInfo);
-      } catch (Exception e) {
-        logger.warn("Exception while initializing cluster", e);
-        onInitializationFailure(e);
-      }
-    }, false).start();
-  }
-
-  /**
-   * Wait for startup to either succeed or fail.
-   * @return the {@link HelixAggregatedViewClusterInfo} that contains the {@link HelixClusterChangeHandler}.
-   * @throws Exception if startup of the datacenter fails.
-   */
-  HelixAggregatedViewClusterInfo join() throws Exception {
+  public HelixAggregatedViewClusterInfo start() throws Exception {
     try {
-      return initializationFuture.get();
-    } catch (ExecutionException e) {
-      throw Utils.extractFutureExceptionCause(e);
+      HelixAggregatedViewClusterInfo clusterInfo = initialize();
+      if (exception != null) {
+        // We could have hit an error in one of the helix listener callbacks in HelixClusterChangeHandler. In such cases,
+        // rethrow the exception.
+        throw exception;
+      } else {
+        return clusterInfo;
+      }
+    } catch (Exception e) {
+      logger.warn("Exception while initializing cluster", e);
+      throw e;
     }
-  }
-
-  /**
-   * Callback to complete the future when an error occurs
-   * @param e the {@link Exception}.
-   */
-  private void onInitializationFailure(Exception e) {
-    initializationFuture.completeExceptionally(e);
   }
 
   /**
@@ -112,7 +90,7 @@ class HelixAggregatedViewClusterInitializer {
    * @return the {@link HelixAggregatedViewClusterInfo} for the cluster.
    * @throws Exception if something went wrong during startup
    */
-  public HelixAggregatedViewClusterInfo initializeHelixAggregatedViewCluster() throws Exception {
+  public HelixAggregatedViewClusterInfo initialize() throws Exception {
     // We can assume that Helix Aggregated view cluster will be present in same zookeeper hosting regular Ambry cluster
     // information. Get the HelixManager to talk to the local zk service.
     DcZkInfo localDcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
@@ -126,8 +104,8 @@ class HelixAggregatedViewClusterInitializer {
     logger.info("Helix cluster name {}", helixManager.getClusterName());
 
     HelixClusterChangeHandler clusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(clusterMapConfig.clusterMapClusterName,
-            this::onInitializationFailure, true);
+        helixClusterManager.new HelixClusterChangeHandler(clusterMapConfig.clusterMapClusterName, ex -> exception = ex,
+            true);
 
     // Helix aggregated view cluster currently aggregates the following:
     // 1. External view (which tells the current state of the cluster like replicas and their states).
