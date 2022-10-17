@@ -317,7 +317,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           if (config.dbTransition) {
             try {
               run_put_v2(record, accountId, containerId, connection);
-            } catch (Exception e) {
+            } catch (RestServiceException e) {
+              if (e.getErrorCode() == RestServiceErrorCode.Conflict) {
+                throw e;
+              }
               logger.error("NAMED PUT: Data Error: old table succeed while new table failed: ", e);
               metricsRecoder.namedDataErrorPutCount.inc();
             }
