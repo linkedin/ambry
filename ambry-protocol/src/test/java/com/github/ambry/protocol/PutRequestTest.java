@@ -34,7 +34,7 @@ import org.junit.Test;
 public class PutRequestTest {
 
   @Test
-  public void testReadFrom() throws IOException {
+  public void testReadFromV5() throws IOException {
 
     int correlationId = 1234;
     String clientId = "client";
@@ -51,10 +51,14 @@ public class PutRequestTest {
     short savedVersion = PutRequest.currentVersion;
     PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
     try {
+      // Compose and serialize the PutRequest with V5 enabled.
       PutRequest request =
           new PutRequest(correlationId, clientId, blobId, blobProperties, userMetadata, blobData, blobSize, blobType,
               ByteBuffer.wrap(encryptionKey), Crc32Impl.getAmbryInstance(), true);
       ByteBuf content = request.content();
+
+      // Read back binary.  The content binary contains extra fields(total size and operation type).
+      // Those extra fields must be read from the stream before calling readFrom().
       NettyByteBufDataInputStream inputStream = new NettyByteBufDataInputStream(content);
       inputStream.readLong();   // Skip the total size.
       inputStream.readShort();  // skip the operation type (PutOperation).
