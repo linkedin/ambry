@@ -44,7 +44,7 @@ public class PutRequest extends RequestOrResponse {
   protected final BlobProperties properties;
   protected final BlobType blobType;
   protected final ByteBuffer blobEncryptionKey;
-  protected boolean isCompressed;
+  protected final boolean isCompressed;
 
   // Used to carry blob content in ambry-frontend when creating this PutRequest.
   protected ByteBuf blob;
