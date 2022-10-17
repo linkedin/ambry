@@ -362,8 +362,7 @@ class TtlUpdateOperation {
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
     if (operationTracker.isDone() || operationCompleted) {
-      // JING TODO next revision, will add configuration for this feature
-      if (!operationTracker.hasSucceeded()) {
+      if (routerConfig.routerRepairWithReplicateBLobEnabled && !operationTracker.hasSucceeded()) {
         // the operation is failed, try to recover with ReplicateBlob
         // if retryWithReplicateBlob returns true, it's under retry. operation is not completed yet.
         if (retryWithReplicateBlob()) {

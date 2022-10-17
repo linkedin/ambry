@@ -124,6 +124,7 @@ public class RouterConfig {
       "router.update.op.metadata.reliance.timestamp.in.ms";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE =
       "router.unavailable.due.to.success.count.is.non.zero.for.delete";
+  public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED = "router.repair.with.replicate.blob.enabled";
 
   /**
    * Number of independent scaling units for the router.
@@ -638,6 +639,14 @@ public class RouterConfig {
   @Config(ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS)
   public final long routerUpdateOpMetadataRelianceTimestampInMs;
 
+  /**
+   * If this config is set to {@code true}, when operation fails because of not enough replicas having replicated the Blob,
+   * the operation will trigger the on-demand replication to replicate the Blob to more replicas and then retry the request.
+   */
+  @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED)
+  @Default("false")
+  public final boolean routerRepairWithReplicateBLobEnabled;
+
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
 
@@ -780,6 +789,8 @@ public class RouterConfig {
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
     routerUpdateOpMetadataRelianceTimestampInMs = verifiableProperties.getLong(
         ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS, DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
+    routerRepairWithReplicateBLobEnabled =
+        verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED, false);
 
     compressionConfig = new CompressionConfig(verifiableProperties);
   }
