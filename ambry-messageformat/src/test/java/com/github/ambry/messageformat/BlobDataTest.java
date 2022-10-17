@@ -18,6 +18,10 @@ import io.netty.buffer.Unpooled;
 import org.junit.Assert;
 import org.junit.Test;
 
+
+/**
+ * Unit test Blob Data structure.  It's a simple structure with the majority of logic in constructor.
+ */
 public class BlobDataTest {
 
   @Test
