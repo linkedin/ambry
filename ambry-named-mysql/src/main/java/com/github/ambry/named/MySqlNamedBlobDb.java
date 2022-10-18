@@ -335,15 +335,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();
           PutResult putResult = null, putResultV2 = null;
-          try {
-            putResult = run_put(record, accountId, containerId, connection);
-          } catch (Exception eOld) {
-            if (!config.dbRelyOnNewTable) {
-              throw eOld;
-            }
-            logger.error("NAMED PUT: Failed in saving data to old table: ", eOld);
-          }
-
+          putResult = run_put(record, accountId, containerId, connection);
           if (config.dbTransition) {
             try {
               putResultV2 = run_put_v2(record, state, accountId, containerId, connection);
@@ -365,14 +357,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
       long startTime = System.currentTimeMillis();
       DeleteResult deleteResult = null, deleteResultV2 = null;
-      try {
-        deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
-      } catch (Exception eOld) {
-        if (!config.dbRelyOnNewTable) {
-          throw eOld;
-        }
-        logger.error("NAMED DELETE: Failed in deleting data in the old table: ", eOld);
-      }
+      deleteResult = run_delete(accountName, containerName, blobName, accountId, containerId, connection);
       if (config.dbTransition) {
         try {
           deleteResultV2 = run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
