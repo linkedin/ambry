@@ -171,14 +171,14 @@ class ReplicateBlobOperation {
         requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
-      logger.info("ReplicateBlobRequest {} with response correlationId {} timed out for replica {} ",
+      logger.error("ReplicateBlobRequest {} with response correlationId {} timed out for replica {} ",
           replicateBlobRequest.getBlobId(), replicateBlobRequest.getCorrelationId(), replica.getDataNodeId());
       onErrorResponse(replica, new RouterException(
           "Operation to ReplicateBlob " + blobId + " timed out because of " + responseInfo.getError() + " at DataNode "
               + responseInfo.getDataNode(), RouterErrorCode.OperationTimedOut));
     } else {
       if (replicateBlobResponse == null) {
-        logger.info(
+        logger.error(
             "ReplicateBlobRequest {} with correlationId {} received UnexpectedInternalError on deserialization for replica {} ",
             replicateBlobRequest.getBlobId(), replicateBlobRequest.getCorrelationId(), replica.getDataNodeId());
         onErrorResponse(replica, new RouterException("Response deserialization received an unexpected error",
@@ -206,7 +206,7 @@ class ReplicateBlobOperation {
               routerMetrics.crossColoSuccessCount.inc();
             }
           } else if (serverError == ServerErrorCode.Disk_Unavailable) {
-            logger.info("Replica {} {} returned Disk_Unavailable for a ReplicateBlob request with correlationId : {} ",
+            logger.error("Replica {} {} returned Disk_Unavailable for a ReplicateBlob request with correlationId : {} ",
                 replicateBlobRequest.getBlobId(), replica.getDataNodeId(), replicateBlobRequest.getCorrelationId());
             operationTracker.onResponse(replica, TrackedRequestFinalState.DISK_DOWN);
             setOperationException(
@@ -214,7 +214,8 @@ class ReplicateBlobOperation {
             routerMetrics.routerRequestErrorCount.inc();
             routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).replicateBlobRequestErrorCount.inc();
           } else {
-            logger.info("Replica {} {} returned error {} for a ReplicateBlob request with response correlationId : {} ",
+            logger.error(
+                "Replica {} {} returned error {} for a ReplicateBlob request with response correlationId : {} ",
                 replicateBlobRequest.getBlobId(), replica.getDataNodeId(), serverError,
                 replicateBlobRequest.getCorrelationId());
             RouterErrorCode routerErrorCode = processServerError(serverError);

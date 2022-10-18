@@ -645,7 +645,7 @@ public class RouterConfig {
    */
   @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED)
   @Default("false")
-  public final boolean routerRepairWithReplicateBLobEnabled;
+  public final boolean routerRepairWithReplicateBlobEnabled;
 
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
@@ -789,7 +789,7 @@ public class RouterConfig {
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
     routerUpdateOpMetadataRelianceTimestampInMs = verifiableProperties.getLong(
         ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS, DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
-    routerRepairWithReplicateBLobEnabled =
+    routerRepairWithReplicateBlobEnabled =
         verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED, false);
 
     compressionConfig = new CompressionConfig(verifiableProperties);

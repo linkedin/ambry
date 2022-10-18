@@ -362,7 +362,7 @@ class TtlUpdateOperation {
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
     if (operationTracker.isDone() || operationCompleted) {
-      if (routerConfig.routerRepairWithReplicateBLobEnabled && !operationTracker.hasSucceeded()) {
+      if (routerConfig.routerRepairWithReplicateBlobEnabled && !operationTracker.hasSucceeded()) {
         // the operation is failed, try to recover with ReplicateBlob
         // if retryWithReplicateBlob returns true, it's under retry. operation is not completed yet.
         if (retryWithReplicateBlob()) {
@@ -452,9 +452,11 @@ class TtlUpdateOperation {
           return true;
         }
       case RETRYING:
-      default:
         // retry is done but still failed. Nothing else we can do.
         return false;
+      default:
+        // code shouldn't come here
+        throw new IllegalStateException("Unrecognized state type");
     }
   }
 
