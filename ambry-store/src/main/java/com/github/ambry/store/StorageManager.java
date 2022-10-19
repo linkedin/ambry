@@ -562,7 +562,6 @@ public class StorageManager implements StoreManager {
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
               StoreNotStarted);
         }
-
         // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
         // it to stay in BOOTSTRAP state when catching up with peers.
         long storeUsedCapacity = store.getSizeInBytes();
@@ -621,7 +620,6 @@ public class StorageManager implements StoreManager {
               "Store " + partitionName + " is already disabled due to I/O error or by " + "admin operation",
               ReplicaOperationFailure);
         }
-
         // 0. as long as local replica exists, we create a decommission file in its dir
         File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
         try {
