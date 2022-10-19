@@ -754,7 +754,9 @@ public class AccountContainerTest {
 
     for (Container container : refContainers) {
       String serializedContainerStr = objectMapper.writeValueAsString(container);
-      Container deserializedContainer = objectMapper.readValue(serializedContainerStr, Container.class);
+      Container deserializedContainer =
+          new ContainerBuilder(objectMapper.readValue(serializedContainerStr, Container.class)).setParentAccountId(
+              container.getParentAccountId()).build();
       assertEquals("Two containers should be equal", container, deserializedContainer);
     }
   }
