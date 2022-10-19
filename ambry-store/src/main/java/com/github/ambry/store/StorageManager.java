@@ -482,7 +482,7 @@ public class StorageManager implements StoreManager {
     /**
      * Indicates whether it's a listener object for primary helix cluster-manager. Used to respond to state transition
      * messages from primary helix cluster, which is simply the first string in zkConnectStr separated by commas.
-     * The usage of "participant" is being used to refer to both ambry-server node and helix at some places in the
+     * The word "participant" is being used to refer to both ambry-server node and helix at some places in the
      * code which is wrong. We don't want to fix all usages retroactively at this point,
      * but going forward please follow this convention below.
      * <p>
