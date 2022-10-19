@@ -56,25 +56,9 @@ public class Container {
   static final String JSON_VERSION_KEY = "version";
   static final String CONTAINER_NAME_KEY = "containerName";
   static final String CONTAINER_ID_KEY = "containerId";
-  static final String STATUS_KEY = "status";
-  static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTime";
-  static final String DESCRIPTION_KEY = "description";
-  static final String IS_PRIVATE_KEY = "isPrivate";
-  static final String BACKUP_ENABLED_KEY = "backupEnabled";
-  static final String ENCRYPTED_KEY = "encrypted";
   static final String PREVIOUSLY_ENCRYPTED_KEY = "previouslyEncrypted";
-  static final String CACHEABLE_KEY = "cacheable";
-  static final String MEDIA_SCAN_DISABLED_KEY = "mediaScanDisabled";
-  static final String REPLICATION_POLICY_KEY = "replicationPolicy";
-  static final String TTL_REQUIRED_KEY = "ttlRequired";
-  static final String SECURE_PATH_REQUIRED_KEY = "securePathRequired";
   static final String OVERRIDE_ACCOUNT_ACL_KEY = "overrideAccountAcl";
-  static final String NAMED_BLOB_MODE_KEY = "namedBlobMode";
-  static final String ACCESS_CONTROL_ALLOW_ORIGIN_KEY = "accessControlAllowOrigin";
-  static final String CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD = "contentTypeWhitelistForFilenamesOnDownload";
-  static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
-  static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
-  static final String SNAPSHOT_VERSION_KEY = "snapshotVersion";
+
   static final boolean BACKUP_ENABLED_DEFAULT_VALUE = false;
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;

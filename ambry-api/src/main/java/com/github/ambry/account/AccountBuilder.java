@@ -228,8 +228,10 @@ public class AccountBuilder {
     }
     // Did we check the container parent account id here?
     for (Map.Entry<Short, Container> entry : idToContainerMetadataMap.entrySet()) {
-      if (entry.getValue().getParentAccountId() == Container.UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID) {
+      if (entry.getValue().getParentAccountId() != id) {
         entry.setValue(new ContainerBuilder(entry.getValue()).setParentAccountId(id).build());
+      } else {
+        entry.setValue(new ContainerBuilder(entry.getValue()).build());
       }
     }
     return new Account(id, name, status, aclInheritedByContainer, snapshotVersion, idToContainerMetadataMap.values(),
