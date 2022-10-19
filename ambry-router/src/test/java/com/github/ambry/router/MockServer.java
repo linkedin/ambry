@@ -17,6 +17,8 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.compression.Compression;
+import com.github.ambry.config.CompressionConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -73,7 +75,7 @@ class MockServer {
   private LinkedList<ServerErrorCode> serverErrors = new LinkedList<ServerErrorCode>();
   private final Map<String, StoredBlob> blobs = new ConcurrentHashMap<>();
   private boolean shouldRespond = true;
-  private short blobFormatVersion = MessageFormatRecord.Blob_Version_V2;
+  private short blobFormatVersion = MessageFormatRecord.Blob_Version_V3;
   private boolean getErrorOnDataBlobOnly = false;
   private final ClusterMap clusterMap;
   private final String dataCenter;
@@ -252,6 +254,17 @@ class MockServer {
             break;
           case Blob:
             switch (blobFormatVersion) {
+              case MessageFormatRecord.Blob_Version_V3:
+                if (originalBlobPutReq.getBlobEncryptionKey() != null) {
+                  msgMetadata = new MessageMetadata(originalBlobPutReq.getBlobEncryptionKey().duplicate());
+                }
+                byteBufferSize =
+                    (int) MessageFormatRecord.Blob_Format_V3.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+                byteBuffer = ByteBuffer.allocate(byteBufferSize);
+                MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType(),
+                    originalBlobPutReq.isCompressed());
+                break;
               case MessageFormatRecord.Blob_Version_V2:
                 if (originalBlobPutReq.getBlobEncryptionKey() != null) {
                   msgMetadata = new MessageMetadata(originalBlobPutReq.getBlobEncryptionKey().duplicate());
@@ -294,6 +307,10 @@ class MockServer {
             int blobInfoSize = blobPropertiesSize + userMetadataSize;
             int blobRecordSize;
             switch (blobFormatVersion) {
+              case MessageFormatRecord.Blob_Version_V3:
+                blobRecordSize =
+                    (int) MessageFormatRecord.Blob_Format_V3.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+                break;
               case MessageFormatRecord.Blob_Version_V2:
                 blobRecordSize =
                     (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
@@ -329,6 +346,10 @@ class MockServer {
             MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             int blobRecordStart = byteBuffer.position();
             switch (blobFormatVersion) {
+              case MessageFormatRecord.Blob_Version_V3:
+                MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType(), originalBlobPutReq.isCompressed());
+                break;
               case MessageFormatRecord.Blob_Version_V2:
                 MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
                     (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());

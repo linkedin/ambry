@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 /**
  * PutMessageFormatInputStream which uses Blob Format V1 instead of the default V2
  */
+@Deprecated   // PutMessageV1 is deprecated and should never be called.  Using it could lead to data lost.
 public class PutMessageFormatBlobV1InputStream extends MessageFormatInputStream {
   public PutMessageFormatBlobV1InputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
       InputStream blobStream, long streamSize, BlobType blobType) throws MessageFormatException {

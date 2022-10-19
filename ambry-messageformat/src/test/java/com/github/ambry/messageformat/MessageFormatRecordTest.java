@@ -748,9 +748,31 @@ public class MessageFormatRecordTest {
     return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(outputBuffer));
   }
 
+  /**
+   * Serializes the blob content using BlobRecord Verison 2 with the passsed in params
+   * De-serialized the blob returns the {@link BlobData} for the same
+   * @param blobSize
+   * @param blobType
+   * @param blobContent
+   * @param outputBuffer
+   * @return
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  private BlobData getBlobRecordV3(int blobSize, BlobType blobType, ByteBuffer blobContent, ByteBuffer outputBuffer)
+      throws IOException, MessageFormatException {
+    MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(outputBuffer, blobSize, blobType, false);
+    outputBuffer.put(blobContent);
+    Crc32 crc = new Crc32();
+    crc.update(outputBuffer.array(), 0, outputBuffer.position());
+    outputBuffer.putLong(crc.getValue());
+    outputBuffer.flip();
+    return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(outputBuffer));
+  }
+
   @Test
   public void testBlobRecordWithMetadataContentV2() throws IOException, MessageFormatException {
-    // Test Blob V2 with actual metadata blob V2
+    // Test Blob V3 with actual metadata blob V2
     // construct metadata blob
     List<StoreKey> keys = getKeys(60, 5);
     int[] chunkSizes = {ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), 15};
@@ -759,9 +781,9 @@ public class MessageFormatRecordTest {
       ByteBuffer metadataContent = getSerializedMetadataContentV2(chunkSizes[i], totalSizes[i], keys);
       int metadataContentSize =
           MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
-      long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
+      long blobSize = MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(metadataContentSize);
       ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
-      BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
+      BlobData blobData = getBlobRecordV3(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
 
       Assert.assertEquals(metadataContentSize, blobData.getSize());
       byte[] verify = new byte[metadataContentSize];
@@ -781,6 +803,39 @@ public class MessageFormatRecordTest {
   }
 
   @Test
+  public void testBlobRecordV3() throws IOException, MessageFormatException {
+    // Test the size method.
+    int blobSize = 4096;
+    int size = (int) MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blobSize);
+    Assert.assertTrue(size > 0);
+
+    // Generate source blob, serialize blob into BlobData.
+    ByteBuffer entireBlob = ByteBuffer.allocate(size);
+    ByteBuffer blobContent = ByteBuffer.allocate(blobSize);
+    new Random().nextBytes(blobContent.array());
+    MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(entireBlob, blobSize, BlobType.DataBlob, true);
+    entireBlob.put(blobContent);
+    Crc32 crc = new Crc32();
+    crc.update(entireBlob.array(), 0, entireBlob.position());
+    entireBlob.putLong(crc.getValue());
+
+    // De-serialize the blobData from the serialized content.
+    entireBlob.flip();
+    BlobData blobData = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob));
+    Assert.assertEquals("Blob size mismatch", blobSize, blobData.getSize());
+    byte[] verify = new byte[blobSize];
+    blobData.content().readBytes(verify);
+    Assert.assertArrayEquals("BlobContent mismatch", blobContent.array(), verify);
+    blobData.release();
+
+    // corrupt blob record by modifying a byte, the CRC check should fail.
+    entireBlob.put(entireBlob.position() - 9, (byte) (entireBlob.get(entireBlob.position() - 9) / 2 + 1));
+    entireBlob.flip();
+    Exception ex = TestUtils.getException(() -> MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob)));
+    Assert.assertTrue(ex instanceof MessageFormatException);
+  }
+
+  @Test
   public void testBlobRecordWithMetadataContentV3() throws IOException, MessageFormatException {
     int numKeys = 5;
     List<StoreKey> keys = getKeys(60, numKeys);
@@ -795,9 +850,9 @@ public class MessageFormatRecordTest {
     ByteBuffer metadataContent = getSerializedMetadataContentV3(total, keysAndContentSizes);
     int metadataContentSize =
         MessageFormatRecord.Metadata_Content_Format_V3.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
-    long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
+    long blobSize = MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(metadataContentSize);
     ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
-    BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
+    BlobData blobData = getBlobRecordV3(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
     Assert.assertEquals(metadataContentSize, blobData.getSize());
     byte[] verify = new byte[metadataContentSize];
     blobData.content().readBytes(verify);
@@ -824,7 +879,7 @@ public class MessageFormatRecordTest {
     blob.rewind();
     // case 1: corrupt blob record version
     byte savedByte = blob.get(1);
-    blob.put(1, (byte) (savedByte + 1));
+    blob.put(1, (byte) (savedByte + 100));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       fail("Failed to detect corruption of Blob record version ");

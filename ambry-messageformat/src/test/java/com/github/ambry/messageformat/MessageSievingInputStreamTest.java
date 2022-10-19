@@ -125,10 +125,24 @@ public class MessageSievingInputStreamTest {
   public void testValidBlobsAgainstCorruption() throws Exception {
     testValidBlobs(Blob_Version_V1, BlobType.DataBlob, Message_Header_Version_V1);
     testValidBlobs(Blob_Version_V1, BlobType.DataBlob, Message_Header_Version_V2);
-    testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V2);
-    testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V2);
-    testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V3);
-    testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V3);
+
+    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
+    try {
+      PutMessageFormatInputStream.useBlobFormatV3 = false;
+      testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V2);
+      testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V2);
+      testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V3);
+      testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V3);
+
+      PutMessageFormatInputStream.useBlobFormatV3 = true;
+      testValidBlobs(Blob_Version_V3, BlobType.DataBlob, Message_Header_Version_V2);
+      testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V2);
+      testValidBlobs(Blob_Version_V3, BlobType.DataBlob, Message_Header_Version_V3);
+      testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V3);
+    }
+    finally {
+      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
+    }
   }
 
   private void testValidBlobs(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
@@ -148,21 +162,19 @@ public class MessageSievingInputStreamTest {
     int blobContentSize = 2000;
     byte[] data1 = new byte[blobContentSize];
     RANDOM.nextBytes(data1);
-    long blobSize;
-    if (blobType == BlobType.DataBlob) {
-      blobSize = (int) Blob_Format_V2.getBlobRecordSize(blobContentSize);
-    } else {
+    if (blobType != BlobType.DataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data1 = byteBufferBlob.array();
       blobContentSize = data1.length;
-      blobSize = (int) Blob_Format_V2.getBlobRecordSize(blobContentSize);
     }
+    long blobSize = (blobVersion == Blob_Version_V3) ? (int) Blob_Format_V3.getBlobRecordSize(blobContentSize) :
+        (int) Blob_Format_V2.getBlobRecordSize(blobContentSize);
 
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     // For Blob_Version_V2, encryption key is null.
     MessageFormatInputStream messageFormatStream1 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key1, null, prop1,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key1, null, prop1,
             ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
@@ -189,7 +201,7 @@ public class MessageSievingInputStreamTest {
 
     // For Blob_Version_V2, encryption key is non-null.
     MessageFormatInputStream messageFormatStream2 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key2, ByteBuffer.wrap(encryptionKey), prop2,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key2, ByteBuffer.wrap(encryptionKey), prop2,
             ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
@@ -216,7 +228,7 @@ public class MessageSievingInputStreamTest {
 
     // For Blob_Version_V2, encryption key is null.
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key3, null, prop3,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key3, null, prop3,
             ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
@@ -244,7 +256,7 @@ public class MessageSievingInputStreamTest {
       blobContentSize = data4.length;
     }
 
-    if (blobVersion == Blob_Version_V2) {
+    if (blobVersion >= Blob_Version_V2) {
       ByteBufferInputStream stream4 = new ByteBufferInputStream(ByteBuffer.wrap(data4));
       MessageFormatRecord.headerVersionToUse = Message_Header_Version_V2;
       // encryption key is non-null.
@@ -271,7 +283,7 @@ public class MessageSievingInputStreamTest {
       data5 = byteBufferBlob.array();
       blobContentSize = data5.length;
     }
-    if (blobVersion == Blob_Version_V2) {
+    if (blobVersion >= Blob_Version_V2) {
       ByteBufferInputStream stream5 = new ByteBufferInputStream(ByteBuffer.wrap(data5));
       MessageFormatRecord.headerVersionToUse = Message_Header_Version_V2;
       // encryption key is null.
@@ -286,7 +298,7 @@ public class MessageSievingInputStreamTest {
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
         new byte[(int) (messageFormatStream1.getSize() + messageFormatStream2.getSize() + messageFormatStream3.getSize()
-            + (blobVersion == Blob_Version_V2 ? messageFormatStream4.getSize() + messageFormatStream5.getSize() : 0))];
+            + (blobVersion >= Blob_Version_V2 ? messageFormatStream4.getSize() + messageFormatStream5.getSize() : 0))];
     messageFormatStream1.read(totalMessageStreamContent, 0, (int) messageFormatStream1.getSize());
     messageFormatStream2.read(totalMessageStreamContent, (int) messageFormatStream1.getSize(),
         (int) messageFormatStream2.getSize());
@@ -294,7 +306,7 @@ public class MessageSievingInputStreamTest {
         (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
         (int) messageFormatStream3.getSize());
 
-    if (blobVersion == Blob_Version_V2) {
+    if (blobVersion >= Blob_Version_V2) {
       messageFormatStream4.read(totalMessageStreamContent,
           (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
               + (int) messageFormatStream3.getSize(), (int) messageFormatStream4.getSize());
@@ -310,7 +322,7 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo1);
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
-    if (blobVersion == Blob_Version_V2) {
+    if (blobVersion >= Blob_Version_V2) {
       msgInfoList.add(msgInfo4);
       msgInfoList.add(msgInfo5);
     }
@@ -338,7 +350,7 @@ public class MessageSievingInputStreamTest {
     int encryptionRecordSize =
         BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey));
 
-    if (blobVersion == Blob_Version_V2) {
+    if (blobVersion >= Blob_Version_V2) {
       totalHeadSize += 2 * headerSizeV2;
       // stream 2 and stream 4 have encryption keys.
       totalEncryptionRecordSize += 2 * encryptionRecordSize;
@@ -365,14 +377,14 @@ public class MessageSievingInputStreamTest {
 
       verifySievedTransformedMessage(sievedStream,
           options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key2) : key2, "servid2", accountId2,
-          containerId2, blobVersion == Blob_Version_V2 ? encryptionKey : null, usermetadata2, data2, blobVersion,
+          containerId2, blobVersion >= Blob_Version_V2 ? encryptionKey : null, usermetadata2, data2, blobVersion,
           blobType);
 
       verifySievedTransformedMessage(sievedStream,
           options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key3) : key3, "servid3", accountId3,
           containerId3, null, usermetadata3, data3, blobVersion, blobType);
 
-      if (blobVersion == Blob_Version_V2) {
+      if (blobVersion >= Blob_Version_V2) {
         verifySievedTransformedMessage(sievedStream,
             options.contains(TransformerOptions.KeyConvert) ? convertedMapExtra.get(key4) : key4, "servid4", accountId4,
             containerId4, encryptionKey, usermetadata4, data4, blobVersion, blobType);
@@ -394,16 +406,25 @@ public class MessageSievingInputStreamTest {
    */
   @Test
   public void testInValidDeletedAndExpiredBlobsAgainstCorruption() throws Exception {
-    testInValidDeletedAndExpiredBlobs(Blob_Version_V1, BlobType.DataBlob,
-        MessageFormatRecord.Message_Header_Version_V1);
-    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob,
-        MessageFormatRecord.Message_Header_Version_V2);
-    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob,
-        MessageFormatRecord.Message_Header_Version_V2);
-    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob,
-        MessageFormatRecord.Message_Header_Version_V3);
-    testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob,
-        MessageFormatRecord.Message_Header_Version_V3);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V1, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1);
+
+    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
+    try {
+      PutMessageFormatInputStream.useBlobFormatV3 = false;
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
+
+      // Test blob version V3.
+      PutMessageFormatInputStream.useBlobFormatV3 = true;
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
+      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
+    } finally {
+      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
+    }
   }
 
   private void testInValidDeletedAndExpiredBlobs(short blobVersion, BlobType blobType, short headerVersionToUse)
@@ -426,19 +447,18 @@ public class MessageSievingInputStreamTest {
     int blobContentSize = 2000;
     byte[] data1 = new byte[blobContentSize];
     RANDOM.nextBytes(data1);
-    long blobSize = -1;
-    if (blobType == BlobType.DataBlob) {
-      blobSize = (int) Blob_Format_V2.getBlobRecordSize(blobContentSize);
-    } else {
+    if (blobType != BlobType.DataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data1 = byteBufferBlob.array();
       blobContentSize = data1.length;
-      blobSize = (int) Blob_Format_V2.getBlobRecordSize(blobContentSize);
     }
+    long blobSize = (blobVersion == Blob_Version_V3) ? (int) Blob_Format_V3.getBlobRecordSize(blobContentSize) :
+        Blob_Format_V2.getBlobRecordSize(blobContentSize);
+
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key1, ByteBuffer.wrap(encryptionKey1), prop1,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key1, ByteBuffer.wrap(encryptionKey1), prop1,
             ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
@@ -458,7 +478,7 @@ public class MessageSievingInputStreamTest {
     blobContentSize = 2000;
     byte[] data2 = new byte[blobContentSize];
     RANDOM.nextBytes(data2);
-    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data2 = byteBufferBlob.array();
       blobContentSize = data2.length;
@@ -466,7 +486,7 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key2, ByteBuffer.wrap(encryptionKey2), prop2,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key2, ByteBuffer.wrap(encryptionKey2), prop2,
             ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
@@ -492,7 +512,7 @@ public class MessageSievingInputStreamTest {
     blobContentSize = 2000;
     byte[] data3 = new byte[blobContentSize];
     RANDOM.nextBytes(data3);
-    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data3 = byteBufferBlob.array();
       blobContentSize = data3.length;
@@ -500,7 +520,7 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key3, null, prop3,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key3, null, prop3,
             ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
@@ -520,7 +540,7 @@ public class MessageSievingInputStreamTest {
     blobContentSize = 2000;
     byte[] data4 = new byte[blobContentSize];
     RANDOM.nextBytes(data4);
-    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data4 = byteBufferBlob.array();
       blobContentSize = data4.length;
@@ -528,7 +548,7 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream4 = new ByteBufferInputStream(ByteBuffer.wrap(data4));
 
     MessageFormatInputStream messageFormatStream4 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key4, null, prop4,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key4, null, prop4,
             ByteBuffer.wrap(usermetadata4), stream4, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key4, prop4, ByteBuffer.wrap(usermetadata4), stream4,
                 blobContentSize, blobType);
@@ -549,7 +569,7 @@ public class MessageSievingInputStreamTest {
     blobContentSize = 2000;
     byte[] data5 = new byte[blobContentSize];
     RANDOM.nextBytes(data5);
-    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data5 = byteBufferBlob.array();
       blobContentSize = data5.length;
@@ -557,7 +577,7 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream5 = new ByteBufferInputStream(ByteBuffer.wrap(data5));
 
     MessageFormatInputStream messageFormatStream5 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key5, ByteBuffer.wrap(encryptionKey5), prop5,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key5, ByteBuffer.wrap(encryptionKey5), prop5,
             ByteBuffer.wrap(usermetadata5), stream5, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key5, prop5, ByteBuffer.wrap(usermetadata5), stream5,
                 blobContentSize, blobType);
@@ -577,7 +597,7 @@ public class MessageSievingInputStreamTest {
     blobContentSize = 2000;
     byte[] data6 = new byte[blobContentSize];
     RANDOM.nextBytes(data6);
-    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data2 = byteBufferBlob.array();
       blobContentSize = data6.length;
@@ -585,7 +605,7 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream6 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream6 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key6, ByteBuffer.wrap(encryptionKey6), prop6,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key6, ByteBuffer.wrap(encryptionKey6), prop6,
             ByteBuffer.wrap(usermetadata6), stream6, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key6, prop6, ByteBuffer.wrap(usermetadata6), stream6,
                 blobContentSize, blobType);
@@ -696,8 +716,19 @@ public class MessageSievingInputStreamTest {
   @Test
   public void testDeletedRecordsAgainstCorruption() throws Exception {
     testDeletedRecords(Blob_Version_V1, BlobType.DataBlob);
-    testDeletedRecords(Blob_Version_V2, BlobType.DataBlob);
-    testDeletedRecords(Blob_Version_V2, BlobType.MetadataBlob);
+    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
+    try {
+      PutMessageFormatInputStream.useBlobFormatV3 = false;
+      testDeletedRecords(Blob_Version_V2, BlobType.DataBlob);
+      testDeletedRecords(Blob_Version_V2, BlobType.MetadataBlob);
+
+      // Test Blob format V3.
+      PutMessageFormatInputStream.useBlobFormatV3 = true;
+      testDeletedRecords(Blob_Version_V3, BlobType.DataBlob);
+      testDeletedRecords(Blob_Version_V3, BlobType.MetadataBlob);
+    } finally {
+      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
+    }
   }
 
   private void testDeletedRecords(short blobVersion, BlobType blobType) throws Exception {
@@ -725,7 +756,7 @@ public class MessageSievingInputStreamTest {
         int blobContentSize = 2000;
         byte[] data1 = new byte[blobContentSize];
         RANDOM.nextBytes(data1);
-        if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+        if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
           ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
           data1 = byteBufferBlob.array();
           blobContentSize = data1.length;
@@ -733,7 +764,7 @@ public class MessageSievingInputStreamTest {
         ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
         MessageFormatInputStream messageFormatStream1 =
-            (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key1, ByteBuffer.wrap(encryptionKey1),
+            (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key1, ByteBuffer.wrap(encryptionKey1),
                 prop1, ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
                 : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                     blobContentSize, blobType);
@@ -763,7 +794,7 @@ public class MessageSievingInputStreamTest {
         blobContentSize = 2000;
         byte[] data3 = new byte[blobContentSize];
         RANDOM.nextBytes(data3);
-        if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+        if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
           ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
           data3 = byteBufferBlob.array();
           blobContentSize = data3.length;
@@ -771,7 +802,7 @@ public class MessageSievingInputStreamTest {
         ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
         MessageFormatInputStream messageFormatStream3 =
-            (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key3, ByteBuffer.wrap(encryptionKey3),
+            (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key3, ByteBuffer.wrap(encryptionKey3),
                 prop3, ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
                 : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                     blobContentSize, blobType);
@@ -817,10 +848,22 @@ public class MessageSievingInputStreamTest {
   @Test
   public void testDeprecatedMsgTransformation() throws Exception {
     testDeprecatedMsg(Blob_Version_V1, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1);
-    testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
-    testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
-    testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
-    testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
+    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
+    try {
+      PutMessageFormatInputStream.useBlobFormatV3 = false;
+      testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
+      testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
+
+      PutMessageFormatInputStream.useBlobFormatV3 = true;
+      testDeprecatedMsg(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testDeprecatedMsg(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+      testDeprecatedMsg(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
+      testDeprecatedMsg(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
+    } finally {
+      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
+    }
   }
 
   private void testDeprecatedMsg(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
@@ -841,19 +884,18 @@ public class MessageSievingInputStreamTest {
     int blobContentSize = 2000;
     byte[] data1 = new byte[blobContentSize];
     RANDOM.nextBytes(data1);
-    long blobSize = -1;
-    if (blobType == BlobType.DataBlob) {
-      blobSize = (int) Blob_Format_V2.getBlobRecordSize(blobContentSize);
-    } else {
+    if (blobType != BlobType.DataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data1 = byteBufferBlob.array();
       blobContentSize = data1.length;
-      blobSize = (int) Blob_Format_V2.getBlobRecordSize(blobContentSize);
     }
+    long blobSize = blobVersion == Blob_Version_V3 ? (int) Blob_Format_V3.getBlobRecordSize(blobContentSize)
+        : Blob_Format_V2.getBlobRecordSize(blobContentSize);
+
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key1, ByteBuffer.wrap(encryptionKey1), prop1,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key1, ByteBuffer.wrap(encryptionKey1), prop1,
             ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
@@ -873,7 +915,7 @@ public class MessageSievingInputStreamTest {
     blobContentSize = 2000;
     byte[] data2 = new byte[blobContentSize];
     RANDOM.nextBytes(data2);
-    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data2 = byteBufferBlob.array();
       blobContentSize = data2.length;
@@ -881,7 +923,7 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key2, ByteBuffer.wrap(encryptionKey2), prop2,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key2, ByteBuffer.wrap(encryptionKey2), prop2,
             ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
@@ -904,7 +946,7 @@ public class MessageSievingInputStreamTest {
     blobContentSize = 2000;
     byte[] data3 = new byte[blobContentSize];
     RANDOM.nextBytes(data3);
-    if (blobVersion == Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+    if (blobVersion >= Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data3 = byteBufferBlob.array();
       blobContentSize = data3.length;
@@ -912,7 +954,7 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == Blob_Version_V2) ? new PutMessageFormatInputStream(key3, ByteBuffer.wrap(encryptionKey3), prop3,
+        (blobVersion >= Blob_Version_V2) ? new PutMessageFormatInputStream(key3, ByteBuffer.wrap(encryptionKey3), prop3,
             ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
