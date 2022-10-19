@@ -269,6 +269,8 @@ public class ReplicationManager extends ReplicationEngine {
 
     @Override
     public void onPartitionBecomeStandbyFromBootstrap(String partitionName) {
+      logger.info("Partition state change notification from Bootstrap to Standby received for partition {}",
+          partitionName);
       // if code arrives here, it means local replica has completed OFFLINE -> BOOTSTRAP transition. We don't have to
       // check if local replica exists or not.
       ReplicaId localReplica = storeManager.getReplica(partitionName);
@@ -278,15 +280,20 @@ public class ReplicationManager extends ReplicationEngine {
         throw new StateTransitionException(
             "Store " + partitionName + " is not started during Bootstrap-To-Standby transition", StoreNotStarted);
       }
+      logger.info("Partition = {}, replicaId = {}, storeId = {}", partitionName, localReplica, store);
       // 2. check if store is new added and needs to catch up with peer replicas.
+      ReplicaState currentState = store.getCurrentState();
       if (store.isBootstrapInProgress()) {
+        logger.info("Partition {} bootstrap in progress, current state = {}", partitionName, currentState);
         store.setCurrentState(ReplicaState.BOOTSTRAP);
         // store state will updated to STANDBY in ReplicaThread when bootstrap is complete
         replicaSyncUpManager.initiateBootstrap(localReplica);
       } else {
+        logger.info("Partition {} bootstrap complete, current state = {}", partitionName, currentState);
         // if this is existing replica, then directly set state to STANDBY
         store.setCurrentState(ReplicaState.STANDBY);
       }
+      logger.info("Partition {} has changed state from {} to {}", partitionName, currentState, store.getCurrentState());
     }
 
     @Override

@@ -1034,6 +1034,7 @@ public class BlobStore implements Store {
 
   @Override
   public void setCurrentState(ReplicaState state) {
+    logger.info("storeId = {}, State change from {} to {}", storeId, currentState, state);
     currentState = state;
   }
 
