@@ -245,6 +245,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();
+          NamedBlobRecord recordCurrent = null;
+          try {
+            recordCurrent = run_get_v2(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+                GetOption.None, accountId, containerId, connection);
+          } catch (RestServiceException e) {
+            logger.trace("Skip exception in pulling data from db: accountId='{}', containerId='{}', blobName='{}': {}",
+                accountId, containerId, record.getBlobName(), e);
+          }
+          if (recordCurrent != null) {
+            throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
+                record.getContainerName(), record.getBlobName());
+          }
           PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
           metricsRecoder.namedBlobPutTimeInMs.update(System.currentTimeMillis() - startTime);
           return putResult;
