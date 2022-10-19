@@ -59,6 +59,8 @@ public class RouterConfig {
   public static final String ROUTER_MAX_PUT_CHUNK_SIZE_BYTES = "router.max.put.chunk.size.bytes";
   public static final String ROUTER_PUT_REQUEST_PARALLELISM = "router.put.request.parallelism";
   public static final String ROUTER_PUT_SUCCESS_TARGET = "router.put.success.target";
+  public static final String ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM = "router.replicate.blob.request.parallelism";
+  public static final String ROUTER_REPLICATE_BLOB_SUCCESS_TARGET = "router.replicate.blob.success.target";
   public static final String ROUTER_MAX_SLIPPED_PUT_ATTEMPTS = "router.max.slipped.put.attempts";
   public static final String ROUTER_DELETE_REQUEST_PARALLELISM = "router.delete.request.parallelism";
   public static final String ROUTER_DELETE_SUCCESS_TARGET = "router.delete.success.target";
@@ -233,6 +235,20 @@ public class RouterConfig {
   @Config(ROUTER_PUT_SUCCESS_TARGET)
   @Default("2")
   public final int routerPutSuccessTarget;
+
+  /**
+   * The maximum number of parallel requests issued at a time by the ReplicateBlob manager.
+   */
+  @Config(ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM)
+  @Default("3")
+  public final int routerReplicateBlobRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a ReplicateBlob operation.
+   */
+  @Config(ROUTER_REPLICATE_BLOB_SUCCESS_TARGET)
+  @Default("2")
+  public final int routerReplicateBlobSuccessTarget;
 
   /**
    * The maximum number of times to retry putting any chunk of a put operation
@@ -680,6 +696,10 @@ public class RouterConfig {
     routerPutRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_PUT_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
     routerPutSuccessTarget = verifiableProperties.getIntInRange(ROUTER_PUT_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
+    routerReplicateBlobRequestParallelism =
+        verifiableProperties.getIntInRange(ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
+    routerReplicateBlobSuccessTarget =
+        verifiableProperties.getIntInRange(ROUTER_REPLICATE_BLOB_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
     routerMaxSlippedPutAttempts =
         verifiableProperties.getIntInRange(ROUTER_MAX_SLIPPED_PUT_ATTEMPTS, 1, 0, Integer.MAX_VALUE);
     routerDeleteRequestParallelism =
