@@ -27,7 +27,13 @@ import com.github.ambry.commons.Callback;
  */
 public class ReplicateBlobCallback implements Callback<Void> {
 
-  public enum RetryState {
+  /**
+   * There are three stages during the retry
+   * 1. Sends out the ReplicateBlob, waiting for the response
+   * 2. ReplicateBlob is finished. ReplicateBlobCallback is called.
+   * 3. Retrying the original operation like TtlUpdateOperation or DeleteOperation
+   */
+  public enum State {
     REPLICATING_BLOB, // replicating the blob
     REPLICATION_DONE, // blob replication is done
     RETRYING          // retry the original failed operation
@@ -35,13 +41,13 @@ public class ReplicateBlobCallback implements Callback<Void> {
 
   private final BlobId blobId;
   private final DataNodeId sourceDataNode;
-  private volatile RetryState retryState;
+  private volatile State retryState;
   private Exception exception;
 
   public ReplicateBlobCallback(BlobId blobId, DataNodeId sourceDataNode) {
     this.blobId = blobId;
     this.sourceDataNode = sourceDataNode;
-    this.retryState = RetryState.REPLICATING_BLOB;
+    this.retryState = State.REPLICATING_BLOB;
   }
 
   /**
@@ -59,16 +65,16 @@ public class ReplicateBlobCallback implements Callback<Void> {
   }
 
   /**
-   * @return the {@link RetryState}
+   * @return the {@link State}
    */
-  public RetryState getState() {
+  public State getState() {
     return retryState;
   }
 
   /**
-   * Change the {@link RetryState}
+   * Change the {@link State}
    */
-  public void setState(RetryState newState) {
+  public void setState(State newState) {
     this.retryState = newState;
   }
 
@@ -86,6 +92,6 @@ public class ReplicateBlobCallback implements Callback<Void> {
   @Override
   public void onCompletion(Void v, Exception exception) {
     this.exception = exception;
-    this.retryState = RetryState.REPLICATION_DONE;
+    this.retryState = State.REPLICATION_DONE;
   }
 }
