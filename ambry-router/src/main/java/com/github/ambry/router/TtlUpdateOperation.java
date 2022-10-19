@@ -449,6 +449,7 @@ class TtlUpdateOperation {
           operationTracker =
               new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
                   originatingDcName, false, routerMetrics, blobId);
+          ttlUpdateRequestInfos.clear();
           return true;
         }
       case RETRYING:

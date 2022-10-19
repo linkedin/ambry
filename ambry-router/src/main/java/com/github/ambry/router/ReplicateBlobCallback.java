@@ -35,7 +35,7 @@ public class ReplicateBlobCallback implements Callback<Void> {
 
   private final BlobId blobId;
   private final DataNodeId sourceDataNode;
-  private RetryState retryState;
+  private volatile RetryState retryState;
   private Exception exception;
 
   public ReplicateBlobCallback(BlobId blobId, DataNodeId sourceDataNode) {
