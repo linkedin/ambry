@@ -563,11 +563,6 @@ public class StorageManager implements StoreManager {
               StoreNotStarted);
         }
 
-        if (!isPrimaryClusterManagerListener) {
-          logger.info("Not changing replica state from OFFLINE to BOOTSTRAP since this is not the primary cluster-manager listener");
-          return;
-        }
-
         // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
         // it to stay in BOOTSTRAP state when catching up with peers.
         long storeUsedCapacity = store.getSizeInBytes();
@@ -584,7 +579,12 @@ public class StorageManager implements StoreManager {
           }
         }
       }
-      store.setCurrentState(ReplicaState.BOOTSTRAP);
+      if (isPrimaryClusterManagerListener) {
+        // Only update store state if this is a state transition for primary participant. Since replication Manager
+        // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
+        // stuck in BOOTSTRAP if this is updated by second participant listener too
+        store.setCurrentState(ReplicaState.BOOTSTRAP);
+      }
     }
 
     @Override
@@ -622,11 +622,6 @@ public class StorageManager implements StoreManager {
               ReplicaOperationFailure);
         }
 
-        if (!isPrimaryClusterManagerListener) {
-          logger.info("Not changing replica state from STANDBY to INACTIVE since this is not the primary cluster-manager listener");
-          return;
-        }
-
         // 0. as long as local replica exists, we create a decommission file in its dir
         File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
         try {
@@ -642,8 +637,10 @@ public class StorageManager implements StoreManager {
         }
         if (localStore.isStarted()) {
           // 1. set state to INACTIVE
-          localStore.setCurrentState(ReplicaState.INACTIVE);
-          logger.info("Store {} is set to INACTIVE", partitionName);
+          if (isPrimaryClusterManagerListener) {
+            localStore.setCurrentState(ReplicaState.INACTIVE);
+            logger.info("Store {} is set to INACTIVE", partitionName);
+          }
           // 2. disable compaction on this store
           if (!controlCompactionForBlobStore(replica.getPartitionId(), false)) {
             logger.error("Failed to disable compaction on store {}", partitionName);
