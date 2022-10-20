@@ -349,32 +349,32 @@ class SimpleOperationTracker implements OperationTracker {
     // Count of total and offline replicas in all data centers. This will be used later to check if we
     // should return 503 unavailable instead of 404 not found.
     if (routerConfig.routerGetEligibleReplicasByStateEnabled) {
-      for (List<ReplicaId> replicaIds : replicasByStateSnapshot.values()) {
-        totalReplicaCount += replicaIds.size();
-      }
+      replicasByStateSnapshot.values().forEach(replicaIds -> totalReplicaCount += replicaIds.size());
+      totalOfflineReplicaCount =
+          replicasByStateSnapshot.getOrDefault(ReplicaState.OFFLINE, Collections.emptyList()).size();
     } else {
       totalReplicaCount = partitionId.getReplicaIds().size();
+      // Since we are not looking into replica states, consider offline replica count as 0.
+      totalOfflineReplicaCount = 0;
     }
-    totalOfflineReplicaCount =
-        getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE)).getOrDefault(ReplicaState.OFFLINE,
-            Collections.emptyList()).size();
 
     // Count of total and offline replicas in originating data center. This will be used later to check if we
     // should return 503 unavailable instead of 404 not found.
     if (routerConfig.routerGetEligibleReplicasByStateEnabled) {
-      for (List<ReplicaId> replicaIds : getReplicasByState(originatingDcName,
-          EnumSet.allOf(ReplicaState.class)).values()) {
-        originatingDcTotalReplicaCount += replicaIds.size();
-      }
+      Map<ReplicaState, List<ReplicaId>> replicasByStateInOrigDC =
+          getReplicasByState(originatingDcName, EnumSet.allOf(ReplicaState.class));
+      replicasByStateInOrigDC.values().forEach(replicaIds -> originatingDcTotalReplicaCount += replicaIds.size());
+      originatingDcOfflineReplicaCount =
+          replicasByStateInOrigDC.getOrDefault(ReplicaState.OFFLINE, Collections.emptyList()).size();
     } else {
       for (ReplicaId replicaId : partitionId.getReplicaIds()) {
         if (replicaId.getDataNodeId().getDatacenterName().equals(originatingDcName)) {
           originatingDcTotalReplicaCount++;
         }
       }
+      // Since we are not looking into replica states, consider offline replica count as 0.
+      originatingDcOfflineReplicaCount = 0;
     }
-    originatingDcOfflineReplicaCount =
-        getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
