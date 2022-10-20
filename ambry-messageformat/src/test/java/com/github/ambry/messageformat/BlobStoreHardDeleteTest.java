@@ -429,6 +429,10 @@ public class BlobStoreHardDeleteTest {
   @Test
   public void blobStoreHardDeleteTestBlobV3Mixed() throws MessageFormatException, IOException {
 
+    // The 2 blocks of tests look very similar, but they are slightly different.
+    // The 1st sequence is Data, Metadata, Data, Metadata, Data.
+    // The 2nd sequence is Data, Data, Metadata, Data, Metadata.
+
     short[] blobVersions = new short[5];
     BlobType[] blobTypes = new BlobType[5];
 
