@@ -211,7 +211,7 @@ public class BlobStoreHardDeleteTest {
     private MessageFormatInputStream getPutMessage(StoreKey key, ByteBuffer encryptionKey,
         BlobProperties blobProperties, byte[] usermetadata, byte[] blob, int blobSize, short blobVersion,
         BlobType blobType) throws MessageFormatException {
-      if (blobVersion == MessageFormatRecord.Blob_Version_V2) {
+      if (blobVersion >= MessageFormatRecord.Blob_Version_V2) {
         return new PutMessageFormatInputStream(key, encryptionKey, blobProperties, ByteBuffer.wrap(usermetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
       } else {
@@ -333,6 +333,7 @@ public class BlobStoreHardDeleteTest {
     blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
   }
 
+  @Deprecated // V2 is being replaced by V3.  Remove after deployed V3.
   @Test
   public void blobStoreHardDeleteTestBlobV2Simple() throws MessageFormatException, IOException {
     short[] blobVersions = new short[5];
@@ -353,6 +354,33 @@ public class BlobStoreHardDeleteTest {
     blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
   }
 
+  @Test
+  public void blobStoreHardDeleteTestBlobV3Simple() throws MessageFormatException, IOException {
+    boolean useBlobVersionSaved = PutMessageFormatInputStream.useBlobFormatV3;
+    PutMessageFormatInputStream.useBlobFormatV3 = true;
+    try {
+      short[] blobVersions = new short[5];
+      BlobType[] blobTypes = new BlobType[5];
+      for (int i = 0; i < 5; i++) {
+        blobVersions[i] = MessageFormatRecord.Blob_Version_V3;
+        blobTypes[i] = BlobType.DataBlob;
+      }
+      // all blobs V3 with Data blob
+      blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+      blobVersions = new short[5];
+      blobTypes = new BlobType[5];
+      for (int i = 0; i < 5; i++) {
+        blobVersions[i] = MessageFormatRecord.Blob_Version_V3;
+        blobTypes[i] = BlobType.MetadataBlob;
+      }
+      // all blobs V3 with Metadata blob
+      blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+    } finally {
+      PutMessageFormatInputStream.useBlobFormatV3 = useBlobVersionSaved;
+    }
+  }
+
+  @Deprecated()  // Has been replaced by blobStoreHardDeleteTestBlobV3Mixed().  Remove after V3 deployed.
   @Test
   public void blobStoreHardDeleteTestBlobV2Mixed() throws MessageFormatException, IOException {
 
@@ -391,6 +419,49 @@ public class BlobStoreHardDeleteTest {
     blobTypes[3] = BlobType.DataBlob;
 
     blobVersions[4] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[4] = BlobType.MetadataBlob;
+
+    blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+  }
+
+  @Test
+  public void blobStoreHardDeleteTestBlobV3Mixed() throws MessageFormatException, IOException {
+
+    short[] blobVersions = new short[5];
+    BlobType[] blobTypes = new BlobType[5];
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V1;
+    blobTypes[0] = BlobType.DataBlob;
+
+    blobVersions[1] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[1] = BlobType.MetadataBlob;
+
+    blobVersions[2] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[2] = BlobType.DataBlob;
+
+    blobVersions[3] = MessageFormatRecord.Blob_Version_V3;
+    blobTypes[3] = BlobType.MetadataBlob;
+
+    blobVersions[4] = MessageFormatRecord.Blob_Version_V3;
+    blobTypes[4] = BlobType.DataBlob;
+
+    blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+
+    blobVersions = new short[5];
+    blobTypes = new BlobType[5];
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V1;
+    blobTypes[0] = BlobType.DataBlob;
+
+    blobVersions[1] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[1] = BlobType.DataBlob;
+
+    blobVersions[2] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[2] = BlobType.MetadataBlob;
+
+    blobVersions[3] = MessageFormatRecord.Blob_Version_V3;
+    blobTypes[3] = BlobType.DataBlob;
+
+    blobVersions[4] = MessageFormatRecord.Blob_Version_V3;
     blobTypes[4] = BlobType.MetadataBlob;
 
     blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
