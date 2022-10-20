@@ -777,7 +777,12 @@ public class AccountContainerTest {
         .setTtlRequired(container.isTtlRequired())
         .setContentTypeWhitelistForFilenamesOnDownload(container.getContentTypeWhitelistForFilenamesOnDownload())
         .setDeleteTriggerTime(container.getDeleteTriggerTime())
+        .setOverrideAccountAcl(container.isAccountAclOverridden())
+        .setSecurePathRequired(container.isSecurePathRequired())
         .setAccessControlAllowOrigin(container.getAccessControlAllowOrigin())
+        .setNamedBlobMode(container.getNamedBlobMode())
+        .setLastModifiedTime(container.getLastModifiedTime())
+        .setSnapshotVersion(container.getSnapshotVersion())
         .setCacheTtlInSecond(container.getCacheTtlInSecond())
         .setUserMetadataKeysToNotPrefixInResponse(container.getUserMetadataKeysToNotPrefixInResponse())
         .build();
@@ -839,9 +844,11 @@ public class AccountContainerTest {
             container.getAccessControlAllowOrigin());
         assertEquals("Wrong cacheTtlInSeconds", refContainerCacheTtlInSeconds.get(index),
             container.getCacheTtlInSecond());
+        Set<String> expectedUserMetadataKeysToNotPrefixInResponse =
+            refContainerUserMetadataKeysToNotPrefixInResponses.get(index) == null ? Collections.emptySet()
+                : refContainerUserMetadataKeysToNotPrefixInResponses.get(index);
         assertEquals("Wrong user metadata keys to not prefix in response",
-            refContainerUserMetadataKeysToNotPrefixInResponses.get(index),
-            container.getUserMetadataKeysToNotPrefixInResponse());
+            expectedUserMetadataKeysToNotPrefixInResponse, container.getUserMetadataKeysToNotPrefixInResponse());
         break;
       default:
         throw new IllegalStateException("Unsupported version: " + Container.getCurrentJsonVersion());
