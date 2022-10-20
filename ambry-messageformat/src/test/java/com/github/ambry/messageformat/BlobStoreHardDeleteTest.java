@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Consumer;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -359,22 +360,23 @@ public class BlobStoreHardDeleteTest {
     boolean useBlobVersionSaved = PutMessageFormatInputStream.useBlobFormatV3;
     PutMessageFormatInputStream.useBlobFormatV3 = true;
     try {
-      short[] blobVersions = new short[5];
-      BlobType[] blobTypes = new BlobType[5];
-      for (int i = 0; i < 5; i++) {
-        blobVersions[i] = MessageFormatRecord.Blob_Version_V3;
-        blobTypes[i] = BlobType.DataBlob;
-      }
-      // all blobs V3 with Data blob
-      blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
-      blobVersions = new short[5];
-      blobTypes = new BlobType[5];
-      for (int i = 0; i < 5; i++) {
-        blobVersions[i] = MessageFormatRecord.Blob_Version_V3;
-        blobTypes[i] = BlobType.MetadataBlob;
-      }
-      // all blobs V3 with Metadata blob
-      blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+      Consumer<BlobType> runTest = blobType -> {
+          short[] blobVersions = new short[5];
+          BlobType[] blobTypes = new BlobType[5];
+          for (int i = 0; i < 5; i++) {
+            blobVersions[i] = MessageFormatRecord.Blob_Version_V3;
+            blobTypes[i] = blobType;
+          }
+          try {
+            // all blobs V3 with Data blob
+            blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+          } catch (Exception ex) {
+            throw new RuntimeException(ex);
+          }
+      };
+
+      runTest.accept(BlobType.DataBlob);
+      runTest.accept(BlobType.MetadataBlob);
     } finally {
       PutMessageFormatInputStream.useBlobFormatV3 = useBlobVersionSaved;
     }
