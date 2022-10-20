@@ -368,7 +368,6 @@ public class BlobStoreHardDeleteTest {
             blobTypes[i] = blobType;
           }
           try {
-            // all blobs V3 with Data blob
             blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
           } catch (Exception ex) {
             throw new RuntimeException(ex);
