@@ -15,6 +15,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -31,6 +32,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -55,7 +57,7 @@ class TtlUpdateOperation {
   private final QuotaChargeCallback quotaChargeCallback;
   // Parameters associated with the state.
   // The operation tracker that tracks the state of this operation.
-  private final OperationTracker operationTracker;
+  private OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
   private final Map<Integer, RequestInfo> ttlUpdateRequestInfos = new LinkedHashMap<>();
   // The result of this operation to be set into FutureResult.
@@ -67,6 +69,9 @@ class TtlUpdateOperation {
   private boolean operationCompleted = false;
   // Quota charger for this operation.
   private final OperationQuotaCharger operationQuotaCharger;
+  private final NonBlockingRouter nonBlockingRouter;
+  private ReplicateBlobCallback replicateBlobCallback;
+  private final String originatingDcName;
 
   /**
    * Instantiates a {@link TtlUpdateOperation}.
@@ -81,10 +86,11 @@ class TtlUpdateOperation {
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
    * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
+   * @param nonBlockingRouter The non-blocking router object
    */
   TtlUpdateOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       BlobId blobId, String serviceId, long expiresAtMs, long operationTimeMs, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
@@ -95,13 +101,14 @@ class TtlUpdateOperation {
     this.expiresAtMs = expiresAtMs;
     this.operationTimeMs = operationTimeMs;
     byte blobDcId = blobId.getDatacenterId();
-    String originatingDcName = clusterMap.getDatacenterName(blobDcId);
+    this.originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics, blobId);
     this.quotaChargeCallback = quotaChargeCallback;
     this.operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -350,33 +357,62 @@ class TtlUpdateOperation {
   }
 
   /**
+   * Check if we should replicate the blob and retry the operation.
+   * @return true if need to do the retry.
+   */
+  private boolean shouldReplicateBlobAndRetry() {
+    // the conditions to trigger ReplicateBlob and retry the original operation:
+    // 1. the feature is enabled.
+    // 2. and at least one replica returned NOT_FOUND status.
+    // 3. and at least one replica returned successful status.
+    // 4. and error code precedence is over AmbryUnavailable. If we have one success and one delete, shouldn't do retry.
+    RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
+    return (routerConfig.routerRepairWithReplicateBlobEnabled && operationTracker.hasNotFound()
+        && operationTracker.getSuccessCount() > 0
+        && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable));
+  }
+
+  /**
    * Completes the {@link TtlUpdateOperation} if it is done.
    */
   private void checkAndMaybeComplete() {
     // operationCompleted is true if Blob_Authorization_Failure was received.
     if (operationTracker.isDone() || operationCompleted) {
+
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
-      } else if (operationTracker.maybeFailedDueToOfflineReplicas()) {
-        operationException.set(new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
-            RouterErrorCode.AmbryUnavailable));
-      } else if (operationTracker.hasFailedOnNotFound()) {
-        /*
-        We are relying on the fact that at least one replica has the blob. Scenarios like below are rare, so that we don’t need to handle them for now.
-          1. put parallelism is 3 && all three replicas of originating dc are down && remote replication is not caught up
-          2. put parallelism is 2 && 2 replicas are down (note that 2 replicas down happen all the time) && replication has not caught up such that blob doesn’t exist in at least one other replica.
-              i.e, its very rare for 2 replicas to be down simultaneously and immediately after taking a POST (with parallelism 2)
-        */
-        if (operationTracker.getSuccessCount() > 0) {
-          routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
-          operationException.set(
-              new RouterException("TtlUpdateOperation failed possibly because of unavailable replicas",
-                  RouterErrorCode.AmbryUnavailable));
-        } else {
-          operationException.set(new RouterException("TtlUpdateOperation failed because of BlobNotFound",
-              RouterErrorCode.BlobDoesNotExist));
+      } else {
+        // the operation is failed, try to recover with ReplicateBlob
+        if (shouldReplicateBlobAndRetry()) {
+          // if retryWithReplicateBlob returns true, it's under retry. operation is not completed yet. so return.
+          // if it returns false, continue the following code to set the proper operationException and complete the request.
+          if (retryWithReplicateBlob()) {
+            return;
+          }
+        }
+
+        if (operationTracker.maybeFailedDueToOfflineReplicas()) {
+          operationException.set(new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
+              RouterErrorCode.AmbryUnavailable));
+        } else if (operationTracker.hasFailedOnNotFound()) {
+          /*
+            We are relying on the fact that at least one replica has the blob. Scenarios like below are rare, so that we don’t need to handle them for now.
+            1. put parallelism is 3 && all three replicas of originating dc are down && remote replication is not caught up
+            2. put parallelism is 2 && 2 replicas are down (note that 2 replicas down happen all the time) && replication has not caught up such that blob doesn’t exist in at least one other replica.
+                i.e, its very rare for 2 replicas to be down simultaneously and immediately after taking a POST (with parallelism 2)
+          */
+          if (operationTracker.getSuccessCount() > 0) {
+            routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
+            operationException.set(
+                new RouterException("TtlUpdateOperation failed possibly because of unavailable replicas",
+                    RouterErrorCode.AmbryUnavailable));
+          } else {
+            operationException.set(new RouterException("TtlUpdateOperation failed because of BlobNotFound",
+                RouterErrorCode.BlobDoesNotExist));
+          }
         }
       }
+
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {
           quotaChargeCallback.checkAndCharge(false, true);
@@ -385,6 +421,60 @@ class TtlUpdateOperation {
         }
       }
       operationCompleted = true;
+    }
+  }
+
+  /**
+   * Try to replicate the blob and then retry the TtlUpdate Request
+   * @return true if it's under retry. return false if cannot do retry or retry is finished.
+   */
+  private boolean retryWithReplicateBlob() {
+    List<ReplicaId> successfulReplica = operationTracker.getSuccessReplica();
+    // it's the first time we hit the 503
+    if (replicateBlobCallback == null) {
+      DataNodeId sourceDataNode = successfulReplica.get(0).getDataNodeId();
+      replicateBlobCallback = new ReplicateBlobCallback(blobId, sourceDataNode);
+
+      nonBlockingRouter.replicateBlob(blobId.getID(), this.getClass().getSimpleName(), sourceDataNode,
+          replicateBlobCallback);
+      LOGGER.trace("Start the on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+          replicateBlobCallback.getSourceDataNode());
+      return true;
+    }
+
+    ReplicateBlobCallback.State state = replicateBlobCallback.getState();
+    switch (state) {
+      case REPLICATING_BLOB:
+        // Has sent out the ReplicateBlob operation and is waiting for its completion.
+        LOGGER.trace("Running on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+            replicateBlobCallback.getSourceDataNode());
+        return true;
+      case REPLICATION_DONE:
+        // ReplicateBlob is done.
+        // If ReplicateBlob fails, recovery procedure is done. Will complete the TtlUpdateOperation
+        if (replicateBlobCallback.getException() != null) {
+          LOGGER.error("on-demand replication {} {} failed.", replicateBlobCallback.getBlobId(),
+              replicateBlobCallback.getSourceDataNode(), replicateBlobCallback.getException());
+          return false;
+        }
+        // If ReplicateBlob is successful, retry the TtlUpdateOperation.
+        LOGGER.info("On-demand replication {} {} is successful.", replicateBlobCallback.getBlobId(),
+            replicateBlobCallback.getSourceDataNode());
+        replicateBlobCallback.setState(ReplicateBlobCallback.State.RETRYING);
+
+        // retry the TtlUpdate
+        operationException.set(null);
+        operationTracker =
+            new SimpleOperationTracker(routerConfig, RouterOperation.TtlUpdateOperation, blobId.getPartition(),
+                originatingDcName, false, routerMetrics, blobId);
+        ttlUpdateRequestInfos.clear();
+        return true;
+      case RETRYING:
+        // TtlUpdateOperation retry is finished but still failed. Nothing else we can do. Will complete the operation.
+        return false;
+      default:
+        // code shouldn't come here
+        throw new IllegalStateException("Unrecognized state type");
     }
   }
 
