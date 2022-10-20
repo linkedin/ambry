@@ -90,12 +90,8 @@ public class Account {
   static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
   static final String ACCOUNT_NAME_KEY = "accountName";
-  static final String STATUS_KEY = "status";
-  static final String SNAPSHOT_VERSION_KEY = "snapshotVersion";
   static final String CONTAINERS_KEY = "containers";
-  static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
-  static final String ACL_INHERITED_BY_CONTAINER_KEY = "aclInheritedByContainer";
-  static final String QUOTA_RESOURCE_TYPE_KEY = "quotaResourceType";
+
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
