@@ -75,7 +75,7 @@ class SimpleOperationTracker implements OperationTracker {
   // How many NotFound responses from originating dc will terminate the operation.
   // It is set to tolerate one random failure in the originating dc if all other responses are not found.
   protected final int originatingDcNotFoundFailureThreshold;
-  protected final int totalReplicaCount;
+  protected final int operationReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
   protected final NonBlockingRouterMetrics routerMetrics;
   private final OpTrackerIterator otIterator;
@@ -98,9 +98,8 @@ class SimpleOperationTracker implements OperationTracker {
   private int originatingDcOfflineReplicaCount = 0;
   private int originatingDcTotalReplicaCount = 0;
   private int totalOfflineReplicaCount = 0;
-  private int allReplicaCount = 0;
-  private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
-  private final List<ReplicaId> allReplicas;
+  private int totalReplicaCount = 0;
+  private final Map<ReplicaState, List<ReplicaId>> replicasByStateSnapshot;
   private final BlobId blobId;
 
   /**
@@ -190,15 +189,10 @@ class SimpleOperationTracker implements OperationTracker {
 
     // Note that we get a snapshot of replicas by state only once in this class, and use the same snapshot everywhere
     // to avoid the case where a replica state might change in between an operation.
-    allDcReplicasByState =
+    replicasByStateSnapshot =
         (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(EnumSet.allOf(ReplicaState.class), null);
     List<ReplicaId> eligibleReplicas;
     List<ReplicaId> offlineReplicas = new ArrayList<>();
-    totalOfflineReplicaCount =
-        getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE)).getOrDefault(ReplicaState.OFFLINE,
-            Collections.emptyList()).size();
-    allReplicas = partitionId.getReplicaIds().stream().collect(Collectors.toList());
-    allReplicaCount = allReplicas.size();
 
     switch (routerOperation) {
       case GetBlobOperation:
@@ -349,20 +343,45 @@ class SimpleOperationTracker implements OperationTracker {
         remoteOfflineReplicas.forEach(this::addToEndOfPool);
       }
     }
-    totalReplicaCount = replicaPool.size();
+    // Count of replicas that will be used for this operation.
+    operationReplicaCount = replicaPool.size();
+
+    // Count of total and offline replicas in all data centers. This will be used later to check if we
+    // should return 503 unavailable instead of 404 not found.
+    if (routerConfig.routerGetEligibleReplicasByStateEnabled) {
+      for (List<ReplicaId> replicaIds : replicasByStateSnapshot.values()) {
+        totalReplicaCount += replicaIds.size();
+      }
+    } else {
+      totalReplicaCount = partitionId.getReplicaIds().size();
+    }
+    totalOfflineReplicaCount =
+        getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE)).getOrDefault(ReplicaState.OFFLINE,
+            Collections.emptyList()).size();
+
+    // Count of total and offline replicas in originating data center. This will be used later to check if we
+    // should return 503 unavailable instead of 404 not found.
+    if (routerConfig.routerGetEligibleReplicasByStateEnabled) {
+      for (List<ReplicaId> replicaIds : getReplicasByState(originatingDcName,
+          EnumSet.allOf(ReplicaState.class)).values()) {
+        originatingDcTotalReplicaCount += replicaIds.size();
+      }
+    } else {
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        if (replicaId.getDataNodeId().getDatacenterName().equals(originatingDcName)) {
+          originatingDcTotalReplicaCount++;
+        }
+      }
+    }
     originatingDcOfflineReplicaCount =
         getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
-    originatingDcTotalReplicaCount = allReplicas.stream()
-        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
-        .collect(Collectors.toList())
-        .size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
     Supplier<IllegalArgumentException> notEnoughReplicasException = () -> new IllegalArgumentException(
         generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
             routerOperation));
-    if (totalReplicaCount < getSuccessTarget()) {
+    if (operationReplicaCount < getSuccessTarget()) {
       throw notEnoughReplicasException.get();
     }
 
@@ -372,12 +391,24 @@ class SimpleOperationTracker implements OperationTracker {
         && numActiveReplicasInOriginatingDc >= routerConfig.routerPutSuccessTarget) {
       // There are two conditions to meet in order to use this feature
       // 1. TerminateOnNotFound has to be enabled.
-      // 2. We need enough active replicas in the originating DC
+      // 2. We also need to make sure that there are sufficient number of replicas in leader or stand by state. This is
+      //   because it is possible that local replicas became unavailable due to incorrect batch OS updates, etc. In
+      //   such cases, we shouldn't terminate our search locally and try remote colos.
       // How many active replicas is considered as enough? We have to consider some extreme cases.
       // When the put success target is 2, we at least need 2 replicas in active state so we know the replicas are up to
       // date. If we have only one replica in active state, we might run into a scenario that we are getting NotFound
       // from the other two inactive replicas and we should not ignore the active one.
-      originatingDcNotFoundFailureThreshold = originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1;
+
+      // Count the number of replicas from originating dc that will be used for this operation and set the failure
+      // threshold for NOT_FOUND errors based on it.
+      int originatingDcOperationReplicaCount = 0;
+      for (ReplicaId replicaId : replicaPool) {
+        if (replicaId.getDataNodeId().getDatacenterName().equals(originatingDcName)) {
+          originatingDcOperationReplicaCount++;
+        }
+      }
+      originatingDcNotFoundFailureThreshold =
+          originatingDcOperationReplicaCount - routerConfig.routerPutSuccessTarget + 1;
     } else {
       originatingDcNotFoundFailureThreshold = 0;
     }
@@ -406,7 +437,8 @@ class SimpleOperationTracker implements OperationTracker {
     boolean hasSucceeded;
     if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
       // this logic only applies to replicas where the quorum can change during replica movement
-      int dynamicSuccessTarget = Math.max(totalReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
+      int dynamicSuccessTarget =
+          Math.max(operationReplicaCount - disabledCount - 1, routerConfig.routerPutSuccessTarget);
       hasSucceeded = replicaSuccessCount >= dynamicSuccessTarget;
     } else {
       hasSucceeded = replicaSuccessCount >= replicaSuccessTarget;
@@ -436,15 +468,15 @@ class SimpleOperationTracker implements OperationTracker {
       routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
       return true;
     }
-    if (hasFailedOnCrossColoNotFound() && allReplicaCount - totalNotFoundCount >= replicaSuccessTarget
+    if (hasFailedOnCrossColoNotFound() && totalReplicaCount - totalNotFoundCount >= replicaSuccessTarget
         && totalOfflineReplicaCount > 0) {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
               + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-              + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {} {} "
-              + "replicasByState = {}",
-          routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-          replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, getBlobIdLog(), allDcReplicasByState);
+              + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, totalReplicaCount: {} {} "
+              + "replicasByState = {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
+          totalNotFoundCount, operationReplicaCount, replicaSuccessTarget, totalOfflineReplicaCount, totalReplicaCount,
+          getBlobIdLog(), replicasByStateSnapshot);
       routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
       return true;
     }
@@ -460,22 +492,22 @@ class SimpleOperationTracker implements OperationTracker {
       logger.info(
           "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {},"
               + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
-              + "replicaSuccessTarget: {}, allReplicaCount: {} {}", routerOperation.name(), partitionId,
+              + "replicaSuccessTarget: {}, totalReplicaCount: {} {}", routerOperation.name(), partitionId,
           originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount,
-          originatingDcTotalReplicaCount, replicaSuccessTarget, allReplicaCount, getBlobIdLog());
+          originatingDcTotalReplicaCount, replicaSuccessTarget, totalReplicaCount, getBlobIdLog());
       routerMetrics.failedOnOriginatingDcNotFoundCount.inc();
       return true;
     }
-    // To account for GET operation, the threshold should be  >= totalReplicaCount - (success target - 1)
+    // To account for GET operation, the threshold should be  >= operationReplicaCount - (success target - 1)
     // Right now, this only applies for replica only partitions and may not be completely accurate if there are
     // failures responses other than not found.
     if (hasFailedOnCrossColoNotFound()) {
       logger.info(
           "Terminating {} on {} due to disk down count and total Not_Found. CrossColoEnabled: {}, DiskDownCount: {},"
               + "TotalNotFoundCount: {}, TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {},"
-              + "allReplicaCount: {} {} replicasByState = {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
-          totalNotFoundCount, totalReplicaCount, replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount,
-          getBlobIdLog(), allDcReplicasByState);
+              + "totalReplicaCount: {} {} replicasByState = {}", routerOperation, partitionId, crossColoEnabled,
+          diskDownCount, totalNotFoundCount, operationReplicaCount, replicaSuccessTarget, totalOfflineReplicaCount,
+          totalReplicaCount, getBlobIdLog(), replicasByStateSnapshot);
       routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
     }
@@ -571,7 +603,7 @@ class SimpleOperationTracker implements OperationTracker {
    * {@code false} otherwise.
    */
   private boolean hasFailedOnCrossColoNotFound() {
-    return (crossColoEnabled && (diskDownCount + totalNotFoundCount > totalReplicaCount - replicaSuccessTarget));
+    return (crossColoEnabled && (diskDownCount + totalNotFoundCount > operationReplicaCount - replicaSuccessTarget));
   }
 
   /**
@@ -599,8 +631,8 @@ class SimpleOperationTracker implements OperationTracker {
   Map<ReplicaState, List<ReplicaId>> getReplicasByState(String dcName, EnumSet<ReplicaState> states) {
     Map<ReplicaState, List<ReplicaId>> map = new HashMap<>();
     for (ReplicaState replicaState : states) {
-      if (allDcReplicasByState.containsKey(replicaState)) {
-        for (ReplicaId replicaId : allDcReplicasByState.get(replicaState)) {
+      if (replicasByStateSnapshot.containsKey(replicaState)) {
+        for (ReplicaId replicaId : replicasByStateSnapshot.get(replicaState)) {
           if (dcName == null || replicaId.getDataNodeId().getDatacenterName().equals(dcName)) {
             map.putIfAbsent(replicaState, new ArrayList<>());
             map.get(replicaState).add(replicaId);
@@ -616,7 +648,7 @@ class SimpleOperationTracker implements OperationTracker {
       return true;
     }
     if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
-      return totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
+      return operationReplicaCount - failedCount < Math.max(operationReplicaCount - 1,
           routerConfig.routerPutSuccessTarget + disabledCount);
     } else {
       // if there is no possible way to use the remaining replicas to meet the success target,
