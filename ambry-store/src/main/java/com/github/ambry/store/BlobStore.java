@@ -956,9 +956,33 @@ public class BlobStore implements Store {
         throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
             StoreErrorCodes.ID_Not_Found);
       }
-      return new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
-          value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
-          value.getLifeVersion());
+      return fromIndexValue(key, value);
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Override
+  public Map<String, MessageInfo> findAllMessageInfosForKey(StoreKey key) throws StoreException {
+    checkStarted();
+    final Timer.Context context = metrics.findAllMessageInfosResponse.time();
+    try {
+      List<IndexValue> values = index.findAllIndexValuesForKey(key, null);
+      if (values == null) {
+        return Collections.emptyMap();
+      }
+      Map<String, MessageInfo> result = new HashMap<>();
+      for (IndexValue value : values) {
+        Offset offset = value.getOffset();
+        String mapKey = offset.getName().toString() + "_" + offset.getOffset();
+        result.put(mapKey, fromIndexValue(key, value));
+      }
+      return result;
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
         onError();
@@ -1296,6 +1320,12 @@ public class BlobStore implements Store {
         }
       }
     }
+  }
+
+  private MessageInfo fromIndexValue(StoreKey key, IndexValue value) {
+    return new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
+        value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
+        value.getLifeVersion());
   }
 
   /**
