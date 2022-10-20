@@ -163,6 +163,13 @@ public class ServerMetrics {
   public final Histogram healthCheckResponseSendTimeInMs;
   public final Histogram healthCheckRequestTotalTimeInMs;
 
+  public final Histogram blobIndexRequestQueueTimeInMs;
+  public final Histogram blobIndexRequestProcessingTimeInMs;
+  public final Histogram blobIndexResponseQueueTimeInMs;
+  public final Histogram blobIndexResponseSendTimeInMs;
+  public final Histogram blobIndexRequestTotalTimeInMs;
+
+
 
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
@@ -192,6 +199,7 @@ public class ServerMetrics {
   public final Meter catchupStatusRequestRate;
   public final Meter blobStoreControlRequestRate;
   public final Meter healthCheckRequestRate;
+  public final Meter blobIndexRequestRate;
 
   public final Meter putSmallBlobRequestRate;
   public final Meter getSmallBlobRequestRate;
@@ -457,6 +465,17 @@ public class ServerMetrics {
     healthCheckRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "HealthCheckRequestTotalTimeInMs"));
 
+    blobIndexRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "BlobIndexRequestQueueTimeInMs"));
+    blobIndexRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "BlobIndexRequestProcessingTimeInMs"));
+    blobIndexResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "BlobIndexResponseQueueTimeInMs"));
+    blobIndexResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "BlobIndexResponseSendTimeInMs"));
+    blobIndexRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "BlobIndexRequestTotalTimeInMs"));
+
 
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));
@@ -494,6 +513,7 @@ public class ServerMetrics {
     catchupStatusRequestRate = registry.meter(MetricRegistry.name(requestClass, "CatchupStatusRequestRate"));
     blobStoreControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlRequestRate"));
     healthCheckRequestRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckRequestRate"));
+    blobIndexRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobIndexRequestRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetSmallBlobRequestRate"));

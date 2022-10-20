@@ -15,6 +15,7 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -25,6 +26,8 @@ import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ServerConfig;
@@ -37,6 +40,7 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.AdminResponseWithContent;
 import com.github.ambry.protocol.AmbryRequests;
+import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
@@ -49,11 +53,13 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.DiskHealthStatus;
 import com.github.ambry.store.DiskManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -91,6 +97,7 @@ public class AmbryServerRequests extends AmbryRequests {
   private final ClusterParticipant clusterParticipant;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
   AmbryServerRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, ServerMetrics serverMetrics, FindTokenHelper findTokenHelper,
@@ -119,6 +126,7 @@ public class AmbryServerRequests extends AmbryRequests {
         RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
       requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     }
+    StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
   }
 
   /**
@@ -245,6 +253,15 @@ public class AmbryServerRequests extends AmbryRequests {
           requestTotalTimeHistogram = metrics.healthCheckRequestTotalTimeInMs;
           response = handleHealthCheckRequest(requestStream, adminRequest);
           break;
+        case BlobIndex:
+          metrics.blobIndexRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.blobIndexRequestRate.mark();
+          processingTimeHistogram = metrics.blobIndexRequestQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.blobIndexRequestQueueTimeInMs;
+          responseSendTimeHistogram = metrics.blobIndexResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.blobIndexRequestTotalTimeInMs;
+          response = handleBlobIndexRequest(requestStream, adminRequest);
+          break;
       }
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
@@ -254,6 +271,11 @@ public class AmbryServerRequests extends AmbryRequests {
       switch (adminRequest.getType()) {
         case CatchupStatus:
           response = new CatchupStatusAdminResponse(false, response);
+          break;
+        case HealthCheck:
+        case BlobIndex:
+          response = new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(),
+              ServerErrorCode.Unknown_Error);
           break;
       }
     } finally {
@@ -437,8 +459,7 @@ public class AmbryServerRequests extends AmbryRequests {
    * @return the {@link AdminResponse} to the request.
    * @throws IOException if there is any I/O error reading from the {@code requestStream}.
    */
-  private AdminResponse handleHealthCheckRequest(DataInputStream requestStream, AdminRequest adminRequest)
-      throws StoreException, IOException {
+  private AdminResponse handleHealthCheckRequest(DataInputStream requestStream, AdminRequest adminRequest) {
     ServerHealthStatus serverHealthStatus = this.storeManager instanceof StorageManager ? ServerHealthStatus.GOOD
         : ServerHealthStatus.BAD; //used to determine if the server is ever unhealthy
     JSONArray brokenDisks = new JSONArray();        // indicate which disks didn't pass the disk healthcheck
@@ -503,8 +524,52 @@ public class AmbryServerRequests extends AmbryRequests {
 
     byte[] content = contentJSON.toString().getBytes(StandardCharsets.UTF_8);
     ServerErrorCode error = ServerErrorCode.No_Error;
-
     return new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(), error, content);
+  }
+
+  /**
+   * Handles {@link BlobIndexAdminRequest}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponseWithContent} to the request.
+   */
+  private AdminResponse handleBlobIndexRequest(DataInputStream requestStream, AdminRequest adminRequest) {
+    final int correlationId = adminRequest.getCorrelationId();
+    final String clientId = adminRequest.getClientId();
+    BlobIndexAdminRequest blobIndexAdminRequest = null;
+    String errorMessage = null;
+    try {
+      blobIndexAdminRequest = BlobIndexAdminRequest.readFrom(requestStream, adminRequest, storeKeyFactory);
+    } catch (Exception e) {
+      logger.error("Failed to deserialize BlobIndexAdminRequest", e);
+      return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Bad_Request, null);
+    }
+
+    BlobId blobId = (BlobId) blobIndexAdminRequest.getStoreKey();
+    try {
+      PartitionId partitionId = blobId.getPartition();
+      Store store = storeManager.getStore(partitionId);
+      if (store == null) {
+        logger.error("BlobId {}'s partition[{}] doesn't exist or stopped in this host", blobId, partitionId.getId());
+        return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Replica_Unavailable, null);
+      }
+
+      Map<String, MessageInfo> messages = store.findAllMessageInfosForKey(blobId);
+      // Serialize with JSON
+      String json = objectMapper.writeValueAsString(messages);
+      return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.No_Error, json.getBytes());
+    } catch (StoreException e) {
+      logger.error("Failed to find all message infos for given key {}", blobId, e);
+      errorMessage = e.getMessage();
+    } catch (IOException e) {
+      logger.error("Failed to serialize to json string", e);
+      errorMessage = e.getMessage();
+    } catch (Exception e) {
+      logger.error("Unexpected error when handleBlobIndexRequest", e);
+      errorMessage = e.getMessage();
+    }
+    return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Unknown_Error,
+        errorMessage.getBytes());
   }
 
   /**
