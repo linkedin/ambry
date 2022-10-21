@@ -467,10 +467,8 @@ public class Container {
         && Objects.equals(this.getReplicationPolicy(), containerToCompare.getReplicationPolicy())
         && Objects.equals(this.isSecurePathRequired(), containerToCompare.isSecurePathRequired())
         && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled())
-        && Objects.equals(this.getContentTypeWhitelistForFilenamesOnDownload(),
-                          containerToCompare.getContentTypeWhitelistForFilenamesOnDownload())
-        && Objects.equals(this.isAccountAclOverridden(), containerToCompare.isAccountAclOverridden())
-        && Objects.equals(this.getCacheTtlInSecond(), containerToCompare.getCacheTtlInSecond());
+        && Objects.equals(this.getContentTypeWhitelistForFilenamesOnDownload(), containerToCompare.getContentTypeWhitelistForFilenamesOnDownload())
+        && Objects.equals(this.isAccountAclOverridden(), containerToCompare.isAccountAclOverridden());
     //@formatter:on
   }
 
