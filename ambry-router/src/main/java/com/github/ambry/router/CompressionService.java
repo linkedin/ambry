@@ -129,7 +129,6 @@ public class CompressionService {
 
     // TODO - Temporary deployment control code that will be removed after testing and deployment.
     if (config.isCompressionEnabled) {
-      PutMessageFormatInputStream.useBlobFormatV3 = true;
       PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
     }
   }

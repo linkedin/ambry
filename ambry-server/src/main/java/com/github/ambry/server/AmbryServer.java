@@ -206,7 +206,6 @@ public class AmbryServer {
 
       // TODO - Temporary deploy code that will be removed after compression has been tested and deployed.
       if (storeConfig.storeUseBlobFormatV3) {
-        PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
         PutMessageFormatInputStream.useBlobFormatV3 = true;
       }
 
