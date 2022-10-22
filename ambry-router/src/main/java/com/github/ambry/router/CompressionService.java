@@ -127,8 +127,7 @@ public class CompressionService {
     }
     defaultCompressor = compressor;
 
-    // Temporary deployment control code that will be removed after testing and deployment.
-    // https://jira01.corp.linkedin.com:8443/browse/AMBRY-9410
+    // TODO - Temporary deployment control code that will be removed after testing and deployment.
     if (config.isCompressionEnabled) {
       PutMessageFormatInputStream.useBlobFormatV3 = true;
       PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
