@@ -433,11 +433,15 @@ final class ServerTestUtil {
       // We should have two message infos
       // first one is the creation of the blob id2 and second one if the ttl update for the blob id2
       assertEquals(2, messages.size());
-      TreeMap<String, MessageInfo> sortedMessages = new TreeMap<>(messages);
+      TreeMap<Long, MessageInfo> sortedMessages = new TreeMap<>();
+      for (String key : messages.keySet()) {
+        // Key is offset
+        sortedMessages.put(Long.parseLong(key.split("_")[2]), messages.get(key));
+      }
       List<MessageInfo> sortedMessageList = new ArrayList<>(sortedMessages.values());
       // First one should be PUT
       assertEquals(false, sortedMessageList.get(0).isDeleted());
-      assertEquals(false, sortedMessageList.get(0).isTtlUpdated());
+      assertEquals(new String(jsonBytes), false, sortedMessageList.get(0).isTtlUpdated());
       assertEquals(false, sortedMessageList.get(0).isUndeleted());
       // Second one should be ttlupdate
       assertEquals(false, sortedMessageList.get(1).isDeleted());
