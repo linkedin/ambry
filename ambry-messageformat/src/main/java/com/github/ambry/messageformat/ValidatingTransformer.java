@@ -87,7 +87,7 @@ public class ValidatingTransformer implements Transformer {
         PutMessageFormatInputStream transformedStream =
             new PutMessageFormatInputStream(keyInStream, encryptionKey, props, metadata,
                 new ByteBufInputStream(blobData.content(), true), blobData.getSize(), blobData.getBlobType(),
-                msgInfo.getLifeVersion());
+                msgInfo.getLifeVersion(), blobData.isCompressed());
         MessageInfo transformedMsgInfo = new MessageInfo.Builder(msgInfo).size(transformedStream.getSize())
             .isDeleted(false)
             .isUndeleted(false)
