@@ -47,6 +47,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
@@ -59,6 +60,7 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
+import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
@@ -201,6 +203,11 @@ public class AmbryServer {
       CloudConfig cloudConfig = new CloudConfig(properties);
       // verify the configs
       properties.verify();
+
+      // TODO - Temporary deploy code that will be removed after compression has been tested and deployed.
+      if (storeConfig.storeUseBlobFormatV3) {
+        PutMessageFormatInputStream.useBlobFormatV3 = true;
+      }
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       // if there are more than one participants on local node, we create a consistency checker to monitor and alert any

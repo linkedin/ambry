@@ -89,18 +89,6 @@ public class CompressionConfig {
   public final String algorithmName;
 
   /**
-   * Create an instance of CompressionConfig using the default values.
-   */
-  public CompressionConfig() {
-    isCompressionEnabled = DEFAULT_COMPRESSION_ENABLED;
-    isSkipWithContentEncoding = DEFAULT_SKIP_IF_CONTENT_ENCODED;
-    algorithmName = DEFAULT_ALGORITHM_NAME;
-    compressibleContentTypesCSV = DEFAULT_COMPRESS_CONTENT_TYPES;
-    minimalSourceDataSizeInBytes = DEFAULT_MINIMAL_DATA_SIZE_IN_BYTES;
-    minimalCompressRatio = DEFAULT_MINIMAL_COMPRESS_RATIO;
-  }
-
-  /**
    * Construct a compression config instance using a specific verifiable properties.
    * @param verifiableProperties The verifiable properties.
    */
