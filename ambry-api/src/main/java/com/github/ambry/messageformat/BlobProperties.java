@@ -248,4 +248,31 @@ public class BlobProperties {
         contentEncoding, that.contentEncoding) && Objects.equals(filename, that.filename) && Objects.equals(
         externalAssetTag, that.externalAssetTag);
   }
+
+  /**
+   * check if two BlobProperties are equal.
+   * contentEquals treats null same as empty string "". It applied to ownerId and contentType.
+   * @return true if from the content point of view, two {@link BlobProperties} are the same.
+   */
+  public boolean contentEquals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    BlobProperties that = (BlobProperties) o;
+    return isPrivate == that.isPrivate
+        && creationTimeInMs == that.creationTimeInMs
+        && accountId == that.accountId
+        && containerId == that.containerId
+        && isEncrypted == that.isEncrypted
+        && blobSize == that.blobSize
+        && timeToLiveInSeconds == that.timeToLiveInSeconds
+        && Objects.equals(serviceId, that.serviceId)
+        && (Objects.equals(ownerId, that.ownerId) || ((ownerId == null || ownerId.isEmpty()) && (that.ownerId == null || that.ownerId.isEmpty())))
+        && (Objects.equals(contentType, that.contentType) || ((contentType == null || contentType.isEmpty()) && (that.contentType == null || that.contentType.isEmpty())))
+        && Objects.equals(contentEncoding, that.contentEncoding)
+        && Objects.equals(filename, that.filename) && Objects.equals(externalAssetTag, that.externalAssetTag);
+  }
 }

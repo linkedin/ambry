@@ -1104,9 +1104,9 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
   @Test
   public void testReplicateBlobWhenTargetConditions() throws Exception {
-    // ON_DEMAND_REPLICATION_TODO: test cases
     // Besides the above test cases to test the different conditions on the source host, need verify the different cases on the local store.
-    // But seems doesn't have a good way to simulate these local store errors with unit test yet.
+    // We test it with Integration test which uses the production BlobStore instead of the mock layer.
+    // Refer to ServerHttp2Test.replicateBlobCaseTest
     // test PutBlob but StoreErrorCodes.Already_Exist
     // test PutBlob and applyTTLUpdate but hit StoreErrorCodes.Already_Updated or StoreErrorCodes.ID_Deleted
     // test PutBlob and applyDelete but hit StoreErrorCodes.ID_Deleted or StoreErrorCodes.Life_Version_Conflict
