@@ -266,6 +266,8 @@ public class InMemAccountService implements AccountService {
     boolean refContainerCaching = TestUtils.RANDOM.nextBoolean();
     boolean refContainerMediaScanDisabled = TestUtils.RANDOM.nextBoolean();
     boolean refContainerBackupEnabled = TestUtils.RANDOM.nextBoolean();
+    String refUserMetadataKeyToNotPrefix = TestUtils.getRandomString(10);
+    long refCacheTtlInSecond = TestUtils.RANDOM.nextInt();
     return new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
         accountId).setEncrypted(refContainerEncryption)
         .setPreviouslyEncrypted(refContainerPreviousEncryption)
@@ -275,6 +277,8 @@ public class InMemAccountService implements AccountService {
         .setSecurePathRequired(false)
         .setBackupEnabled(refContainerBackupEnabled)
         .setNamedBlobMode(Container.NamedBlobMode.OPTIONAL)
+        .setUserMetadataKeysToNotPrefixInResponse(Collections.singleton(refUserMetadataKeyToNotPrefix))
+        .setCacheTtlInSecond(refCacheTtlInSecond)
         .build();
   }
 }

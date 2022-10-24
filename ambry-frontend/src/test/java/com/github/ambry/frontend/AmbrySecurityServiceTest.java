@@ -28,11 +28,11 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
-import com.github.ambry.quota.QuotaMetrics;
-import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.quota.QuotaManager;
+import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.QuotaMode;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -61,6 +61,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -92,9 +93,11 @@ public class AmbrySecurityServiceTest {
   private static final QuotaManager QUOTA_MANAGER;
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
+  private static final Container RANDOM_CONTAINER;
   private static final Map<String, Object> USER_METADATA = new HashMap<>();
   private static final BlobInfo DEFAULT_INFO;
   private static final BlobInfo LIFEVERSION_INFO;
+  private static final BlobInfo RANDOM_INFO;
   private static final short DEFAULT_LIFEVERSION = 3;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
@@ -114,12 +117,27 @@ public class AmbrySecurityServiceTest {
       ACCOUNT_SERVICE.clear();
       REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+      Container randomContainer = null;
+      for (Container container : REF_ACCOUNT.getAllContainers()) {
+        if (container.getId() != Container.DEFAULT_PRIVATE_CONTAINER_ID
+            && container.getId() != Container.DEFAULT_PUBLIC_CONTAINER_ID) {
+          randomContainer = container;
+        }
+      }
+      if (randomContainer == null) {
+        throw new IllegalStateException("No random container found");
+      }
+      RANDOM_CONTAINER = randomContainer;
       USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(9),
           TestUtils.getRandomString(9));
       USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(10),
           TestUtils.getRandomString(10));
       USER_METADATA.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + TestUtils.getRandomString(11),
           TestUtils.getRandomString(11));
+      USER_METADATA.put(
+          RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + RANDOM_CONTAINER.getUserMetadataKeysToNotPrefixInResponse()
+              .iterator()
+              .next(), TestUtils.getRandomString(12));
       DEFAULT_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
               false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
@@ -128,6 +146,10 @@ public class AmbrySecurityServiceTest {
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
               false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
           RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
+      RANDOM_INFO = new BlobInfo(
+          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), RANDOM_CONTAINER.getId(), RANDOM_CONTAINER.isEncrypted(),
+              null, null, null), RestUtils.buildUserMetadata(USER_METADATA));
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
       QuotaConfig quotaConfig = QuotaTestUtils.createQuotaConfig(Collections.emptyMap(), false, QuotaMode.TRACKING);
       QUOTA_MANAGER = new AmbryQuotaManager(quotaConfig, new SimpleQuotaRecommendationMergePolicy(quotaConfig),
@@ -296,6 +318,8 @@ public class AmbrySecurityServiceTest {
     // HEAD
     // normal
     testHeadBlobWithVariousRanges(DEFAULT_INFO);
+    // random
+    testHeadBlobWithVariousRanges(RANDOM_INFO);
     // with lifeVersion
     testHeadBlobWithVariousRanges(LIFEVERSION_INFO);
     // unknown account
@@ -572,7 +596,7 @@ public class AmbrySecurityServiceTest {
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
       Assert.assertEquals("Not modified response expected", ResponseStatus.NotModified,
           restResponseChannel.getStatus());
-      verifyHeadersForGetBlobNotModified(restResponseChannel, accountAndContainer.getSecond().isCacheable());
+      verifyHeadersForGetBlobNotModified(restResponseChannel, accountAndContainer.getSecond());
     } else {
       Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
           restResponseChannel.getStatus());
@@ -666,8 +690,18 @@ public class AmbrySecurityServiceTest {
       Assert.assertTrue("Internal key " + RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY + " should be set",
           (Boolean) restRequest.getArgs().get(RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY));
     } else if (!(blobInfo.getUserMetadata().length == 0)) {
-      USER_METADATA.forEach((key, value) -> Assert.assertEquals("Value of " + key + " not as expected", value,
-          restResponseChannel.getHeader(key)));
+      Set<String> keysToNotPrefix = accountAndContainer.getSecond().getUserMetadataKeysToNotPrefixInResponse();
+      for (Map.Entry<String, Object> entry : USER_METADATA.entrySet()) {
+        String key = entry.getKey();
+        String value = (String) entry.getValue();
+        String keyWithoutPrefix = key.substring(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.length());
+        if (keysToNotPrefix.contains(keyWithoutPrefix)) {
+          Assert.assertEquals("Value of " + key + " not as expected", value,
+              restResponseChannel.getHeader(keyWithoutPrefix));
+        } else {
+          Assert.assertEquals("Value of " + key + " not as expected", value, restResponseChannel.getHeader(key));
+        }
+      }
     }
   }
 
@@ -805,18 +839,28 @@ public class AmbrySecurityServiceTest {
           "Internal key " + RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY + " should not be set",
           restRequest.getArgs().get(RestUtils.InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY));
     } else {
-      USER_METADATA.forEach((key, value) -> Assert.assertEquals("Value of " + key + " not as expected", value,
-          restResponseChannel.getHeader(key)));
+      Set<String> keysToNotPrefix = accountAndContainer.getSecond().getUserMetadataKeysToNotPrefixInResponse();
+      for (Map.Entry<String, Object> entry : USER_METADATA.entrySet()) {
+        String key = entry.getKey();
+        String value = (String) entry.getValue();
+        String keyWithoutPrefix = key.substring(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.length());
+        if (keysToNotPrefix.contains(keyWithoutPrefix)) {
+          Assert.assertEquals("Value of " + key + " not as expected", value,
+              restResponseChannel.getHeader(keyWithoutPrefix));
+        } else {
+          Assert.assertEquals("Value of " + key + " not as expected", value, restResponseChannel.getHeader(key));
+        }
+      }
     }
-    verifyCacheHeaders(getAccountAndContainer(blobProperties).getSecond().isCacheable(), restResponseChannel);
+    verifyCacheHeaders(accountAndContainer.getSecond(), restResponseChannel);
   }
 
   /**
    * Verify the headers from the response for a Not modified blob are as expected
    * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
-   * @param cacheable {@code true} if blob is cacheable, {@code false} otherwise.
+   * @param container the {@link Container}.
    */
-  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel, boolean cacheable) {
+  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel, Container container) {
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertNotNull("Last-Modified has not been set",
         restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED));
@@ -826,22 +870,24 @@ public class AmbrySecurityServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     Assert.assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
-    verifyCacheHeaders(cacheable, restResponseChannel);
+    verifyCacheHeaders(container, restResponseChannel);
     verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.CONTENT_TYPE,
         RestUtils.Headers.LIFE_VERSION);
   }
 
   /**
    * Verifies that the right cache headers are returned.
-   * @param cacheable {@code true} if the blob is cacheable, {@code false} if not.
+   * @param container the {@link Container}.
    * @param restResponseChannel the {@link RestResponseChannel} over which the response is sent.
    */
-  private void verifyCacheHeaders(boolean cacheable, MockRestResponseChannel restResponseChannel) {
-    if (cacheable) {
+  private void verifyCacheHeaders(Container container, MockRestResponseChannel restResponseChannel) {
+    if (container.isCacheable()) {
+      long cacheTtl = container.getCacheTtlInSecond() != null ? container.getCacheTtlInSecond().longValue()
+          : FRONTEND_CONFIG.cacheValiditySeconds;
       Assert.assertTrue("Expires value should be in the future",
           RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES))
               > System.currentTimeMillis());
-      Assert.assertEquals("Cache-Control value not as expected", "max-age=" + FRONTEND_CONFIG.cacheValiditySeconds,
+      Assert.assertEquals("Cache-Control value not as expected", "max-age=" + cacheTtl,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertNull("Pragma value should not have been set",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
