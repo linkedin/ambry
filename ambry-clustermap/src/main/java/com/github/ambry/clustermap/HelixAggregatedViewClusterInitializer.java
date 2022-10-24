@@ -123,11 +123,19 @@ class HelixAggregatedViewClusterInitializer {
     // As we can see above, since #3 and #4 are not aggregated by Helix currently, we get these information by talking
     // to all ZK servers ourselves.
 
-    // 1. Create RoutingTableProvider of entire cluster to keep track of partition(replicas) state. Here, we use current
-    // state based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
+    // 1. Create Helix RoutingTableProvider class which provides APIs to get information from external view.
     logger.info("Creating routing table provider for entire cluster associated with Helix manager at {}",
         localZkConnectStr);
-    RoutingTableProvider routingTableProvider = new RoutingTableProvider(helixManager, PropertyType.CURRENTSTATES);
+    // There are two ways to instantiate a RoutingTable. 1. EXTERNAL_VIEW based, 2. CURRENT_STATES based. In the former
+    // one, helix controller generates the external view and this is read by the helix spectator to create the Routing
+    // table. In the latter one, CURRENT STATES are read from helix participant to participant at the helix spectator to
+    // create the Routing table. According to helix team, the former one usually takes longer time since it is dependent
+    // on helix controller to generate up-to-date view but has less read traffic since we have to read constructed view.
+    // The latter one takes lesser time since we don't have to wait for controller to calculate the view but has more
+    // read traffic.
+    // In case of Aggregated view, CURRENT_STATES based RoutingTable doesn't work since CURRENT_STATES are
+    // not aggregated by helix. So, we only have one option, i.e EXTERNAL_VIEW based and helix team asked to use it.
+    RoutingTableProvider routingTableProvider = new RoutingTableProvider(helixManager, PropertyType.EXTERNALVIEW);
     logger.info("Routing table provider is created for entire cluster");
     routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
     logger.info("Registered routing table change listeners for entire cluster");
