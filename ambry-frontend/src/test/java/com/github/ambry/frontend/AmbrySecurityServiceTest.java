@@ -344,12 +344,14 @@ public class AmbrySecurityServiceTest {
 
     // GET BlobInfo
     testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.BlobInfo);
+    testGetSubResource(RANDOM_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(LIFEVERSION_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO_ENC, RestUtils.SubResource.BlobInfo);
     // GET UserMetadata
     testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.UserMetadata);
+    testGetSubResource(RANDOM_INFO, RestUtils.SubResource.UserMetadata);
     byte[] usermetadata = TestUtils.getRandomBytes(10);
     testGetSubResource(new BlobInfo(DEFAULT_INFO.getBlobProperties(), usermetadata),
         RestUtils.SubResource.UserMetadata);
@@ -358,6 +360,8 @@ public class AmbrySecurityServiceTest {
     testPostBlob();
 
     // GET Blob
+    testGetBlobWithVariousRanges(DEFAULT_INFO);
+    testGetBlobWithVariousRanges(RANDOM_INFO);
     testGetBlobWithVariousRanges(LIFEVERSION_INFO);
     // less than chunk threshold size
     blobInfo = new BlobInfo(
@@ -408,6 +412,13 @@ public class AmbrySecurityServiceTest {
     testGetNotModifiedBlob(DEFAULT_INFO, DEFAULT_INFO.getBlobProperties().getCreationTimeInMs());
     // < creation time (in secs)
     testGetNotModifiedBlob(DEFAULT_INFO, DEFAULT_INFO.getBlobProperties().getCreationTimeInMs() - 1000);
+    // > creation time (in secs).
+    testGetNotModifiedBlob(RANDOM_INFO, RANDOM_INFO.getBlobProperties().getCreationTimeInMs() + 1000);
+    // == creation time
+    testGetNotModifiedBlob(RANDOM_INFO, RANDOM_INFO.getBlobProperties().getCreationTimeInMs());
+    // < creation time (in secs)
+    testGetNotModifiedBlob(RANDOM_INFO, RANDOM_INFO.getBlobProperties().getCreationTimeInMs() - 1000);
+
 
     // bad rest response channel
     testExceptionCasesProcessResponse(RestMethod.HEAD, new BadRestResponseChannel(), blobInfo,
