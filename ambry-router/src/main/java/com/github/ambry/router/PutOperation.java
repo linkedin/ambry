@@ -120,6 +120,14 @@ class PutOperation {
   private boolean isEncryptionEnabled;
   private final QuotaChargeCallback quotaChargeCallback;
 
+  // Whether the entire blob (all chunks) are compressible.  Default is null for undecided.
+  // The value is set based on blobProperties and compression service configuration.
+  // For example, if BlobProperties.ContentEncoding specified, then the entire blob will
+  // not be compressed by setting this field to FALSE.
+  // This field is set once when inserting the first chunk based on blob properties.
+  // All chunk compression will check this field and skip compression if this value FALSE.
+  private Boolean isBlobCompressible;
+
   // Parameters associated with the state.
 
   // the list of PutChunks that will be used to hold chunks that are sent out. A PutChunk will only hold one chunk at
@@ -168,6 +176,7 @@ class PutOperation {
   // Variables to keep track of netty chunks
   private final RestRequest restRequest;
   private final String loggingContext;
+  private final CompressionService compressionService;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -305,6 +314,9 @@ class PutOperation {
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
+
+    // TODO - use dependency injection when available.
+    compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
   }
 
   /**
@@ -1049,6 +1061,10 @@ class PutOperation {
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
 
+    // Whether this chunk is compressed.  Default is false for not compressed.
+    // This value is set after compression has completed.  It is used to create PutRequest.
+    private boolean isChunkCompressed;
+
     /**
      * Construct a PutChunk
      */
@@ -1292,6 +1308,35 @@ class PutOperation {
     }
 
     /**
+     * Compress the buffer in "buf" field for data chunks.  It does not compress metadata chunks.
+     * It also applies rules specified in config.
+     * After compression, it replaces "buf" field and update isCompressed field in blob properties.
+     */
+    private void compressChunk() {
+      // Do not compress metadata chunk or already compressed chunk.
+      if (isMetadataChunk() || isChunkCompressed) {
+        return;
+      }
+
+      // Check whether the blob is compressible, if not already done so.
+      if (isBlobCompressible == null) {
+        isBlobCompressible = compressionService.isBlobCompressible(passedInBlobProperties);
+      }
+      if (!isBlobCompressible) {
+        return;
+      }
+
+      // Note: compress() returns null if it failed.
+      boolean isFullChunk = (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes);
+      ByteBuf newBuffer = compressionService.compressChunk(buf, isFullChunk);
+      if (newBuffer != null) {
+        buf.release();
+        buf = newBuffer;
+        isChunkCompressed = true;
+      }
+    }
+
+    /**
      * Submits encrypt job for the given {@link PutChunk} and processes the callback for the same
      */
     private void encryptChunk() {
@@ -1325,6 +1370,9 @@ class PutOperation {
       if (updateMetric) {
         routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
       }
+
+      // Attempt to apply compression on data chunk.
+      compressChunk();
 
       if (!passedInBlobProperties.isEncrypted()) {
         prepareForSending();
@@ -1513,11 +1561,12 @@ class PutOperation {
      * @return the crated {@link PutRequest}.
      */
     protected PutRequest createPutRequest() {
-      return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
-          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
+      return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(),
+          routerConfig.routerHostname, chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata),
+          buf.retainedDuplicate(), buf.readableBytes(), BlobType.DataBlob,
+          encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
           routerConfig.routerPutRequestUseJavaNativeCrc32 ? Crc32Impl.getJavaNativeInstance()
-              : Crc32Impl.getAmbryInstance());
+              : Crc32Impl.getAmbryInstance(), isChunkCompressed);
     }
 
     /**
