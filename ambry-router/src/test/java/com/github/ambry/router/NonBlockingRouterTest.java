@@ -24,6 +24,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -40,6 +41,7 @@ import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -1531,6 +1533,102 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test for ReplicateBlob success case on CompositeBlob
+   * Replicating one Blob to the remote replicas when two local replicas were unavailable.
+   * @throws Exception
+   */
+  @Test
+  public void testReplicateBlobOnCompositeBlob() throws Exception {
+    try {
+      // CompositeBlob with four chunks.
+      maxPutChunkSize = PUT_CONTENT_SIZE / 4;
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      String serviceId = "replicate-blob-service";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      // PutBlob to the three local replicas
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      GetBlobResult localGetBlobResult =
+          router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
+      BlobProperties localProperties = localGetBlobResult.getBlobInfo().getBlobProperties();
+
+      // set error status for all the local replica. read from the remote replica, it should fail
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+
+      try {
+        router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
+        Assert.fail("Should return Ambry unavailable.");
+      } catch (ExecutionException e) {
+        Throwable t = e.getCause();
+        assertTrue("Cause should be RouterException", t instanceof RouterException);
+        assertEquals("ErrorCode mismatch", RouterErrorCode.AmbryUnavailable, ((RouterException) t).getErrorCode());
+      }
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+
+      // Replicate Blob from the local replica to some remote replicas.
+      // choose one local replica as the source DataNode. Set the other two replicas as Replica_Unavailable
+      DataNodeId sourceDataNode = null;
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+          } else {
+            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          }
+        }
+      }
+      // since there is only one local available, router will replicate the blob to at least 1 remote replicas.
+      // Replicating the four chunks. Also replicate the composite metadata blob.
+      GetBlobResult localGetChunkResult = router.getBlob(compositeBlobId,
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build(), null, null)
+          .get();
+      List<StoreKey> chunkIds = localGetChunkResult.getBlobChunkIds();
+      for (StoreKey chunk : chunkIds) {
+        router.replicateBlob(chunk.getID(), serviceId, sourceDataNode).get();
+      }
+      router.replicateBlob(compositeBlobId, serviceId, sourceDataNode).get();
+
+      // set unavailable to all local replicas. So router.getBlob will get the Blob from remote replicas.
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+      GetBlobResult remoteGetBlobResult = router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
+
+      // verify BlobProperties
+      Assert.assertEquals(remoteGetBlobResult.getBlobInfo().getBlobProperties(), localProperties);
+      // verify userMetadata
+      Assert.assertTrue(Arrays.equals(remoteGetBlobResult.getBlobInfo().getUserMetadata(), putUserMetadata));
+      // verify data content
+      RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+      remoteGetBlobResult.getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
+      InputStream input = retainingAsyncWritableChannel.consumeContentAsInputStream();
+      retainingAsyncWritableChannel.close();
+      byte[] content = Utils.readBytesFromStream(input, (int) PUT_CONTENT_SIZE);
+      input.close();
+      Assert.assertTrue(Arrays.equals(putContent, content));
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
    * Test for ReplicateBlob failure when source is not available.
    * @throws Exception
    */
@@ -2288,6 +2386,110 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
       assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
 
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * CompositeBlob TTLUpdate first hits 503. Then run ReplicateBlob and Retry. It is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testCompositeBlobTtlUpdate503AndThenRetrySuccess() throws Exception {
+    try {
+      // CompositeBlob with four chunks.
+      maxPutChunkSize = PUT_CONTENT_SIZE / 4;
+      String updateServiceId = "update-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTtl(router, Collections.singleton(compositeBlobId), TimeUnit.DAYS.toSeconds(7));
+
+      // set two replicas Replica_Unavailable. Leave one local replica available as the source of the ReplicationBlob
+      DataNodeId sourceDataNode = null;
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+          } else {
+            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          }
+        }
+      }
+      router.updateBlobTtl(compositeBlobId, updateServiceId, Utils.Infinite_Time).get();
+
+      // simulate Replica_Unavailable for all local replicas. Then verify ttl from the remote replica
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+      assertTtl(router, Collections.singleton(compositeBlobId), Utils.Infinite_Time);
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * CompositeBlob TTLUpdate first hits 503. Then run ReplicateBlob and Retry.
+   * ReplicateBlob fails and then TtlUpdate fails.
+   * @throws Exception
+   */
+  @Test
+  public void testCompositeBlobTtlUpdate503AndThenRetryFailure() throws Exception {
+    try {
+      // CompositeBlob with four chunks.
+      maxPutChunkSize = PUT_CONTENT_SIZE / 4;
+      String updateServiceId = "update-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTtl(router, Collections.singleton(compositeBlobId), TimeUnit.DAYS.toSeconds(7));
+
+      // set two replicas Replica_Unavailable. Leave one local replica available as the source of the ReplicationBlob
+      // But all remote replicas fail the ReplicateBlob.
+      DataNodeId sourceDataNode = null;
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+          } else {
+            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          }
+        } else {
+          server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+        }
+      }
+      try {
+        router.updateBlobTtl(compositeBlobId, updateServiceId, Utils.Infinite_Time).get();
+      } catch (Exception e) {
+        assertTrue(e.getCause() instanceof RouterException);
+        assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
+      }
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
     } finally {
       // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
