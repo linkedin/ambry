@@ -255,7 +255,7 @@ public class BlobProperties {
    * @return true if the string is either null or is an empty string.
    */
   private boolean nullOrEmptry(String str) {
-    return str==null || str.isEmpty();
+    return str == null || str.isEmpty();
   }
 
   /**

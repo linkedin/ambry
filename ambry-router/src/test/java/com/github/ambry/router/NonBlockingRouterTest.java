@@ -1607,15 +1607,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // verify BlobProperties
       Assert.assertEquals(remoteGetBlobResult.getBlobInfo().getBlobProperties(), localProperties);
       // verify userMetadata
-      Assert.assertTrue(Arrays.equals(remoteGetBlobResult.getBlobInfo().getUserMetadata(), putUserMetadata));
+      Assert.assertArrayEquals(remoteGetBlobResult.getBlobInfo().getUserMetadata(), putUserMetadata);
       // verify data content
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
       remoteGetBlobResult.getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
       InputStream input = retainingAsyncWritableChannel.consumeContentAsInputStream();
       retainingAsyncWritableChannel.close();
-      byte[] content = Utils.readBytesFromStream(input, (int) PUT_CONTENT_SIZE);
+      byte[] content = Utils.readBytesFromStream(input, PUT_CONTENT_SIZE);
       input.close();
-      Assert.assertTrue(Arrays.equals(putContent, content));
+      Assert.assertArrayEquals(putContent, content);
 
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
     } finally {
