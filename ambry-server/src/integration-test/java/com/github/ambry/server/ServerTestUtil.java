@@ -460,7 +460,7 @@ final class ServerTestUtil {
       });
       assertEquals(0, messages.size());
 
-      // Do this test for a fake partit
+      // Do this test for a fake partition
       MockPartitionId fakePartition = new MockPartitionId(123456, "FAKE");
       BlobId fakeBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           properties.getAccountId(), properties.getContainerId(), fakePartition, false, BlobId.BlobDataType.DATACHUNK);

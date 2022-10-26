@@ -202,7 +202,7 @@ public class AmbryServerRequests extends AmbryRequests {
         case TriggerCompaction:
           metrics.triggerCompactionRequestQueueTimeInMs.update(requestQueueTime);
           metrics.triggerCompactionRequestRate.mark();
-          processingTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
+          processingTimeHistogram = metrics.triggerCompactionRequestProcessingTimeInMs;
           responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
@@ -211,7 +211,7 @@ public class AmbryServerRequests extends AmbryRequests {
         case RequestControl:
           metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
           metrics.requestControlRequestRate.mark();
-          processingTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
+          processingTimeHistogram = metrics.requestControlRequestProcessingTimeInMs;
           responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
@@ -220,7 +220,7 @@ public class AmbryServerRequests extends AmbryRequests {
         case ReplicationControl:
           metrics.replicationControlRequestQueueTimeInMs.update(requestQueueTime);
           metrics.replicationControlRequestRate.mark();
-          processingTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
+          processingTimeHistogram = metrics.replicationControlRequestProcessingTimeInMs;
           responseQueueTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.replicationControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
@@ -229,7 +229,7 @@ public class AmbryServerRequests extends AmbryRequests {
         case CatchupStatus:
           metrics.catchupStatusRequestQueueTimeInMs.update(requestQueueTime);
           metrics.catchupStatusRequestRate.mark();
-          processingTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
+          processingTimeHistogram = metrics.catchupStatusRequestProcessingTimeInMs;
           responseQueueTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.catchupStatusResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
@@ -238,8 +238,8 @@ public class AmbryServerRequests extends AmbryRequests {
         case BlobStoreControl:
           metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
           metrics.blobStoreControlRequestRate.mark();
-          processingTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
-          responseQueueTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
+          processingTimeHistogram = metrics.blobStoreControlRequestProcessingTimeInMs;
+          responseQueueTimeHistogram = metrics.blobStoreControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
           response = handleBlobStoreControlRequest(requestStream, adminRequest);
@@ -247,8 +247,8 @@ public class AmbryServerRequests extends AmbryRequests {
         case HealthCheck:
           metrics.healthCheckRequestQueueTimeInMs.update(requestQueueTime);
           metrics.healthCheckRequestRate.mark();
-          processingTimeHistogram = metrics.healthCheckRequestQueueTimeInMs;
-          responseQueueTimeHistogram = metrics.healthCheckRequestQueueTimeInMs;
+          processingTimeHistogram = metrics.healthCheckRequestProcessingTimeInMs;
+          responseQueueTimeHistogram = metrics.healthCheckResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.healthCheckResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.healthCheckRequestTotalTimeInMs;
           response = handleHealthCheckRequest(requestStream, adminRequest);
@@ -256,8 +256,8 @@ public class AmbryServerRequests extends AmbryRequests {
         case BlobIndex:
           metrics.blobIndexRequestQueueTimeInMs.update(requestQueueTime);
           metrics.blobIndexRequestRate.mark();
-          processingTimeHistogram = metrics.blobIndexRequestQueueTimeInMs;
-          responseQueueTimeHistogram = metrics.blobIndexRequestQueueTimeInMs;
+          processingTimeHistogram = metrics.blobIndexRequestProcessingTimeInMs;
+          responseQueueTimeHistogram = metrics.blobIndexResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.blobIndexResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.blobIndexRequestTotalTimeInMs;
           response = handleBlobIndexRequest(requestStream, adminRequest);
